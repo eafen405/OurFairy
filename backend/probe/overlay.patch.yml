@@ -1,0 +1,10 @@
+# Test-only overlay: mounts the OurFairy baseline probe above the product
+# bundle layers. The product composition never includes this row; tests pass
+# this file through `dsh --profile ourfairy --patch <file>`.
+#
+# The overlay changes nothing else: all services, paths, and defaults under
+# test come from backend/v1-bundle/cordis.patch.yml.
+
+- insert:
+    - id: ourfairy-baseline-probe
+      name: '@ourfairy/dsh-baseline-probe'
