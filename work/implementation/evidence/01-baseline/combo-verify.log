@@ -1,0 +1,8 @@
+$ node scripts/combo.mjs verify
+repo      branch                   expected          actual            result                                             
+--------  -----------------------  ----------------  ----------------  ---------------------------------------------------
+ourfairy  integration/ourfairy-v1  based on integra  83d72dc229b0567f  ok (worktree is based on the integration tip)      
+dsh       product/ourfairy-v1      d743267388641bc7  d743267388641bc7  ok (research upstream only; no product commits yet)
+rikkahub  product/ourfairy-v1      0966502c4d65c1ee  0966502c4d65c1ee  ok (research upstream only; no product commits yet)
+combo: combination verified
+EXIT=0

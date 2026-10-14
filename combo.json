@@ -1,20 +1,21 @@
 {
   "schemaVersion": 1,
   "product": "OurFairy v1",
-  "description": "The version combination the OurFairy v1 backend is built and tested against. `productCommit` is the commit the product actually consumes; `researchUpstreamSha` is the upstream commit the readiness research was written against and is NEVER a product deliverable. A ticket worktree obtains the same combination by checking out each repo's `integrationBranch` tip through scripts/combo.mjs.",
+  "description": "The version combination the OurFairy v1 backend is built and tested against. External dependencies (dsh, rikkahub) are pinned to exact product commits; the product repository itself locks its integration branch, because pinning a repository to its own branch tip would be self-referential and would fail after every merge. `researchUpstreamSha` is the upstream commit the readiness research was written against and is NEVER a product deliverable. A ticket worktree obtains the same combination by branching from each repo's `integrationBranch` tip and running scripts/combo.mjs verify.",
   "repos": {
     "ourfairy": {
       "role": "product",
+      "lock": "integration-branch",
       "localPath": "/home/eafen405/projects/OurFairy",
       "remoteName": "origin",
-      "remoteUrl": "git@github.com:eafen405/OurFairy.git",
+      "remoteUrl": "https://github.com/eafen405/OurFairy.git",
       "integrationBranch": "integration/ourfairy-v1",
-      "productCommit": "9533063686aff86daf9c8daec7b9b4f0bd0035d1",
       "researchUpstreamSha": null,
-      "note": "Product repository. Backend modules live under backend/, product launchers under scripts/."
+      "note": "Self repository: verify asserts the current worktree HEAD is the integration branch tip or an ancestor of it (the worktree is based on this combination), instead of comparing against a fixed commit. Product modules live under backend/, product launchers under scripts/."
     },
     "dsh": {
       "role": "backend-harness",
+      "lock": "commit",
       "localPath": "/home/eafen405/projects/deepseek-harness",
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/deepseek-harness.git",
@@ -22,10 +23,16 @@
       "productCommit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
       "researchUpstreamSha": "d743267388641bc76f17c45ce8b4c231aed1d32c",
       "researchUpstreamRef": "origin/master",
-      "note": "Product commit currently equals the research upstream SHA: no product commit has landed on the fork yet. Native public-representation changes (owner/delivery/format) will advance productCommit while researchUpstreamSha stays fixed."
+      "requiredBuild": [
+        "corepack pnpm@11.28.5 install",
+        "corepack pnpm@11.28.5 run build:lib:host",
+        "corepack pnpm@11.28.5 run build:native-system"
+      ],
+      "note": "Product commit currently equals the research upstream SHA: no product commit has landed on the fork yet. Native public-representation changes (owner/delivery/format) will advance productCommit while researchUpstreamSha stays fixed. build:lib:host builds the CLI/host libraries; build:native-system builds native/system/packages/linux-x64/bin/glibc/system.node, which the durable JSONL session writer requires (verified: without it a session flush fails to load the flock addon)."
     },
     "rikkahub": {
       "role": "android-client",
+      "lock": "commit",
       "localPath": "/home/eafen405/projects/rikkahub",
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/rikkahub.git",
@@ -43,6 +50,11 @@
     "probePackage": "@ourfairy/dsh-baseline-probe",
     "probePathInRepo": "backend/probe",
     "launcher": "scripts/ourfairy-backend.mjs",
+    "agentModel": {
+      "provider": "deepseek-official",
+      "model": "deepseek-flash"
+    },
+    "agentModelNote": "Single source of truth for the model selection this combination runs. The bundle's agent-default-model row declares the same pair for entry layers (ticket #28 consumes it); the launcher passes this pair to the probe, which passes it explicitly as agentOptions because no entry layer is mounted in the v1 baseline. 'doctor' checks backend/v1-bundle/cordis.patch.yml against these values so the two declarations cannot drift apart.",
     "nodeRange": "^22.19.0 || >=24",
     "pnpmPin": "11.28.5",
     "pnpmInvocation": "corepack pnpm@11.28.5",
@@ -53,13 +65,17 @@
   },
   "androidToolchain": {
     "androidHome": "/home/eafen405/Android/Sdk",
-    "platforms": ["android-37.0"],
+    "platforms": ["android-37.2"],
     "buildTools": ["37.0.0"],
     "ndk": "28.2.13676358",
     "cmake": true,
     "java": "Temurin 21 (/home/eafen405/.local/bin/java)",
     "gradle": "wrapper (cache /home/eafen405/.gradle)",
     "localProperties": "sdk.dir=/home/eafen405/Android/Sdk (not committed; written in the rikkahub checkout)",
-    "firstApkBuildTicket": 26
+    "firstApkBuildTicket": 26,
+    "measuredNotes": [
+      "A rikkahub Gradle build auto-installs platform android-37.2 (compileSdk 37 resolves to 37.2), not android-37.0; recorded from the measured build output.",
+      "build-tools 37.0.0 and NDK 28.2.13676358 are the installed versions."
+    ]
   }
 }

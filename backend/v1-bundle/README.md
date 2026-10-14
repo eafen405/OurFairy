@@ -50,3 +50,26 @@ isolated `OURFAIRY_HOME` that declares this package through a `file:` dependency
 and lists it in `dsh.profile.bundles`, then boots the real dsh CLI. This package
 declares no `@deepseek-ai/dsh*` peerDependencies, so no exact-version exemption
 is required.
+
+## Two deliberate choices a reviewer will ask about
+
+**`session-query-sqlite` is mounted with `openAt: never` on purpose.** The
+readiness research records that `never` is the *base bundle's* patch value, not
+the plugin's own default (the plugin's own default is `startup`). Because this
+bundle does not inherit `@deepseek-ai/dsh-base`, that inherited value is not in
+play: the `never` written here is an explicit choice, so the v1 baseline mounts
+the query plugin (its exact reads and titles stay available) while content
+search stays off. Ticket #33 enables search by turning this into
+`startup`/`first-search` against the same isolated home; it is not a missing
+configuration, and it must not be flipped silently by an unrelated profile
+change.
+
+**The model route is declared twice on purpose, from one source.** The
+`agent-default-model` row states `deepseek-official`/`deepseek-flash` for the
+entry layers that consume `agentDefaultModel` (the client gateway, ticket #28).
+Those layers are not mounted in the v1 baseline, so nothing consumes the service
+yet, and an Agent created directly through the agent factory would carry no model
+at all. The launcher therefore reads the same pair from `combo.json`
+(`backend.agentModel`) and passes it to the probe as an explicit `agentOptions`
+selection; `doctor` compares the two declarations so they cannot drift apart.
+The baseline never depends on an implicit model default.

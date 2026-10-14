@@ -14,8 +14,13 @@
  *
  * Environment:
  *   OURFAIRY_PROBE_REPORT  absolute path of the JSON report to write
- *   OURFAIRY_PROBE_MODE    `boot` (default) or `turn`
+ *   OURFAIRY_PROBE_MODE    `boot` (default), `turn`, or `hold`
+ *   OURFAIRY_PROBE_HOLD_MS bounded hold in `hold` mode (0 = until a signal)
  *   DSH_HOME               the isolated harness home the launcher pinned
+ *
+ * `hold` keeps the real composition alive after a successful check so the
+ * launcher's start/stop supervision can be exercised; it still exits non-zero
+ * when a check fails, so a supervisor never mistakes a broken boot for ready.
  */
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
@@ -136,7 +141,15 @@ function collectTools(ctx) {
   return { available: true, discovery: 'not-enumerable', names: null, count: null }
 }
 
-/** All `.jsonl` files under a root, relative and sorted. */
+/**
+ * All durable session-log files under a root, relative and sorted.
+ *
+ * The JSONL persistence writes compressed logs by default, so the artifact on
+ * disk is `session.v4.jsonl.zstd`; an uncompressed `.jsonl` appears when
+ * compression is off. Both are durable session logs and both must be reported —
+ * matching only `.jsonl` would report "no durable log" for a session that was
+ * in fact saved.
+ */
 function listJsonlFiles(root) {
   if (root === undefined || !existsSync(root)) return []
   const found = []
@@ -144,7 +157,7 @@ function listJsonlFiles(root) {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name)
       if (entry.isDirectory()) walk(path)
-      else if (entry.name.endsWith('.jsonl')) found.push(relative(root, path))
+      else if (/\.jsonl(\.zstd)?$/.test(entry.name)) found.push(relative(root, path))
     }
   }
   walk(root)
@@ -172,10 +185,29 @@ async function runTurn(ctx, report) {
   }
   const agents = ctx.get('agents')
   if (agents === undefined) throw new Error('cannot run a turn: the "agents" service is not live')
+  const sessions = ctx.get('sessions')
+  if (sessions === undefined) throw new Error('cannot run a turn: the "sessions" service is not live')
+  // The model selection arrives from the launcher (combo.json backend.agentModel).
+  // It is passed explicitly because no entry layer consumes the agentDefaultModel
+  // service in the v1 baseline: without it the created Agent has no model and the
+  // turn would make no model call at all.
+  const provider = process.env.OURFAIRY_PROBE_PROVIDER
+  const model = process.env.OURFAIRY_PROBE_MODEL
+  if (provider === undefined || provider === '' || model === undefined || model === '') {
+    throw new ProbeConfigError(
+      'missing required configuration OURFAIRY_PROBE_PROVIDER / OURFAIRY_PROBE_MODEL:'
+      + ' the requested turn must carry an explicit model selection (the launcher supplies it from'
+      + ' combo.json backend.agentModel). Refusing to fall back to an implicit default.',
+    )
+  }
   const { createUserMessage } = await import('@deepseek-ai/dsh-llm')
 
   const sessionId = process.env.OURFAIRY_PROBE_SESSION_ID ?? `ourfairy-baseline-${Date.now()}`
-  const handle = await agents.create({ sessionId, meta: { cwd: process.cwd() } })
+  const handle = await agents.create({
+    sessionId,
+    meta: { cwd: process.cwd() },
+    agentOptions: { provider, model },
+  })
   const agent = handle.agent
   let output
   let events = 0
@@ -195,9 +227,11 @@ async function runTurn(ctx, report) {
   } finally {
     dispose()
   }
-  const flushed = await ctx.sessions.flush(agent.session)
+  const flushed = await sessions.flush(agent.session)
   report.model = {
-    provider: 'deepseek-official',
+    provider,
+    model,
+    selection: 'explicit agentOptions (the v1 baseline mounts no entry layer that consumes agentDefaultModel)',
     sessionId: String(agent.session.id),
     events,
     output: output ?? null,
@@ -205,10 +239,37 @@ async function runTurn(ctx, report) {
   }
   if (output === undefined) {
     report.failures.push(
-      'model turn produced no assistant text through the configured route;'
+      `model turn produced no assistant text through the configured route ${provider}/${model};`
       + ' check the external model double (DEEPSEEK_BASE_URL / DEEPSEEK_API_KEY) and the llm-deepseek route',
     )
   }
+}
+
+/**
+ * Keep the real composition alive until a stop signal (or a bounded interval).
+ *
+ * The dsh CLI returns from `runProfile` as soon as readiness commits: a profile
+ * whose rows own no long-running work has nothing left to keep the event loop
+ * alive, so the process would exit the instant it reported ready and a
+ * supervisor would see the backend disappear. The hold therefore owns a ref'd
+ * interval for its whole duration — that handle, not the signal listeners, is
+ * what keeps the booted composition running until `stop`.
+ */
+function holdUntilSignal(ms) {
+  return new Promise((resolve) => {
+    const keepAlive = setInterval(() => {}, 1_000)
+    let bounded
+    const finish = () => {
+      clearInterval(keepAlive)
+      if (bounded !== undefined) clearTimeout(bounded)
+      process.off('SIGTERM', finish)
+      process.off('SIGINT', finish)
+      resolve()
+    }
+    process.once('SIGTERM', finish)
+    process.once('SIGINT', finish)
+    if (Number.isFinite(ms) && ms > 0) bounded = setTimeout(finish, ms)
+  })
 }
 
 async function runProbe(ctx) {
@@ -253,7 +314,7 @@ async function runProbe(ctx) {
       report.sessions.files = listJsonlFiles(sessionsRoot)
       if (report.sessions.files.length === 0) {
         report.failures.push(
-          `durable session log missing after the turn: no .jsonl file under ${sessionsRoot}`,
+          `durable session log missing after the turn: no session log (.jsonl or .jsonl.zstd) under ${sessionsRoot}`,
         )
       }
     } else {
@@ -267,19 +328,27 @@ async function runProbe(ctx) {
   report.ok = report.failures.length === 0
   report.finishedAt = new Date().toISOString()
 
+  // Publish the report BEFORE holding. The report is the readiness signal a
+  // supervisor waits on (`start` polls it), so holding first would deadlock
+  // every start until the hold expired, and a failed check would stay invisible
+  // for the whole hold window instead of failing the start immediately.
   const reportPath = process.env.OURFAIRY_PROBE_REPORT
   if (reportPath !== undefined && reportPath !== '') {
     mkdirSync(dirname(reportPath), { recursive: true })
     writeFileSync(reportPath, `${JSON.stringify(report, undefined, 2)}\n`)
   }
 
-  const exitCode = report.ok ? 0 : (report.failures.some(line => line.includes('DEEPSEEK_API_KEY')) ? 3 : 1)
   if (!report.ok) {
     process.stderr.write(
       `ourfairy-baseline-probe: ${report.failures.length} failure(s)\n`
       + report.failures.map(line => `  - ${line}\n`).join(''),
     )
-  } else {
+  }
+
+  if (report.mode === 'hold' && report.ok) {
+    process.stdout.write('ourfairy-baseline-probe: ready\n')
+    await holdUntilSignal(Number(process.env.OURFAIRY_PROBE_HOLD_MS ?? 0))
+  } else if (report.ok) {
     process.stdout.write(
       `ourfairy-baseline-probe: ok (${Object.keys(report.services).length} services live,`
       + ` ${report.rows.length} rows composed, mode ${report.mode})\n`,
@@ -287,10 +356,10 @@ async function runProbe(ctx) {
   }
   const exit = ctx.get('appExit')
   if (exit === undefined) {
-    process.exitCode = exitCode
+    process.exitCode = report.ok ? 0 : (report.failures.some(line => line.includes('DEEPSEEK_API_KEY')) ? 3 : 1)
     return
   }
-  exit(exitCode)
+  exit(report.ok ? 0 : (report.failures.some(line => line.includes('DEEPSEEK_API_KEY')) ? 3 : 1))
 }
 
 /** Mount the probe and run it once readiness commits. */
