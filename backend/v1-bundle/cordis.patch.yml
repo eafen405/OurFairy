@@ -1,0 +1,101 @@
+# OurFairy v1 backend bundle — the explicit first-version rows.
+#
+# This bundle deliberately does NOT inherit @deepseek-ai/dsh-base. The base
+# bundle also mounts excluded capabilities (skill, goal, subagent, telemetry,
+# the web tools) and default file/shell/sandbox rows whose permission
+# adaptation is not implemented, so every row the product actually runs is
+# listed here and the absent rows are asserted absent by tests/baseline-boot.
+#
+# Row order carries no load semantics (activation is service-availability
+# driven); the grouping below is for readers. Later tickets extend this list —
+# a capability is mounted here only once its own adaptation ticket lands.
+
+- insert:
+    # ── session, model, and prompt core ────────────────────────────────────────
+    - id: agent
+      name: '@deepseek-ai/dsh-agent'
+
+    - id: session
+      name: '@deepseek-ai/dsh-session'
+
+    - id: llm
+      name: '@deepseek-ai/dsh-llm'
+
+    # The deployment persona is a product decision and stays empty in the
+    # baseline; product tickets add their own persona sections.
+    - id: system-prompt
+      name: '@deepseek-ai/dsh-system-prompt'
+      config:
+        personaPrefix: ''
+
+    - id: session-projection
+      name: '@deepseek-ai/dsh-session-projection'
+
+    # The tool registry. Only tools whose own adaptation landed are inserted
+    # below; the filesystem, shell, sandbox, working-directory, subagent, goal,
+    # skill, web, and workflow rows are deliberately absent.
+    - id: tools
+      name: '@deepseek-ai/dsh-tools'
+
+    - id: tool-todo
+      name: '@deepseek-ai/dsh-tool-todo'
+      config:
+        allowParallelInProgress: true
+
+    # The loop mechanism only: `agents: []` mounts the factory and the session
+    # wiring without starting an Agent at boot.
+    - id: agent-loop
+      name: '@deepseek-ai/dsh-agent-loop'
+      config:
+        agents: []
+
+    # The v1 shared official route. Explicit here because the base bundle's
+    # default is not inherited when base itself is not mounted.
+    - id: agent-default-model
+      name: '@deepseek-ai/dsh-agent-default-model'
+      config:
+        provider: deepseek-official
+        model: deepseek-flash
+
+    # No key or endpoint is inlined: the credential reference resolves per
+    # request from the launching environment (or the credentials service when a
+    # later ticket mounts one), and DEEPSEEK_BASE_URL overrides the endpoint.
+    - id: llm-deepseek-api-key
+      name: '@deepseek-ai/dsh-llm-deepseek-api-key'
+      config:
+        apiKeyEnv: DEEPSEEK_API_KEY
+
+    # ── durable session base ──────────────────────────────────────────────────
+    # Every durable path derives from DSH_HOME, which the launcher pins to the
+    # isolated OURFAIRY_HOME. Nothing here reaches the host's real home.
+    - id: session-persistence-jsonl
+      name: '@deepseek-ai/dsh-session-persistence-jsonl'
+      config:
+        root: !!js dshHomePath('sessions')
+
+    # Durability barrier before each model request and top-level dispatch.
+    - id: session-checkpoint-policy
+      name: '@deepseek-ai/dsh-session-checkpoint-policy'
+
+    # Content search is opt-in for v1, so this is stated explicitly rather than
+    # inherited: `ctx.sessionQuery` mounts and its exact reads/titles stay
+    # available, while search fails with SESSION_QUERY_SEARCH_DISABLED and the
+    # SQLite file stays unopened. The path is still an isolated, durable path so
+    # enabling search later cannot silently point at the host.
+    - id: session-query-sqlite
+      name: '@deepseek-ai/dsh-session-query-sqlite'
+      config:
+        path: !!js dshHomePath('query/sessions.sqlite')
+        openAt: never
+
+    # ── process-local support services ───────────────────────────────────────
+    # In-memory job registry only; the shell-backed job tools are not mounted.
+    - id: jobs-local
+      name: '@deepseek-ai/dsh-jobs-local'
+
+    # Content-addressed attachment bytes live outside the append-only session
+    # log; the directory resolves from the isolated DSH_HOME.
+    - id: attachment-local
+      name: '@deepseek-ai/dsh-attachment-local'
+      config:
+        dshHome: !!js dshHomePath()

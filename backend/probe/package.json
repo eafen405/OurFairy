@@ -1,0 +1,17 @@
+{
+  "name": "@ourfairy/dsh-baseline-probe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Test-only liveness probe for the OurFairy v1 backend composition. Mounted through a --patch overlay and never part of the product bundle.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src/index.mjs",
+    "overlay.patch.yml",
+    "README.md"
+  ]
+}

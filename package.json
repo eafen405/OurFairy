@@ -1,0 +1,20 @@
+{
+  "name": "ourfairy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OurFairy v1: an invited multi-user Fairy backend with an Android client. This repository holds the product modules, the explicit backend composition, and the version combination that binds the companion fork commits.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  },
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "combo:verify": "node scripts/combo.mjs verify",
+    "backend:probe": "node scripts/ourfairy-backend.mjs probe",
+    "backend:start": "node scripts/ourfairy-backend.mjs start",
+    "backend:stop": "node scripts/ourfairy-backend.mjs stop",
+    "backend:status": "node scripts/ourfairy-backend.mjs status",
+    "backend:doctor": "node scripts/ourfairy-backend.mjs doctor"
+  }
+}

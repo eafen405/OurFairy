@@ -1,0 +1,17 @@
+{
+  "name": "@ourfairy/dsh-v1-bundle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OurFairy v1 backend bundle: the explicit first-version row set, composed without inheriting @deepseek-ai/dsh-base.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "cordis.patch.yml",
+    "README.md"
+  ]
+}

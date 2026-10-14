@@ -1,0 +1,21 @@
+$ node --test "tests/**/*.test.mjs"
+▶ OurFairy v1 baseline composition
+  ✔ real profile boot reports every required service live (keyless) (1147.570516ms)
+  ✔ v1 profile does not mount unadapted file/shell/sandbox or excluded capabilities (364.637353ms)
+  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (367.167349ms)
+  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (367.090952ms)
+✔ OurFairy v1 baseline composition (2247.300418ms)
+✔ duplicate start is refused, stop is clean, and nothing leaks across cycles (2633.830732ms)
+✔ doctor passes on a clean isolated home and names its checks (431.177183ms)
+✔ a missing dsh checkout fails loudly instead of booting something else (48.429732ms)
+✔ one real turn reaches the external model double, registers tools, and persists the session (1197.103687ms)
+✔ a turn without credentials fails with a diagnostic naming the missing variable (902.145125ms)
+ℹ tests 9
+ℹ suites 1
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3185.270796
+EXIT=0
