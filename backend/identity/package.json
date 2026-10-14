@@ -1,0 +1,19 @@
+{
+  "name": "@ourfairy/dsh-identity",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OurFairy identity module: users, short numbers, invites, and sessions in the business SQLite store, with the product's own request paths and Connection's second-credential admission.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~"
+  }
+}
