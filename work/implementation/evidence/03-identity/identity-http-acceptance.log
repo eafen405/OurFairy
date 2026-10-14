@@ -1,0 +1,18 @@
+▶ OurFairy identity over real HTTP
+  ✔ the provisioned Phaethon signs in as short number 1 (47.334398ms)
+  ✔ invited agents take the next short numbers in registration order (94.189012ms)
+  ✔ refused registrations leave no identity and consume no short number (83.726604ms)
+  ✔ an ordinary agent is refused the administrator invite operation (57.402567ms)
+  ✔ the credential names its own holder with no user field in the request (56.253706ms)
+  ✔ signing out ends the credential it was presented with (81.166399ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (61.09066ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (224.075748ms)
+✔ OurFairy identity over real HTTP (706.388011ms)
+ℹ tests 8
+ℹ suites 1
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2258.20725

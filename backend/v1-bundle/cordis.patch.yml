@@ -99,3 +99,41 @@
       name: '@deepseek-ai/dsh-attachment-local'
       config:
         dshHome: !!js dshHomePath()
+
+    # ── the product's HTTP carrier and its own identity paths ─────────────────
+    # #26 mounts the real Web carrier so the identity module serves `/identity/*`
+    # request paths. Those paths sit outside the shared `/api` prefix on purpose:
+    # `/api` is admitted as a whole before any handler runs, so an unauthenticated
+    # sign-in endpoint cannot exist under it.
+    - id: credentials
+      name: '@deepseek-ai/dsh-credentials-local'
+
+    # `host` must be one concrete IP literal — the plugin rejects wildcard binds.
+    # Port 0 asks the OS for one, which is how the tests get an ephemeral port.
+    - id: webserver
+      name: '@deepseek-ai/dsh-host-webserver'
+      config:
+        host: !!js process.env.OURFAIRY_BIND_HOST ?? '127.0.0.1'
+        port: !!js Number(process.env.OURFAIRY_PORT ?? 3080)
+
+    # trustedHosts must name every authority that is not loopback: an Android
+    # client reaches this listener by an address the fence does not treat as
+    # loopback, and without the entry every request is a 403.
+    - id: connection
+      name: '@deepseek-ai/dsh-client-connection'
+      config:
+        trustedHosts: !!js (process.env.OURFAIRY_TRUSTED_HOSTS ?? '').split(',').filter(Boolean)
+
+    # The identity module: business SQLite beside (never inside) the dsh session
+    # logs, plus the `/identity/*` request paths and the session-token
+    # authenticator that admits `/api` requests for the right principal.
+    - id: identity
+      name: '@ourfairy/dsh-identity'
+      config:
+        path: !!js dshHomePath('identity/identity.sqlite')
+        sessionTtlDays: 30
+        phaethonName: !!js process.env.OURFAIRY_PHAETHON_NAME ?? 'phaethon'
+        # Left unset, Phaethon exists with short number 1 but no password: the
+        # operator provisions it by exporting this before a start.
+        phaethonPassword: !!js process.env.OURFAIRY_PHAETHON_PASSWORD
+

@@ -31,6 +31,7 @@ export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const PROFILE_NAME = 'ourfairy'
 const BUNDLE_PACKAGE = '@ourfairy/dsh-v1-bundle'
 const PROBE_PACKAGE = '@ourfairy/dsh-baseline-probe'
+const IDENTITY_PACKAGE = '@ourfairy/dsh-identity'
 const PNPM = ['corepack', ['pnpm@11.28.5']]
 
 /** Files whose content decides whether the linked profile is stale. */
@@ -40,6 +41,11 @@ const PRODUCT_SOURCES = [
   'backend/probe/package.json',
   'backend/probe/src/index.mjs',
   'backend/probe/overlay.patch.yml',
+  'backend/identity/package.json',
+  'backend/identity/src/codes.mjs',
+  'backend/identity/src/store.mjs',
+  'backend/identity/src/http.mjs',
+  'backend/identity/src/index.mjs',
 ]
 
 function fail(message, code = 1) {
@@ -142,6 +148,9 @@ const profileManifest = () => ({
   dependencies: {
     [BUNDLE_PACKAGE]: `file:${join(repoRoot, 'backend', 'v1-bundle')}`,
     [PROBE_PACKAGE]: `file:${join(repoRoot, 'backend', 'probe')}`,
+    // Product modules the bundle mounts by package name. A linked package only
+    // resolves its dsh peers when it is a profile dependency too.
+    [IDENTITY_PACKAGE]: `file:${join(repoRoot, 'backend', 'identity')}`,
   },
   dsh: { profile: { bundles: [BUNDLE_PACKAGE] } },
 })

@@ -1,0 +1,263 @@
+/**
+ * Ticket #26 acceptance: invite registration, sign-in, and session credentials
+ * over the real backend.
+ *
+ * These drive the shipped launcher (`scripts/ourfairy-backend.mjs start`), which
+ * boots the real dsh CLI with the OurFairy profile, and then speak HTTP to the
+ * listener it bound — no plugin is assembled by hand and no request is faked.
+ * Requests go through `node:http`, not `fetch`, so they cannot be routed
+ * through an ambient proxy the way `NODE_USE_ENV_PROXY` does for global fetch.
+ *
+ * An explicit `OURFAIRY_DSH_DIR` override (a ticket worktree of the harness) is
+ * passed through with `--allow-drift`; without it the launcher checks out the
+ * pinned combination, which is what a normal run must do.
+ */
+import assert from 'node:assert/strict'
+import http from 'node:http'
+import { after, before, describe, test } from 'node:test'
+import { describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
+
+const PHAETHON_PASSWORD = 'test-phaethon-password'
+const home = makeHome('ourfairy-identity-')
+const started = { port: undefined, stop: () => {} }
+
+before(() => {
+  const args = ['start', '--json']
+  if (process.env.OURFAIRY_DSH_DIR !== undefined && process.env.OURFAIRY_DSH_DIR !== '') args.push('--allow-drift')
+  const run = runBackend(args, {
+    OURFAIRY_HOME: home,
+    OURFAIRY_PORT: '0',
+    OURFAIRY_PHAETHON_PASSWORD: PHAETHON_PASSWORD,
+    DEEPSEEK_API_KEY: undefined,
+    DEEPSEEK_BASE_URL: undefined,
+  })
+  assert.equal(run.code, 0, describeRun('start', run))
+  const summary = JSON.parse(run.stdout)
+  assert.ok(Array.isArray(summary.listeningPorts) && summary.listeningPorts.length > 0,
+    `started backend reported no listening port: ${run.stdout}`)
+  started.port = summary.listeningPorts[0]
+  started.stop = () => { started.stopped = runBackend(['stop'], { OURFAIRY_HOME: home }) }
+})
+
+after(() => {
+  const stop = runBackend(['stop'], { OURFAIRY_HOME: home })
+  assert.equal(stop.code, 0, describeRun('stop', stop))
+  assert.match(stop.stdout, /"leakedProcesses": \[\]|leaked processes: 0/u,
+    `stopping the backend must not leave a process behind:\n${stop.stdout}`)
+  removeHome(home)
+})
+
+/** One HTTP request against the running backend. */
+function request(path, { method = 'POST', token, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body))
+    const headers = { host: `127.0.0.1:${started.port}` }
+    if (token !== undefined) headers.authorization = `Bearer ${token}`
+    if (payload !== undefined) {
+      headers['content-type'] = 'application/json'
+      headers['content-length'] = String(payload.byteLength)
+    }
+    const call = http.request({ host: '127.0.0.1', port: started.port, path, method, headers }, response => {
+      const chunks = []
+      response.on('data', chunk => chunks.push(chunk))
+      response.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8')
+        let json
+        try { json = JSON.parse(text) } catch { json = undefined }
+        resolve({ status: response.statusCode, headers: response.headers, text, json })
+      })
+    })
+    call.on('error', reject)
+    if (payload !== undefined) call.write(payload)
+    call.end()
+  })
+}
+
+/** Sign one identity in and return its session credential. */
+async function signIn(name, password) {
+  const response = await request('/identity/sign-in', { body: { name, password } })
+  assert.equal(response.status, 200, `sign-in for ${name} failed: ${response.text}`)
+  return response.json
+}
+
+/** Mint one invite as the given administrator. */
+async function createInvite(token) {
+  const response = await request('/identity/invite', { token })
+  assert.equal(response.status, 200, `invite creation failed: ${response.text}`)
+  return response.json.invite.code
+}
+
+/** Register one invited identity. */
+function register(inviteCode, name, password = `${name}-password`) {
+  return request('/identity/register', { body: { inviteCode, name, password } })
+}
+
+describe('OurFairy identity over real HTTP', () => {
+  test('the provisioned Phaethon signs in as short number 1', async () => {
+    const signedIn = await signIn('phaethon', PHAETHON_PASSWORD)
+    assert.equal(signedIn.user.shortId, 1, 'Phaethon must be short number 1')
+    assert.equal(signedIn.user.isAdmin, true, 'Phaethon must be the administrator')
+    assert.equal(typeof signedIn.token, 'string')
+    assert.ok(signedIn.token.length >= 32, 'the session credential must be a real secret, not a guessable value')
+    const sessions = await request('/identity/session', { token: signedIn.token })
+    assert.equal(sessions.status, 200, `the fresh credential must verify: ${sessions.text}`)
+    assert.equal(sessions.json.user.shortId, 1)
+  })
+
+  test('invited agents take the next short numbers in registration order', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const first = await register(await createInvite(phaethon.token), 'agent-one')
+    assert.equal(first.status, 200, `the first invited agent must register: ${first.text}`)
+    assert.equal(first.json.user.shortId, 2, 'the first invited agent must be short number 2')
+    assert.equal(first.json.user.isAdmin, false)
+    const second = await register(await createInvite(phaethon.token), 'agent-two')
+    assert.equal(second.status, 200, `the second invited agent must register: ${second.text}`)
+    assert.equal(second.json.user.shortId, 3, 'the second invited agent must be short number 3')
+  })
+
+  test('refused registrations leave no identity and consume no short number', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const spent = await createInvite(phaethon.token)
+    const created = await register(spent, 'agent-refusal-probe')
+    assert.equal(created.status, 200, `the probe identity must register: ${created.text}`)
+    const allocated = created.json.user.shortId
+
+    const unknown = await register('ZZZZZZZZZZZZ', 'agent-unknown-invite')
+    assert.equal(unknown.status, 403, `an unissued invite code must be refused: ${unknown.text}`)
+    assert.equal(unknown.json.error.code, 'identity/unknown-invite')
+
+    const reused = await register(spent, 'agent-reused-invite')
+    assert.equal(reused.status, 409, `a spent invite code must be refused: ${reused.text}`)
+    assert.equal(reused.json.error.code, 'identity/invite-used')
+
+    const duplicateName = await register(await createInvite(phaethon.token), 'agent-refusal-probe')
+    assert.equal(duplicateName.status, 409, `a name already in use must be refused: ${duplicateName.text}`)
+    assert.equal(duplicateName.json.error.code, 'identity/name-taken')
+
+    // The next successful registration proves none of the three refusals
+    // allocated an identity or burned a number.
+    const next = await register(await createInvite(phaethon.token), 'agent-after-refusals')
+    assert.equal(next.status, 200, `the following registration must succeed: ${next.text}`)
+    assert.equal(next.json.user.shortId, allocated + 1,
+      'a refused registration must not consume a short number')
+  })
+
+  test('an ordinary agent is refused the administrator invite operation', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const agent = await register(await createInvite(phaethon.token), 'agent-no-admin')
+    assert.equal(agent.status, 200, `the agent must exist: ${agent.text}`)
+
+    const refused = await request('/identity/invite', { token: agent.json.token })
+    assert.equal(refused.status, 403, `an agent must not mint invites: ${refused.text}`)
+    assert.equal(refused.json.error.code, 'identity/forbidden')
+
+    // Refused for real, not just hidden: no invite code came back.
+    assert.equal(refused.json.invite, undefined)
+    const anonymous = await request('/identity/invite')
+    assert.equal(anonymous.status, 401, `an anonymous caller must be refused: ${anonymous.text}`)
+  })
+
+  test('the credential names its own holder with no user field in the request', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const agent = await register(await createInvite(phaethon.token), 'agent-self')
+    assert.equal(agent.status, 200, `the agent must exist: ${agent.text}`)
+
+    const seen = await request('/identity/session', { token: agent.json.token })
+    assert.equal(seen.status, 200, `the agent credential must verify: ${seen.text}`)
+    assert.equal(seen.json.user.shortId, agent.json.user.shortId)
+    assert.equal(seen.json.user.isAdmin, false)
+
+    // The administrator's own credential still speaks for the administrator:
+    // presenting it never turns the request into the agent's identity or back.
+    const admin = await request('/identity/session', { token: phaethon.token })
+    assert.equal(admin.json.user.shortId, 1)
+    assert.equal(admin.json.user.isAdmin, true)
+
+    const forged = await request('/identity/session', { token: 'not-a-real-session-token' })
+    assert.equal(forged.status, 401, `a forged credential must be refused: ${forged.text}`)
+  })
+
+  test('signing out ends the credential it was presented with', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const agent = await register(await createInvite(phaethon.token), 'agent-signout')
+    assert.equal(agent.status, 200, `the agent must exist: ${agent.text}`)
+    const token = agent.json.token
+
+    const signedOut = await request('/identity/sign-out', { token })
+    assert.equal(signedOut.status, 200, `sign-out must succeed: ${signedOut.text}`)
+    assert.equal(signedOut.json.revoked, true)
+
+    const afterSignOut = await request('/identity/session', { token })
+    assert.equal(afterSignOut.status, 401, `a revoked credential must stop working: ${afterSignOut.text}`)
+
+    // Signing in again mints a working credential, so sign-out ended the
+    // session and not the identity.
+    const again = await signIn('agent-signout', 'agent-signout-password')
+    const restored = await request('/identity/session', { token: again.token })
+    assert.equal(restored.status, 200, `a fresh credential must work: ${restored.text}`)
+  })
+
+  test('a session credential admits dsh /api while an anonymous request is refused at the door', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const agent = await register(await createInvite(phaethon.token), 'agent-api-admission')
+    assert.equal(agent.status, 200, `the agent must exist: ${agent.text}`)
+
+    // No endpoint is mounted on dsh's shared channel yet (that is ticket #28),
+    // so admission is observable as the difference between the carrier's door
+    // and the bridge's own "not found": 401 means the request never entered.
+    const anonymous = await request('/api/session.list', { method: 'GET' })
+    assert.equal(anonymous.status, 401, `an anonymous /api request must be refused: ${anonymous.text}`)
+    assert.match(anonymous.text, /unauthorized/u)
+
+    const admitted = await request('/api/session.list', { method: 'GET', token: agent.json.token })
+    assert.equal(admitted.status, 404,
+      `the session credential must pass admission and then miss the endpoint: ${admitted.text}`)
+  })
+
+  test('concurrent registrations never share a short number and never half-succeed', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const codes = []
+    for (let index = 0; index < 5; index += 1) codes.push(await createInvite(phaethon.token))
+
+    const results = await Promise.all(codes.map((code, index) => register(code, `agent-parallel-${index}`)))
+    const shortIds = results.map(result => result.json.user.shortId)
+    assert.deepEqual(results.map(result => result.status), [200, 200, 200, 200, 200],
+      `every distinct invite must register exactly once: ${results.map(r => r.text).join(' | ')}`)
+    assert.equal(new Set(shortIds).size, shortIds.length, `short numbers must be unique, got ${shortIds.join(', ')}`)
+    // Which of five simultaneous registrations commits first is genuinely
+    // nondeterministic, so the assertion is on the arithmetic rather than on
+    // the arrival order of the responses: five successes take five consecutive
+    // numbers, with no duplicate and no gap left by a failure.
+    const ordered = [...shortIds].sort((left, right) => left - right)
+    const first = ordered[0]
+    assert.deepEqual(ordered, [first, first + 1, first + 2, first + 3, first + 4],
+      `five concurrent registrations must take five consecutive short numbers: ${shortIds.join(', ')}`)
+    assert.deepEqual(results.map(result => result.json.user.name),
+      ['agent-parallel-0', 'agent-parallel-1', 'agent-parallel-2', 'agent-parallel-3', 'agent-parallel-4'],
+      'each concurrent registration must create exactly its own identity')
+
+    // Five simultaneous submissions of ONE invite code: exactly one identity.
+    const shared = await createInvite(phaethon.token)
+    const repeated = await Promise.all(
+      Array.from({ length: 5 }, (_unused, index) => register(shared, `agent-duplicate-${index}`)),
+    )
+    const accepted = repeated.filter(result => result.status === 200)
+    const refused = repeated.filter(result => result.status !== 200)
+    assert.equal(accepted.length, 1,
+      `exactly one submission of a single-use invite may succeed: ${repeated.map(r => r.text).join(' | ')}`)
+    assert.equal(refused.length, 4)
+    for (const result of refused) assert.equal(result.status, 409, `a duplicate submission is refused: ${result.text}`)
+
+    // The single winner is a real, usable identity, and the four losers left
+    // nothing behind: the next registration takes the very next number.
+    const winner = accepted[0].json
+    const verified = await request('/identity/session', { token: winner.token })
+    assert.equal(verified.status, 200, `the winning identity must be usable: ${verified.text}`)
+    assert.equal(verified.json.user.shortId, winner.user.shortId)
+
+    const trailing = await register(await createInvite(phaethon.token), 'agent-after-duplicates')
+    assert.equal(trailing.status, 200, `the trailing registration must succeed: ${trailing.text}`)
+    assert.equal(trailing.json.user.shortId, winner.user.shortId + 1,
+      'a refused duplicate submission must not consume a short number')
+  })
+})
