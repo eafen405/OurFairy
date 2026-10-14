@@ -20,15 +20,16 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/deepseek-harness.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
+      "productCommit": "2f084be06e75cd56c2a7ac9a31e155db9f4deee0",
       "researchUpstreamSha": "d743267388641bc76f17c45ce8b4c231aed1d32c",
       "researchUpstreamRef": "origin/master",
       "requiredBuild": [
         "corepack pnpm@11.28.5 install",
         "corepack pnpm@11.28.5 run build:lib:host",
+        "corepack pnpm@11.28.5 run build:lib:client",
         "corepack pnpm@11.28.5 run build:native-system"
       ],
-      "note": "Product commit currently equals the research upstream SHA: no product commit has landed on the fork yet. Native public-representation changes (owner/delivery/format) will advance productCommit while researchUpstreamSha stays fixed. build:lib:host builds the CLI/host libraries; build:native-system builds native/system/packages/linux-x64/bin/glibc/system.node, which the durable JSONL session writer requires (verified: without it a session flush fails to load the flock addon)."
+      "note": "productCommit is the fork's integration branch tip and has now advanced past researchUpstreamSha: ticket #26 landed the admission generalization (a registered second credential admitted as its own principal Peer, with the browser cookie path unchanged), and ticket #25 landed durable session ownership plus first-class delivery of a peer Session's message -- the owner is an optional compatible header extension (no SESSION_FORMAT_VERSION bump, v4 owns its own header codec, the released v2 contract untouched) and delivery is a new surface event type carrying no fabricated turn/step/stream. Widening AssistantMessage.source to accept a delivered (non-model) source reached further than the first consumer list (four production consumers and four existing tests needed narrowing), which is why the merge was held until typecheck was clean on both the host and client projects; the pushed pre-push hook re-ran typecheck on the merged commit and it passed. researchUpstreamSha stays fixed at the upstream commit the readiness research was written against and is never a product deliverable. build:lib:host builds the CLI/host libraries, but it is NOT sufficient: packages/client/tsdown.client.ts:120 returns SKIP_WORKSPACE_BUILD in the host pass for every package declared through clientBundle() without hostPhase, so a package such as @deepseek-ai/dsh-client-connection has no lib/index.js after build:lib:host while its package.json main points exactly there. build:lib:client is the DSH_BUILD_FACE=client pass that emits those Node loader entries and browser artifacts. Measured: without it, a profile mounting the `connection` row fails to import ('1 required plugin did not activate', ERR_MODULE_NOT_FOUND on packages/client/connection/lib/index.js) in a checkout that had only ever run build:lib:host. build:native-system builds native/system/packages/linux-x64/bin/glibc/system.node, which the durable JSONL session writer requires (verified: without it a session flush fails to load the flock addon)."
     },
     "rikkahub": {
       "role": "android-client",
