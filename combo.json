@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "product": "OurFairy v1",
+  "description": "The version combination the OurFairy v1 backend is built and tested against. `productCommit` is the commit the product actually consumes; `researchUpstreamSha` is the upstream commit the readiness research was written against and is NEVER a product deliverable. A ticket worktree obtains the same combination by checking out each repo's `integrationBranch` tip through scripts/combo.mjs.",
+  "repos": {
+    "ourfairy": {
+      "role": "product",
+      "localPath": "/home/eafen405/projects/OurFairy",
+      "remoteName": "origin",
+      "remoteUrl": "git@github.com:eafen405/OurFairy.git",
+      "integrationBranch": "integration/ourfairy-v1",
+      "productCommit": "9533063686aff86daf9c8daec7b9b4f0bd0035d1",
+      "researchUpstreamSha": null,
+      "note": "Product repository. Backend modules live under backend/, product launchers under scripts/."
+    },
+    "dsh": {
+      "role": "backend-harness",
+      "localPath": "/home/eafen405/projects/deepseek-harness",
+      "remoteName": "fork",
+      "remoteUrl": "https://github.com/eafen405/deepseek-harness.git",
+      "integrationBranch": "product/ourfairy-v1",
+      "productCommit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
+      "researchUpstreamSha": "d743267388641bc76f17c45ce8b4c231aed1d32c",
+      "researchUpstreamRef": "origin/master",
+      "note": "Product commit currently equals the research upstream SHA: no product commit has landed on the fork yet. Native public-representation changes (owner/delivery/format) will advance productCommit while researchUpstreamSha stays fixed."
+    },
+    "rikkahub": {
+      "role": "android-client",
+      "localPath": "/home/eafen405/projects/rikkahub",
+      "remoteName": "fork",
+      "remoteUrl": "https://github.com/eafen405/rikkahub.git",
+      "integrationBranch": "product/ourfairy-v1",
+      "productCommit": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
+      "researchUpstreamSha": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
+      "researchUpstreamRef": "origin/master",
+      "note": "Baseline recorded for the Android client. First APK build is accepted by ticket #26; a missing Android build environment is not a backend blocker."
+    }
+  },
+  "backend": {
+    "profileName": "ourfairy",
+    "bundlePackage": "@ourfairy/dsh-v1-bundle",
+    "bundlePathInRepo": "backend/v1-bundle",
+    "probePackage": "@ourfairy/dsh-baseline-probe",
+    "probePathInRepo": "backend/probe",
+    "launcher": "scripts/ourfairy-backend.mjs",
+    "nodeRange": "^22.19.0 || >=24",
+    "pnpmPin": "11.28.5",
+    "pnpmInvocation": "corepack pnpm@11.28.5",
+    "isolatedHomeEnv": "OURFAIRY_HOME",
+    "isolatedHomeDefault": "<worktree>/.ourfairy",
+    "dshHomeEnv": "DSH_HOME",
+    "dshHomeDefault": "<OURFAIRY_HOME>/dsh-home"
+  },
+  "androidToolchain": {
+    "androidHome": "/home/eafen405/Android/Sdk",
+    "platforms": ["android-37.0"],
+    "buildTools": ["37.0.0"],
+    "ndk": "28.2.13676358",
+    "cmake": true,
+    "java": "Temurin 21 (/home/eafen405/.local/bin/java)",
+    "gradle": "wrapper (cache /home/eafen405/.gradle)",
+    "localProperties": "sdk.dir=/home/eafen405/Android/Sdk (not committed; written in the rikkahub checkout)",
+    "firstApkBuildTicket": 26
+  }
+}
