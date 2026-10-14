@@ -57,6 +57,10 @@ const COMBINATION = readCombination()
 const PROFILE_NAME = COMBINATION.profileName
 const BUNDLE_PACKAGE = COMBINATION.bundlePackage
 const PROBE_PACKAGE = COMBINATION.probePackage
+// The identity module is a product package the bundle mounts by name. combo.json
+// records no identity field (and this ticket must not edit that file), so the
+// name stays a launcher constant while its sources join the staleness hash below.
+const IDENTITY_PACKAGE = '@ourfairy/dsh-identity'
 const BUNDLE_DIR = join(repoRoot, COMBINATION.bundlePathInRepo)
 const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
 const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
@@ -68,6 +72,11 @@ const PRODUCT_SOURCES = [
   join(COMBINATION.probePathInRepo, 'package.json'),
   join(COMBINATION.probePathInRepo, 'src', 'index.mjs'),
   join(COMBINATION.probePathInRepo, 'overlay.patch.yml'),
+  'backend/identity/package.json',
+  'backend/identity/src/codes.mjs',
+  'backend/identity/src/store.mjs',
+  'backend/identity/src/http.mjs',
+  'backend/identity/src/index.mjs',
 ]
 
 function fail(message, code = 1) {
@@ -170,6 +179,9 @@ const profileManifest = () => ({
   dependencies: {
     [BUNDLE_PACKAGE]: `file:${BUNDLE_DIR}`,
     [PROBE_PACKAGE]: `file:${PROBE_DIR}`,
+    // Product modules the bundle mounts by package name. A linked package only
+    // resolves its dsh peers when it is a profile dependency too.
+    [IDENTITY_PACKAGE]: `file:${join(repoRoot, 'backend', 'identity')}`,
   },
   dsh: { profile: { bundles: [BUNDLE_PACKAGE] } },
 })

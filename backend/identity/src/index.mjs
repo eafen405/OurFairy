@@ -1,0 +1,145 @@
+/**
+ * The OurFairy identity module: users, short numbers, invites, and sessions as
+ * one dsh plugin.
+ *
+ * It does two things for the rest of the composition:
+ *
+ *   1. mounts the product's own request paths (`/identity/*`, see `http.mjs`)
+ *      on the real Web carrier, outside the admitted `/api` prefix; and
+ *   2. registers a second-credential authenticator with Connection, so a
+ *      session token this module issued is also what admits an Android request
+ *      to dsh's `/api` — and the principal dsh then reports is the one derived
+ *      here from the credential, never one the client chose.
+ *
+ * @module @ourfairy/dsh-identity
+ */
+import { Service } from '@deepseek-ai/cordis'
+import { IdentityError, IdentityStore, PHAETHON_SHORT_ID } from './store.mjs'
+import { bearerToken, identityHandlers, IDENTITY_PATHS } from './http.mjs'
+
+/** Stable Cordis plugin name. */
+export const name = 'ourfairy-identity'
+
+/** The carrier this module serves its request paths through, and dsh's admission. */
+export const inject = ['webServer', 'connection']
+
+/** Principal key one short number speaks for; stable across that user's sessions. */
+export function principalIdOf(shortId) {
+  return `user:${shortId}`
+}
+
+/** The identity service the composition reads as `ctx.identity`. */
+export class IdentityService extends Service {
+  /**
+   * @param ctx - owning plugin context.
+   * @param options - the business store and the resolved Phaethon identity.
+   */
+  constructor(ctx, { store, phaethon }) {
+    super(ctx, 'identity')
+    this.store = store
+    this.phaethon = phaethon
+  }
+
+  /** The user a presented request speaks for, or undefined. */
+  authenticateRequest(request) {
+    const token = bearerToken(request)
+    return token === undefined ? undefined : this.store.authenticate(token)
+  }
+
+  /** Connection's second-credential seam: the principal one request speaks for. */
+  identify(request) {
+    const user = this.authenticateRequest(request)
+    return user === undefined ? undefined : { id: principalIdOf(user.shortId) }
+  }
+
+  /** Mint an invite for the authenticated administrator. */
+  createInvite(caller) {
+    if (caller.isAdmin !== true) {
+      throw new IdentityError(403, 'identity/forbidden', 'only Phaethon may create invites')
+    }
+    return this.store.createInvite(caller.shortId)
+  }
+
+  /** Register an invited identity. */
+  register({ inviteCode, name, password }) {
+    return this.store.register({ inviteCode, name, password })
+  }
+
+  /** Sign one identity in. */
+  signIn({ name, password }) {
+    return this.store.signIn({ name, password })
+  }
+
+  /**
+   * End the caller's credential and drop the principal scope it was admitted
+   * as, so no open stream keeps speaking for that identity.
+   * @param request - the signing-out request.
+   * @returns the revoked principal key.
+   */
+  async signOutRequest(request) {
+    const token = bearerToken(request)
+    const user = this.authenticateRequest(request)
+    if (token === undefined || user === undefined) {
+      throw new IdentityError(401, 'identity/unauthorized', 'present a live session credential')
+    }
+    this.store.signOut(token)
+    await this.ctx.get('connection')?.revokePrincipal(principalIdOf(user.shortId))
+    return { revoked: true, principal: principalIdOf(user.shortId) }
+  }
+}
+
+/** Validate the row config; the bundle writes it, so a mistake fails at load. */
+function resolveConfig(config) {
+  const source = config ?? {}
+  if (typeof source.path !== 'string' || source.path === '') {
+    throw new Error('ourfairy-identity: config.path must name the business SQLite file')
+  }
+  const sessionTtlDays = source.sessionTtlDays ?? 30
+  if (!Number.isSafeInteger(sessionTtlDays) || sessionTtlDays < 1) {
+    throw new Error('ourfairy-identity: config.sessionTtlDays must be a positive integer')
+  }
+  return {
+    path: source.path,
+    sessionTtlDays,
+    phaethonName: source.phaethonName ?? 'phaethon',
+    phaethonPassword: typeof source.phaethonPassword === 'string' && source.phaethonPassword !== ''
+      ? source.phaethonPassword
+      : undefined,
+  }
+}
+
+/**
+ * Mount the identity module.
+ * @param ctx - plugin context.
+ * @param config - resolved row config.
+ */
+export function apply(ctx, config) {
+  const resolved = resolveConfig(config)
+  const store = new IdentityStore({ path: resolved.path, sessionTtlDays: resolved.sessionTtlDays })
+  const seeded = store.seedPhaethon({ name: resolved.phaethonName, password: resolved.phaethonPassword })
+  ctx.effect(() => () => store.close(), 'ourfairy-identity: business store')
+
+  const service = new IdentityService(ctx, { store, phaethon: seeded.user })
+  const handlers = identityHandlers({ service, fence: (request) => ctx.connection.fence(request) })
+
+  // The session token this module issues is also a first-class credential for
+  // dsh's own `/api`: Connection admits it as the principal derived above.
+  ctx.connection.authenticators.register({
+    name: 'ourfairy-identity',
+    identify: (request) => service.identify(request),
+  })
+
+  for (const path of IDENTITY_PATHS) {
+    const handler = handlers.get(path)
+    ctx.effect(
+      () => ctx.webServer.register({ kind: 'exact', path, handler }),
+      `ourfairy-identity: ${path}`,
+    )
+  }
+
+  ctx.logger?.info?.(
+    `ourfairy-identity: Phaethon is short number ${String(PHAETHON_SHORT_ID)}`
+    + ` (${seeded.created ? 'seeded' : 'already present'}),`
+    + ` ${seeded.user.name}${seeded.user.isAdmin ? '' : ' (not an administrator)'}`,
+  )
+}
