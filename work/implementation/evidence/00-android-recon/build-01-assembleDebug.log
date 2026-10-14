@@ -1,0 +1,27 @@
+Starting a Gradle Daemon, 1 incompatible Daemon could not be reused, use --status for details
+Calculating task graph as no cached configuration is available for tasks: :app:assembleDebug
+> Task :build-logic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :build-logic:compileKotlin UP-TO-DATE
+> Task :build-logic:compileJava NO-SOURCE
+> Task :build-logic:pluginDescriptors UP-TO-DATE
+> Task :build-logic:processResources UP-TO-DATE
+> Task :build-logic:classes UP-TO-DATE
+> Task :build-logic:jar UP-TO-DATE
+Checking the license for package Android SDK Platform 37.2 in /home/eafen405/Android/Sdk/licenses
+License for package Android SDK Platform 37.2 accepted.
+Preparing "Install Android SDK Platform 37.2 (revision 1)".
+"Install Android SDK Platform 37.2 (revision 1)" ready.
+Installing Android SDK Platform 37.2 in /home/eafen405/Android/Sdk/platforms/android-37.2
+"Install Android SDK Platform 37.2 (revision 1)" complete.
+"Install Android SDK Platform 37.2 (revision 1)" finished.
+START 2026-10-14T21:02:16+08:00
+Starting a Gradle Daemon, 1 incompatible Daemon could not be reused, use --status for details
+Calculating task graph as no cached configuration is available for tasks: :app:assembleDebug
+> Task :build-logic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :build-logic:compileKotlin UP-TO-DATE
+> Task :build-logic:compileJava NO-SOURCE
+> Task :build-logic:pluginDescriptors UP-TO-DATE
+> Task :build-logic:processResources UP-TO-DATE
+> Task :build-logic:classes UP-TO-DATE
+> Task :build-logic:jar UP-TO-DATE
+EXIT=143 END 2026-10-14T21:12:30+08:00
