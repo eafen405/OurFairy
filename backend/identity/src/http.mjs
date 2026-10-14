@@ -42,8 +42,24 @@ export function bearerToken(request) {
   return match === null ? undefined : match[1]
 }
 
+/**
+ * Whether this request carries a payload at all.
+ *
+ * Three of these paths (`/identity/invite`, `/identity/session`,
+ * `/identity/sign-out`) act purely on the presented credential and have no
+ * document to send. A bodyless POST carries no `content-type`, and demanding
+ * one would answer `415 Unsupported Media Type` to a request that has no media
+ * type to be unsupported — a real client posting an empty body must be served.
+ */
+function carriesBody(request) {
+  const declared = headerOf(request, 'content-length')
+  if (declared !== undefined) return Number(declared) > 0
+  return headerOf(request, 'transfer-encoding') !== undefined
+}
+
 /** Read a bounded JSON body; a wrong content type or oversized body is a 4xx, not a hang. */
 async function readJsonBody(request) {
+  if (!carriesBody(request)) return {}
   const mediaType = headerOf(request, 'content-type')?.split(';', 1)[0]?.trim().toLowerCase()
   if (mediaType !== 'application/json') {
     throw new IdentityError(415, 'identity/unsupported-media-type', 'send the body as application/json')
