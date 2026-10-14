@@ -1,20 +1,128 @@
 ▶ OurFairy v1 baseline composition
-  ✔ real profile boot reports every required service live (keyless) (92348.371921ms)
-  ✔ v1 profile does not mount unadapted file/shell/sandbox or excluded capabilities (302.469197ms)
-  ✔ the product profile alone boots with no test overlay at all (291.402839ms)
-  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (297.187261ms)
-  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (294.286578ms)
-✔ OurFairy v1 baseline composition (93535.054882ms)
-✔ duplicate start is refused, stop is clean, and nothing leaks across cycles (29692.687499ms)
-✔ doctor passes on a clean isolated home and names its checks (410.57632ms)
-✔ a missing dsh checkout fails loudly instead of booting something else (32.313059ms)
-✔ one real turn reaches the external model double, registers tools, and persists the session (19797.688898ms)
-✔ a turn without credentials fails with a diagnostic naming the missing variable (6539.478366ms)
-ℹ tests 10
-ℹ suites 1
-ℹ pass 10
-ℹ fail 0
+  ✔ real profile boot reports every required service live (keyless) (4912.607658ms)
+  ✔ v1 profile does not mount unadapted file/shell/sandbox or excluded capabilities (894.246189ms)
+  ✖ the product profile alone boots with no test overlay at all (300108.964896ms)
+  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (800.375447ms)
+  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (816.921197ms)
+✖ OurFairy v1 baseline composition (307538.68523ms)
+▶ OurFairy identity over real HTTP
+  ✔ the provisioned Phaethon signs in as short number 1 (98.925037ms)
+  ✔ invited agents take the next short numbers in registration order (167.393817ms)
+  ✔ refused registrations leave no identity and consume no short number (182.29117ms)
+  ✔ an ordinary agent is refused the administrator invite operation (121.840896ms)
+  ✔ the credential names its own holder with no user field in the request (125.28821ms)
+  ✔ signing out ends the credential it was presented with (185.91529ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (128.189373ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (462.212629ms)
+✔ OurFairy identity over real HTTP (1474.139187ms)
+✔ duplicate start is refused, stop is clean, and nothing leaks across cycles (6059.823984ms)
+✖ doctor passes on a clean isolated home and names its checks (968.787297ms)
+✔ a missing dsh checkout fails loudly instead of booting something else (71.191919ms)
+✔ one real turn reaches the external model double, registers tools, and persists the session (3934.069648ms)
+✔ a turn without credentials fails with a diagnostic naming the missing variable (4633.625537ms)
+ℹ tests 18
+ℹ suites 2
+ℹ pass 16
+ℹ fail 2
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 93595.636568
+ℹ duration_ms 307673.443169
+
+✖ failing tests:
+
+test at tests/baseline-boot.test.mjs:133:3
+✖ the product profile alone boots with no test overlay at all (300108.964896ms)
+  AssertionError [ERR_ASSERTION]: boot-product (product profile, no overlay) exited -1 (spawnSync /usr/bin/node ETIMEDOUT)
+  --- stdout ---
+  
+  --- stderr ---
+  
+  every other boot passes --patch backend/probe/overlay.patch.yml, so this is the only check that the product composition boots on its own
+  
+  -1 !== 0
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/01-baseline/tests/baseline-boot.test.mjs:136:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: -1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/lifecycle.test.mjs:77:1
+✖ doctor passes on a clean isolated home and names its checks (968.787297ms)
+  AssertionError [ERR_ASSERTION]: doctor exited 1
+  --- stdout ---
+  {
+    "ok": false,
+    "checks": [
+      {
+        "name": "node version",
+        "ok": true,
+        "detail": "24.18.0 satisfies ^22.19.0 || >=24"
+      },
+      {
+        "name": "corepack pnpm pin available",
+        "ok": true,
+        "detail": "11.28.5 (COREPACK_HOME=/home/eafen405/projects/OurFairy/.worktrees/01-baseline/.corepack)"
+      },
+      {
+        "name": "combo combination",
+        "ok": false,
+        "detail": "ourfairy: worktree HEAD 31f58e1f82ce845e97aad353358aa235817bb6ca is not based on integration/ourfairy-v1 (a7b2db5ee179de07028c1136c8ec8fb9d5b06e5f); run 'git -C /home/eafen405/projects/OurFairy/.worktrees/01-baseline merge integration/ourfairy-v1' before finishing this ticket; rikkahub: product/ourfairy-v1 is ffc88e306b0f55cf52c3592ac93151be0492b864 but combo.json locks 0966502c4d65c1ee4b2a3e49a19703bb1978016c; run 'git -C /home/eafen405/projects/rikkahub checkout 0966502c4d65c1ee4b2a3e49a19703bb1978016c' (or update combo.json when the combination intentionally moves)"
+      },
+      {
+        "name": "dsh CLI build",
+        "ok": true,
+        "detail": "/home/eafen405/projects/deepseek-harness/apps/cli/lib/bin.js (2f084be06e75)"
+      },
+      {
+        "name": "product packages",
+        "ok": true,
+        "detail": "backend/v1-bundle/package.json, backend/v1-bundle/cordis.patch.yml, backend/probe/package.json, backend/probe/src/index.mjs, backend/probe/overlay.patch.yml, backend/identity/package.json, backend/identity/src/codes.mjs, backend/identity/src/store.mjs, backend/identity/src/http.mjs, backend/identity/src/index.mjs"
+      },
+      {
+        "name": "isolated home",
+        "ok": true,
+        "detail": "/tmp/ourfairy-lifecycle-4MYPfl"
+      },
+      {
+        "name": "profile project linked",
+        "ok": true,
+        "detail": "/tmp/ourfairy-lifecycle-4MYPfl/dsh-home/profiles/ourfairy (cached)"
+      },
+      {
+        "name": "model double",
+        "ok": true,
+        "detail": "not configured (keyless startup only)"
+      }
+    ]
+  }
+  
+  --- stderr ---
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/01-baseline/tests/lifecycle.test.mjs:80:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
