@@ -12,7 +12,17 @@ import { after, test } from 'node:test'
 import { describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-lifecycle-')
-const env = { OURFAIRY_HOME: home, DEEPSEEK_API_KEY: undefined, DEEPSEEK_BASE_URL: undefined }
+// The v1 composition mounts the product's web carrier, so it binds a port by
+// design. Ask for an ephemeral one: the default 3080 is the port `dsh web`
+// itself serves the harness UI on, so the default collides on a developer
+// machine. What the ticket requires is that the port is *released* across
+// cycles, not that none is ever bound.
+const env = {
+  OURFAIRY_HOME: home,
+  OURFAIRY_PORT: '0',
+  DEEPSEEK_API_KEY: undefined,
+  DEEPSEEK_BASE_URL: undefined,
+}
 after(() => removeHome(home))
 
 function parseSummary(text, label) {
@@ -27,10 +37,11 @@ test('duplicate start is refused, stop is clean, and nothing leaks across cycles
     assert.equal(started.code, 0, describeRun(`start (cycle ${cycle})`, started))
     const summary = parseSummary(started.stdout, 'start')
     assert.equal(summary.ready, true, `start must wait for probe readiness; got ${JSON.stringify(summary)}`)
-    assert.deepEqual(
-      summary.listeningPorts,
-      [],
-      `the v1 baseline binds no ports; pid ${summary.pid} listened on ${JSON.stringify(summary.listeningPorts)}`,
+    assert.equal(
+      summary.listeningPorts.length,
+      1,
+      `the v1 composition binds exactly one port (the product's web carrier); `
+        + `pid ${summary.pid} listened on ${JSON.stringify(summary.listeningPorts)}`,
     )
 
     const status = runBackend(['status'], env)

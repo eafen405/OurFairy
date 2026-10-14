@@ -1,21 +1,30 @@
-$ node --test "tests/**/*.test.mjs"
 ▶ OurFairy v1 baseline composition
-  ✔ real profile boot reports every required service live (keyless) (1147.570516ms)
-  ✔ v1 profile does not mount unadapted file/shell/sandbox or excluded capabilities (364.637353ms)
-  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (367.167349ms)
-  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (367.090952ms)
-✔ OurFairy v1 baseline composition (2247.300418ms)
-✔ duplicate start is refused, stop is clean, and nothing leaks across cycles (2633.830732ms)
-✔ doctor passes on a clean isolated home and names its checks (431.177183ms)
-✔ a missing dsh checkout fails loudly instead of booting something else (48.429732ms)
-✔ one real turn reaches the external model double, registers tools, and persists the session (1197.103687ms)
-✔ a turn without credentials fails with a diagnostic naming the missing variable (902.145125ms)
-ℹ tests 9
-ℹ suites 1
-ℹ pass 9
+  ✔ real profile boot reports every required service live (keyless) (4823.630565ms)
+  ✔ v1 profile does not mount unadapted file/shell/sandbox or excluded capabilities (844.815717ms)
+  ✔ the product profile alone boots with no test overlay at all (1104.329398ms)
+  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (895.198335ms)
+  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (801.446182ms)
+✔ OurFairy v1 baseline composition (8471.373405ms)
+▶ OurFairy identity over real HTTP
+  ✔ the provisioned Phaethon signs in as short number 1 (100.912324ms)
+  ✔ invited agents take the next short numbers in registration order (164.072592ms)
+  ✔ refused registrations leave no identity and consume no short number (182.908487ms)
+  ✔ an ordinary agent is refused the administrator invite operation (110.179851ms)
+  ✔ the credential names its own holder with no user field in the request (118.662271ms)
+  ✔ signing out ends the credential it was presented with (188.986328ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (122.07036ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (462.912519ms)
+✔ OurFairy identity over real HTTP (1453.070716ms)
+✔ duplicate start is refused, stop is clean, and nothing leaks across cycles (5961.878934ms)
+✔ doctor passes on a clean isolated home and names its checks (1003.98366ms)
+✔ a missing dsh checkout fails loudly instead of booting something else (69.828682ms)
+✔ one real turn reaches the external model double, registers tools, and persists the session (4100.714621ms)
+✔ a turn without credentials fails with a diagnostic naming the missing variable (5008.016367ms)
+ℹ tests 18
+ℹ suites 2
+ℹ pass 18
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 3185.270796
-EXIT=0
+ℹ duration_ms 9298.124696

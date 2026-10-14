@@ -12,7 +12,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { describeRun, makeHome, readReport, removeHome, repoRoot, runBackendAsync } from './helpers/backend.mjs'
+import { describeRun, DURABLE_LOG, makeHome, readReport, removeHome, repoRoot, runBackendAsync } from './helpers/backend.mjs'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
 const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
@@ -20,8 +20,6 @@ const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-suppo
 
 const home = makeHome('ourfairy-model-double-')
 const reportPath = join(home, 'turn-report.json')
-/** A durable session log artifact, compressed or not. */
-const DURABLE_LOG = /\.jsonl(\.zstd)?$/
 let server
 after(async () => {
   if (server !== undefined) await server.close()
