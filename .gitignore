@@ -1,2 +1,4 @@
 /docs/dispatch-tips.md
 *.env
+.worktrees/
+.vendor/
