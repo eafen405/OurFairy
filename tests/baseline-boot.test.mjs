@@ -11,7 +11,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
-import { describeRun, makeHome, readReport, removeHome, runBackend } from './helpers/backend.mjs'
+import { describeRun, DURABLE_LOG, makeHome, readReport, removeHome, runBackend } from './helpers/backend.mjs'
 
 /** Services the v1 baseline must provide for a live session, tools, model, and persistence base. */
 const REQUIRED_SERVICES = [
@@ -28,6 +28,11 @@ const REQUIRED_SERVICES = [
  * Rows the first version must NOT mount: file, shell, and sandbox capabilities
  * whose permission adaptation is not implemented yet, plus capabilities the
  * product decision excluded from v1 entirely.
+ *
+ * This list is the single expectation for row absence. The probe intentionally
+ * keeps no copy of it — it reports the composed row ids as a fact, and this test
+ * decides what must not appear among them. A duplicated list inside the probe
+ * would let the two agree with each other while both drifted from the bundle.
  */
 const FORBIDDEN_ROW_IDS = [
   'tool-fs',
@@ -123,11 +128,24 @@ describe('OurFairy v1 baseline composition', () => {
       `forbidden row(s) mounted in the v1 profile: ${mounted.join(', ')};`
       + ` mounted rows were ${JSON.stringify([...rowIds])}`,
     )
-    // The probe reports the same check from inside the process; both must agree.
+  })
+
+  test('the product profile alone boots with no test overlay at all', () => {
+    const productReportPath = join(sharedHome, 'product-boot.json')
+    const run = runBackend(['boot-product', '--report', productReportPath], keylessEnv)
+    assert.equal(
+      run.code,
+      0,
+      `${describeRun('boot-product (product profile, no overlay)', run)}\n`
+      + 'every other boot passes --patch backend/probe/overlay.patch.yml, so this is the only check'
+      + ' that the product composition boots on its own',
+    )
+    const report = readReport(productReportPath)
+    assert.equal(report.ok, true, `product boot report must be ok: ${JSON.stringify(report)}`)
     assert.deepEqual(
-      report.excluded?.found ?? [],
+      report.overlaysApplied,
       [],
-      `probe found excluded capabilities mounted: ${(report.excluded?.found ?? []).join(', ')}`,
+      'the product-only boot must apply no patch overlay',
     )
   })
 
@@ -136,7 +154,11 @@ describe('OurFairy v1 baseline composition', () => {
       ['probe', '--turn', '--report', join(sharedHome, 'turn-missing-key.json')],
       keylessEnv,
     )
-    assert.notEqual(run.code, 0, describeRun('probe --turn (missing key) should fail', run))
+    assert.equal(
+      run.code,
+      3,
+      `${describeRun('probe --turn (missing key) must exit 3 for a configuration failure', run)}`,
+    )
     const output = `${run.stdout}\n${run.stderr}`
     assert.ok(
       output.includes('DEEPSEEK_API_KEY'),
@@ -159,7 +181,7 @@ describe('OurFairy v1 baseline composition', () => {
     // The startup itself must not create durable session files (no turn ran).
     const sessionsRoot = report.sessions?.root
     const files = sessionsRoot !== undefined && existsSync(sessionsRoot)
-      ? readdirSync(sessionsRoot, { recursive: true }).filter(name => String(name).endsWith('.jsonl'))
+      ? readdirSync(sessionsRoot, { recursive: true }).filter(name => DURABLE_LOG.test(String(name)))
       : []
     assert.deepEqual(files, [], `keyless boot without a turn must not write session logs; found ${files.join(', ')}`)
 

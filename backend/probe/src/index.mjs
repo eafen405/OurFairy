@@ -6,7 +6,8 @@
  *
  *   1. waits for the Loader tree to settle,
  *   2. checks every service the v1 backend promises is live and its row ACTIVE,
- *   3. checks the deliberately excluded rows are not mounted,
+ *   3. reports the exact composed row ids so the caller can assert which
+ *      capabilities must be absent (the expectation itself is the test's),
  *   4. optionally drives one real model turn through the agent loop,
  *   5. writes a machine-readable report and requests a bounded process exit.
  *
@@ -16,6 +17,10 @@
  *   OURFAIRY_PROBE_REPORT  absolute path of the JSON report to write
  *   OURFAIRY_PROBE_MODE    `boot` (default), `turn`, or `hold`
  *   OURFAIRY_PROBE_HOLD_MS bounded hold in `hold` mode (0 = until a signal)
+ *   OURFAIRY_PROBE_PROVIDER / OURFAIRY_PROBE_MODEL
+ *                          the explicit model selection a `turn` must carry
+ *                          (the launcher passes them from combo.json; a turn
+ *                          without them fails rather than using a default)
  *   DSH_HOME               the isolated harness home the launcher pinned
  *
  * `hold` keeps the real composition alive after a successful check so the
@@ -43,27 +48,29 @@ const SERVICE_ROWS = [
 ]
 
 /**
- * Rows the first version must not mount: file/shell/sandbox capabilities whose
- * permission adaptation has not landed, plus capabilities v1 excludes.
+ * Rows the first version must not mount live in the keeping of the tests, not
+ * here.
+ *
+ * The probe reports facts — which rows the profile actually composed
+ * (`report.rows`). The expectation of which rows must be absent is product
+ * policy and belongs to the test that owns it; a copy of that list inside the
+ * probe would let the probe's check and the test's check agree with each other
+ * while both drifted away from the bundle.
  */
-const FORBIDDEN_ROWS = [
-  'tool-fs', 'tool-fs-search', 'fs-sandbox', 'fs-observation-policy',
-  'working-directory', 'tool-working-directory',
-  'tool-bash', 'bash-sandbox', 'pwsh-sandbox', 'tool-pwsh',
-  'sandbox', 'sandbox-policy', 'approval', 'permission', 'shell-env', 'subprocess',
-  'skill', 'skill-filesystem', 'tool-skill',
-  'goal', 'goal-round-driver', 'tool-goal', 'command-goal',
-  'subagent', 'subagent-spawn-in-process', 'subagent-fork-in-process',
-  'tool-subagent', 'tool-subagent-control', 'tool-subagent-list-agents', 'tool-subagent-fork',
-  'otel', 'session-telemetry-otel',
-  'web', 'web-search-deepseek', 'web-fetch-http', 'tool-web', 'mcp-resources',
-  'plan-mode', 'workflow-ptc', 'tool-workflow', 'ptc-runtime',
-]
 
 const FIBER_STATES = ['pending', 'loading', 'active', 'failed', 'disposed', 'unloading']
 
-/** A configuration fact the requested run needs and the environment did not provide. */
-class ProbeConfigError extends Error {}
+/**
+ * A required configuration fact the requested run needs and the environment did
+ * not provide. Distinguished from a liveness failure so the process exit code
+ * tells a supervisor which one it is (3 = configuration, 1 = composition).
+ */
+class ProbeConfigError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'ProbeConfigError'
+  }
+}
 
 function fiberStateName(entry) {
   const state = entry?.fiber?.state
@@ -282,11 +289,12 @@ async function runProbe(ctx) {
     rows: [],
     services: {},
     tools: {},
-    excluded: { checked: FORBIDDEN_ROWS, found: [] },
     model: null,
     sessions: { root: null, files: [] },
+    configurationFailure: false,
     failures: [],
   }
+  let configurationFailure = false
 
   try {
     const loader = ctx.get('loader')
@@ -298,13 +306,6 @@ async function runProbe(ctx) {
     report.services = services.services
     report.failures.push(...services.failures)
     report.tools = collectTools(ctx)
-    const rowIds = new Set(report.rows.map(row => row.id))
-    report.excluded.found = FORBIDDEN_ROWS.filter(id => rowIds.has(id))
-    if (report.excluded.found.length > 0) {
-      report.failures.push(
-        `excluded capability row(s) are mounted in the v1 profile: ${report.excluded.found.join(', ')}`,
-      )
-    }
 
     const sessionsRoot = process.env.DSH_HOME === undefined ? undefined : join(process.env.DSH_HOME, 'sessions')
     report.sessions.root = sessionsRoot ?? null
@@ -321,10 +322,12 @@ async function runProbe(ctx) {
       report.sessions.files = listJsonlFiles(sessionsRoot)
     }
   } catch (error) {
+    if (error instanceof ProbeConfigError) configurationFailure = true
     report.failures.push(error instanceof Error ? `${error.name}: ${error.message}` : String(error))
     report.error = error instanceof Error ? (error.stack ?? error.message) : String(error)
   }
 
+  report.configurationFailure = configurationFailure
   report.ok = report.failures.length === 0
   report.finishedAt = new Date().toISOString()
 
@@ -355,11 +358,12 @@ async function runProbe(ctx) {
     )
   }
   const exit = ctx.get('appExit')
+  const exitCode = report.ok ? 0 : (configurationFailure ? 3 : 1)
   if (exit === undefined) {
-    process.exitCode = report.ok ? 0 : (report.failures.some(line => line.includes('DEEPSEEK_API_KEY')) ? 3 : 1)
+    process.exitCode = exitCode
     return
   }
-  exit(report.ok ? 0 : (report.failures.some(line => line.includes('DEEPSEEK_API_KEY')) ? 3 : 1))
+  exit(exitCode)
 }
 
 /** Mount the probe and run it once readiness commits. */

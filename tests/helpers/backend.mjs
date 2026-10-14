@@ -17,6 +17,29 @@ export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 /** Path of the product launcher every test drives. */
 export const backendScript = join(repoRoot, 'scripts', 'ourfairy-backend.mjs')
 
+/**
+ * A durable session-log artifact. The JSONL writer compresses by default, so
+ * the file on disk is `session.v4.jsonl.zstd`; an uncompressed `.jsonl` appears
+ * when compression is off. Both are durable logs, and matching only `.jsonl`
+ * would let a "the log was persisted" assertion pass while seeing nothing.
+ */
+export const DURABLE_LOG = /\.jsonl(\.zstd)?$/
+
+/**
+ * Layer env entries over the process environment. An explicit `undefined`
+ * removes a name, which is how a test proves keyless behavior.
+ * @param {Record<string, string|undefined>} env
+ * @returns {Record<string, string|undefined>}
+ */
+export function mergedEnv(env) {
+  const merged = { ...process.env }
+  for (const [name, value] of Object.entries(env)) {
+    if (value === undefined) delete merged[name]
+    else merged[name] = value
+  }
+  return merged
+}
+
 /** Create a unique isolated OURFAIRY_HOME under the OS temp directory. */
 export function makeHome(prefix = 'ourfairy-home-') {
   return mkdtempSync(join(tmpdir(), prefix))
@@ -37,14 +60,9 @@ export function removeHome(path) {
  * @returns {{code: number, stdout: string, stderr: string, error?: Error}}
  */
 export function runBackend(args, env = {}, options = {}) {
-  const merged = { ...process.env }
-  for (const [name, value] of Object.entries(env)) {
-    if (value === undefined) delete merged[name]
-    else merged[name] = value
-  }
   const result = spawnSync(process.execPath, [backendScript, ...args], {
     cwd: options.cwd ?? repoRoot,
-    env: merged,
+    env: mergedEnv(env),
     encoding: 'utf8',
     timeout: options.timeoutMs ?? 300_000,
     maxBuffer: 32 * 1024 * 1024,
@@ -76,15 +94,10 @@ export function readReport(path) {
  * @returns {Promise<{code: number, stdout: string, stderr: string, error?: Error}>}
  */
 export function runBackendAsync(args, env = {}, options = {}) {
-  const merged = { ...process.env }
-  for (const [name, value] of Object.entries(env)) {
-    if (value === undefined) delete merged[name]
-    else merged[name] = value
-  }
   return new Promise(resolve => {
     const child = spawn(process.execPath, [backendScript, ...args], {
       cwd: options.cwd ?? repoRoot,
-      env: merged,
+      env: mergedEnv(env),
     })
     let stdout = ''
     let stderr = ''

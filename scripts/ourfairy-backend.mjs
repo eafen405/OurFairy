@@ -10,10 +10,16 @@
  *
  * Commands:
  *   probe [--turn] [--report <path>]   boot, run the test-only liveness probe, exit with its result
+ *   boot-product [--report <path>]     boot the product profile with NO overlay and report the outcome
  *   start [--hold-ms <n>]              boot detached, wait until the probe reports ready
  *   stop                               signal the whole process group and verify nothing leaked
  *   status                             pid/readiness/port facts of the last start
  *   doctor                             dependency, pin, build, and isolation diagnostics
+ *
+ * `--allow-drift` (also on `combo.mjs verify`) is an explicit, opt-in escape
+ * hatch for investigating a checkout that has moved past its pinned commit. It
+ * is never used by `probe`, `boot-product`, `start`, or `doctor`; those fail on
+ * drift and say which commit is expected.
  *
  * Missing required configuration is a hard failure naming the variable or path
  * and the command that fixes it.
@@ -28,18 +34,40 @@ import { readCombo, repoPath, verifyCombination } from './combo.mjs'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-const PROFILE_NAME = 'ourfairy'
-const BUNDLE_PACKAGE = '@ourfairy/dsh-v1-bundle'
-const PROBE_PACKAGE = '@ourfairy/dsh-baseline-probe'
-const PNPM = ['corepack', ['pnpm@11.28.5']]
+/**
+ * The pinned combination, read once from combo.json.
+ *
+ * Profile name, package names, repo-relative paths, and the pnpm pin all come
+ * from the recorded combination: hardcoding them here would make combo.json's
+ * pins decorative, so a recorded version could drift from what actually runs
+ * without anything failing.
+ */
+function readCombination() {
+  const { combo, path } = readCombo(repoRoot)
+  const backend = combo.backend ?? {}
+  for (const field of ['profileName', 'bundlePackage', 'probePackage', 'bundlePathInRepo', 'probePathInRepo', 'pnpmPin', 'nodeRange']) {
+    if (typeof backend[field] !== 'string' || backend[field] === '') {
+      fail(`${path} backend.${field} must be a non-empty string; the launcher reads its pins from combo.json`)
+    }
+  }
+  return backend
+}
+
+const COMBINATION = readCombination()
+const PROFILE_NAME = COMBINATION.profileName
+const BUNDLE_PACKAGE = COMBINATION.bundlePackage
+const PROBE_PACKAGE = COMBINATION.probePackage
+const BUNDLE_DIR = join(repoRoot, COMBINATION.bundlePathInRepo)
+const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
+const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
 
 /** Files whose content decides whether the linked profile is stale. */
 const PRODUCT_SOURCES = [
-  'backend/v1-bundle/package.json',
-  'backend/v1-bundle/cordis.patch.yml',
-  'backend/probe/package.json',
-  'backend/probe/src/index.mjs',
-  'backend/probe/overlay.patch.yml',
+  join(COMBINATION.bundlePathInRepo, 'package.json'),
+  join(COMBINATION.bundlePathInRepo, 'cordis.patch.yml'),
+  join(COMBINATION.probePathInRepo, 'package.json'),
+  join(COMBINATION.probePathInRepo, 'src', 'index.mjs'),
+  join(COMBINATION.probePathInRepo, 'overlay.patch.yml'),
 ]
 
 function fail(message, code = 1) {
@@ -114,7 +142,7 @@ function resolveDsh(options) {
   }
   const bin = join(dir, 'apps', 'cli', 'lib', 'bin.js')
   if (!existsSync(bin)) {
-    fail(`dsh CLI build missing at ${bin}; run 'corepack pnpm@11.28.5 run build:lib:host' in ${dir}`)
+    fail(`dsh CLI build missing at ${bin}; run '${PNPM[0]} ${PNPM[1].join(' ')} run build:lib:host' in ${dir}`)
   }
   const head = git(['rev-parse', 'HEAD'], dir)
   const locked = combo.repos.dsh.productCommit
@@ -140,8 +168,8 @@ const profileManifest = () => ({
   name: `dsh-profile-${PROFILE_NAME}`,
   private: true,
   dependencies: {
-    [BUNDLE_PACKAGE]: `file:${join(repoRoot, 'backend', 'v1-bundle')}`,
-    [PROBE_PACKAGE]: `file:${join(repoRoot, 'backend', 'probe')}`,
+    [BUNDLE_PACKAGE]: `file:${BUNDLE_DIR}`,
+    [PROBE_PACKAGE]: `file:${PROBE_DIR}`,
   },
   dsh: { profile: { bundles: [BUNDLE_PACKAGE] } },
 })
@@ -167,6 +195,7 @@ function installProfile(layout, options) {
   if (!options.reinstall && existsSync(linked) && stamped === hash) return 'cached'
   const result = spawnSync(PNPM[0], [...PNPM[1], 'install', '--ignore-scripts', '--store-dir', layout.pnpmStore], {
     cwd: layout.profileDir,
+    env: isolatedEnv(layout),
     encoding: 'utf8',
     timeout: 300_000,
   })
@@ -181,7 +210,42 @@ function installProfile(layout, options) {
   return 'installed'
 }
 
-/** Child environment: isolated home, launcher facts, and the model-double passthrough. */
+/**
+ * Child environment for every process the launcher spawns on the product's
+ * behalf (the profile install and the real CLI boot).
+ *
+ * `HOME` and every tool cache are pinned inside the isolated home: the browser
+ * session cookie, `~/.cache/pnpm`, the pnpm store and the durable dsh home must
+ * all land under `OURFAIRY_HOME`, otherwise a boot quietly writes to the host's
+ * real home and the isolation claim is false.
+ */
+function isolatedEnv(layout, extra = {}) {
+  return {
+    ...process.env,
+    HOME: layout.userHome,
+    DSH_HOME: layout.dshHome,
+    OURFAIRY_HOME: layout.home,
+    XDG_CACHE_HOME: join(layout.home, 'cache'),
+    XDG_CONFIG_HOME: join(layout.home, 'config'),
+    XDG_DATA_HOME: join(layout.home, 'data'),
+    XDG_STATE_HOME: join(layout.home, 'state'),
+    // pnpm's own cache and store ARE product-run state: they hold what this
+    // checkout installed, so they stay inside the isolated home.
+    npm_config_cache: join(layout.home, 'cache', 'npm'),
+    npm_config_store_dir: layout.pnpmStore,
+    PNPM_HOME: join(layout.home, 'pnpm-home'),
+    // Corepack's cache is a TOOL cache, not product state: it holds downloaded
+    // toolchain archives. It is SHARED across isolated homes on purpose —
+    // rebuilding it per home re-extracts ~98MB (measured: 0.36s warm vs 2.74s
+    // cold, and whole tests went from ~1s to 35-42s). It stays inside the
+    // repository rather than the host home, so "never writes the host's real
+    // home" still holds; the deliberate tradeoff is recorded in
+    // work/implementation/evidence/01-baseline/README.md.
+    COREPACK_HOME: join(repoRoot, '.corepack'),
+    ...extra,
+  }
+}
+
 /**
  * The model selection this combination runs, read from combo.json's backend
  * block. Missing or malformed values are a hard failure: the probe refuses to
@@ -206,22 +270,18 @@ function bundleDeclaresAgentModel(selection) {
 
 function childEnv(layout, { reportPath, mode, holdMs }) {
   const selection = agentModelOf()
-  const env = {
-    ...process.env,
-    HOME: layout.userHome,
-    DSH_HOME: layout.dshHome,
-    OURFAIRY_HOME: layout.home,
+  const env = isolatedEnv(layout, {
     OURFAIRY_PROBE_REPORT: reportPath,
     OURFAIRY_PROBE_MODE: mode,
     OURFAIRY_PROBE_PROVIDER: selection.provider,
     OURFAIRY_PROBE_MODEL: selection.model,
-  }
+  })
   if (holdMs !== undefined) env.OURFAIRY_PROBE_HOLD_MS = String(holdMs)
   return env
 }
 
 function overlayPath() {
-  const path = join(repoRoot, 'backend', 'probe', 'overlay.patch.yml')
+  const path = join(PROBE_DIR, 'overlay.patch.yml')
   if (!existsSync(path)) fail(`probe overlay missing at ${path}`)
   return path
 }
@@ -276,6 +336,59 @@ function commandProbe(layout, options) {
   })
   if (result.error !== undefined) fail(`failed to launch ${dsh.bin}: ${result.error.message}`)
   return result.status ?? 1
+}
+
+/**
+ * Boot the **product** profile with no test overlay at all and report the
+ * outcome.
+ *
+ * Every other boot passes `--patch backend/probe/overlay.patch.yml`, so without
+ * this path the product composition alone is never exercised: a broken product
+ * profile could hide behind an overlay that happens to fix it up. The product
+ * profile owns no long-running work, so the real CLI returns from `runProfile`
+ * as soon as app-readiness commits and exits 0 — that clean exit is the
+ * observable fact this command records.
+ */
+function commandBootProduct(layout, options) {
+  assertIsolatedHome(layout)
+  const dsh = resolveDsh(options)
+  const installMode = installProfile(layout, options)
+  const reportPath = options.report ?? join(layout.runDir, 'product-boot-report.json')
+  rmSync(reportPath, { force: true })
+  const result = spawnSync(process.execPath, [dsh.bin, '--profile', PROFILE_NAME], {
+    cwd: repoRoot,
+    env: childEnv(layout, { reportPath, mode: 'product' }),
+    encoding: 'utf8',
+    timeout: 300_000,
+    maxBuffer: 32 * 1024 * 1024,
+  })
+  const stdout = result.stdout ?? ''
+  const stderr = result.stderr ?? ''
+  process.stdout.write(stdout)
+  process.stderr.write(stderr)
+  const exitCode = result.error !== undefined ? 1 : (result.status ?? 1)
+  const report = {
+    ok: result.error === undefined && exitCode === 0,
+    command: 'boot-product (no --patch overlay)',
+    exitCode,
+    profileDir: layout.profileDir,
+    isolatedHome: layout.home,
+    overlaysApplied: [],
+    dshBin: dsh.bin,
+    dshHead: dsh.head,
+    dshLocked: dsh.locked,
+    dshDrifted: dsh.drifted,
+    installMode,
+    stdout,
+    stderr,
+  }
+  writeFileSync(reportPath, `${JSON.stringify(report, undefined, 2)}\n`)
+  if (result.error !== undefined) fail(`failed to launch ${dsh.bin}: ${result.error.message}`)
+  if (exitCode !== 0) {
+    process.stderr.write(`ourfairy-backend: the product profile alone failed to boot (exit ${exitCode});`
+      + ` see ${reportPath}\n`)
+  }
+  return exitCode
 }
 
 function isAlive(pid) {
@@ -500,6 +613,30 @@ function commandStatus(layout, options) {
   return 0
 }
 
+/**
+ * Whether a Node version satisfies the combination's declared range. Supports
+ * the forms combo.json uses (`^N.M.P` and `>=N`); an unrecognized form throws
+ * rather than passing silently, so a changed range cannot quietly disable the
+ * check.
+ */
+function nodeSatisfies(range, version) {
+  const [major, minor] = version.split('.').map(Number)
+  for (const alternative of range.split('||').map(part => part.trim())) {
+    const caret = /^\^(\d+)\.(\d+)\.\d+$/.exec(alternative)
+    if (caret !== null) {
+      if (major === Number(caret[1]) && minor >= Number(caret[2])) return true
+      continue
+    }
+    const atLeast = /^>=(\d+)$/.exec(alternative)
+    if (atLeast !== null) {
+      if (major >= Number(atLeast[1])) return true
+      continue
+    }
+    throw new Error(`unsupported alternative ${JSON.stringify(alternative)} in combo.json backend.nodeRange`)
+  }
+  return false
+}
+
 function commandDoctor(layout, options) {
   assertIsolatedHome(layout)
   const checks = []
@@ -516,14 +653,17 @@ function commandDoctor(layout, options) {
   }
 
   check('node version', () => {
-    const major = Number(process.versions.node.split('.')[0])
-    must(major >= 24 || (major === 22 && Number(process.versions.node.split('.')[1]) >= 19), `node ${process.versions.node} does not satisfy ^22.19.0 || >=24`)
-    return process.versions.node
+    must(nodeSatisfies(COMBINATION.nodeRange, process.versions.node),
+      `node ${process.versions.node} does not satisfy ${COMBINATION.nodeRange} (combo.json backend.nodeRange)`)
+    return `${process.versions.node} satisfies ${COMBINATION.nodeRange}`
   })
   check('corepack pnpm pin available', () => {
-    const result = spawnSync(PNPM[0], [...PNPM[1], '--version'], { encoding: 'utf8' })
+    // Must run under the same environment the profile install uses: with the
+    // ambient environment this check would read the host's corepack cache and
+    // silently disagree with what `installProfile` actually does.
+    const result = spawnSync(PNPM[0], [...PNPM[1], '--version'], { encoding: 'utf8', env: isolatedEnv(layout) })
     must(result.status === 0, `${PNPM[0]} ${PNPM[1].join(' ')} failed: ${result.stderr || result.error?.message}`)
-    return result.stdout.trim()
+    return `${result.stdout.trim()} (COREPACK_HOME=${join(repoRoot, '.corepack')})`
   })
   check('combo combination', () => {
     const result = verifyCombination({ allowDrift: options.allowDrift })
@@ -565,18 +705,19 @@ function commandDoctor(layout, options) {
 const options = parseArgv(process.argv)
 const layout = layoutOf(options)
 if (process.argv[2] === '--help' || options.command === 'help' || options.command === undefined) {
-  process.stdout.write('usage: ourfairy-backend <probe|start|stop|status|doctor> [--turn] [--report <path>] [--home <dir>] [--json] [--reinstall] [--allow-drift]\n')
+  process.stdout.write('usage: ourfairy-backend <probe|boot-product|start|stop|status|doctor> [--turn] [--report <path>] [--home <dir>] [--json] [--reinstall] [--allow-drift]\n')
   process.exit(options.command === undefined ? 2 : 0)
 }
 
 const exitCode = await (async () => {
   switch (options.command) {
     case 'probe': return commandProbe(layout, options)
+    case 'boot-product': return commandBootProduct(layout, options)
     case 'start': return await commandStart(layout, options)
     case 'stop': return await commandStop(layout, options)
     case 'status': return commandStatus(layout, options)
     case 'doctor': return commandDoctor(layout, options)
-    default: fail(`unknown command ${JSON.stringify(options.command)}; expected probe|start|stop|status|doctor`)
+    default: fail(`unknown command ${JSON.stringify(options.command)}; expected probe|boot-product|start|stop|status|doctor`)
   }
 })()
 process.exit(exitCode)
