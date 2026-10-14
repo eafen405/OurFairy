@@ -356,49 +356,84 @@ function commandProbe(layout, options) {
  *
  * Every other boot passes `--patch backend/probe/overlay.patch.yml`, so without
  * this path the product composition alone is never exercised: a broken product
- * profile could hide behind an overlay that happens to fix it up. The product
- * profile owns no long-running work, so the real CLI returns from `runProfile`
- * as soon as app-readiness commits and exits 0 — that clean exit is the
- * observable fact this command records.
+ * profile could hide behind an overlay that happens to fix it up.
+ *
+ * Readiness is observed from the product itself, not from a clean exit. The
+ * profile mounts its own web carrier, so it stays up and never exits; waiting
+ * for one would report a healthy backend as a timeout, and a bare timeout would
+ * report a hung boot as healthy. What is recorded instead is the observable
+ * fact that the composition came up and is serving: the process is alive and
+ * has a listening port. The boot is then stopped and the port's release is
+ * checked, so the command leaves nothing running behind it.
  */
-function commandBootProduct(layout, options) {
+async function commandBootProduct(layout, options) {
   assertIsolatedHome(layout)
   const dsh = resolveDsh(options)
   const installMode = installProfile(layout, options)
   const reportPath = options.report ?? join(layout.runDir, 'product-boot-report.json')
   rmSync(reportPath, { force: true })
-  const result = spawnSync(process.execPath, [dsh.bin, '--profile', PROFILE_NAME], {
+  mkdirSync(layout.logDir, { recursive: true })
+  mkdirSync(layout.runDir, { recursive: true })
+  const logFile = join(layout.logDir, `product-boot-${new Date().toISOString().replaceAll(':', '-')}.log`)
+  const fd = openSync(logFile, 'a')
+  // No --patch: this boot is the product composition exactly as it ships.
+  const child = spawn(process.execPath, [dsh.bin, '--profile', PROFILE_NAME], {
     cwd: repoRoot,
     env: childEnv(layout, { reportPath, mode: 'product' }),
-    encoding: 'utf8',
-    timeout: 300_000,
-    maxBuffer: 32 * 1024 * 1024,
+    detached: true,
+    stdio: ['ignore', fd, fd],
   })
-  const stdout = result.stdout ?? ''
-  const stderr = result.stderr ?? ''
-  process.stdout.write(stdout)
-  process.stderr.write(stderr)
-  const exitCode = result.error !== undefined ? 1 : (result.status ?? 1)
+  child.unref()
+
+  const ready = await waitFor(() => listeningPorts(child.pid).length > 0, options.readyTimeoutMs)
+  const listening = ready ? listeningPorts(child.pid) : []
+
+  // Stop the boot we started, whether or not it came up, so a failure cannot
+  // leave a half-started backend holding the port for the next test. The
+  // predicate must stay synchronous: `waitFor` treats it as a boolean, so an
+  // async one would hand it a Promise — always truthy — and it would report the
+  // boot gone on the first tick instead of waiting for it.
+  const gone = () => !isAlive(child.pid)
+  try { process.kill(-child.pid, 'SIGTERM') } catch { try { process.kill(child.pid, 'SIGTERM') } catch { /* already gone */ } }
+  if (!await waitFor(gone, 10_000)) {
+    try { process.kill(-child.pid, 'SIGKILL') } catch { try { process.kill(child.pid, 'SIGKILL') } catch { /* already gone */ } }
+    await waitFor(gone, 10_000)
+  }
+  const ended = gone()
+  const portsAfter = ended ? [] : listeningPorts(child.pid)
+
+  const exitCode = ready && ended ? 0 : 1
   const report = {
-    ok: result.error === undefined && exitCode === 0,
+    ok: exitCode === 0,
     command: 'boot-product (no --patch overlay)',
     exitCode,
     profileDir: layout.profileDir,
     isolatedHome: layout.home,
     overlaysApplied: [],
+    // The liveness fact this command records: the product composition came up
+    // and served, and left nothing behind.
+    listeningPorts: listening,
+    portsAfter,
+    processExited: ended,
     dshBin: dsh.bin,
     dshHead: dsh.head,
     dshLocked: dsh.locked,
     dshDrifted: dsh.drifted,
     installMode,
-    stdout,
-    stderr,
+    logFile,
+    stderr: tail(logFile),
   }
   writeFileSync(reportPath, `${JSON.stringify(report, undefined, 2)}\n`)
-  if (result.error !== undefined) fail(`failed to launch ${dsh.bin}: ${result.error.message}`)
+  process.stdout.write(`${JSON.stringify({
+    command: report.command,
+    ok: report.ok,
+    listeningPorts: listening,
+    portsAfter,
+    logFile,
+  })}\n`)
   if (exitCode !== 0) {
-    process.stderr.write(`ourfairy-backend: the product profile alone failed to boot (exit ${exitCode});`
-      + ` see ${reportPath}\n`)
+    process.stderr.write(`ourfairy-backend: the product profile alone failed to come up serving`
+      + ` (ready=${ready}, exited=${ended}); see ${reportPath}\nlog ${logFile}:\n${tail(logFile)}\n`)
   }
   return exitCode
 }
