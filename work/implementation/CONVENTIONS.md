@@ -63,11 +63,27 @@ git -C /home/eafen405/projects/rikkahub worktree add \
 | Node | `node` v24.18.0（dsh 要求 `^22.19.0 \|\| >=24`） |
 | pnpm | **必须用 corepack 固定版本**：`corepack pnpm@11.28.5 <cmd>`（`PATH` 上的 pnpm 12 来自 Windows，勿用） |
 | JDK | `java` = Temurin 21（`/home/eafen405/.local/bin/java`） |
-| Android SDK | `ANDROID_HOME=/home/eafen405/Android/Sdk`（已装 `platforms;android-37.0`、`build-tools;37.0.0`、`platform-tools`、`ndk;28.2.13676358`、`cmake`） |
-| Gradle | wrapper 自动下载；缓存 `/home/eafen405/.gradle`（已有 3.7G） |
+| Android SDK | `ANDROID_HOME=/home/eafen405/Android/Sdk`（已装 `platforms;android-36`、`android-37.0`、`android-37.2`、`build-tools;37.0.0`、`platform-tools`、`ndk;28.2.13676358`、`cmake`） |
+| Gradle | wrapper 会下载 9.6.0；缓存 `/home/eafen405/.gradle`（已有 3.7G） |
 | gh CLI | 已登录 `eafen405`，token 有 `repo` scope；git 走 HTTPS（已配置 credential helper） |
 
 **Android 构建必须显式设置**：`export ANDROID_HOME=/home/eafen405/Android/Sdk`，并在 rikkahub 检出目录写 `local.properties` 指向 `sdk.dir=/home/eafen405/Android/Sdk`（该文件不入库）。
+
+### 3.1 Android 构建实测踩坑（2026-10-14 由侦察票实测，勿重复踩）
+
+以下每条都是**实测结论**，不是推测：
+
+| 现象 | 事实与对策 |
+| --- | --- |
+| `./gradlew` 下载 Gradle 发行版超时 | 本机 HTTP 代理只以**环境变量**形式存在（`http_proxy/https_proxy=http://127.0.0.1:7890`），**Java/Gradle 不读环境变量代理**。对策：用 `curl` 走代理把 `gradle-9.6.0-bin.zip` 下到 `~/.gradle/wrapper/dists/gradle-9.6.0-bin/<base36(md5(url))>/`，用 python3 `zipfile` 解压（本机**没有 `unzip`**），`chmod +x gradle-9.6.0/bin/*`，再 `touch gradle-9.6.0-bin.zip.ok`。 |
+| 依赖解析长时间无输出 | Gradle 只在任务完成时打印 `> Task`，大量依赖元数据下载期间日志会长时间静止——**这是正常推进，不是卡死**。判据：`~/.gradle/caches/modules-2/metadata-*/descriptors/` 有新文件写入。 |
+| 构建极慢／单 worker | 用户级 `~/.gradle/gradle.properties` 含 `-Xmx2560m`、`org.gradle.workers.max=1`、`org.gradle.parallel=false`、`kotlin.compiler.execution.strategy=in-process`。**不要改这个共享文件**（其他队友也在用）；用命令行覆盖：`-Dorg.gradle.jvmargs="-Xmx10g -Dfile.encoding=UTF-8" --max-workers=8 --parallel`。 |
+| `compileSdk` 与已装平台不符 | rikkahub 用 `compileSdk { version = release(37) { minorApiLevel = 2 } }`，实际解析到 **`android-37.2`**（不是 `android-37.0`）。AGP 会自动装（license 已接受），但首次会拖长构建。 |
+| 缺 `app/google-services.json` | `:app:processDebugGoogleServices` 会硬失败（`File google-services.json is missing`）。该文件被 `app/.gitignore` 忽略，需要自备桩文件；**桩里的 key 是假的，Firebase/Crashlytics 运行时不可用**，任何真机/崩溃上报结论都必须声明这一点。 |
+| 子模块未初始化 | `material3/material-color-utilities` 未 init 时 `:material3` 编译会失败；需 `git submodule update --init --recursive`。 |
+| `web` 模块 preBuild 跑 pnpm | `web/build.gradle.kts` 的 `buildWebUi` 只跑 `pnpm run build`，**不跑 install**；必须在 `web-ui/` 先 `pnpm install --frozen-lockfile`。pnpm 必须是 `corepack pnpm@11.28.5`（PATH 上的 12 是 Windows 版）。 |
+
+**长构建请用 `setsid nohup ... &` 脱离 agent turn 运行**：队友 turn 结束时其后台任务会被回收，构建日志要落到 `work/implementation/evidence/<票>/` 下供任何人轮询。
 
 ## 4. 常用命令
 
