@@ -1,51 +1,61 @@
-$ OURFAIRY_HOME=<isolated> node scripts/ourfairy-backend.mjs probe
-ourfairy-baseline-probe: ok (11 services live, 17 rows composed, mode boot)
-EXIT=0
-
-$ OURFAIRY_HOME=<isolated> node scripts/ourfairy-backend.mjs doctor --json
+ourfairy-baseline-probe: ok (11 services live, 21 rows composed, mode boot)
 {
   "ok": true,
-  "checks": [
-    {
-      "name": "node version",
-      "ok": true,
-      "detail": "24.18.0"
-    },
-    {
-      "name": "corepack pnpm pin available",
-      "ok": true,
-      "detail": "11.28.5"
-    },
-    {
-      "name": "combo combination",
-      "ok": true,
-      "detail": "ourfairy@83d72dc229b0, dsh@d74326738864, rikkahub@0966502c4d65"
-    },
-    {
-      "name": "dsh CLI build",
-      "ok": true,
-      "detail": "/home/eafen405/projects/deepseek-harness/apps/cli/lib/bin.js (d74326738864)"
-    },
-    {
-      "name": "product packages",
-      "ok": true,
-      "detail": "backend/v1-bundle/package.json, backend/v1-bundle/cordis.patch.yml, backend/probe/package.json, backend/probe/src/index.mjs, backend/probe/overlay.patch.yml"
-    },
-    {
-      "name": "isolated home",
-      "ok": true,
-      "detail": "/home/eafen405/projects/OurFairy/.worktrees/01-baseline/.ourfairy"
-    },
-    {
-      "name": "profile project linked",
-      "ok": true,
-      "detail": "/home/eafen405/projects/OurFairy/.worktrees/01-baseline/.ourfairy/dsh-home/profiles/ourfairy (cached)"
-    },
-    {
-      "name": "model double",
-      "ok": true,
-      "detail": "not configured (keyless startup only)"
-    }
-  ]
+  "command": "boot-product (no --patch overlay)",
+  "exitCode": 0,
+  "profileDir": "/tmp/ourfairy-evidence/dsh-home/profiles/ourfairy",
+  "isolatedHome": "/tmp/ourfairy-evidence",
+  "overlaysApplied": [],
+  "listeningPorts": [
+    57310
+  ],
+  "portsAfter": [],
+  "processExited": true,
+  "dshBin": "/home/eafen405/projects/deepseek-harness/apps/cli/lib/bin.js",
+  "dshHead": "2f084be06e75cd56c2a7ac9a31e155db9f4deee0",
+  "dshLocked": "2f084be06e75cd56c2a7ac9a31e155db9f4deee0",
+  "dshDrifted": false,
+  "installMode": "cached",
+  "logFile": "/tmp/ourfairy-evidence/logs/product-boot-2026-10-14T16-52-27.987Z.log",
+  "stderr": ""
 }
-EXIT=0
+{
+  "pid": 47004,
+  "ready": true,
+  "isolatedHome": "/tmp/ourfairy-evidence",
+  "dshHome": "/tmp/ourfairy-evidence/dsh-home",
+  "dshHead": "2f084be06e75cd56c2a7ac9a31e155db9f4deee0",
+  "installMode": "cached",
+  "listeningPorts": [
+    57488
+  ],
+  "logFile": "/tmp/ourfairy-evidence/logs/backend-2026-10-14T16-52-40.732Z.log"
+}
+{
+  "running": true,
+  "pid": 47004,
+  "startedAt": "2026-10-14T16:52:40.736Z",
+  "ready": true,
+  "isolatedHome": "/tmp/ourfairy-evidence",
+  "dshHome": "/tmp/ourfairy-evidence/dsh-home",
+  "listeningPorts": [
+    57488
+  ],
+  "logFile": "/tmp/ourfairy-evidence/logs/backend-2026-10-14T16-52-40.732Z.log",
+  "probe": {
+    "ok": true,
+    "failures": [],
+    "mode": "hold"
+  }
+}
+{
+  "pid": 47004,
+  "exited": true,
+  "forced": false,
+  "portsBefore": [
+    57488
+  ],
+  "portsAfter": [],
+  "leakedProcesses": [],
+  "isolatedHome": "/tmp/ourfairy-evidence"
+}
