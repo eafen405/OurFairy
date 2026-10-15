@@ -1,0 +1,72 @@
+[
+  {
+    "name": "me.rerere.rikkahub.data.remote.AccountSessionTest",
+    "tests": "7",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.CredentialStoreTest",
+    "tests": "6",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.IdentityApiTest",
+    "tests": "6",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.OwnedSessionStateTest",
+    "tests": "10",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.RemoteChatApiTest",
+    "tests": "14",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest",
+    "tests": "14",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.RemoteChatStateTest",
+    "tests": "8",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.SessionApiTest",
+    "tests": "9",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "me.rerere.rikkahub.ui.identity.IdentityAccessPolicyTest",
+    "tests": "6",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "me.rerere.rikkahub.ui.identity.IdentityNavigationTest",
+    "tests": "5",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  }
+]
