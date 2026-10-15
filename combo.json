@@ -38,10 +38,10 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/rikkahub.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "07c0df403a54aa0532840244adec63a6a91a81b4",
+      "productCommit": "34cabaad38ac15b81f5f10ac501a24248fea6ec8",
       "researchUpstreamSha": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
       "researchUpstreamRef": "origin/master",
-      "note": "productCommit is the fork integration tip after T5/#28 remote chat: authenticated native-session send/receipt/read/observe/stop, one credential/session-scoped StateFlow, stable unresolved request identities, cumulative raw-text SSE snapshots, plain active text and existing MarkdownBlock for terminal replies. Reuses the shared identity endpoint and OkHttp client; no local model execution or Room history. T5 targeted remote/identity/session tests passed 68/68 and debug APKs built from the merged source tree. No emulator/phone, APK-to-real-backend, official model or signed-release acceptance was run. T6 paging/recovery is pending. researchUpstreamSha remains the research baseline, not a product deliverable."
+      "note": "productCommit is the fork integration tip after T5/#28 remote chat and T6/#29 recovery. Remote chat reuses authenticated identity endpoint/shared OkHttp, native-session receipt identities, cumulative exact-text SSE and existing MarkdownBlock for settled replies; the phone does not execute a model or keep authoritative Room history. T6 backfills bounded fixed-cut native events while preserving live attempt/status, reconnects automatically, and advances consumed W only after contiguous applied coverage, writer checkpoint and awaited local preference commit. A small endpoint/user/session record persists W/initialization and unresolved request identity/text; restart still reloads body history. Targeted remote/identity/session JVM tests passed 82/82 and debug APKs built from the exact merged source tree. No Android preference runtime/failure, emulator/phone, APK-to-real-backend, official model or signed-release acceptance was run. researchUpstreamSha remains the research baseline."
     }
   },
   "backend": {

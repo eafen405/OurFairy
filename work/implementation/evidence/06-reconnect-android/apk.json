@@ -1,0 +1,17 @@
+[
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/06-reconnect/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk",
+    "bytes": 86248692,
+    "sha256": "7016675fa7461afdbca0d91f18a31792d1460c29074f03d65852d508a00bce15"
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/06-reconnect/app/build/outputs/apk/debug/app-universal-debug.apk",
+    "bytes": 97672336,
+    "sha256": "9b216a98ee05efe037a1414360671326f9fb0f22d6867dde2c39700f1908d0c0"
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/06-reconnect/app/build/outputs/apk/debug/app-x86_64-debug.apk",
+    "bytes": 87104636,
+    "sha256": "2a6e36a5873919d75f150597f973d6ef167cc0bf2e2f276104334765eef8c784"
+  }
+]
