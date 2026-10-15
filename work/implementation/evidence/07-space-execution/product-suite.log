@@ -1,0 +1,83 @@
+▶ OurFairy v1 baseline composition
+  ✔ real profile boot reports every required service live (keyless) (3137.995918ms)
+  ✔ v1 profile mounts scoped file/shell adapters and excludes unused capabilities (474.353138ms)
+  ✔ the product profile alone boots with no test overlay at all (659.364168ms)
+  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (456.23965ms)
+  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (462.441507ms)
+✔ OurFairy v1 baseline composition (5191.379969ms)
+▶ OurFairy identity over real HTTP
+  ✔ the provisioned Phaethon signs in as short number 1 (55.554948ms)
+  ✔ invited agents take the next short numbers in registration order (100.623251ms)
+  ✔ refused registrations leave no identity and consume no short number (93.770144ms)
+  ✔ an ordinary agent is refused the administrator invite operation (61.547425ms)
+  ✔ the credential names its own holder with no user field in the request (60.825215ms)
+  ✔ signing out ends the credential it was presented with (89.712529ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (64.423914ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (227.332806ms)
+✔ OurFairy identity over real HTTP (755.081431ms)
+▶ migrating a genuine v1 database
+  ✔ keeps the ids and passwords the v1 file already held (71.111626ms)
+  ✔ keeps the v1 session digests usable (0.526062ms)
+  ✔ keeps a v1 unredeemed invite redeemable and refuses the redeemed one (32.678676ms)
+  ✔ refuses a duplicate name without a unique index backing it (0.69318ms)
+  ✔ never reuses a short number once an identity is gone (32.650522ms)
+  ✔ a removed user no longer signs in, authenticates, or appears in a listing (33.013152ms)
+  ✔ a removed name stays reserved, deleted rows included (0.339015ms)
+✔ migrating a genuine v1 database (171.875756ms)
+▶ seeding against a deleted Phaethon
+  ✔ refuses to recreate short number 1 beside a tombstoned row (32.800626ms)
+  ✔ refuses an initial seed whose name belongs to another row (33.950567ms)
+✔ seeding against a deleted Phaethon (67.090971ms)
+▶ the stored schema obeys AGENTS.md
+  ✔ carries logical deletion and update timestamps on the three business tables (0.994824ms)
+  ✔ keeps the associated person column on every business table (0.629669ms)
+  ✔ carries no foreign key and no unique constraint beyond the primary key (0.907328ms)
+  ✔ keeps the ordinary lookup index the queries actually need (0.520541ms)
+  ✔ a fresh database lands directly on the migrated schema (30.830397ms)
+  ✔ refuses a database newer than this module understands, leaving it untouched (2.324836ms)
+  ✔ signing out a logically deleted session reports nothing to revoke (91.79283ms)
+✔ the stored schema obeys AGENTS.md (128.502941ms)
+✔ duplicate start is refused, stop is clean, and nothing leaks across cycles (4658.291361ms)
+✔ doctor passes on a clean isolated home and names its checks (545.162024ms)
+✔ a missing dsh checkout fails loudly instead of booting something else (36.448823ms)
+✔ one real turn reaches the external model double, registers tools, and persists the session (3181.578433ms)
+✔ a turn without credentials fails with a diagnostic naming the missing variable (2756.1776ms)
+▶ OurFairy owned sessions over real HTTP
+  ✔ a failed durable create can be retried in the same backend process (109.978473ms)
+  ✔ a session created by a signed-in identity keeps its owner and its primary binding across a restart (823.362186ms)
+  ✔ a missing or foreign session is refused, and no request is ever served as an implicit user (190.93889ms)
+  ✔ a primary request racing a create still resolves the fixed primary session (98.970885ms)
+  ✔ cold ownerless and foreign sessions are refused without changing durable artifacts (1823.629238ms)
+  ℹ {"coldFixtures":[{"id":"ourfairy-user-7-primary"},{"id":"cold-foreign-session","owner":"user:8"},{"id":"ourfairy-user-9-primary","owner":"user:8"}],"durableArtifacts":{"_no-cwd/cold-foreign-session/session.v4.jsonl.zstd":{"sha256":"3b6f9e26b0ba67ea1b9810ae60c51faee38e6c9b07b64bad1e10dad79c2f7714","mtimeNs":"1792071009837156418"},"_no-cwd/ourfairy-user-2-primary/session.v4.jsonl.zstd":{"sha256":"b70d2130034150336dc27d6a6d946a3ccdcc1221ebbdcb6bf8c94b91b391deda","mtimeNs":"1792071007897156716"},"_no-cwd/ourfairy-user-3-24a7a4fb-427f-4bb4-807d-0e82c54ff43b/session.v4.jsonl.zstd":{"sha256":"c4aebf083d44356e4502fd6499e23c1d009575facaba53adab79fd9337e321bd","mtimeNs":"1792071007985156703"},"_no-cwd/ourfairy-user-3-primary/session.v4.jsonl.zstd":{"sha256":"96120a03093a015bc5226fe2862539b52ef418f6f714f5e04abbcf4ec1236548","mtimeNs":"1792071007973156705"},"_no-cwd/ourfairy-user-4-primary/session.v4.jsonl.zstd":{"sha256":"fbb3523396cf181e9bb19eb13743249d110a086f3a709cd0ab257338ff0e0703","mtimeNs":"1792071008897156563"},"_no-cwd/ourfairy-user-6-6a199189-9218-4444-be5c-af61a3c59759/session.v4.jsonl.zstd":{"sha256":"b6efa10f2192b432b80eed36f69d30ab9ad3aec21767fc60acd5753d61bf1537","mtimeNs":"1792071009005156547"},"_no-cwd/ourfairy-user-6-706b8f79-3d84-44d7-9f07-b67bf68d7256/session.v4.jsonl.zstd":{"sha256":"02d5de138568ed5075bca9d69921c5edaccc0a3f17f9cada87f246cb779bfc86","mtimeNs":"1792071009009156546"},"_no-cwd/ourfairy-user-6-primary/session.v4.jsonl.zstd":{"sha256":"a40e9bde471d67116aa81a8ad2b7de2725fb29d793390dd52cc8a854f49fe22e","mtimeNs":"1792071008981156551"},"_no-cwd/ourfairy-user-7-primary/session.v4.jsonl.zstd":{"sha256":"6203a235d9f5e13d16151f21dd2488f84d6932ace8dc4189b130de2d78a9a4e5","mtimeNs":"1792071009833156419"},"_no-cwd/ourfairy-user-9-primary/session.v4.jsonl.zstd":{"sha256":"3de79406f56579d56d762f2a59bac20abeeaa146af493aefa4987c58b63f1b7c","mtimeNs":"1792071009845156417"}}}
+  ✔ an empty owned session can be resumed by the existing agent factory (775.801957ms)
+  ℹ {"emptyResume":{"created":{"id":"ourfairy-user-10-primary","owner":"user:10"},"persistedEventCount":0,"resumed":{"id":"ourfairy-user-10-primary","owner":"user:10"},"ownerAfterDispose":"user:10"}}
+✔ OurFairy owned sessions over real HTTP (3823.690669ms)
+✔ bounded history pages keep the opening cut while new formal events arrive (3889.439257ms)
+✔ a reconnect restores the active cumulative attempt while bounded backfill and live tail proceed independently (2025.858712ms)
+✔ a lost page response can be retried at its unchanged frozen cut (37.946114ms)
+✔ a real writer permission failure cannot advance durable ACK, then retry and cold recovery use the same acceptance (767.309189ms)
+✔ new history and checkpoint routes keep the cold/live ownership fence and validate exact ranges (51.585459ms)
+✔ a crash-orphaned turn is resumed and writer-saved before its recovery closer is acknowledged (2015.087817ms)
+✔ a stable send is durably accepted once across concurrent retries and backend restart (4521.049703ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (450.072719ms)
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (375.252903ms)
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply (390.51523ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (1507.922833ms)
+✔ the deployment owner identity is separate from a chat attempt to edit the persona (1012.737032ms)
+✔ stopping the current reply preserves accepted queued input for the next wake (512.016804ms)
+✔ stopping before visible output records interruption rather than a failed reply (1485.997841ms)
+✔ chat tools write own private files, share public files, and deny another user including administrator (3868.559613ms)
+✔ real child processes share public files, keep private boundaries after cd, and retain networking (699.758392ms)
+✔ directory changes, edits, image reads and symlinks retain the same owner boundary (1076.914977ms)
+✔ agentless filesystem and script Interface calls refuse instead of inheriting a default user (0.769394ms)
+✔ shell background children stay confined and detached job entry is explicitly unavailable until T13 (373.385741ms)
+✔ a network-installed dependency is available to both users in the one shared environment (952.720702ms)
+✔ ensure restores the owner private root when a persisted working directory disappears (485.83779ms)
+ℹ tests 61
+ℹ suites 6
+ℹ pass 61
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10597.402769
