@@ -214,3 +214,7 @@ the time it was written, not the current ancestry.
 - `red-06-durable-retry.log` — actual failed-write retry exposes live duplicate
 - `green-05-cold-and-retry.log` — 13/13, with cold fixture durable hash/mtime evidence
 - `green-06-published-service.log` — 13/13 after the service publication
+
+## Lead final product verification
+
+After the final `OwnedSessionService` registration at `01dd084`, Lead independently ran the complete product suite on the host: `node --test 'tests/**/*.test.mjs'` → **39 passed, 0 failed**, 6 suites. Raw output: `final-product-suite.log`. This verifies the backend product tree; it does not claim Android completion, real cloud service validation, or closure of #27.
