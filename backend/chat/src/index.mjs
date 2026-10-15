@@ -1,12 +1,14 @@
 /** Narrow product routes over native Agent/SessionQuery, without the upstream controller. */
 import { postHandler } from '@ourfairy/dsh-identity/http'
 import { RemoteChat } from './service.mjs'
+import { installDelivery } from './delivery.mjs'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 
 export const name = 'ourfairy-chat'
-export const inject = ['webServer', 'connection', 'ourfairySessions', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments']
+export const inject = ['webServer', 'connection', 'ourfairySessions', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'identity', 'tools', 'sessionPersistence']
 export function apply(ctx) {
   const chat = new RemoteChat(ctx)
+  installDelivery(ctx, chat)
   const register = (path, handle, respond) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,
     handler: postHandler({ fence: request => ctx.connection.fence(request), HttpError: SessionScopeError,
       codePrefix: 'chat', internalMessage: 'remote chat request failed',
