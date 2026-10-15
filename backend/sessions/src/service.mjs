@@ -2,20 +2,13 @@
  * Owned sessions: which authenticated identity a session belongs to, and which
  * of that identity's sessions is its fixed primary session.
  *
- * There is no second ownership index. The **only** authority for ownership is
- * `SessionHeader.owner`, the durable header field dsh already stores and
- * replays (#25). A product database here would be a second source that can
- * disagree with the artifact it describes, so this module has no tables at all.
+ * Ownership authority is `SessionHeader.owner` alone — no second index, table,
+ * or database. A user's primary id is derived from their permanent short number,
+ * so the binding needs no stored column and cannot drift.
  *
- * The fixed primary is derived, not stored: an identity's primary session id is
- * a pure function of its permanent, never-recycled short number. That makes the
- * binding identical before and after a restart, needs no extra column, and
- * cannot drift because nobody wrote it down twice.
- *
- * Every read path checks the owner **before** any content is returned and
- * before any path that could open, repair, or rewrite an artifact is taken. The
- * check reads only the stored header (`stat`/`list`), so refusing a foreign or
- * ownerless session leaves the artifact byte-for-byte untouched.
+ * Every read path checks the owner before returning content or before any path
+ * that could open, repair, or rewrite an artifact, using only the stored header
+ * (`stat`/`list`).
  *
  * @module @ourfairy/dsh-sessions/src/service
  */
@@ -109,7 +102,10 @@ export class OwnedSessionService {
   }
 
   /**
-   * Read one stored header without opening a write, recovery, or repair path.
+   * Read one stored snapshot without opening a write, recovery, or repair path.
+   *
+   * `persistence.stat` answers with a snapshot `{header, revision, ...}`, not a
+   * bare header; every owner check below reads `snapshot.header.owner`.
    *
    * @param id - the session id.
    * @returns the stored snapshot, or undefined when nothing is stored under it.
@@ -121,9 +117,9 @@ export class OwnedSessionService {
   /**
    * Resolve one session for a caller, refusing anything they do not own.
    *
-   * An unknown id, a header with no owner, and a header owned by somebody else
-   * are all refused with the same answer, and all are refused before any handle
-   * is opened — nothing is adopted, rebound, or repaired.
+   * An unknown id, an ownerless header, and a foreign owner's header are refused
+   * with the same answer, before any handle is opened: nothing is adopted,
+   * rebound, or repaired.
    *
    * @param owner - the authenticated identity.
    * @param sessionId - the requested session id.
@@ -149,8 +145,7 @@ export class OwnedSessionService {
   /**
    * Every stored session this identity owns, and its primary.
    *
-   * Listing reads stored headers only. It never creates a session, so a user who
-   * has none gets an empty list rather than a side effect.
+   * Listing reads stored headers only and never creates a session.
    *
    * @param owner - the authenticated identity.
    * @returns the owned headers plus the primary session id (or null).
@@ -173,7 +168,7 @@ export class OwnedSessionService {
    *
    * The header is persisted explicitly: dsh's persistence keeps a created
    * session unmaterialized until something is appended, so a session created
-   * here and never written to would not survive a restart at all.
+   * and never written to would not survive a restart.
    *
    * @param owner - the authenticated identity.
    * @param id - the id to mint for this session.
@@ -186,13 +181,16 @@ export class OwnedSessionService {
   }
 
   /**
-   * Run `work` as the single in-flight operation for one owner.
+   * Run `work` as the only operation in flight for one owner.
    *
-   * Two concurrent first creates (or a create racing a primary request) would
-   * otherwise mint two different sessions for the same identity, because the
-   * "does this user have a session yet" question and the answer are separated by
-   * an await. Coalescing is deliberately per-request state, cleared in `finally`:
-   * it is not a lock framework, and it leaves nothing behind when it fails.
+   * "Does this identity already have a primary" and the answer that mints one are
+   * separated by an await, so two overlapping operations could both answer "no"
+   * and both mint. Serializing (not coalescing) keeps them honest: a `/primary`
+   * racing a `/create` runs after it, and still resolves the deterministic main,
+   * rather than inheriting whichever ordinary session the other call minted.
+   *
+   * The queue is per-request state cleared in `finally` — no lock framework, and
+   * a failed operation leaves nothing behind for the next one.
    *
    * @param owner - the identity the work belongs to.
    * @param work - the operation to run at most once at a time.
@@ -200,14 +198,14 @@ export class OwnedSessionService {
    */
   async #exclusively(owner, work) {
     const key = owner.shortId
-    const running = this.#inFlight.get(key)
-    if (running !== undefined) return await running
-    const started = (async () => work())()
-    this.#inFlight.set(key, started)
+    const running = this.#inFlight.get(key) ?? Promise.resolve()
+    const started = running.then(work, work)
+    const tail = started.then(() => {}, () => {})
+    this.#inFlight.set(key, tail)
     try {
       return await started
     } finally {
-      if (this.#inFlight.get(key) === started) this.#inFlight.delete(key)
+      if (this.#inFlight.get(key) === tail) this.#inFlight.delete(key)
     }
   }
 
@@ -229,10 +227,10 @@ export class OwnedSessionService {
         const header = await this.#materialize(owner, primaryId)
         return header
       }
-      if (existing.owner === undefined) {
+      if (existing.header.owner === undefined) {
         throw new SessionScopeError(409, 'sessions/unowned-primary', 'the reserved primary identifier exists without an owner and is never adopted')
       }
-      if (existing.owner !== `user:${owner.shortId}`) {
+      if (existing.header.owner !== `user:${owner.shortId}`) {
         throw new SessionScopeError(409, 'sessions/primary-taken', 'the reserved primary identifier belongs to another identity and is never rebound')
       }
       return await this.#materialize(owner, sessionIdOf(owner.shortId))
@@ -250,10 +248,10 @@ export class OwnedSessionService {
       const primaryId = primarySessionIdOf(owner.shortId)
       const existing = await this.#headerOf(primaryId)
       if (existing === undefined) return await this.#materialize(owner, primaryId)
-      if (existing.owner === undefined) {
+      if (existing.header.owner === undefined) {
         throw new SessionScopeError(409, 'sessions/unowned-primary', 'the reserved primary identifier exists without an owner and is never adopted')
       }
-      if (existing.owner !== `user:${owner.shortId}`) {
+      if (existing.header.owner !== `user:${owner.shortId}`) {
         throw new SessionScopeError(409, 'sessions/primary-taken', 'the reserved primary identifier belongs to another identity and is never rebound')
       }
       return existing.header

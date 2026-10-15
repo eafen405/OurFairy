@@ -9,7 +9,6 @@
  *
  * @module @ourfairy/dsh-sessions
  */
-import { Service } from '@deepseek-ai/cordis'
 import { OwnedSessionService } from './service.mjs'
 import { SESSION_PATHS, sessionHandlers } from './http.mjs'
 

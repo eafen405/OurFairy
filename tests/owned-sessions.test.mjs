@@ -234,4 +234,57 @@ describe('OurFairy owned sessions over real HTTP', () => {
     assert.deepEqual(adminList.json.sessions, [],
       'the administrator identity must not see sessions it does not own')
   })
+
+  test('a primary request racing a create still resolves the fixed primary session', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const agent = await register(await createInvite(phaethon.token), 'agent-owner-four')
+    assert.equal(agent.status, 200, `the agent must exist: ${agent.text}`)
+    const token = agent.json.token
+
+    // Both requests are in flight together for an identity that owns nothing.
+    // Answering the create's response from the primary path (or the other way
+    // round) would hand one caller a session that is not the fixed main, so each
+    // response is checked for being the primary it was asked for.
+    const [created, returned] = await Promise.all([
+      request('/sessions/create', { token }),
+      request('/sessions/primary', { token }),
+    ])
+
+    assert.equal(created.status, 200, `the racing create must succeed: ${created.text}`)
+    assert.equal(returned.status, 200, `the racing primary must succeed: ${returned.text}`)
+    assert.equal(returned.json.session.primary, true,
+      `the primary request must answer with the fixed primary session, not ${returned.json.session.id}`)
+    assert.equal(created.json.session.owner, `user:${agent.json.user.shortId}`)
+
+    // The fixed primary is deterministic: asking again resolves the same session,
+    // and exactly one of this identity's sessions is primary.
+    const again = await request('/sessions/primary', { token })
+    assert.equal(again.json.session.id, returned.json.session.id,
+      'the fixed primary must be stable, not minted per request')
+
+    const listed = await request('/sessions/list', { token })
+    assert.equal(listed.json.primarySessionId, returned.json.session.id,
+      'the primary binding must be the session the primary request returned')
+    assert.equal(listed.json.sessions.filter(session => session.primary).length, 1,
+      'exactly one session is primary')
+
+    // Two concurrent creates may each mint their own ordinary session, but
+    // neither can displace the main or bind it to anything else.
+    const [extra, other] = await Promise.all([
+      request('/sessions/create', { token }),
+      request('/sessions/create', { token }),
+    ])
+    assert.equal(extra.status, 200, `the first extra create must succeed: ${extra.text}`)
+    assert.equal(other.status, 200, `the second extra create must succeed: ${other.text}`)
+    assert.notEqual(extra.json.session.id, other.json.session.id,
+      'two concurrent creates must each get their own ordinary session')
+    for (const created of [extra, other]) {
+      assert.equal(created.json.session.primary, false,
+        'a racing ordinary create must never answer with the primary session')
+    }
+
+    const settled = await request('/sessions/list', { token })
+    assert.equal(settled.json.primarySessionId, returned.json.session.id,
+      'concurrent creates must not move the primary binding')
+  })
 })
