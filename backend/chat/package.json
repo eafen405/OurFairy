@@ -10,6 +10,7 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-llm": "workspace:~",
+    "@deepseek-ai/dsh-tools": "workspace:~",
     "@deepseek-ai/dsh-session": "workspace:~",
     "@ourfairy/dsh-identity": "workspace:~",
     "@ourfairy/dsh-sessions": "workspace:~"

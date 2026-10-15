@@ -92,6 +92,7 @@ const PRODUCT_SOURCES = [
   'backend/chat/src/service.mjs',
   'backend/chat/src/projection.mjs',
   'backend/chat/src/persona.mjs',
+  'backend/chat/src/delivery.mjs',
   'backend/attachments/package.json',
   ...['index', 'service'].map(name => `backend/attachments/src/${name}.mjs`),
   'backend/spaces/package.json',

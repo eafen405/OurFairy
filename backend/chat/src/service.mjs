@@ -38,7 +38,7 @@ export class RemoteChat extends Service {
     if (this._live.has(sessionId)) return this._live.get(sessionId)
     let opening = this._opening.get(sessionId)
     if (opening === undefined) {
-      opening = this._resume(owner, sessionId)
+      opening = this._exclusively(sessionId, () => this._resume(owner, sessionId))
       this._opening.set(sessionId, opening)
     }
     try { return await opening } finally {
