@@ -1,0 +1,37 @@
+▶ OurFairy owned sessions over real HTTP
+  ✖ a failed durable create can be retried in the same backend process (71.116335ms)
+  ✔ a session created by a signed-in identity keeps its owner and its primary binding across a restart (786.317196ms)
+  ✔ an unowned or foreign session is refused, and no request is ever served as an implicit user (123.268146ms)
+  ✔ a primary request racing a create still resolves the fixed primary session (76.902491ms)
+✖ OurFairy owned sessions over real HTTP (1058.317514ms)
+ℹ tests 4
+ℹ suites 1
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3873.178018
+
+✖ failing tests:
+
+test at tests/owned-sessions.test.mjs:116:3
+✖ a failed durable create can be retried in the same backend process (71.116335ms)
+  AssertionError [ERR_ASSERTION]: retry must not leave a duplicate live entry: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  
+  500 !== 200
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/04-owned-sessions/tests/owned-sessions.test.mjs:132:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

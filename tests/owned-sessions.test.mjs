@@ -20,6 +20,10 @@
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'
+import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { join, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { after, before, describe, test } from 'node:test'
 import { describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
 
@@ -110,7 +114,49 @@ function register(inviteCode, name, password = `${name}-password`) {
   return request('/identity/register', { body: { inviteCode, name, password } })
 }
 
+function durableArtifacts() {
+  const root = join(home, 'dsh-home', 'sessions')
+  const artifacts = {}
+  const walk = dir => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) walk(path)
+      else if (/\.jsonl(\.zstd)?$/u.test(entry.name)) {
+        artifacts[relative(root, path)] = {
+          sha256: createHash('sha256').update(readFileSync(path)).digest('hex'),
+          mtimeNs: String(statSync(path, { bigint: true }).mtimeNs),
+        }
+      }
+    }
+  }
+  walk(root)
+  return artifacts
+}
+
 describe('OurFairy owned sessions over real HTTP', () => {
+  test('a failed durable create can be retried in the same backend process', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const agent = await register(await createInvite(phaethon.token), 'agent-write-retry')
+    assert.equal(agent.status, 200, agent.text)
+    // A file where JSONL needs a project directory produces a real write error.
+    // Metadata listing ignores this non-directory; creation reaches durability.
+    const project = join(home, 'dsh-home', 'sessions', '_no-cwd')
+    mkdirSync(join(home, 'dsh-home', 'sessions'), { recursive: true })
+    writeFileSync(project, 'write obstruction')
+    try {
+      const failed = await request('/sessions/create', { token: agent.json.token })
+      assert.equal(failed.status, 500, failed.text)
+    } finally {
+      rmSync(project, { force: true })
+    }
+    const retried = await request('/sessions/create', { token: agent.json.token })
+    assert.equal(retried.status, 200, `retry must not leave a duplicate live entry: ${retried.text}`)
+    assert.equal(retried.json.session.primary, true)
+    const read = await request('/sessions/read', {
+      token: agent.json.token, body: { sessionId: retried.json.session.id },
+    })
+    assert.equal(read.status, 200, read.text)
+  })
   test('a session created by a signed-in identity keeps its owner and its primary binding across a restart', async () => {
     const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
     const agent = await register(await createInvite(phaethon.token), 'agent-owner-one')
@@ -179,7 +225,7 @@ describe('OurFairy owned sessions over real HTTP', () => {
     assert.equal(read.json.session.id, first.json.session.id)
   })
 
-  test('an unowned or foreign session is refused, and no request is ever served as an implicit user', async () => {
+  test('a missing or foreign session is refused, and no request is ever served as an implicit user', async () => {
     // Anonymous requests are refused outright: a caller that presented no
     // credential is never served as some implicit user, and the product never
     // falls back to "user 1" (the administrator) for it.
@@ -214,8 +260,8 @@ describe('OurFairy owned sessions over real HTTP', () => {
       assert.equal(refused.json.session, undefined, 'a refused request must not disclose the session')
     }
 
-    // An identifier with no ownership record at all is refused as well: nothing
-    // is adopted merely because it looks like a session, and nothing is guessed.
+    // Nonexistent identifiers are refused; persisted ownerless data is covered
+    // separately by the cold fixture test.
     for (const sessionId of ['session-1', 'not-a-session']) {
       const refused = await request('/sessions/read', { token: owner.json.token, body: { sessionId } })
       assert.equal(refused.status, 404, `an unowned identifier must be refused: ${refused.text}`)
@@ -286,5 +332,82 @@ describe('OurFairy owned sessions over real HTTP', () => {
     const settled = await request('/sessions/list', { token })
     assert.equal(settled.json.primarySessionId, returned.json.session.id,
       'concurrent creates must not move the primary binding')
+  })
+
+  test('cold ownerless and foreign sessions are refused without changing durable artifacts', async t => {
+    const admin = await signIn('phaethon', PHAETHON_PASSWORD)
+    const caller = await register(await createInvite(admin.token), 'agent-cold-caller')
+    const owner = await register(await createInvite(admin.token), 'agent-cold-owner')
+    const collision = await register(await createInvite(admin.token), 'agent-cold-collision')
+    for (const registered of [caller, owner, collision]) assert.equal(registered.status, 200, registered.text)
+    const ownerlessId = `ourfairy-user-${caller.json.user.shortId}-primary`
+    const takenId = `ourfairy-user-${collision.json.user.shortId}-primary`
+    const foreignId = 'cold-foreign-session'
+    const fixtures = [
+      { id: ownerlessId },
+      { id: foreignId, owner: `user:${owner.json.user.shortId}` },
+      { id: takenId, owner: `user:${owner.json.user.shortId}` },
+    ]
+    const profileLayer = join(home, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml')
+    const fixturePlugin = fileURLToPath(new URL('../backend/sessions/test-support/persist-fixtures.mjs', import.meta.url))
+    stopBackend()
+    writeFileSync(profileLayer, JSON.stringify([{ insert: [{
+      id: 'cold-session-fixtures', name: fixturePlugin, config: { fixtures },
+    }] }]))
+    try {
+      startBackend()
+      stopBackend()
+    } finally {
+      writeFileSync(profileLayer, '[]\n')
+    }
+    const before = durableArtifacts()
+    for (const { id } of fixtures) {
+      assert.equal(Object.keys(before).filter(path => path.split('/').includes(id)).length, 1,
+        `fixture ${id} must have one real persisted artifact before the product restart`)
+    }
+    startBackend() // fixture plugin absent; no fixture session was entered live.
+    for (const token of [caller.json.token, admin.token]) {
+      for (const path of ['/sessions/read', '/sessions/select']) {
+        for (const [sessionId, status, code] of [
+          [ownerlessId, 403, 'sessions/unowned-session'],
+          [foreignId, 404, 'sessions/unknown-session'],
+        ]) {
+          const refused = await request(path, { token, body: { sessionId } })
+          assert.equal(refused.status, status, refused.text)
+          assert.equal(refused.json.error.code, code)
+          assert.equal(refused.json.session, undefined)
+        }
+      }
+      const listed = await request('/sessions/list', { token })
+      assert.equal(listed.status, 200, listed.text)
+      assert.ok(listed.json.sessions.every(session => !fixtures.some(fixture => fixture.id === session.id)))
+      // All installed product paths above check ownership. Shared/future paths
+      // must stay unregistered even with an admitted token and a known other id.
+      for (const path of ['/api/sessions/read', '/api/sessions/select', '/api/sessions/subscribe',
+        '/api/sessions/control', '/sessions/subscribe', '/sessions/control']) {
+        const absent = await request(path, { token, body: { sessionId: foreignId } })
+        assert.equal(absent.status, 404, `${path}: ${absent.text}`)
+      }
+    }
+    for (const [token, code] of [
+      [caller.json.token, 'sessions/unowned-primary'],
+      [collision.json.token, 'sessions/primary-taken'],
+    ]) {
+      for (const path of ['/sessions/create', '/sessions/primary']) {
+        const refused = await request(path, { token })
+        assert.equal(refused.status, 409, refused.text)
+        assert.equal(refused.json.error.code, code)
+      }
+    }
+    for (const path of ['/sessions/read', '/sessions/select']) {
+      const anonymous = await request(path, { body: { sessionId: foreignId } })
+      assert.equal(anonymous.status, 401, anonymous.text)
+      const ownRead = await request(path, { token: owner.json.token, body: { sessionId: foreignId } })
+      assert.equal(ownRead.status, 200, ownRead.text)
+      assert.equal(ownRead.json.session.owner, `user:${owner.json.user.shortId}`)
+    }
+    const after = durableArtifacts()
+    assert.deepEqual(after, before, 'cold refusal/read/list must not repair or write any durable artifact')
+    t.diagnostic(JSON.stringify({ coldFixtures: fixtures, durableArtifacts: after }))
   })
 })

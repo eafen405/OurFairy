@@ -166,18 +166,29 @@ export class OwnedSessionService {
   /**
    * Materialize one session durably, owned by the given identity.
    *
-   * The header is persisted explicitly: dsh's persistence keeps a created
-   * session unmaterialized until something is appended, so a session created
-   * and never written to would not survive a restart.
+   * Flush the public write handle before publishing the live session. The
+   * persistence backend routes later events and store flushes to this handle;
+   * session disposal or backend teardown closes it.
    *
    * @param owner - the authenticated identity.
    * @param id - the id to mint for this session.
    * @returns the persisted header.
    */
   async #materialize(owner, id) {
-    const session = this.sessions.create(id, { meta: { owner: `user:${owner.shortId}` } })
-    await this.persistence.persistHeader(session.header, 0)
-    return session.header
+    const session = this.sessions.prepare(id, { meta: { owner: `user:${owner.shortId}` } })
+    const handle = await this.persistence.create(session.header)
+    try {
+      await handle.flush()
+      const sessions = this.sessions
+      this.ctx.effect(function* () {
+        yield sessions.enter(session)
+        sessions.announce(session)
+      }, 'ourfairy owned session')
+      return session.header
+    } catch (error) {
+      await handle.close()
+      throw error
+    }
   }
 
   /**

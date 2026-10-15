@@ -1,8 +1,9 @@
 # #27 backend: owned sessions and a fixed primary — evidence
 
-**Status: the product tests are green.** `node --test tests/owned-sessions.test.mjs`
-passes 3/3 and the identity regression is unchanged. What is *not* claimed is marked
-under "Remaining gates".
+**Status: backend acceptance is green.**
+`node --test tests/owned-sessions.test.mjs tests/identity-http.test.mjs`
+passes **13/13** (5 session + 8 identity tests). Android and future message,
+subscription and control behavior are outside this backend result.
 
 ## The actual cause of the earlier 409 (corrected)
 
@@ -78,8 +79,62 @@ callers. With serialization it passes.
 - **HTTP duplication was removed.** `backend/identity/src/http.mjs` exports
   `postHandler`, `sendJson`, `readJsonBody`; the sessions module imports them.
   Identity's own behavior is unchanged (regression green).
-- **No dsh changes**, no `combo.json` change, and no guessed API: only
-  `ctx.sessions` and `ctx.sessionPersistence` are used.
+- **No dsh changes**, no `combo.json` change. The earlier implementation called
+  JSONL's `persistHeader` implementation method; the finish below replaces it
+  with the declared persistence interface.
+
+## Formal persistence and failed-create recovery
+
+At pinned dsh `d3fe98f`, `packages/session/session-persistence/src/index.ts`
+declares `create(header, options?): Promise<SessionHandle>`, `open`, `flush`,
+`stat` and `list`. `SessionHandle.flush()` explicitly materializes empty
+sessions. `persistHeader` is not declared by the service; it belongs to the
+JSONL implementation's storage collaborator. Its direct use also skipped
+registering a writer for subsequent live events.
+
+The product now uses `SessionStore.prepare` → `persistence.create` →
+`handle.flush` → an owned effect containing `enter`/`announce`. A persistence
+failure closes the handle while the session is still unpublished, so a retry
+does not collide with an abandoned live session. The successful handle stays
+open: JSONL routes `session/event` and `SessionStore.flush(session)` to that
+writer, and closes it on session disposal or persistence teardown
+(`session-persistence-jsonl/src/storage.ts`, `JsonlBackendTracker.install`).
+Future #28 code must reuse that live session/writer, not create a second writer.
+Cold message resume is still #28 work; these read/select endpoints return only
+the authorized header.
+
+The HTTP regression places a regular file at JSONL's `_no-cwd` directory,
+causing a real filesystem materialization error. After removing it, another
+create in the **same backend process** must succeed. Before the fix, the retry
+returned 500 because the first call left a duplicate live session
+(`red-06-durable-retry.log`); after the fix it passes. No persistence mock or
+product fixture endpoint was added.
+
+## Cold ownerless and foreign refusal without writes
+
+`backend/sessions/test-support/persist-fixtures.mjs` is a test-only profile row.
+It uses public `sessions.prepare`, `sessionPersistence.create`, handle `flush`
+and `close` to persist three empty current-format sessions: an ownerless
+reserved primary, a known foreign session, and a reserved primary with a
+foreign owner. It never enters them into the live store. The test stops that
+process, removes the fixture profile row, then restarts the product.
+
+Both an ordinary user and the administrator receive 403 on ownerless
+read/select and 404 on a known foreign id. Reserved ownerless primary
+create/primary return 409 `sessions/unowned-primary`; foreign primary collision
+returns 409 `sessions/primary-taken`. The fixture's real owner can read/select
+their own header; anonymous read/select are 401. None of these operations
+changes any durable log: SHA-256 and nanosecond mtime for every artifact are
+compared before restart and after all requests. `green-05-cold-and-retry.log`
+records the fixture ids, hashes and mtimes after that equality assertion.
+
+Authenticated requests naming the foreign id under `/api/sessions/read`,
+`select`, `subscribe`, `control` return 404, as do the unregistered product
+subscribe/control routes. The actual composition has only the connection
+`/api` prefix carrier, identity paths and the five owned-session paths; no
+shared session RPC/query route is mounted. No claim is made about future
+handlers. This is current-format data with optional owner absent, not a
+hand-written historical JSONL or malformed artifact.
 
 ## Commands actually run
 
@@ -99,6 +154,15 @@ All from `.worktrees/04-owned-sessions` (ticket/04-owned-sessions).
    operations: → `green-03.log`, **EXIT=0**, 3/3 pass.
 6. `node --test tests/identity-http.test.mjs` → `regression-identity.log`, 8/8 pass,
    after the shared HTTP helper extraction.
+7. Initial sandbox attempt for the new retry test timed out before test output
+   (`red-05-durable-retry.log`). Retrying with authorized host loopback execution
+   exposed a fixture setup ENOENT (`red-05-durable-retry-host.log`); after creating
+   the parent directory, the real failed-retry red was captured in
+   `red-06-durable-retry.log` (**3 pass, 1 fail**).
+8. After the formal handle lifecycle fix and cold fixture extension:
+   `node --test tests/owned-sessions.test.mjs tests/identity-http.test.mjs`
+   → `green-05-cold-and-retry.log`, **13 pass, 0 fail**. Host execution was used
+   for the real loopback backend, without a model/cloud request.
 
 ### Merge state
 
@@ -118,18 +182,15 @@ the time it was written, not the current ancestry.
 
 - **Done:** create → restart → list/read/select/primary with unchanged owner and
   main; two users cannot read or select a known other's id before content;
-  administrator gets the same own-only rule; anonymous refused on create/list/
-  primary; concurrent primary-vs-create and concurrent creates; unknown shared
-  `/api` route probed at the current composition (admission is covered by the
-  identity suite: anonymous `/api` is refused at the door with 401, and an
-  authenticated `/api` request reaches a 404 because no session endpoint is
-  mounted there — so no product session content is reachable through `/api`).
-- **NOT executed:** the genuinely ownerless **cold** legacy fixture — a persisted
-  session with no owner, created while the backend is stopped, proving refusal
-  before any repair or write. The code path (`persistence.stat` → 409
-  `sessions/unowned-primary`, no write) is implemented and the *hot* ownerless
-  and foreign cases are green, but the cold fixture was not built and this gate
-  is therefore unproven.
+  administrator gets the same own-only rule; anonymous refused on all five
+  paths; concurrent primary-vs-create and concurrent creates; genuinely
+  persisted cold ownerless/foreign fixtures and reserved-primary collisions
+  refused with unchanged artifact hashes/mtimes; failed-write retry succeeds;
+  no mounted `/api` bypass for a known foreign id in the current composition.
+- **Earlier evidence corrected:** the original second test used nonexistent ids
+  `session-1` and `not-a-session`, not persisted ownerless sessions. There was no
+  proved "hot ownerless" gate. The cold test above supplies actual ownerless
+  persisted data. It does not test migration of incompatible historical data.
 - **Not done by design:** no `/sessions/subscribe` or `/sessions/control` routes
   (they stay unregistered), no Android work, no issue closure, and no push.
 
@@ -140,3 +201,7 @@ the time it was written, not the current ancestry.
 - `green-02.log` — same, without `sessions.flush` (wrong-hypothesis probe)
 - `green-03.log` — 3/3 pass after the snapshot/header and serialization fixes
 - `regression-identity.log` — identity suite 8/8 after shared HTTP helpers
+- `red-05-durable-retry.log` — restricted sandbox run timed out
+- `red-05-durable-retry-host.log` — initial failure-test setup ENOENT
+- `red-06-durable-retry.log` — actual failed-write retry exposes live duplicate
+- `green-05-cold-and-retry.log` — 13/13, with cold fixture durable hash/mtime evidence
