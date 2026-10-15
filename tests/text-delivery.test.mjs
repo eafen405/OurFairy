@@ -177,3 +177,42 @@ test('simultaneous senders and recipient primary creation preserve both deliveri
   assert.equal(modelRequests.length-before,4)
   assert.equal(after.events.filter(e=>e.type==='delivery/message').length,2)
 })
+
+test('failed native durability checkpoint never confirms and stable retry recovers the same message', async () => {
+  const target = (await request('/sessions/primary', bob.token)).session.id
+  await stopBackend()
+  const layer = join(home,'dsh-home','profiles','ourfairy','cordis.patch.yml')
+  const fixture = new URL('../backend/chat/test-support/fail-outlets.mjs',import.meta.url).pathname
+  writeFileSync(layer,JSON.stringify([{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failFlush:true}}]}]))
+  await startBackend()
+  await request('/chat/read',bob.token,{sessionId:target}) // ensure the recipient is live
+  const args = {recipientShortId:bob.user.shortId,text:'Checkpoint retry is still one delivery'}
+  const failed = await tool(alice,'deliver_message',args,senderSession,'flush-failure-call')
+  assert.doesNotMatch(failed,/deliveryId/)
+  const db = new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
+  const pending = db.prepare('SELECT * FROM deliveries WHERE text = ?').get(args.text)
+  assert.equal(pending.status,0)
+  assert.match(await tool(alice,'deliver_message',args,senderSession,'flush-failure-call'),/deliveryId/)
+  assert.equal(db.prepare('SELECT status FROM deliveries WHERE delivery_id = ?').get(pending.delivery_id).status,1)
+  const after = (await request('/chat/read',bob.token,{sessionId:target})).projection
+  assert.equal(after.messages.filter(m=>m.text===args.text).length,1)
+  db.close(); writeFileSync(layer,'[]\n')
+})
+
+test('notification outlet failure preserves durable delivery and successful sender confirmation', async () => {
+  const target = (await request('/sessions/primary', bob.token)).session.id
+  await stopBackend()
+  const layer = join(home,'dsh-home','profiles','ourfairy','cordis.patch.yml')
+  const fixture = new URL('../backend/chat/test-support/fail-outlets.mjs',import.meta.url).pathname
+  writeFileSync(layer,JSON.stringify([{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failNotification:true}}]}]))
+  await startBackend()
+  try {
+    const args = {recipientShortId:bob.user.shortId,text:'Notification trouble does not retract this'}
+    assert.match(await tool(alice,'deliver_message',args,senderSession,'notification-failure-call'),/deliveryId/)
+    const after = (await request('/chat/read',bob.token,{sessionId:target})).projection
+    assert.equal(after.messages.filter(m=>m.text===args.text).length,1)
+    const db = new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
+    assert.equal(db.prepare('SELECT status FROM deliveries WHERE text = ?').get(args.text).status,1)
+    db.close()
+  } finally { writeFileSync(layer,'[]\n') }
+})
