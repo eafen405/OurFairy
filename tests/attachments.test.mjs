@@ -190,7 +190,9 @@ test('native model file handles permit real read and sandboxed scripts only in t
   const handle = bodyText.match(/read-only copy saved at ("(?:[^"\\]|\\.)*")/)
   assert.ok(handle, 'actual provider text must contain a usable file handle')
   const path = JSON.parse(handle[1])
-  assert.match(await tool(alice, aliceId, 'bash', { description: 'Read immutable input in actual sandbox', command: `cat '${path}'; printf bad > '${path}'` }), /REAL_ATTACHMENT_CONTENT_私密/)
+  const child = await tool(alice, aliceId, 'bash', { description: 'Read immutable input in actual sandbox', command: `cat '${path}'; printf bad > '${path}'` })
+  assert.match(child, /REAL_ATTACHMENT_CONTENT_私密/)
+  assert.match(child, /Read-only file system|Permission denied/i)
   assert.match(await tool(alice, aliceId, 'write', { file_path: path, content: 'bad' }), /denied|outside|permission/i)
   for (const [who, id] of [[bob, bobId], [alice, otherId]]) {
     assert.match(await tool(who, id, 'read', { file_path: path }), /denied|outside|permission/i)
@@ -198,6 +200,9 @@ test('native model file handles permit real read and sandboxed scripts only in t
     assert.doesNotMatch(denied, /REAL_ATTACHMENT_CONTENT_私密/)
     assert.match(denied, /No such file|denied|not found/i)
   }
+  const read = await request('/chat/read', alice.token, { sessionId: aliceId })
+  const inputMessage = read.body.projection.messages.find(message => message.attachments?.length)
+  assert.deepEqual((await request('/attachments/download', alice.token, { sessionId: aliceId, messageId: inputMessage.messageId, index: 0 })).bytes, bytes, 'failed script/tool mutations must preserve the downloadable original')
   await stop(); await start()
   assert.match(await tool(alice, aliceId, 'read', { file_path: '$INPUT' }), /REAL_ATTACHMENT_CONTENT_私密/)
 })

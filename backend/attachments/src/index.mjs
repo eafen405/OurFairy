@@ -34,7 +34,7 @@ export function apply(ctx, config) {
     }
   })
   register('/attachments/download', json((owner, body) => service.download(owner, body), async (res, input) => {
-    // Open/verify the immutable original before headers, then stream with backpressure.
+    // Open the qualified immutable original before headers, then stream with backpressure.
     const iterator = ctx.attachments.readFileStream(input.original)[Symbol.asyncIterator]()
     const first = await iterator.next()
     res.writeHead(200, { 'cache-control': 'no-store', 'content-type': input.mime,
