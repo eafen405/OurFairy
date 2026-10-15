@@ -1,0 +1,28 @@
+✖ disconnecting an original download during backpressure settles its handler and closes its file source (1535.470635ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1718.67861
+
+✖ failing tests:
+
+test at tests/attachment-download-abort.test.mjs:19:1
+✖ disconnecting an original download during backpressure settles its handler and closes its file source (1535.470635ms)
+  AssertionError [ERR_ASSERTION]: the responder must leave its drain wait after client close
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/review-t7-t9/tests/attachment-download-abort.test.mjs:52:12)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
