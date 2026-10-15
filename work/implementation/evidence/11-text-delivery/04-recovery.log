@@ -1,0 +1,12 @@
+✔ Fairy delivers only selected text to a cold primary without recipient inference (3003.920533ms)
+✔ live delivery remains independent of the recipient active attempt and later model history includes it (150.155176ms)
+✔ native log success with failed business update recovers after restart and exact retry stays single (937.22314ms)
+✔ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (117.951465ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4513.145745

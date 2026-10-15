@@ -34,7 +34,7 @@ import {
 export const PHAETHON_SHORT_ID = 1
 
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
-const SCHEMA_VERSION = 4
+const SCHEMA_VERSION = 5
 
 /**
  * The current shape. No UNIQUE constraint and no REFERENCES clause: AGENTS.md
@@ -149,6 +149,26 @@ CREATE TABLE IF NOT EXISTS uploads (
 );
 `
 
+/** Delivery coordination only; the native log is the delivered-content authority. */
+const DELIVERY_SCHEMA = `
+CREATE TABLE IF NOT EXISTS deliveries (
+  delivery_id TEXT PRIMARY KEY,
+  sender_short_id INTEGER NOT NULL,
+  sender_session_id TEXT NOT NULL,
+  recipient_short_id INTEGER NOT NULL,
+  recipient_session_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  status INTEGER NOT NULL DEFAULT 0, -- 0 pending coordination, 1 durably delivered
+  message_id TEXT,
+  accepted_seq INTEGER,
+  created_by INTEGER NOT NULL,
+  updated_by INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+`
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
@@ -158,6 +178,7 @@ ${Object.values(TABLE_DDL).map(ddl => ddl.replace('CREATE TABLE ', 'CREATE TABLE
 ${INDEX_DDL}
 ${GROUP_SCHEMA}
 ${UPLOAD_SCHEMA}
+${DELIVERY_SCHEMA}
 `
 
 /**
@@ -295,7 +316,7 @@ export class IdentityStore {
           `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${row.value}`)
       }
       if (version === SCHEMA_VERSION) return
-      if (version !== 1 && version !== 2 && version !== 3) {
+      if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
         throw new IdentityError(500, 'identity/schema-unsupported',
           `unsupported identity schema version ${row.value}`)
       }
@@ -307,9 +328,43 @@ export class IdentityStore {
       }
       this.#db.exec(GROUP_SCHEMA)
       this.#db.exec(UPLOAD_SCHEMA)
+      this.#db.exec(DELIVERY_SCHEMA)
       this.#db.prepare('UPDATE meta SET value = ? WHERE key = ?')
         .run(String(SCHEMA_VERSION), 'schema_version')
     })
+  }
+
+  readDelivery(id) {
+    const row = this.#db.prepare('SELECT * FROM deliveries WHERE delivery_id = ? AND deleted_at IS NULL').get(id)
+    return row && { deliveryId: row.delivery_id, senderShortId: row.sender_short_id, senderSessionId: row.sender_session_id,
+      recipientShortId: row.recipient_short_id, sessionId: row.recipient_session_id, text: row.text,
+      status: row.status, messageId: row.message_id, acceptedSeq: row.accepted_seq }
+  }
+  prepareDelivery(row) {
+    return this.#transaction(() => {
+      const existing = this.readDelivery(row.deliveryId)
+      if (existing) {
+        if (existing.senderShortId !== row.senderShortId || existing.senderSessionId !== row.senderSessionId
+          || existing.recipientShortId !== row.recipientShortId || existing.text !== row.text) {
+          throw new IdentityError(409, 'delivery/conflict', 'this delivery identity already names different content or recipient')
+        }
+        return existing
+      }
+      const now = this.now()
+      this.#db.prepare(`INSERT INTO deliveries
+        (delivery_id,sender_short_id,sender_session_id,recipient_short_id,recipient_session_id,text,created_by,updated_by,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).run(row.deliveryId,row.senderShortId,row.senderSessionId,row.recipientShortId,
+          row.sessionId,row.text,row.senderShortId,row.senderShortId,now,now)
+      return this.readDelivery(row.deliveryId)
+    })
+  }
+  pendingDeliveries() {
+    return this.#db.prepare('SELECT delivery_id FROM deliveries WHERE status = 0 AND deleted_at IS NULL ORDER BY created_at,delivery_id')
+      .all().map(row => this.readDelivery(row.delivery_id))
+  }
+  completeDelivery(id, { messageId, acceptedSeq }) {
+    this.#db.prepare('UPDATE deliveries SET status = 1, message_id = ?, accepted_seq = ?, updated_by = sender_short_id, updated_at = ? WHERE delivery_id = ? AND deleted_at IS NULL')
+      .run(messageId,acceptedSeq,this.now(),id)
   }
 
   /** Insert an opaque upload receipt after the staging file exists. */

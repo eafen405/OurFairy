@@ -93,6 +93,7 @@ const PRODUCT_SOURCES = [
   'backend/chat/src/service.mjs',
   'backend/chat/src/projection.mjs',
   'backend/chat/src/persona.mjs',
+  'backend/chat/src/delivery.mjs',
   'backend/search/package.json',
   'backend/search/src/index.mjs',
   'backend/attachments/package.json',

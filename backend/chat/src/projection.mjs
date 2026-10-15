@@ -30,7 +30,7 @@ export function transcript(events, sessionId) {
     } else if (event.type === 'user/message' && isAppendSurfaceEvent(event) && event.data.source?.kind === 'user') {
       const message = event.data
       messages.set(message.id, { messageId: message.id, seq: event.seq, requestId: message.source.rpcId ?? null, role: 1, status: 2, text: messageText(message), attachments: attachmentsOf(message) })
-    } else if (event.type === 'assistant/message' && isAppendSurfaceEvent(event)) {
+    } else if ((event.type === 'assistant/message' || event.type === 'delivery/message') && isAppendSurfaceEvent(event)) {
       const message = event.data.message
       messages.set(message.id, { messageId: message.id, seq: event.seq, requestId: null, role: 2, status: event.data.interrupted ? 3 : 2, text: messageText(message), attachments: attachmentsOf(message) })
     } else if (event.type === 'assistant/attempt') {
