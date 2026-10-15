@@ -1,0 +1,4 @@
+$ tsx scripts/gen-config-catalog.ts
+gen-config-catalog: 3 artifact(s) computed, 2 written.
+$ tsx scripts/gen-config-catalog.ts --check
+gen-config-catalog: 3 artifact(s) are up to date.

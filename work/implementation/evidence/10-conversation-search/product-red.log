@@ -1,0 +1,20 @@
+✖ chat searches Chinese message excerpts then reads original event positions (6041.290334ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6360.787969
+
+✖ failing tests:
+
+test at tests/conversation-search.test.mjs:77:1
+✖ chat searches Chinese message excerpts then reads original event positions (6041.290334ms)
+  SyntaxError: Unexpected token 'E', "Error: unk"... is not valid JSON
+      at JSON.parse (<anonymous>)
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/10-conversation-search/tests/conversation-search.test.mjs:83:22)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)

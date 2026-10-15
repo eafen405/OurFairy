@@ -1,0 +1,14 @@
+{
+  "name": "@ourfairy/dsh-search",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.mjs",
+  "files": ["src", "README.md"],
+  "exports": { ".": "./src/index.mjs" },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-tools": "workspace:~",
+    "@deepseek-ai/dsh-session-query": "workspace:~"
+  }
+}
