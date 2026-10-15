@@ -81,3 +81,57 @@ test('unfinished and foreign receipts never grant message or download access, in
   assert.equal((await request('/attachments/download', alice.token, { sessionId: aliceId, uploadId: bobUpload.uploadId, index: 0 })).status, 404)
   assert.equal((await request('/chat/send', alice.token, { sessionId: aliceId, requestId: 'own-input', text: '', uploadIds: [pending.uploadId] })).status, 409)
 })
+
+test('lost chunk ACK retries exact bytes, expired upload cannot be new input, and admitted retry survives expiry', async () => {
+  const sessionId = await session(alice), bytes = Buffer.from('two chunk upload')
+  const receipt = await propose(alice, sessionId, bytes)
+  const first = bytes.subarray(0, 5)
+  assert.equal((await chunk(alice, receipt, first)).body.upload.offset, 5)
+  assert.equal((await chunk(alice, receipt, first)).body.upload.offset, 5)
+  assert.equal((await chunk(alice, receipt, Buffer.from('wrong'))).status, 409)
+  assert.equal((await chunk(alice, receipt, bytes.subarray(5), 5)).body.upload.offset, bytes.length)
+  assert.equal((await request('/attachments/complete', alice.token, { uploadId: receipt.uploadId })).status, 200)
+  const input = { sessionId, requestId: 'expired-admitted', text: '', uploadIds: [receipt.uploadId] }
+  const sent = await request('/chat/send', alice.token, input)
+  assert.equal(sent.status, 200)
+  // Clock-boundary fault setup in the actual business DB; observable results
+  // below still go through authenticated public routes, not database reads.
+  const { DatabaseSync } = await import('node:sqlite')
+  const db = new DatabaseSync(join(home, 'dsh-home', 'identity', 'identity.sqlite'))
+  try { db.prepare('UPDATE uploads SET expires_at = ? WHERE upload_id = ?').run(Date.now() - 1, receipt.uploadId) }
+  finally { db.close() }
+  assert.equal((await request('/attachments/complete', alice.token, { uploadId: receipt.uploadId })).status, 410)
+  assert.equal((await request('/chat/send', alice.token, { ...input, requestId: 'expired-new' })).status, 410)
+  await stop(); await start()
+  assert.deepEqual((await request('/chat/send', alice.token, input)).body.receipt, sent.body.receipt)
+  assert.deepEqual((await request('/attachments/download', alice.token, { sessionId, messageId: sent.body.receipt.messageId, index: 0 })).bytes, bytes)
+})
+
+test('images keep original downloads while official Messages serialization uses normalized native image content', async () => {
+  const sessionId = await session(alice)
+  const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNgZGIGAAAOAAeCcsnOAAAAAElFTkSuQmCC', 'base64')
+  const receipt = await upload(alice, sessionId, bytes, 'pixel.png', 'image/png')
+  const sent = await request('/chat/send', alice.token, { sessionId, requestId: 'image-input', text: 'see T9_PIXEL', uploadIds: [receipt.uploadId] })
+  assert.equal(sent.status, 200, JSON.stringify(sent))
+  const until = Date.now() + 10000
+  let captured
+  do {
+    captured = model.requests.find(item => JSON.stringify(item.body).includes('T9_PIXEL'))
+    if (captured) break
+    await new Promise(resolve => setTimeout(resolve, 25))
+  } while (Date.now() < until)
+  assert.ok(captured, 'official provider must actually dispatch image request')
+  const images = captured.body.messages.flatMap(m => m.content).filter(c => c.type === 'image')
+  assert.equal(images.length, 1)
+  assert.equal(images[0].source.type, 'base64')
+  assert.ok(Buffer.from(images[0].source.data, 'base64').length > 0)
+  const read = await request('/chat/read', alice.token, { sessionId })
+  assert.deepEqual(read.body.projection.messages.find(m => m.requestId === 'image-input').attachments,
+    [{ index: 0, type: 2, name: 'pixel.png', mime: 'image/png', bytes: bytes.length }])
+  const download = await request('/attachments/download', alice.token, { sessionId, messageId: sent.body.receipt.messageId, index: 0 })
+  assert.deepEqual(download.bytes, bytes)
+  const malformed = await propose(alice, sessionId, Buffer.from('not a png'), 'broken.png', 'image/png')
+  await chunk(alice, malformed, Buffer.from('not a png'))
+  assert.equal((await request('/attachments/complete', alice.token, { uploadId: malformed.uploadId })).status, 400)
+  assert.equal((await request('/chat/send', alice.token, { sessionId, requestId: 'broken-image', text: '', uploadIds: [malformed.uploadId] })).status, 404)
+})
