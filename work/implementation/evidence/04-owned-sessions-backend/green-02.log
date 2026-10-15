@@ -1,0 +1,35 @@
+▶ OurFairy owned sessions over real HTTP
+  ✖ a session created by a signed-in identity keeps its owner and its primary binding across a restart (80.426719ms)
+  ✔ an unowned or foreign session is refused, and no request is ever served as an implicit user (101.398987ms)
+✖ OurFairy owned sessions over real HTTP (182.373318ms)
+ℹ tests 2
+ℹ suites 1
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3040.487673
+
+✖ failing tests:
+
+test at tests/owned-sessions.test.mjs:114:3
+✖ a session created by a signed-in identity keeps its owner and its primary binding across a restart (80.426719ms)
+  AssertionError [ERR_ASSERTION]: creating a second session must succeed: {"ok":false,"error":{"code":"sessions/unowned-primary","message":"the reserved primary identifier exists without an owner and is never adopted"}}
+  
+  
+  409 !== 200
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/04-owned-sessions/tests/owned-sessions.test.mjs:133:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 409,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

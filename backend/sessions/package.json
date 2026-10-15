@@ -1,0 +1,20 @@
+{
+  "name": "@ourfairy/dsh-sessions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OurFairy owned sessions: SessionHeader.owner as the only ownership authority, plus the identity's deterministic fixed primary session, with the product's own request paths.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@ourfairy/dsh-identity": "workspace:~"
+  }
+}

@@ -61,6 +61,9 @@ const PROBE_PACKAGE = COMBINATION.probePackage
 // records no identity field (and this ticket must not edit that file), so the
 // name stays a launcher constant while its sources join the staleness hash below.
 const IDENTITY_PACKAGE = '@ourfairy/dsh-identity'
+// The owned-session module, mounted by the bundle for the same reason: a linked
+// product package must also be a profile dependency for its dsh peers to resolve.
+const SESSIONS_PACKAGE = '@ourfairy/dsh-sessions'
 const BUNDLE_DIR = join(repoRoot, COMBINATION.bundlePathInRepo)
 const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
 const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
@@ -77,6 +80,10 @@ const PRODUCT_SOURCES = [
   'backend/identity/src/store.mjs',
   'backend/identity/src/http.mjs',
   'backend/identity/src/index.mjs',
+  'backend/sessions/package.json',
+  'backend/sessions/src/service.mjs',
+  'backend/sessions/src/http.mjs',
+  'backend/sessions/src/index.mjs',
 ]
 
 function fail(message, code = 1) {
@@ -182,6 +189,7 @@ const profileManifest = () => ({
     // Product modules the bundle mounts by package name. A linked package only
     // resolves its dsh peers when it is a profile dependency too.
     [IDENTITY_PACKAGE]: `file:${join(repoRoot, 'backend', 'identity')}`,
+    [SESSIONS_PACKAGE]: `file:${join(repoRoot, 'backend', 'sessions')}`,
   },
   dsh: { profile: { bundles: [BUNDLE_PACKAGE] } },
 })
