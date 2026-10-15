@@ -1,0 +1,13 @@
+diff --git a/docs/config-catalog.zh.md b/docs/config-catalog.zh.md
+index 436a2ae904..10cc67f118 100644
+--- a/docs/config-catalog.zh.md
++++ b/docs/config-catalog.zh.md
+@@ -437,7 +437,7 @@ export type Config = LocalConfig
+ ## `@deepseek-ai/dsh-client-connection`
+ 
+ - `inject`: `credentials`
+-- `source`: [`packages/client/connection/src/index.ts:92`](../packages/client/connection/src/index.ts)
++- `source`: [`packages/client/connection/src/index.ts:97`](../packages/client/connection/src/index.ts)
+ 
+ ```ts config-catalog
+ /** Browser authentication, request limits, and connection recovery configuration. */

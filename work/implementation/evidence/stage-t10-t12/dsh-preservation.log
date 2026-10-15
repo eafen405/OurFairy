@@ -1,0 +1,5 @@
+16/16 original dirty paths retained; no staged changes
+14/14 unaffected full-file SHA-256 match initial stage baseline
+2/2 catalogs retain exact original diff hunk/context bytes (only Git blob index line changes)
+Both catalog original source92->97 changes remain unstaged; product commit adds only literalSubstring docs
+Normal merge initially refused catalog overlap; narrowed two-file stash, normal merge, clean stash pop
