@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
 import { join } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { before, after, test } from 'node:test'
 import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
 
@@ -40,6 +40,15 @@ async function tool(user, name, args, sessionId) {
   }
   assert.fail(`tool ${name} reply was not returned to original chat ${sessionId}`)
 }
+async function note(user, sessionId, text) {
+  await request('/chat/send', user.token, { sessionId, requestId: `note-${++requestNo}`, text })
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const { projection } = await request('/chat/read', user.token, { sessionId })
+    if (projection.messages.some(m => m.text === 'NOTE_SAVED')) return
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  assert.fail('ordinary note did not finish')
+}
 before(async () => {
   model = http.createServer(async (req, res) => {
     let data = ''; for await (const chunk of req) data += chunk
@@ -51,7 +60,10 @@ before(async () => {
     res.writeHead(200, { 'content-type': 'text/event-stream' })
     const emit = event => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
     emit({ type: 'message_start', message: { id: 'group-message', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
-    if (result) {
+    if (!command) {
+      emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'NOTE_SAVED' } })
+    } else if (result) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(result.content)}` } })
     } else {
@@ -60,7 +72,7 @@ before(async () => {
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(call.args) } })
     }
     emit({ type: 'content_block_stop', index: 0 })
-    emit({ type: 'message_delta', delta: { stop_reason: result ? 'end_turn' : 'tool_use', stop_sequence: null }, usage: { output_tokens: 3 } })
+    emit({ type: 'message_delta', delta: { stop_reason: result || !command ? 'end_turn' : 'tool_use', stop_sequence: null }, usage: { output_tokens: 3 } })
     emit({ type: 'message_stop' })
     res.end()
   })
@@ -78,8 +90,8 @@ after(async () => {
 test('chat searches Chinese message excerpts then reads original event positions', async () => {
   aliceSession = (await request('/sessions/create', alice.token)).session.id
   bobSession = (await request('/sessions/create', bob.token)).session.id
-  await tool(alice, 'groups', { note: '春天的计划。'.repeat(15) + '北京咖啡馆周末讨论' + '等待确认时间。'.repeat(15) }, aliceSession)
-  await tool(bob, 'groups', { note: '咖啡' }, bobSession)
+  await note(alice, aliceSession, '春天的计划。'.repeat(15) + '北京咖啡馆周末讨论' + '等待确认时间。'.repeat(15))
+  await note(bob, bobSession, '咖啡')
   const result = JSON.parse(await tool(alice, 'conversation_search', { query: '咖啡', limit: 1 }))
   const value = JSON.parse(result.map(c => c.text ?? '').join(''))
   assert.equal(value.matches.length, 1)
@@ -93,4 +105,64 @@ test('chat searches Chinese message excerpts then reads original event positions
   assert.equal(range.events[0].seq, value.matches[0].seq)
   assert.match(range.events[0].text, /北京咖啡馆/)
   assert.deepEqual(range.events.map(e => e.type), ['user/message'])
+})
+
+const valueOf = text => JSON.parse(JSON.parse(text).map(c => c.text ?? '').join(''))
+
+test('known foreign IDs and administrator status cannot widen conversation tools', async () => {
+  for (const caller of [alice, admin]) {
+    const denied = await tool(caller, 'conversation_read', { sessionId: bobSession, fromSeq: 0, toSeq: 99 })
+    assert.match(denied, /unknown-session|visible to you/)
+    assert.doesNotMatch(denied, /NOTE_SAVED/)
+  }
+  const adminSearch = valueOf(await tool(admin, 'conversation_search', { query: '咖啡', limit: 1 }))
+  assert.deepEqual(adminSearch.matches, [])
+  const aliceSearch = valueOf(await tool(alice, 'conversation_search', { query: '咖啡', limit: 1 }))
+  assert.notEqual(aliceSearch.matches[0].sessionId, bobSession)
+  assert.match(aliceSearch.matches[0].sessionId, /^ourfairy-user-2-/)
+  const schema = modelRequests.at(-1).tools.find(t => t.name === 'conversation_search')
+  assert.deepEqual(Object.keys(schema.input_schema.properties).sort(), ['limit', 'query'])
+})
+
+test('read intervals have inclusive original positions, omit tool results, and bound message text', async () => {
+  await tool(alice, 'groups', {}, aliceSession)
+  const raw = (await request('/chat/read', alice.token, { sessionId: aliceSession, maxEvents: 256 })).projection.events
+  assert.ok(raw.some(e => e.type === 'tool/result'))
+  const range = valueOf(await tool(alice, 'conversation_read', { sessionId: aliceSession, fromSeq: 0, toSeq: 99 }))
+  assert.ok(range.events.length >= 2)
+  assert.ok(range.events.every(e => ['user/message', 'assistant/message', 'delivery/message'].includes(e.type)))
+  assert.ok(range.events.every(e => Number.isInteger(e.seq)))
+  assert.equal(range.truncated, false)
+  const empty = valueOf(await tool(alice, 'conversation_read', { sessionId: aliceSession, fromSeq: 999, toSeq: 999 }))
+  assert.deepEqual(empty.events, [])
+  assert.match(await tool(alice, 'conversation_read', { sessionId: aliceSession, fromSeq: 10, toSeq: 9 }), /invalid-range/)
+  assert.match(await tool(alice, 'conversation_read', { sessionId: aliceSession, fromSeq: 0, toSeq: 100 }), /invalid-range/)
+  const longSession = (await request('/sessions/create', alice.token)).session.id
+  await note(alice, longSession, '消息预算😀'.repeat(2000))
+  const budget = valueOf(await tool(alice, 'conversation_read', { sessionId: longSession, fromSeq: 0, toSeq: 99 }))
+  assert.equal(budget.truncated, true)
+  assert.equal(budget.events.reduce((sum, e) => sum + Array.from(e.text).length, 0), 8000)
+  const brief = (await request('/sessions/create', alice.token)).session.id
+  await note(alice, brief, '单字珈')
+  const shortHit = valueOf(await tool(alice, 'conversation_search', { query: '珈', limit: 1 }))
+  assert.equal(shortHit.matches[0].snippet, '单字珈')
+})
+
+test('native index rebuild preserves Chinese search scope and independently authorized range reads', async () => {
+  const index = join(home, 'dsh-home', 'query', 'sessions.sqlite')
+  assert.ok(existsSync(index))
+  let run = await runBackendAsync(['stop', '--json', ...devFlags], { OURFAIRY_HOME: home })
+  assert.equal(run.code, 0, describeRun('stop for index rebuild', run))
+  for (const suffix of ['', '-wal', '-shm']) rmSync(index + suffix, { force: true })
+  run = await runBackendAsync(['start', '--json', ...devFlags], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+    DEEPSEEK_API_KEY: 'mock-search-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
+  assert.equal(run.code, 0, describeRun('restart after index deletion', run))
+  port = JSON.parse(run.stdout).listeningPorts[0]
+  const result = valueOf(await tool(alice, 'conversation_search', { query: '咖啡馆', limit: 1 }))
+  assert.equal(result.matches[0].sessionId, aliceSession)
+  assert.match(result.matches[0].snippet, /北京咖啡馆/)
+  assert.ok(existsSync(index))
+  const range = valueOf(await tool(alice, 'conversation_read', { sessionId: aliceSession, fromSeq: result.matches[0].seq, toSeq: result.matches[0].seq }))
+  assert.match(range.events[0].text, /北京咖啡馆/)
+  assert.match(await tool(admin, 'conversation_read', { sessionId: aliceSession, fromSeq: 0, toSeq: 99 }), /unknown-session|visible to you/)
 })
