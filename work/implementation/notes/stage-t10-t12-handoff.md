@@ -59,3 +59,32 @@ worktrees and branches remain outside cleanup scope.
 
 Publication, tracker closure and exact stage worktree cleanup status are recorded
 in the stage evidence during final closeout. Read that final record on resumption.
+
+## Completed publication, tracker and cleanup
+
+All three product branches were normally published and independently verified.
+The first published OurFairy reviewed/handoff head was
+`183380976f0df2c9f61efcfb85ddf26ae6c2c5b4`; later closeout evidence commits
+do not change product source. Use the final published integration head as the
+next stage baseline. dsh and Android remain the exact resolved tips above.
+Normal clean-checkout dsh pre-push ran host build + client typecheck and passed;
+root's known dirty-test failures were not hidden or committed.
+
+- [#33 CLOSED](https://github.com/eafen405/OurFairy/issues/33#issuecomment-6196170866)
+- [#34 CLOSED](https://github.com/eafen405/OurFairy/issues/34#issuecomment-6195467128)
+- [#35 CLOSED](https://github.com/eafen405/OurFairy/issues/35#issuecomment-6196172104)
+- [Parent #23 remains OPEN](https://github.com/eafen405/OurFairy/issues/23#issuecomment-6196182540)
+
+All six stage worktrees were removed; all branches and older worktrees remain.
+Four OurFairy/dsh paths used ordinary Git removal. The two clean Android paths
+required Git's submodule `--force` switch after normal deinit and ordinary
+removal refusal, with exact Lead authorization. Only task-owned node_modules
+symlinks were unlinked; their main-checkout target was untouched. Ignored task
+build outputs were removed with their worktrees after raw logs/XML archival.
+No reset, manual Git metadata deletion, force push or hook bypass occurred.
+No task-owned implementation/harness/build/check process remains running.
+Final dsh preservation and root hook checks passed; Android main retains only
+its pre-existing `?? .worktrees/`. See stage `cleanup.log`,
+`android-cleanup.log`, `final-preservation.log` and `publication.md`.
+
+This authorized stage is complete. Stop here. T13/#36 has not been started.

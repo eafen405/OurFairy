@@ -184,3 +184,16 @@ before eventual worktree removal. Effective root worktree hooks path remains
 `.git/dsh-hooks`; pre-push fallback now points at root dependencies, retaining
 the normal typecheck hook. No disable or bypass was used. Exact verification:
 `root-hooks-restored.log`.
+
+## Stage closed and stopped
+
+Lead closed #33/#34/#35 and recorded the stage on OPEN parent #23; see
+`../../notes/stage-t10-t12-handoff.md` for exact tracker links. All six stage
+worktrees are removed (four normally; two clean Android submodule worktrees
+with exact Lead-authorized local `--force` after ordinary refusal). Branches,
+older worktrees, shared node_modules target and all original dsh dirty content
+are preserved. Raw removal checks: `cleanup.log`, `android-cleanup.log`.
+Final 16-path/hash/root-hook checks: `final-preservation.log`. No task-owned
+implementation, harness, build, check or publication process remains after
+closeout; normal final evidence push/remote verification is the final action.
+T13/#36 is not started.
