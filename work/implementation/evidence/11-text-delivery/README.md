@@ -70,3 +70,13 @@ notification integration, full disconnect/back-page recovery, real disk EIO,
 file delivery, signed APK/release or performance acceptance. Those remain their
 own tickets/stage gates. The model server is a deterministic external substitute;
 its captured request count proves no recipient inference in the covered cases.
+
+## Final integration preparation
+
+Merged current `integration/ourfairy-v1` tip `ccaebef` into the ticket as
+`9768d8b`; no conflict. This brings the paired Android T11 compatibility commit
+`d80dfcb9a3ded6e7` through the integration combo. `node scripts/combo.mjs verify`
+passes (`11-combo.log`), and `git diff --check` passes. T10 source is intentionally
+not imported from its unfinished branch; its owner already confirmed native
+query extraction includes `delivery/message`. The merger should run T10 product
+query checks against actual T11 deliveries once both sources are integrated.
