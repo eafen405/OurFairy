@@ -5,7 +5,7 @@ The original reports are preserved without rewriting their findings:
 
 | Axis | Result | Original report |
 | --- | --- | --- |
-| Standards | 1 P2, awaiting bounded correction | [standards.md](standards.md) |
+| Standards | 1 P2, corrected and verified | [standards.md](standards.md) |
 | Spec | 0 findings | [spec.md](spec.md) |
 
 The fixed comparison ranges are OurFairy
@@ -26,9 +26,22 @@ response closed while handler/source remained open. It runs the actual
 new responder with an instrumented attachment source; it does not claim a
 full real-profile or device test.
 
-The owning implementer is correcting only download cancellation/cleanup
-in a separate fix worktree. No transfer framework or extra speculative
-hardening was requested. Correction and merger's bounded verification
-will be recorded after delivery; a second full stage review is not needed
-for this local finding. No source changes or test reruns were made while
-archiving these original reports.
+The owning implementer corrected only download cancellation/cleanup in
+`fix/review-t7-t9` at `028f10cfdc05cc77c2d150b09524fef2056cd074`, merged
+normally as `fcd4502c45ca8e36cbded529a4cd8d8f5e00dd59`. The existing
+response-close event now aborts the native source stream and drain wait;
+the existing iterator cleanup runs. No transfer framework or extra
+speculative hardening was introduced. [Fix evidence](fixes/README.md)
+records actual real-HTTP/file-descriptor red/green checks.
+
+Merger independently ran `node --test
+tests/attachment-download-abort.test.mjs tests/attachments.test.mjs` on
+the merged tree: **6/6**, zero skipped, with both handler settlement and
+file-source closure verified. Normal full-profile attachment upload,
+download/restart, permissions, retries, image serialization and readonly
+tool/script behavior also passed (`fixes/04-merged-download-regression.log`).
+Combo and doctor passed (`fixes/05-merged-combo.log`,
+`fixes/06-merged-doctor.log`); `git diff --check` was clean. No full product
+suite or redundant stage review was rerun for this bounded correction.
+Spec remains **0 findings**, and the original axis reports/ranges above
+remain unchanged.
