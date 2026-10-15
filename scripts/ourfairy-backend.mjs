@@ -92,7 +92,7 @@ const PRODUCT_SOURCES = [
   'backend/chat/src/projection.mjs',
   'backend/chat/src/persona.mjs',
   'backend/spaces/package.json',
-  ...['index', 'scope', 'bwrap', 'fs', 'policy'].map(name => `backend/spaces/src/${name}.mjs`),
+  ...['index', 'scope', 'bwrap', 'fs', 'policy', 'groups'].map(name => `backend/spaces/src/${name}.mjs`),
 ]
 
 function fail(message, code = 1) {
