@@ -34,7 +34,7 @@ import {
 export const PHAETHON_SHORT_ID = 1
 
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 /**
  * The current shape. No UNIQUE constraint and no REFERENCES clause: AGENTS.md
@@ -88,6 +88,44 @@ CREATE INDEX IF NOT EXISTS users_by_short_id ON users(short_id);
 CREATE INDEX IF NOT EXISTS users_by_name ON users(name);
 `
 
+/**
+ * The v3 group tables and their lookup indexes.
+ *
+ * Kept apart from `TABLE_DDL` because that constant drives the v1 rebuild: a
+ * table listed there is renamed, recreated and copied column by column through
+ * `V1_COLUMNS`, and the group tables have no v1 predecessor. Adding them here
+ * instead lets every statement be written idempotently, so a fresh file, a file
+ * that tracked no version, and a v1 or v2 file all reach the same shape.
+ *
+ * Like the tables above they declare no UNIQUE constraint and no foreign key;
+ * membership and ownership uniqueness are checked explicitly inside the store's
+ * immediate transactions, and the indexes below are ordinary lookup aids.
+ */
+const GROUP_SCHEMA = `
+CREATE TABLE IF NOT EXISTS groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  owner_short_id INTEGER NOT NULL,
+  created_by INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS group_members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id INTEGER NOT NULL,
+  user_short_id INTEGER NOT NULL,
+  created_by INTEGER NOT NULL,
+  updated_by INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS groups_by_owner ON groups(owner_short_id);
+CREATE INDEX IF NOT EXISTS group_members_by_user ON group_members(user_short_id);
+CREATE INDEX IF NOT EXISTS group_members_by_group ON group_members(group_id);
+`
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
@@ -95,6 +133,7 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 ${Object.values(TABLE_DDL).map(ddl => ddl.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')).join(';\n')};
 ${INDEX_DDL}
+${GROUP_SCHEMA}
 `
 
 /**
@@ -202,8 +241,9 @@ export class IdentityStore {
    * The version is read and every schema change happens inside one
    * `BEGIN IMMEDIATE` transaction, so a second opener cannot migrate a v1 file
    * behind a stale decision and then rebuild it a second time. An unsupported
-   * version is refused before any DDL runs, leaving the file untouched; only v1
-   * (rebuild) and v2 (already current) are known.
+   * version is refused before any DDL runs, leaving the file untouched; v1
+   * rebuilds the legacy tables into the v2 shape and v2 only adds the v3 group
+   * tables, so both land on the current version in one commit.
    */
   #migrate() {
     this.#transaction(() => {
@@ -231,14 +271,86 @@ export class IdentityStore {
           `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${row.value}`)
       }
       if (version === SCHEMA_VERSION) return
-      if (version !== 1) {
+      if (version !== 1 && version !== 2) {
         throw new IdentityError(500, 'identity/schema-unsupported',
           `unsupported identity schema version ${row.value}`)
       }
-      for (const table of Object.keys(TABLE_DDL)) rebuildTable(this.#db, table)
-      this.#db.exec(INDEX_DDL)
+      if (version === 1) {
+        // Only the tables that existed in v1 are rebuilt; the group tables were
+        // never part of that shape, so they are simply created below.
+        for (const table of Object.keys(TABLE_DDL)) rebuildTable(this.#db, table)
+        this.#db.exec(INDEX_DDL)
+      }
+      this.#db.exec(GROUP_SCHEMA)
       this.#db.prepare('UPDATE meta SET value = ? WHERE key = ?')
         .run(String(SCHEMA_VERSION), 'schema_version')
+    })
+  }
+
+  /** A group's public state; membership is read from the same business store. */
+  #group(row) {
+    return { id: row.id, name: row.name, ownerShortId: row.owner_short_id,
+      memberShortIds: this.#db.prepare('SELECT user_short_id FROM group_members WHERE group_id = ? AND deleted_at IS NULL ORDER BY user_short_id').all(row.id).map(member => member.user_short_id) }
+  }
+
+  /** Current member groups only; system management does not grant file access. */
+  groupsForMember(shortId) {
+    return this.#db.prepare(`SELECT groups.* FROM groups JOIN group_members ON group_members.group_id = groups.id
+      WHERE group_members.user_short_id = ? AND group_members.deleted_at IS NULL AND groups.deleted_at IS NULL ORDER BY groups.id`)
+      .all(shortId).map(row => this.#group(row))
+  }
+
+  ownsGroup(shortId) {
+    return this.#db.prepare('SELECT 1 FROM groups WHERE owner_short_id = ? AND deleted_at IS NULL').get(shortId) !== undefined
+  }
+
+  /** Phaethon creates and designates an existing owner, who joins atomically. */
+  createGroup(callerShortId, { name, ownerShortId }) {
+    const groupName = typeof name === 'string' ? name.trim() : ''
+    if (!groupName || groupName.length > 100 || !Number.isSafeInteger(ownerShortId) || ownerShortId < 1) {
+      throw new IdentityError(400, 'groups/invalid-request', 'provide a group name (1-100 characters) and an existing owner short number')
+    }
+    return this.#transaction(() => {
+      const caller = this.userByShortId(callerShortId)
+      if (caller?.shortId !== PHAETHON_SHORT_ID || !caller.isAdmin) {
+        throw new IdentityError(403, 'groups/forbidden', 'only Phaethon may create a group')
+      }
+      if (!this.userByShortId(ownerShortId)) throw new IdentityError(404, 'groups/unknown-user', 'no active user has that short number')
+      const now = this.now()
+      const info = this.#db.prepare('INSERT INTO groups (name, owner_short_id, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+        .run(groupName, ownerShortId, callerShortId, now, now)
+      const groupId = Number(info.lastInsertRowid)
+      this.#db.prepare('INSERT INTO group_members (group_id, user_short_id, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(groupId, ownerShortId, callerShortId, callerShortId, now, now)
+      return this.#group(this.#db.prepare('SELECT * FROM groups WHERE id = ?').get(groupId))
+    })
+  }
+
+  /** Change only the caller's own group, with authorization and write together. */
+  changeGroupMember(callerShortId, { groupId, userShortId, action }) {
+    if (![groupId, userShortId].every(value => Number.isSafeInteger(value) && value > 0) || (action !== 1 && action !== 2)) {
+      throw new IdentityError(400, 'groups/invalid-request', 'provide groupId, userShortId and action 1 (add) or 2 (remove)')
+    }
+    return this.#transaction(() => {
+      const group = this.#db.prepare('SELECT * FROM groups WHERE id = ? AND deleted_at IS NULL').get(groupId)
+      if (!this.userByShortId(callerShortId) || !group || group.owner_short_id !== callerShortId) {
+        throw new IdentityError(403, 'groups/forbidden', 'only the current owner of this group may change its members')
+      }
+      if (!this.userByShortId(userShortId)) throw new IdentityError(404, 'groups/unknown-user', 'no active user has that short number')
+      if (action === 2 && userShortId === group.owner_short_id) {
+        throw new IdentityError(409, 'groups/owner-required', 'the designated group owner must remain a member')
+      }
+      const member = this.#db.prepare('SELECT * FROM group_members WHERE group_id = ? AND user_short_id = ?').get(groupId, userShortId)
+      const now = this.now()
+      if (action === 1 && !member) {
+        this.#db.prepare('INSERT INTO group_members (group_id, user_short_id, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(groupId, userShortId, callerShortId, callerShortId, now, now)
+      } else if (member && ((action === 1 && member.deleted_at !== null) || (action === 2 && member.deleted_at === null))) {
+        this.#db.prepare('UPDATE group_members SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?')
+          .run(action === 1 ? null : now, callerShortId, now, member.id)
+      }
+      this.#db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, groupId)
+      return this.#group(group)
     })
   }
 

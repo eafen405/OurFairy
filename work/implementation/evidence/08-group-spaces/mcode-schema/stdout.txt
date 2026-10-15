@@ -1,0 +1,31 @@
+Done. Only `backend/identity/src/store.mjs` was modified — schema constants and `#migrate()` — no business/auth methods, no tests, no commit.
+
+## Changes
+
+**[store.mjs](backend/identity/src/store.mjs)** (+51 / −6)
+
+1. `SCHEMA_VERSION` 2 → 3 (line 37).
+2. New `GROUP_SCHEMA` constant (after `INDEX_DDL`) holding `groups`, `group_members`, and the three ordinary non-unique indexes — all written `IF NOT EXISTS` so the same text is valid for a fresh file and for an in-place migration. `SCHEMA` now appends `${GROUP_SCHEMA}`.
+3. `#migrate()`: the guard now accepts version 2 as well as 1; the v1-only `rebuildTable` loop + `INDEX_DDL` are guarded by `if (version === 1)`, and `this.#db.exec(GROUP_SCHEMA)` runs for both v1 and v2 before the single `UPDATE meta` to 3 — all still inside the existing `BEGIN IMMEDIATE`.
+
+Deliberately unchanged: `TABLE_DDL`, `V1_COLUMNS`, `rebuildTable`, and the version-composition of `SCHEMA` over `TABLE_DDL`. The group tables are absent from those constants, so the v1 rebuild can never try to recreate or column-copy them, and no rebuild path is added. No `FOREIGN KEY`, no secondary `UNIQUE`, no role table, no migration framework.
+
+## Checks run
+
+- `node --check backend/identity/src/store.mjs` → `NODE_CHECK_OK`.
+- A throwaway script in `/tmp` (since deleted; no test file created or edited) opened real files through `IdentityStore` and inspected `sqlite_master`:
+
+| file | result |
+|---|---|
+| fresh | version `3`, both tables, all 3 indexes |
+| existing v2 with a hashed credential | version `3`, tables+indexes added, user row and `password`/`is_admin` intact |
+| existing v1 with `UNIQUE` + `REFERENCES` | version `3`, users rebuilt (v1 DDL no longer contains UNIQUE/REFERENCES), invites redemptions and session digest carried across, group tables added |
+| version 4 file | still refused with `identity/schema-too-new`, before any DDL |
+
+AGENTS.md database rules are honoured: numeric ids for associations, `deleted_at` plus created/updated timestamps and the responsible staff columns on both business tables, no foreign keys, no unique indexes.
+
+## Notes for the parent
+
+- Untracked `tests/groups.test.mjs` and `work/implementation/evidence/08-group-spaces/` were already in the worktree; I did not touch them.
+- The module docstring at the top still says "users, their short numbers, invites, and sessions" — it now omits groups. Left alone since it sits outside the granted edit scope, but worth a one-line update when you own the rest of T8.
+- Only the schema is in place; there is no group business/auth code yet, so the group tables are currently unreachable through the store API.
