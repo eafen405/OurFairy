@@ -210,3 +210,73 @@ test('admitted original and image selections can be forwarded without assistant 
   assert.match(JSON.stringify(deliveredInput),/verbatim read-only copy/)
   assert.ok(!JSON.stringify(deliveredInput).includes('UNSELECTED SOURCE SECRET'))
 })
+
+test('a CAS-prepared item whose checklist write fails is retried under the same delivery identity', async () => {
+  const recipient=await user('file-checklist-fault'),target=await primary(recipient)
+  const path=join(home,'dsh-home','spaces','private',String(alice.user.shortId),'checklist.txt')
+  await tool(alice,'write',{file_path:path,content:'NOT YET CHECKLIST COMMITTED'},senderSession)
+  const db=new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
+  db.exec(`CREATE TRIGGER fail_file_checklist BEFORE UPDATE ON deliveries WHEN NEW.recipient_short_id=${recipient.user.shortId} AND OLD.status=2
+    BEGIN SELECT RAISE(ABORT,'injected checklist persistence failure'); END`)
+  const args={recipientShortId:recipient.user.shortId,text:'Checklist retry',files:[{path}]}
+  assert.match(await tool(alice,'deliver_message',args,senderSession,'checklist-stable'),/injected checklist persistence failure/)
+  const row=db.prepare('SELECT * FROM deliveries WHERE text=?').get(args.text)
+  assert.equal(row.status,2)
+  assert.equal(JSON.parse(row.attachments_json)[0].prepared,null)
+  assert.equal((await projection(recipient,target)).messages.length,0)
+  db.exec('DROP TRIGGER fail_file_checklist')
+  await tool(alice,'write',{file_path:path,content:'CHECKLIST RETRY ORIGINAL'},senderSession)
+  assert.match(await tool(alice,'deliver_message',args,senderSession,'checklist-stable'),/deliveryId/)
+  const after=await projection(recipient,target)
+  assert.equal(after.messages.length,1)
+  assert.equal((await download(recipient,target,after.messages[0].messageId,0)).bytes.toString(),'CHECKLIST RETRY ORIGINAL')
+  db.close()
+})
+
+test('file delivery recovers durable log success before business completion without recopying changed sources', async () => {
+  const recipient=await user('file-finalize-fault'),target=await primary(recipient)
+  const path=join(home,'dsh-home','spaces','private',String(alice.user.shortId),'saved-before-business.txt')
+  await tool(alice,'write',{file_path:path,content:'READY SNAPSHOT'},senderSession)
+  const db=new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
+  db.exec(`CREATE TRIGGER fail_file_completion BEFORE UPDATE ON deliveries WHEN NEW.recipient_short_id=${recipient.user.shortId} AND NEW.status=1
+    BEGIN SELECT RAISE(ABORT,'injected file completion failure'); END`)
+  const args={recipientShortId:recipient.user.shortId,text:'Durable file before business completion',files:[{path}]}
+  assert.match(await tool(alice,'deliver_message',args,senderSession,'file-completion-stable'),/injected file completion failure/)
+  const row=db.prepare('SELECT * FROM deliveries WHERE text=?').get(args.text)
+  assert.equal(row.status,0)
+  const original=await projection(recipient,target)
+  assert.equal(original.messages.length,1)
+  assert.equal((await download(recipient,target,original.messages[0].messageId,0)).bytes.toString(),'READY SNAPSHOT')
+  await stopBackend();await startBackend()
+  db.exec('DROP TRIGGER fail_file_completion')
+  await tool(alice,'write',{file_path:path,content:'CHANGED AFTER READY'},senderSession)
+  assert.match(await tool(alice,'deliver_message',args,senderSession,'file-completion-stable'),/deliveryId/)
+  const after=await projection(recipient,target)
+  assert.equal(after.messages.length,1)
+  assert.equal(after.messages[0].messageId,original.messages[0].messageId)
+  assert.equal((await download(recipient,target,after.messages[0].messageId,0)).bytes.toString(),'READY SNAPSHOT')
+  assert.equal(db.prepare('SELECT status FROM deliveries WHERE delivery_id=?').get(row.delivery_id).status,1)
+  db.close()
+})
+
+test('a file delivery flush failure leaves a ready retry and never confirms incomplete durability', async () => {
+  const target=await primary(bob),path=join(home,'dsh-home','spaces','private',String(alice.user.shortId),'flush-file.txt')
+  await tool(alice,'write',{file_path:path,content:'FLUSH RETRY ORIGINAL'},senderSession)
+  await stopBackend()
+  const layer=join(home,'dsh-home','profiles','ourfairy','cordis.patch.yml')
+  const fixture=new URL('../backend/chat/test-support/fail-outlets.mjs',import.meta.url).pathname
+  writeFileSync(layer,JSON.stringify([{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failFlush:true}}]}]))
+  await startBackend();await projection(bob,target)
+  try{
+    const args={recipientShortId:bob.user.shortId,text:'File checkpoint retry',files:[{path}]}
+    const failed=await tool(alice,'deliver_message',args,senderSession,'file-flush-stable')
+    assert.doesNotMatch(failed,/deliveryId/)
+    const db=new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
+    assert.equal(db.prepare('SELECT status FROM deliveries WHERE text=?').get(args.text).status,0)
+    assert.match(await tool(alice,'deliver_message',args,senderSession,'file-flush-stable'),/deliveryId/)
+    const after=await projection(bob,target),message=after.messages.find(m=>m.text===args.text)
+    assert.equal(after.messages.filter(m=>m.text===args.text).length,1)
+    assert.equal((await download(bob,target,message.messageId,0)).bytes.toString(),'FLUSH RETRY ORIGINAL')
+    db.close()
+  }finally{writeFileSync(layer,'[]\n')}
+})
