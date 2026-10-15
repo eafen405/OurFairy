@@ -53,3 +53,23 @@ failures/errors/skips. Full owner log and XML are archived at
 `../11-text-delivery/android/`; no duplicate JVM run was needed for this
 test-only merge. Post-merge Android retains only pre-existing
 `?? .worktrees/`. No device/Compose runtime acceptance is claimed.
+
+## T11 backend merge and independent check
+
+Merged owner `a04a33a57cb9691be26113f44a6dd4f1f5d5953d` as
+`7b24e251f6e566972dbe01f20d6861eea95066c8`. The owner contains target
+integration tip `ccaebef`; source diff matches text delivery, its schema-v5
+coordination rows, transcript projection and launcher hash. No unfinished
+T10 code or dsh source change was imported.
+
+Executed from the merged main checkout:
+`node --test tests/text-delivery.test.mjs` → **6/6**, no skips/failures.
+Raw output: [t11-merged-text-delivery.log](t11-merged-text-delivery.log).
+This independently exercises real profile, local HTTP/SSE, SQLite and
+native JSONL for cold/live delivery, concurrent senders/primary creation,
+stable retry/restart after a coordination fault, rejected durability
+checkpoint, and notification failure. The model HTTP endpoint and injected
+failure outlets are controlled fixtures, not official cloud/disk faults.
+`node scripts/combo.mjs verify` and `git diff --check` passed. Android remains
+the paired test-only compatibility merge recorded above. #34 is ready for
+Lead to close; #35 remains unstarted until tracker closure unblocks it.
