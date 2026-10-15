@@ -20,7 +20,7 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/deepseek-harness.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "2f084be06e75cd56c2a7ac9a31e155db9f4deee0",
+      "productCommit": "d3fe98f969c3963c6d193e74c776692e33c1eb64",
       "researchUpstreamSha": "d743267388641bc76f17c45ce8b4c231aed1d32c",
       "researchUpstreamRef": "origin/master",
       "requiredBuild": [
