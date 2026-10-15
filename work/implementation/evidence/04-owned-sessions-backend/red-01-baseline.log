@@ -1,0 +1,53 @@
+▶ OurFairy owned sessions over real HTTP
+  ✖ a session created by a signed-in identity keeps its owner and its primary binding across a restart (68.791536ms)
+  ✖ an unowned or foreign session is refused, and no request is ever served as an implicit user (2.068541ms)
+✖ OurFairy owned sessions over real HTTP (71.437917ms)
+ℹ tests 2
+ℹ suites 1
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3153.177743
+
+✖ failing tests:
+
+test at tests/owned-sessions.test.mjs:114:3
+✖ a session created by a signed-in identity keeps its owner and its primary binding across a restart (68.791536ms)
+  AssertionError [ERR_ASSERTION]: creating a session must succeed: 
+  
+  404 !== 200
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/04-owned-sessions/tests/owned-sessions.test.mjs:122:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/owned-sessions.test.mjs:182:3
+✖ an unowned or foreign session is refused, and no request is ever served as an implicit user (2.068541ms)
+  AssertionError [ERR_ASSERTION]: /sessions/create must refuse an anonymous caller: 
+  
+  404 !== 401
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/04-owned-sessions/tests/owned-sessions.test.mjs:188:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 401,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+EXIT=1

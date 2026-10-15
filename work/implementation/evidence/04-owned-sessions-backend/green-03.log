@@ -1,0 +1,12 @@
+  ✔ a session created by a signed-in identity keeps its owner and its primary binding across a restart (797.356929ms)
+  ✔ an unowned or foreign session is refused, and no request is ever served as an implicit user (121.092541ms)
+  ✔ a primary request racing a create still resolves the fixed primary session (80.516694ms)
+✔ OurFairy owned sessions over real HTTP (999.971498ms)
+ℹ tests 3
+ℹ suites 1
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3861.551927

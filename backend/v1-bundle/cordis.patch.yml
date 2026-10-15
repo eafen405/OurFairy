@@ -137,3 +137,12 @@
         # operator provisions it by exporting this before a start.
         phaethonPassword: !!js process.env.OURFAIRY_PHAETHON_PASSWORD
 
+    # The owned-session module: the product's `/sessions/*` paths. Ownership is
+    # `SessionHeader.owner` from the authenticated credential, and the primary
+    # session id is derived from the owner's short number — this module adds no
+    # second ownership table to keep in step with the session logs. It reads the
+    # dsh session store and its persistence, which the rows above already mount,
+    # and reuses the identity module's fence and POST helper.
+    - id: sessions
+      name: '@ourfairy/dsh-sessions'
+

@@ -1,0 +1,32 @@
+▶ OurFairy owned sessions over real HTTP
+  ✖ a failed durable create can be retried in the same backend process (68.145471ms)
+  ✔ a session created by a signed-in identity keeps its owner and its primary binding across a restart (779.704891ms)
+  ✔ an unowned or foreign session is refused, and no request is ever served as an implicit user (121.426648ms)
+  ✔ a primary request racing a create still resolves the fixed primary session (83.185673ms)
+✖ OurFairy owned sessions over real HTTP (1053.247208ms)
+ℹ tests 4
+ℹ suites 1
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3986.885975
+
+✖ failing tests:
+
+test at tests/owned-sessions.test.mjs:116:3
+✖ a failed durable create can be retried in the same backend process (68.145471ms)
+  Error: ENOENT: no such file or directory, open '/tmp/ourfairy-owned-sessions-NAzvZJ/dsh-home/sessions/_no-cwd'
+      at writeFileSync (node:fs:2422:20)
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/04-owned-sessions/tests/owned-sessions.test.mjs:123:5)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'open',
+    path: '/tmp/ourfairy-owned-sessions-NAzvZJ/dsh-home/sessions/_no-cwd'
+  }

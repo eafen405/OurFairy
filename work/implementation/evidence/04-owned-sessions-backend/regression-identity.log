@@ -1,0 +1,14 @@
+  ✔ an ordinary agent is refused the administrator invite operation (50.458532ms)
+  ✔ the credential names its own holder with no user field in the request (61.524646ms)
+  ✔ signing out ends the credential it was presented with (77.584977ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (57.252442ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (200.719637ms)
+✔ OurFairy identity over real HTTP (650.850616ms)
+ℹ tests 8
+ℹ suites 1
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3472.694045

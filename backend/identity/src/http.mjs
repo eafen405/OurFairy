@@ -57,19 +57,29 @@ function carriesBody(request) {
   return headerOf(request, 'transfer-encoding') !== undefined
 }
 
-/** Read a bounded JSON body; a wrong content type or oversized body is a 4xx, not a hang. */
-async function readJsonBody(request) {
+/**
+ * Read a bounded JSON body; a wrong content type or oversized body is a 4xx, not a hang.
+ *
+ * Exported for the sibling product route modules (see `backend/sessions`), which
+ * serve the same shape of JSON POST and must not keep a second copy of it.
+ *
+ * @param request - node:http request.
+ * @param HttpError - the calling module's error class carrying status and code.
+ * @param codePrefix - the calling module's error-code namespace, e.g. `identity`.
+ * @returns the parsed JSON object, or `{}` for a bodyless POST.
+ */
+export async function readJsonBody(request, HttpError = IdentityError, codePrefix = 'identity') {
   if (!carriesBody(request)) return {}
   const mediaType = headerOf(request, 'content-type')?.split(';', 1)[0]?.trim().toLowerCase()
   if (mediaType !== 'application/json') {
-    throw new IdentityError(415, 'identity/unsupported-media-type', 'send the body as application/json')
+    throw new HttpError(415, `${codePrefix}/unsupported-media-type`, 'send the body as application/json')
   }
   const chunks = []
   let received = 0
   for await (const chunk of request) {
     received += chunk.length
     if (received > MAX_BODY_BYTES) {
-      throw new IdentityError(413, 'identity/body-too-large', `request bodies are limited to ${MAX_BODY_BYTES} bytes`)
+      throw new HttpError(413, `${codePrefix}/body-too-large`, `request bodies are limited to ${MAX_BODY_BYTES} bytes`)
     }
     chunks.push(chunk)
   }
@@ -77,16 +87,17 @@ async function readJsonBody(request) {
   try {
     const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'))
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new IdentityError(400, 'identity/invalid-body', 'the body must be a JSON object')
+      throw new HttpError(400, `${codePrefix}/invalid-body`, 'the body must be a JSON object')
     }
     return parsed
   } catch (error) {
-    if (error instanceof IdentityError) throw error
-    throw new IdentityError(400, 'identity/invalid-body', 'the body is not valid JSON')
+    if (error instanceof HttpError) throw error
+    throw new HttpError(400, `${codePrefix}/invalid-body`, 'the body is not valid JSON')
   }
 }
 
-function sendJson(response, status, payload) {
+/** Write one JSON response with the product's no-store headers. */
+export function sendJson(response, status, payload) {
   const body = `${JSON.stringify(payload)}\n`
   response.writeHead(status, {
     'cache-control': 'no-store',
@@ -96,13 +107,39 @@ function sendJson(response, status, payload) {
   response.end(body)
 }
 
-function sendError(response, error) {
-  const status = error instanceof IdentityError ? error.status : 500
-  const code = error instanceof IdentityError ? error.code : 'identity/internal'
-  const message = error instanceof IdentityError
-    ? error.message
-    : 'the identity module failed to handle this request'
-  sendJson(response, status, { ok: false, error: { code, message } })
+/**
+ * Build the `post` wrapper every product-owned JSON route shares.
+ *
+ * The fence, the method check, body parsing, and the error envelope are the same
+ * for `/identity/*` and `/sessions/*`; only the error class, the code namespace,
+ * and the handler differ. Keeping this here is the reason the sibling route
+ * module has no second copy of it.
+ *
+ * @param options - `handle(body, request)` plus how to name this module's errors.
+ * @returns an async `(request, response)` handler.
+ */
+export function postHandler({ fence, handle, HttpError = IdentityError, codePrefix = 'identity', internalMessage }) {
+  return async (request, response) => {
+    try {
+      if (fence(request) !== undefined) {
+        sendJson(response, 403, { ok: false, error: { code: `${codePrefix}/forbidden-authority`, message: 'untrusted Host or Origin' } })
+        return
+      }
+      if (request.method !== 'POST') {
+        sendJson(response, 405, { ok: false, error: { code: `${codePrefix}/method-not-allowed`, message: 'use POST' } })
+        return
+      }
+      const body = await readJsonBody(request, HttpError, codePrefix)
+      sendJson(response, 200, await handle(body, request))
+    } catch (error) {
+      const status = error instanceof HttpError ? error.status : 500
+      const code = error instanceof HttpError ? error.code : `${codePrefix}/internal`
+      sendJson(response, status, {
+        ok: false,
+        error: { code, message: error instanceof HttpError ? error.message : internalMessage },
+      })
+    }
+  }
 }
 
 /**
@@ -123,22 +160,13 @@ export function identityHandlers({ service, fence }) {
     }
     return user
   }
-  const post = (handle) => async (request, response) => {
-    try {
-      if (fence(request) !== undefined) {
-        sendJson(response, 403, { ok: false, error: { code: 'identity/forbidden-authority', message: 'untrusted Host or Origin' } })
-        return
-      }
-      if (request.method !== 'POST') {
-        sendJson(response, 405, { ok: false, error: { code: 'identity/method-not-allowed', message: 'use POST' } })
-        return
-      }
-      const body = await readJsonBody(request)
-      sendJson(response, 200, await handle(body, request))
-    } catch (error) {
-      sendError(response, error)
-    }
-  }
+  const post = (handle) => postHandler({
+    fence,
+    handle,
+    HttpError: IdentityError,
+    codePrefix: 'identity',
+    internalMessage: 'the identity module failed to handle this request',
+  })
 
   return new Map([
     ['/identity/invite', post(async (body, request) => {
