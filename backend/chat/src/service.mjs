@@ -13,6 +13,13 @@ function requestIdOf(requestId) {
   return requestId
 }
 
+function maxEventsOf(value = 64) {
+  if (!Number.isSafeInteger(value) || value < 1 || value > 256) {
+    throw new ChatError(400, 'chat/invalid-page', 'maxEvents must be an integer from 1 to 256')
+  }
+  return value
+}
+
 /** Runtime maps are only lifecycle/serialization state; no second ownership, message or receipt store. */
 export class RemoteChat extends Service {
   _opening = new Map()
@@ -121,21 +128,53 @@ export class RemoteChat extends Service {
       return receiptIn((await this._events(sessionId)).events, sessionId, requestId)?.receipt ?? null
     })
   }
-  async _projection(state) {
+  async _projection(state, range) {
     const version = state.version
     const { events, cursor } = await this._events(state.agent.session.id)
-    if (state.version !== version) return this._projection(state)
+    if (state.version !== version) return this._projection(state, range)
     const attempt = state.attempt
+    const throughSeq = range.throughSeq ?? cursor
+    const fromSeq = range.fromSeq ?? Math.max(0, throughSeq - range.maxEvents + 1)
+    // One observer retains only its opening tail plus all later formal events.
+    // Older history is explicitly paged against throughSeq, never replaced by a full-history follow.
+    range.throughSeq = throughSeq
+    range.fromSeq = fromSeq
+    const included = events.slice(fromSeq)
     return { sessionId: state.agent.session.id, generation: state.generation, version: state.version, cursor,
-      durableThroughSeq: Math.min(cursor, state.durableThroughSeq), messages: transcript(events, state.agent.session.id),
+      durableThroughSeq: Math.min(cursor, state.durableThroughSeq),
+      throughSeq, fromSeq, events: included, hasMore: fromSeq > 0, beforeSeq: fromSeq > 0 ? fromSeq : null,
+      messages: transcript(events, state.agent.session.id).filter(message => message.seq >= fromSeq),
       attempt: attempt === null ? null : { attemptId: attempt.attemptId, revision: attempt.revision,
         text: attempt.assembler.interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('') },
       replyStatus: state.agent.status === 'idle' ? 0 : state.stopping ? 2 : 1, error: state.error }
   }
-  async read(owner, { sessionId }) {
+  async read(owner, { sessionId, maxEvents }) {
+    const limit = maxEventsOf(maxEvents)
     const state = await this._agent(owner, sessionId)
     await this._barrier(state)
-    return this._projection(state)
+    return this._projection(state, { maxEvents: limit })
+  }
+  async page(owner, { sessionId, throughSeq, beforeSeq, maxEvents }) {
+    const limit = maxEventsOf(maxEvents)
+    await this._agent(owner, sessionId)
+    const { events, cursor } = await this._events(sessionId)
+    if (!Number.isSafeInteger(throughSeq) || throughSeq < -1 || throughSeq > cursor
+      || !Number.isSafeInteger(beforeSeq) || beforeSeq < 0 || beforeSeq > throughSeq + 1) {
+      throw new ChatError(400, 'chat/invalid-page', 'name a fixed inclusive throughSeq and exclusive beforeSeq within that cut')
+    }
+    const end = Math.min(throughSeq + 1, beforeSeq)
+    const fromSeq = Math.max(0, end - limit)
+    // Project at the fixed cut, then select rows whose authoritative seq belongs
+    // to this page. A page can validly contain no bubbles but still fills event coverage.
+    return { sessionId, throughSeq, fromSeq, beforeSeq: fromSeq > 0 ? fromSeq : null,
+      hasMore: fromSeq > 0, events: events.slice(fromSeq, end),
+      messages: transcript(events.slice(0, throughSeq + 1), sessionId)
+        .filter(message => message.seq >= fromSeq && message.seq < end) }
+  }
+  async checkpoint(owner, { sessionId }) {
+    const state = await this._agent(owner, sessionId)
+    await this._barrier(state)
+    return { sessionId, durableThroughSeq: state.durableThroughSeq }
   }
   async stop(owner, { sessionId }) {
     const state = await this._agent(owner, sessionId)
@@ -144,13 +183,16 @@ export class RemoteChat extends Service {
     state.version++
     this._publish(state)
   }
-  async observe(owner, { sessionId }) {
+  async observe(owner, { sessionId, maxEvents }) {
+    const limit = maxEventsOf(maxEvents)
     const state = await this._agent(owner, sessionId)
+    await this._barrier(state)
     // Subscriber is registered before its initial observation; changed projections use the same source.
     return listener => {
-      state.listeners.add(listener)
+      const observer = { listener, maxEvents: limit }
+      state.listeners.add(observer)
       this._publish(state)
-      return () => state.listeners.delete(listener)
+      return () => state.listeners.delete(observer)
     }
   }
   _publish(state) {
@@ -158,11 +200,13 @@ export class RemoteChat extends Service {
     state.scheduled = true
     queueMicrotask(async () => {
       try {
-        const projection = await this._projection(state)
-        for (const listener of state.listeners) listener(projection)
-        if (state.version !== projection.version) queueMicrotask(() => this._publish(state))
+        for (const observer of state.listeners) {
+          const projection = await this._projection(state, observer)
+          if (state.listeners.has(observer)) observer.listener(projection)
+          if (state.version !== projection.version) queueMicrotask(() => this._publish(state))
+        }
       } catch (error) {
-        for (const listener of state.listeners) listener(undefined, error)
+        for (const observer of state.listeners) observer.listener(undefined, error)
       } finally {
         state.scheduled = false
       }

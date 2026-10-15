@@ -15,6 +15,8 @@ export function apply(ctx) {
   register('/chat/send', async (owner, body) => ({ ok: true, receipt: await chat.send(owner, body) }))
   register('/chat/receipt', async (owner, body) => ({ ok: true, receipt: await chat.receipt(owner, body) }))
   register('/chat/read', async (owner, body) => ({ ok: true, projection: await chat.read(owner, body) }))
+  register('/chat/page', async (owner, body) => ({ ok: true, page: await chat.page(owner, body) }))
+  register('/chat/checkpoint', async (owner, body) => ({ ok: true, ...await chat.checkpoint(owner, body) }))
   register('/chat/stop', async (owner, body) => { await chat.stop(owner, body); return { ok: true } })
   register('/chat/observe', (owner, body) => chat.observe(owner, body), (response, subscribe) => {
     response.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-accel-buffering': 'no' })
