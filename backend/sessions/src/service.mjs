@@ -60,7 +60,7 @@ export function sessionIdOf(shortId) {
 
 /** The product-owned service the composition reads as `ctx.ourfairySessions`. */
 export class OwnedSessionService extends Service {
-  #inFlight = new Map()
+  _inFlight = new Map()
 
   /**
    * @param ctx - owning plugin context.
@@ -111,7 +111,7 @@ export class OwnedSessionService extends Service {
    * @param id - the session id.
    * @returns the stored snapshot, or undefined when nothing is stored under it.
    */
-  async #headerOf(id) {
+  async _headerOf(id) {
     return await this.persistence.stat(id)
   }
 
@@ -126,11 +126,11 @@ export class OwnedSessionService extends Service {
    * @param sessionId - the requested session id.
    * @returns the stored header.
    */
-  async #ownedHeader(owner, sessionId) {
+  async _ownedHeader(owner, sessionId) {
     if (typeof sessionId !== 'string' || sessionId === '') {
       throw new SessionScopeError(400, 'sessions/invalid-request', 'name the session this request acts on')
     }
-    const snapshot = await this.#headerOf(sessionId)
+    const snapshot = await this._headerOf(sessionId)
     if (snapshot === undefined) {
       throw new SessionScopeError(404, 'sessions/unknown-session', 'no session with that identifier is visible to you')
     }
@@ -167,28 +167,21 @@ export class OwnedSessionService extends Service {
   /**
    * Materialize one session durably, owned by the given identity.
    *
-   * Flush the public write handle before publishing the live session. The
-   * persistence backend routes later events and store flushes to this handle;
-   * session disposal or backend teardown closes it.
+   * Only persist the header here; the agent factory owns live publication and
+   * write ownership when a later request resumes this empty session.
    *
    * @param owner - the authenticated identity.
    * @param id - the id to mint for this session.
    * @returns the persisted header.
    */
-  async #materialize(owner, id) {
+  async _materialize(owner, id) {
     const session = this.sessions.prepare(id, { meta: { owner: `user:${owner.shortId}` } })
     const handle = await this.persistence.create(session.header)
     try {
       await handle.flush()
-      const sessions = this.sessions
-      this.ctx.effect(function* () {
-        yield sessions.enter(session)
-        sessions.announce(session)
-      }, 'ourfairy owned session')
       return session.header
-    } catch (error) {
+    } finally {
       await handle.close()
-      throw error
     }
   }
 
@@ -208,16 +201,16 @@ export class OwnedSessionService extends Service {
    * @param work - the operation to run at most once at a time.
    * @returns whatever `work` resolves to.
    */
-  async #exclusively(owner, work) {
+  async _exclusively(owner, work) {
     const key = owner.shortId
-    const running = this.#inFlight.get(key) ?? Promise.resolve()
+    const running = this._inFlight.get(key) ?? Promise.resolve()
     const started = running.then(work, work)
     const tail = started.then(() => {}, () => {})
-    this.#inFlight.set(key, tail)
+    this._inFlight.set(key, tail)
     try {
       return await started
     } finally {
-      if (this.#inFlight.get(key) === tail) this.#inFlight.delete(key)
+      if (this._inFlight.get(key) === tail) this._inFlight.delete(key)
     }
   }
 
@@ -232,11 +225,11 @@ export class OwnedSessionService extends Service {
    * @returns the persisted header.
    */
   async create(owner) {
-    return await this.#exclusively(owner, async () => {
+    return await this._exclusively(owner, async () => {
       const primaryId = primarySessionIdOf(owner.shortId)
-      const existing = await this.#headerOf(primaryId)
+      const existing = await this._headerOf(primaryId)
       if (existing === undefined) {
-        const header = await this.#materialize(owner, primaryId)
+        const header = await this._materialize(owner, primaryId)
         return header
       }
       if (existing.header.owner === undefined) {
@@ -245,7 +238,7 @@ export class OwnedSessionService extends Service {
       if (existing.header.owner !== `user:${owner.shortId}`) {
         throw new SessionScopeError(409, 'sessions/primary-taken', 'the reserved primary identifier belongs to another identity and is never rebound')
       }
-      return await this.#materialize(owner, sessionIdOf(owner.shortId))
+      return await this._materialize(owner, sessionIdOf(owner.shortId))
     })
   }
 
@@ -256,10 +249,10 @@ export class OwnedSessionService extends Service {
    * @returns the persisted header.
    */
   async primary(owner) {
-    return await this.#exclusively(owner, async () => {
+    return await this._exclusively(owner, async () => {
       const primaryId = primarySessionIdOf(owner.shortId)
-      const existing = await this.#headerOf(primaryId)
-      if (existing === undefined) return await this.#materialize(owner, primaryId)
+      const existing = await this._headerOf(primaryId)
+      if (existing === undefined) return await this._materialize(owner, primaryId)
       if (existing.header.owner === undefined) {
         throw new SessionScopeError(409, 'sessions/unowned-primary', 'the reserved primary identifier exists without an owner and is never adopted')
       }
@@ -278,7 +271,7 @@ export class OwnedSessionService extends Service {
    * @returns the stored header.
    */
   async read(owner, sessionId) {
-    return await this.#ownedHeader(owner, sessionId)
+    return await this._ownedHeader(owner, sessionId)
   }
 
   /**
@@ -292,6 +285,6 @@ export class OwnedSessionService extends Service {
    * @returns the stored header.
    */
   async select(owner, sessionId) {
-    return await this.#ownedHeader(owner, sessionId)
+    return await this._ownedHeader(owner, sessionId)
   }
 }

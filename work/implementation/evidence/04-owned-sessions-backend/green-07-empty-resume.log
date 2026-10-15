@@ -1,0 +1,28 @@
+▶ OurFairy identity over real HTTP
+  ✔ the provisioned Phaethon signs in as short number 1 (45.63442ms)
+  ✔ invited agents take the next short numbers in registration order (79.55534ms)
+  ✔ refused registrations leave no identity and consume no short number (90.857097ms)
+  ✔ an ordinary agent is refused the administrator invite operation (61.950083ms)
+  ✔ the credential names its own holder with no user field in the request (51.200467ms)
+  ✔ signing out ends the credential it was presented with (77.819566ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (56.816649ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (204.68201ms)
+✔ OurFairy identity over real HTTP (669.656231ms)
+▶ OurFairy owned sessions over real HTTP
+  ✔ a failed durable create can be retried in the same backend process (93.941739ms)
+  ✔ a session created by a signed-in identity keeps its owner and its primary binding across a restart (794.894784ms)
+  ✔ a missing or foreign session is refused, and no request is ever served as an implicit user (130.060603ms)
+  ✔ a primary request racing a create still resolves the fixed primary session (86.567268ms)
+  ✔ cold ownerless and foreign sessions are refused without changing durable artifacts (1561.954978ms)
+  ℹ {"coldFixtures":[{"id":"ourfairy-user-7-primary"},{"id":"cold-foreign-session","owner":"user:8"},{"id":"ourfairy-user-9-primary","owner":"user:8"}],"durableArtifacts":{"_no-cwd/cold-foreign-session/session.v4.jsonl.zstd":{"sha256":"389b93b9c684456347f69263a5fb43cfa411fbf7476ad8be1b00c5c0fe4c32e3","mtimeNs":"1792060426690807471"},"_no-cwd/ourfairy-user-2-primary/session.v4.jsonl.zstd":{"sha256":"365177e742a05a56b691f94db113a22bb3ca4d361fa7a1d5a7f0c4ad766ad429","mtimeNs":"1792060424982807762"},"_no-cwd/ourfairy-user-3-aadba2a4-a2d8-4660-9f78-9d1d89df58e9/session.v4.jsonl.zstd":{"sha256":"4f5e8919db050085b670126c34e42fdae01cf9d3ed36d03e7d69e6201450c740","mtimeNs":"1792060425062807748"},"_no-cwd/ourfairy-user-3-primary/session.v4.jsonl.zstd":{"sha256":"c919dcf2450bfdde33627aa7db2a8cd133d7a9d013b9bccf36aea87e4b67a818","mtimeNs":"1792060425054807749"},"_no-cwd/ourfairy-user-4-primary/session.v4.jsonl.zstd":{"sha256":"d58a9c97853c666dbe2bd5121acfe36222c350f1cd0b8144e08b1ee6f7658ac3","mtimeNs":"1792060425894807606"},"_no-cwd/ourfairy-user-6-0657266d-b128-498e-8eb8-b6745c9fcca9/session.v4.jsonl.zstd":{"sha256":"07593680abf1e6fad29239fe25d720582148a24d09176e8ad94b19fab651048b","mtimeNs":"1792060425994807589"},"_no-cwd/ourfairy-user-6-6a6c09c6-77c3-4a28-8a21-164c2d9a69c6/session.v4.jsonl.zstd":{"sha256":"d265a3bb21370c6180509e7a54033f03ad3f51687d68ac3a2248a6d34c689e80","mtimeNs":"1792060425986807590"},"_no-cwd/ourfairy-user-6-primary/session.v4.jsonl.zstd":{"sha256":"11aa1caac5fe815741b00404d82e4e21c75dc86a4fc6c0f869e1598706d67749","mtimeNs":"1792060425970807593"},"_no-cwd/ourfairy-user-7-primary/session.v4.jsonl.zstd":{"sha256":"988c19197a3a5a3c7df9c6276b10a2945e78bb7ea65d38ff601dc996460d2793","mtimeNs":"1792060426686807472"},"_no-cwd/ourfairy-user-9-primary/session.v4.jsonl.zstd":{"sha256":"cd809b800ed323a7830fd8fa7aeded453d0394af693cf9c141304616edf63cea","mtimeNs":"1792060426694807470"}}}
+  ✔ an empty owned session can be resumed by the existing agent factory (761.69853ms)
+  ℹ {"emptyResume":{"created":{"id":"ourfairy-user-10-primary","owner":"user:10"},"persistedEventCount":0,"resumed":{"id":"ourfairy-user-10-primary","owner":"user:10"},"ownerAfterDispose":"user:10"}}
+✔ OurFairy owned sessions over real HTTP (3429.984624ms)
+ℹ tests 14
+ℹ suites 2
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6426.812272

@@ -2,7 +2,7 @@
 
 **Status: backend acceptance is green.**
 `node --test tests/owned-sessions.test.mjs tests/identity-http.test.mjs`
-passes **13/13** (5 session + 8 identity tests). Android and future message,
+passes **14/14** (6 session + 8 identity tests). Android and future message,
 subscription and control behavior are outside this backend result.
 
 ## The actual cause of the earlier 409 (corrected)
@@ -92,22 +92,23 @@ sessions. `persistHeader` is not declared by the service; it belongs to the
 JSONL implementation's storage collaborator. Its direct use also skipped
 registering a writer for subsequent live events.
 
-The product now uses `SessionStore.prepare` → `persistence.create` →
-`handle.flush` → an owned effect containing `enter`/`announce`. A persistence
-failure closes the handle while the session is still unpublished, so a retry
-does not collide with an abandoned live session. The successful handle stays
-open: JSONL routes `session/event` and `SessionStore.flush(session)` to that
-writer, and closes it on session disposal or persistence teardown
-(`session-persistence-jsonl/src/storage.ts`, `JsonlBackendTracker.install`).
-Future #28 code must reuse that live session/writer, not create a second writer.
-Cold message resume is still #28 work; these read/select endpoints return only
-the authorized header.
+The final product uses `SessionStore.prepare` → `persistence.create` →
+`handle.flush` → `finally handle.close`. It neither enters nor announces a
+live session. Failures leave no live duplicate; success releases write ownership
+so the existing agent factory can resume the saved session when needed.
+The previous advice to retain/reuse a product-owned live writer was wrong:
+`agents.resume({ resumeSessionId: id })` takes its own write handle, restores
+the header/events and publishes the live session. Retaining the empty-session
+writer blocks that public contract with `SessionAlreadyOwnedError`.
+Read/select still return only the authorized header; driving messages is #28.
 
 `OwnedSessionService` follows the existing identity module's Cordis `Service`
 pattern and publishes the one instance as `ctx.ourfairySessions`. The next
 consumer can inject that service to reuse the same ownership checks and
 per-owner operation queue. Its package already declares the Cordis peer and
 exports this service; no additional registry or ownership state was added.
+Its internal helpers use ordinary `_` members: ECMAScript `#` members reject
+the traced Cordis proxy receiver used by real consuming plugins.
 
 The HTTP regression places a regular file at JSONL's `_no-cwd` directory,
 causing a real filesystem materialization error. After removing it, another
@@ -115,6 +116,25 @@ create in the **same backend process** must succeed. Before the fix, the retry
 returned 500 because the first call left a duplicate live session
 (`red-06-durable-retry.log`); after the fix it passes. No persistence mock or
 product fixture endpoint was added.
+
+## Empty-session handoff to the existing agent factory
+
+The test-only `backend/sessions/test-support/resume-empty.mjs` profile row
+consumes the actual `ctx.ourfairySessions.primary` service. It reads the saved
+session through the public persistence handle and observes **0 events**, then
+calls `ctx.agents.resume({ resumeSessionId: id })`, waits for idle, flushes and
+disposes the agent. Session id and owner remain identical, including after
+disposal and an authorized product HTTP read. No prompt or model call is made;
+the test starts the real keyless product composition.
+
+`red-07-empty-resume.log` first exposed the Cordis private-member receiver
+failure; `red-08-empty-resume-writer.log` records an incorrect test option
+(`sessionId`, corrected from the declared `ResumeAgentOptions` contract to
+`resumeSessionId`). With the correct option, `red-09-empty-resume-writer.log`
+demonstrates the actual retained-writer conflict. The minimal persist/flush/close
+implementation passes in `green-07-empty-resume.log`: **14 pass, 0 fail**,
+including the original cold refusal and failed-write retry cases. No dsh API,
+attachment mechanism or extra owner state was added.
 
 ## Cold ownerless and foreign refusal without writes
 
@@ -171,6 +191,9 @@ All from `.worktrees/04-owned-sessions` (ticket/04-owned-sessions).
    for the real loopback backend, without a model/cloud request.
 9. The same command after publishing `ctx.ourfairySessions`
    → `green-06-published-service.log`, **13 pass, 0 fail**.
+10. After merging integration `315b377`, the public consuming-profile test
+    captured the failures above. The same focused command after releasing the
+    empty-session handle → `green-07-empty-resume.log`, **14 pass, 0 fail**.
 
 ### Merge state
 
@@ -214,7 +237,11 @@ the time it was written, not the current ancestry.
 - `red-06-durable-retry.log` — actual failed-write retry exposes live duplicate
 - `green-05-cold-and-retry.log` — 13/13, with cold fixture durable hash/mtime evidence
 - `green-06-published-service.log` — 13/13 after the service publication
+- `red-07-empty-resume.log` — real Cordis consumer rejects `#` private receiver
+- `red-08-empty-resume-writer.log` — incorrect test resume option, preserved
+- `red-09-empty-resume-writer.log` — correct public resume hits retained writer
+- `green-07-empty-resume.log` — 14/14, includes empty saved session agent takeover
 
 ## Lead final product verification
 
-After the final `OwnedSessionService` registration at `01dd084`, Lead independently ran the complete product suite on the host: `node --test 'tests/**/*.test.mjs'` → **39 passed, 0 failed**, 6 suites. Raw output: `final-product-suite.log`. This verifies the backend product tree; it does not claim Android completion, real cloud service validation, or closure of #27.
+At `01dd084` (before the handoff correction above), Lead independently ran the complete product suite on the host: `node --test 'tests/**/*.test.mjs'` → **39 passed, 0 failed**, 6 suites. Raw output: `final-product-suite.log`. The final handoff correction is covered by the later focused 14-test run; this earlier full run does not cover it. Neither run claims Android completion, real cloud service validation, or closure of #27.
