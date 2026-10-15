@@ -32,7 +32,9 @@ source label and never become deployment prompts. See `backend/search/README.md`
 
 OurFairy branch: `ticket/10-conversation-search`; development base
 `20144666d97becf82af3a3c24553ec28c639adda`, merged current integration
-`489d76f4e57fa86cf26b4f07cf4244e1b9e915bb` (includes T11).
+`489d76f4e57fa86cf26b4f07cf4244e1b9e915bb` (includes T11); before handoff
+also merged `a080f42` (T12 Android verification/combination only, no backend code
+change, so the valid 5/5 backend run was not repeated).
 Red tool entry: `f1edf2e`; implementation: `645418b`; runtime/schema correction and
 scope/budget/rebuild checks: `c3665f3`; T11 merge: `49f167c`.
 The final ticket commit adds the actual delivered-body retrieval case and this
