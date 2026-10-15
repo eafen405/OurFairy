@@ -34,19 +34,28 @@ export function apply(ctx, config) {
     }
   })
   register('/attachments/download', json((owner, body) => service.download(owner, body), async (res, input) => {
-    // Open the qualified immutable original before headers, then stream with backpressure.
-    const iterator = ctx.attachments.readFileStream(input.original)[Symbol.asyncIterator]()
-    const first = await iterator.next()
-    res.writeHead(200, { 'cache-control': 'no-store', 'content-type': input.mime,
-      'content-length': input.original.bytes, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(input.name)}` })
+    // Client close cancels both a pending source read and a backpressure wait.
+    const controller = new AbortController()
+    const close = () => controller.abort()
+    res.once('close', close)
+    if (res.destroyed) close()
+    const iterator = ctx.attachments.readFileStream(input.original, controller.signal)[Symbol.asyncIterator]()
     try {
-      let step = first
+      let step = await iterator.next()
+      res.writeHead(200, { 'cache-control': 'no-store', 'content-type': input.mime,
+        'content-length': input.original.bytes, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(input.name)}` })
       while (!step.done) {
-        if (!res.write(step.value)) await once(res, 'drain')
+        if (!res.write(step.value)) await once(res, 'drain', { signal: controller.signal })
         step = await iterator.next()
       }
       res.end()
-    } catch (error) { res.destroy(error) } finally { await iterator.return?.() }
+    } catch (error) {
+      if (!res.headersSent && !res.destroyed) throw error
+      res.destroy(error)
+    } finally {
+      res.off('close', close)
+      await iterator.return?.()
+    }
   }))
   ctx.ourfairySpaces.readonlyFiles = session => service.readonlyFiles(session)
   // Each iterator pull must inherit the session: merely constructing the async
