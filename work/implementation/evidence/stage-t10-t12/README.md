@@ -73,3 +73,15 @@ failure outlets are controlled fixtures, not official cloud/disk faults.
 `node scripts/combo.mjs verify` and `git diff --check` passed. Android remains
 the paired test-only compatibility merge recorded above. #34 is ready for
 Lead to close; #35 remains unstarted until tracker closure unblocks it.
+
+## T12 Android compatibility merge
+
+Owner `55ce5f8de2dfb2b9ec3864eeee4acb04004d07cd` contained target
+Android tip `d80dfcb9`; merged as `b0911d34bdbe6ee8f559167ede41da95a9f082f8`.
+Diff inspection confirms only the existing attachment state test changed,
+adding a delivered-attachment download alongside an independent attempt.
+No production DTO/UI/transport changes were needed. Parsed original XML:
+attachment API 5, attachment state 6, chat API 18, chat state 9, **38/38**,
+zero failures/errors/skips. Original evidence is under
+`../12-file-delivery/android/`. No duplicate JVM/APK run; no phone/SAF/Compose
+runtime acceptance claimed. Android still has only existing `?? .worktrees/`.

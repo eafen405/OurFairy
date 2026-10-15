@@ -1,0 +1,34 @@
+[
+  {
+    "name": "me.rerere.rikkahub.data.remote.RemoteAttachmentApiTest",
+    "tests": "5",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "0.875"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest",
+    "tests": "6",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "0.038"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.RemoteChatApiTest",
+    "tests": "18",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "0.631"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.RemoteChatStateTest",
+    "tests": "9",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "0.024"
+  }
+]

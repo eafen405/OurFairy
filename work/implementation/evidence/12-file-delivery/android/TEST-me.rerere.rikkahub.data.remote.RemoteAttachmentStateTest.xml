@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-15T15:19:11.163Z" hostname="LAPTOP-45RC44AF" time="0.038">
+  <properties/>
+  <testcase name="delivered attachment is downloaded from the projected message while an attempt runs, without sending or uploading" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest" time="0.018"/>
+  <testcase name="attachment only unknown send survives process restart with original request and ordered references" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest" time="0.008"/>
+  <testcase name="late original download after session switch never exports to selected document" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest" time="0.004"/>
+  <testcase name="late upload after account switch is discarded rather than attached to new draft" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest" time="0.003"/>
+  <testcase name="draft import waits for pending restoration before starting upload" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest" time="0.003"/>
+  <testcase name="failed pending persistence prevents attachment send and retains upload reference" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

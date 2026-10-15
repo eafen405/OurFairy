@@ -38,7 +38,7 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/rikkahub.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "d80dfcb9a3ded6e78d78da67edb33f4b88131332",
+      "productCommit": "b0911d34bdbe6ee8f559167ede41da95a9f082f8",
       "researchUpstreamSha": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
       "researchUpstreamRef": "origin/master",
       "note": "productCommit is the fork integration tip after T5/T6 remote chat/recovery and T9 attachments. Attachments use authenticated remote propose/chunk/complete, persist ordered upload IDs with the existing unknown-send request identity, expose original-byte downloads by session/message/index, and discard delayed work across account/session switches. Existing Markdown rendering and native session history remain in use. Owner relevant JVM suite passed 98/98 and debug APKs built; merger verifies source-tree equality and APK hashes and runs bounded attachment regressions. No phone/emulator, actual Android preference-disk fault, APK-to-real-backend, official-cloud image, signed-release or performance acceptance was run. researchUpstreamSha remains the research baseline."
