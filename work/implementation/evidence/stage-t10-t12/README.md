@@ -158,3 +158,29 @@ Product source is frozen pending Lead's single independent Standards/Spec
 review. No publication, tracker closure or worktree cleanup is performed by
 this merger. #33 and #35 await that stage review; #34 was closed by Lead to
 unblock T12.
+
+## Review and required documentation checks
+
+One independent staged two-axis review completed: Standards **0 findings**,
+Spec **0 findings**. Verbatim reports and fixed ranges are archived under
+`../review-t10-t12/`; no corrective source edit or repeated whole-stage review.
+
+Ran required `corepack pnpm@11.28.5 run doc-sync` once in the clean T10 dsh
+checkout: **39 passed / 4 failed**, 0 skipped, exit 1. Raw `dsh-doc-sync.log`
+names the existing event-producer-consumer graph drift, delivery/owner
+type-equivalence drift, Cordis API catalog drift and config catalog source
+line drift. The full doc-typecheck and site build passed. No failed gate is
+reported as passing and no unrelated drift was repaired.
+
+Pure generator outputs confirm the generated Cordis API artifact exactly
+equals the preserved pre-existing root dirty file; generated config files
+exactly equal root's preserved 92→97 changes plus the integrated T10 fields
+(`dsh-doc-failure-origin.log`). The failed graph/type-equivalence files and
+their delivery/owner inputs were not changed by T10. These are established
+baseline gaps, separate from the successful T10 behavior/build evidence.
+
+Restored managed root hooks with the normal `node scripts/install-lefthook.mjs`
+before eventual worktree removal. Effective root worktree hooks path remains
+`.git/dsh-hooks`; pre-push fallback now points at root dependencies, retaining
+the normal typecheck hook. No disable or bypass was used. Exact verification:
+`root-hooks-restored.log`.

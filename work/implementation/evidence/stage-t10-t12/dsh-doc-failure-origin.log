@@ -1,0 +1,4 @@
+Cordis API generated output equals pre-existing root dirty artifact byte-for-byte
+Config generated output equals preserved root dirty file including T10 fields: docs/config-catalog.md
+Config generated output equals preserved root dirty file including T10 fields: docs/config-catalog.zh.md
+Config generated output equals preserved root dirty file including T10 fields: docs/config-catalog.i18n.yaml

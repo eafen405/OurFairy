@@ -1,0 +1,7 @@
+Executed from /home/eafen405/projects/deepseek-harness:
+node scripts/install-lefthook.mjs
+Output: sync hooks: check pre-commit, pre-merge-commit, pre-push
+Verified effective worktree-level core.hooksPath = /home/eafen405/projects/deepseek-harness/.git/dsh-hooks
+Verified pre-push fallback executable = /home/eafen405/projects/deepseek-harness/node_modules/.pnpm/lefthook-linux-x64@2.1.12/node_modules/lefthook-linux-x64/bin/lefthook
+No T10 worktree path remains; call_lefthook run pre-push remains.
+No hook disable/bypass, source/config/test modification, or dirty-file change.
