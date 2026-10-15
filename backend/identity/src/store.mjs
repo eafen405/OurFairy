@@ -230,7 +230,11 @@ export class IdentityStore {
         throw new IdentityError(500, 'identity/schema-too-new',
           `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${row.value}`)
       }
-      if (version !== 1) return
+      if (version === SCHEMA_VERSION) return
+      if (version !== 1) {
+        throw new IdentityError(500, 'identity/schema-unsupported',
+          `unsupported identity schema version ${row.value}`)
+      }
       for (const table of Object.keys(TABLE_DDL)) rebuildTable(this.#db, table)
       this.#db.exec(INDEX_DDL)
       this.#db.prepare('UPDATE meta SET value = ? WHERE key = ?')

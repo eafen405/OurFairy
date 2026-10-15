@@ -173,3 +173,7 @@ half-succeed, because the `BEGIN IMMEDIATE` transaction is what prevents it.
   through the public `IdentityStore` API only.
 - Loopback was available in this environment, so the real-launcher HTTP run
   completed here rather than being deferred to the host.
+
+## Lead final verification
+
+The complete existing product suite was rerun against this worktree on the host: `node --test 'tests/**/*.test.mjs'` → 34 passed / 0 failed. Raw output: `final-product-suite.log`. The final inspection also made the durable schema branch explicitly accept current v2 or migrate v1, and reject other unsupported versions rather than silently continuing. No real cloud service or device check is implied.
