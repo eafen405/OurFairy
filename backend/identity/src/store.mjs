@@ -34,7 +34,7 @@ import {
 export const PHAETHON_SHORT_ID = 1
 
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
-const SCHEMA_VERSION = 5
+const SCHEMA_VERSION = 6
 
 /**
  * The current shape. No UNIQUE constraint and no REFERENCES clause: AGENTS.md
@@ -158,7 +158,8 @@ CREATE TABLE IF NOT EXISTS deliveries (
   recipient_short_id INTEGER NOT NULL,
   recipient_session_id TEXT NOT NULL,
   text TEXT NOT NULL,
-  status INTEGER NOT NULL DEFAULT 0, -- 0 pending coordination, 1 durably delivered
+  attachments_json TEXT NOT NULL DEFAULT '[]',
+  status INTEGER NOT NULL DEFAULT 0, -- 0 ready coordination, 1 durably delivered, 2 preparing files
   message_id TEXT,
   accepted_seq INTEGER,
   created_by INTEGER NOT NULL,
@@ -316,7 +317,7 @@ export class IdentityStore {
           `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${row.value}`)
       }
       if (version === SCHEMA_VERSION) return
-      if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
+      if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5) {
         throw new IdentityError(500, 'identity/schema-unsupported',
           `unsupported identity schema version ${row.value}`)
       }
@@ -329,6 +330,9 @@ export class IdentityStore {
       this.#db.exec(GROUP_SCHEMA)
       this.#db.exec(UPLOAD_SCHEMA)
       this.#db.exec(DELIVERY_SCHEMA)
+      if (!this.#db.prepare('PRAGMA table_info(deliveries)').all().some(column => column.name === 'attachments_json')) {
+        this.#db.exec("ALTER TABLE deliveries ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'")
+      }
       this.#db.prepare('UPDATE meta SET value = ? WHERE key = ?')
         .run(String(SCHEMA_VERSION), 'schema_version')
     })
@@ -338,24 +342,37 @@ export class IdentityStore {
     const row = this.#db.prepare('SELECT * FROM deliveries WHERE delivery_id = ? AND deleted_at IS NULL').get(id)
     return row && { deliveryId: row.delivery_id, senderShortId: row.sender_short_id, senderSessionId: row.sender_session_id,
       recipientShortId: row.recipient_short_id, sessionId: row.recipient_session_id, text: row.text,
-      status: row.status, messageId: row.message_id, acceptedSeq: row.accepted_seq }
+      status: row.status, messageId: row.message_id, acceptedSeq: row.accepted_seq, files: JSON.parse(row.attachments_json) }
   }
   prepareDelivery(row) {
     return this.#transaction(() => {
       const existing = this.readDelivery(row.deliveryId)
       if (existing) {
         if (existing.senderShortId !== row.senderShortId || existing.senderSessionId !== row.senderSessionId
-          || existing.recipientShortId !== row.recipientShortId || existing.text !== row.text) {
+          || existing.recipientShortId !== row.recipientShortId || existing.text !== row.text
+          || JSON.stringify(existing.files.map(file => file.selector)) !== JSON.stringify((row.files ?? []).map(file => file.selector))) {
           throw new IdentityError(409, 'delivery/conflict', 'this delivery identity already names different content or recipient')
         }
         return existing
       }
       const now = this.now()
       this.#db.prepare(`INSERT INTO deliveries
-        (delivery_id,sender_short_id,sender_session_id,recipient_short_id,recipient_session_id,text,created_by,updated_by,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?)`).run(row.deliveryId,row.senderShortId,row.senderSessionId,row.recipientShortId,
-          row.sessionId,row.text,row.senderShortId,row.senderShortId,now,now)
+        (delivery_id,sender_short_id,sender_session_id,recipient_short_id,recipient_session_id,text,attachments_json,status,created_by,updated_by,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(row.deliveryId,row.senderShortId,row.senderSessionId,row.recipientShortId,
+          row.sessionId,row.text,JSON.stringify(row.files ?? []),(row.files?.length ? 2 : 0),row.senderShortId,row.senderShortId,now,now)
       return this.readDelivery(row.deliveryId)
+    })
+  }
+  /** Persist each immutable file before moving on; null entries alone are retried. */
+  prepareDeliveryFile(id, index, prepared) {
+    return this.#transaction(() => {
+      const row = this.readDelivery(id)
+      row.files[index].prepared = prepared
+      const status = row.files.every(file => file.prepared !== null) ? 0 : 2
+      this.#db.prepare(`UPDATE deliveries SET attachments_json = ?, status = ?,
+        updated_by = sender_short_id, updated_at = ? WHERE delivery_id = ? AND deleted_at IS NULL`)
+        .run(JSON.stringify(row.files),status,this.now(),id)
+      return this.readDelivery(id)
     })
   }
   pendingDeliveries() {

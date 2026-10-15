@@ -4,7 +4,7 @@ import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.m
 import { once } from 'node:events'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 export const name = 'ourfairy-attachments'
-export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel']
+export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory']
 export function apply(ctx, config) {
   const service = new AttachmentService(ctx, config)
   const register = (path, handler) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path, handler }), `ourfairy-attachments: ${path}`)
