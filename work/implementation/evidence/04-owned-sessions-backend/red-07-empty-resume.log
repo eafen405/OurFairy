@@ -1,0 +1,51 @@
+▶ OurFairy owned sessions over real HTTP
+  ✖ an empty owned session can be resumed by the existing agent factory (758.840121ms)
+✖ OurFairy owned sessions over real HTTP (760.043131ms)
+ℹ tests 1
+ℹ suites 1
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3612.894893
+
+✖ failing tests:
+
+test at tests/owned-sessions.test.mjs:414:3
+✖ an empty owned session can be resumed by the existing agent factory (758.840121ms)
+  AssertionError [ERR_ASSERTION]: TypeError: Receiver must be an instance of class OwnedSessionService
+      at Proxy.primary (file:///tmp/ourfairy-owned-sessions-Yc6BT6/dsh-home/profiles/ourfairy/node_modules/@ourfairy/dsh-sessions/src/service.mjs:259:23)
+      at Object.apply (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:120:36)
+      at Object.apply [as callback] (file:///home/eafen405/projects/OurFairy/.worktrees/04-owned-sessions/backend/sessions/test-support/resume-empty.mjs:10:47)
+      at Fiber.execute (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1071:28)
+      at file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1142:34
+      at composeError (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:199:18)
+      at Fiber._execute (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1137:10)
+      at Fiber._reload (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1356:16)
+  + actual - expected
+  
+  + 'TypeError: Receiver must be an instance of class OwnedSessionService\n' +
+  +   '    at Proxy.primary (file:///tmp/ourfairy-owned-sessions-Yc6BT6/dsh-home/profiles/ourfairy/node_modules/@ourfairy/dsh-sessions/src/service.mjs:259:23)\n' +
+  +   '    at Object.apply (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:120:36)\n' +
+  +   '    at Object.apply [as callback] (file:///home/eafen405/projects/OurFairy/.worktrees/04-owned-sessions/backend/sessions/test-support/resume-empty.mjs:10:47)\n' +
+  +   '    at Fiber.execute (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1071:28)\n' +
+  +   '    at file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1142:34\n' +
+  +   '    at composeError (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:199:18)\n' +
+  +   '    at Fiber._execute (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1137:10)\n' +
+  +   '    at Fiber._reload (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1356:16)'
+  - undefined
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/04-owned-sessions/tests/owned-sessions.test.mjs:432:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Promise.all (index 5)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'TypeError: Receiver must be an instance of class OwnedSessionService\n    at Proxy.primary (file:///tmp/ourfairy-owned-sessions-Yc6BT6/dsh-home/profiles/ourfairy/node_modules/@ourfairy/dsh-sessions/src/service.mjs:259:23)\n    at Object.apply (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:120:36)\n    at Object.apply [as callback] (file:///home/eafen405/projects/OurFairy/.worktrees/04-owned-sessions/backend/sessions/test-support/resume-empty.mjs:10:47)\n    at Fiber.execute (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1071:28)\n    at file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1142:34\n    at composeError (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:199:18)\n    at Fiber._execute (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1137:10)\n    at Fiber._reload (file:///home/eafen405/projects/deepseek-harness/vendor/cordis/lib/index.js:1356:16)',
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

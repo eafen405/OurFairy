@@ -410,4 +410,35 @@ describe('OurFairy owned sessions over real HTTP', () => {
     assert.deepEqual(after, before, 'cold refusal/read/list must not repair or write any durable artifact')
     t.diagnostic(JSON.stringify({ coldFixtures: fixtures, durableArtifacts: after }))
   })
+
+  test('an empty owned session can be resumed by the existing agent factory', async t => {
+    const admin = await signIn('phaethon', PHAETHON_PASSWORD)
+    const owner = await register(await createInvite(admin.token), 'agent-resume-empty')
+    assert.equal(owner.status, 200, owner.text)
+    const reportPath = join(home, 'empty-resume-report.json')
+    const profileLayer = join(home, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml')
+    const plugin = fileURLToPath(new URL('../backend/sessions/test-support/resume-empty.mjs', import.meta.url))
+    stopBackend()
+    writeFileSync(profileLayer, JSON.stringify([{ insert: [{
+      id: 'resume-empty-owned-session', name: plugin,
+      config: { shortId: owner.json.user.shortId, reportPath },
+    }] }]))
+    try {
+      startBackend()
+    } finally {
+      writeFileSync(profileLayer, '[]\n')
+    }
+    const report = JSON.parse(readFileSync(reportPath, 'utf8'))
+    assert.equal(report.error, undefined, report.error)
+    assert.equal(report.persistedEventCount, 0, 'the product-created session must be durably empty before resume')
+    assert.equal(report.created.owner, `user:${owner.json.user.shortId}`)
+    assert.deepEqual(report.resumed, report.created, 'resume must retain the same session identity and owner')
+    assert.equal(report.ownerAfterDispose, report.created.owner)
+    const read = await request('/sessions/read', {
+      token: owner.json.token, body: { sessionId: report.created.id },
+    })
+    assert.equal(read.status, 200, read.text)
+    assert.equal(read.json.session.owner, report.created.owner)
+    t.diagnostic(JSON.stringify({ emptyResume: report }))
+  })
 })
