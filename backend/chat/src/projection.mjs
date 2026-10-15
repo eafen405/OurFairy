@@ -19,6 +19,7 @@ export function receiptIn(events, sessionId, requestId) {
 }
 export function transcript(events, sessionId) {
   const messages = new Map()
+  const turnEnds = new Map(events.filter(event => event.type === 'turn/end').map(event => [event.data.turn, event.data.reason.kind]))
   for (const event of events) {
     if (event.type === 'agent/inbox/spliced') {
       for (const message of event.data.inserted) {
@@ -33,7 +34,8 @@ export function transcript(events, sessionId) {
       messages.set(message.id, { messageId: message.id, seq: event.seq, requestId: null, role: 2, status: event.data.interrupted ? 3 : 2, text: messageText(message) })
     } else if (event.type === 'assistant/attempt') {
       const messageId = `attempt:${sessionId}:${event.seq}`
-      messages.set(messageId, { messageId, seq: event.seq, requestId: null, role: 2, status: 4, text: attemptText(event.data.stream) })
+      const interrupted = ['aborted', 'interrupted', 'forked'].includes(turnEnds.get(event.data.turn))
+      messages.set(messageId, { messageId, seq: event.seq, requestId: null, role: 2, status: interrupted ? 3 : 4, text: attemptText(event.data.stream) })
     }
   }
   return [...messages.values()]

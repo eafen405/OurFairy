@@ -1,0 +1,18 @@
+# T5 remote chat wire contract (2026-10-15)
+
+All routes are POST, JSON object body, Authorization: Bearer <identity credential>, same endpoint/fence as /sessions/*. Body never selects owner. Errors before streaming: HTTP 400/401/404/409/500 with {ok:false,error:{code,message}}. Foreign/missing session: same 404 sessions/unknown-session; unauthenticated:401 chat/unauthorized. Host/Origin fence applies. No local model execution.
+
+- /chat/send body {sessionId,requestId,text}. requestId: stable nonempty client-generated string (max128); text nonempty string. Return {ok:true,receipt:{sessionId,requestId,messageId,acceptedSeq}} only after writer flush. Exact same session/requestId/text returns same receipt (including after process restart), changed text returns409 chat/request-conflict. Network/500 means acceptance unknown: retain same requestId/text, retry identical or call receipt, never silently new request.
+- /chat/receipt body {sessionId,requestId}. Return {ok:true,receipt:<same shape>|null}. null means no durable acceptance currently observed; send can retry same request identity.
+- /chat/read body {sessionId}. Return {ok:true,projection:<below>}. T5 returns full current transcript; T6 will add bounded history/recovery without a second authority.
+- /chat/stop body {sessionId}. Return {ok:true}. Calls native cancel current reply, keeps queued input for a later waking send (native semantics); eventual projection settles stopped/error. Closing observer never stops work.
+- /chat/observe body {sessionId}. HTTP200 text/event-stream; each `event: projection\ndata: <JSON projection>\n\n` carries a complete cumulative snapshot. JSON has no ok wrapper. Initial snapshot then every changed state; `: keepalive\n\n` comments allowed. End/IO disconnect = disconnected, never finished. A snapshot may replace an older snapshot; never concatenate snapshots. No event IDs/Last-Event-ID replay guarantee in T5.
+
+Projection:
+{sessionId,generation,version,cursor,durableThroughSeq,messages:[...],attempt:<object|null>,replyStatus,error:<string|null>}
+- generation:string server Agent lifetime UUID (not permanent identity); version:monotone integer within generation. Reject stale callbacks by credential/connection/session epoch on Android. cursor:last observed native event seq, -1 empty; durableThroughSeq:only writer-barrier-confirmed prefix, -1 if unknown. Does NOT mean the client applied that prefix.
+- messages:[{messageId:string,seq:number,requestId:string|null,role:number,status:number,text:string}]. role1=user,2=Fairy. status1=accepted/pending user,2=complete,3=interrupted,4=failed. All text exact original text, including whitespace/Markdown. Stable user messageId from native inbox; accepted pending input remains visible before user/message. Assistant settlement without a native message uses deterministic `attempt:<sessionId>:<seq>` identity and exact saved text; status3 for cancelled turns,4 for failed turns. No runtime-context/system/tool bubbles.
+- attempt:{attemptId:string,revision:number,text:string}|null. Native attemptId only unique within generation; text cumulative exact original visible text. Final durable message replaces attempt. revision monotone within generation. While active plain text; terminal messages use existing complete rich-text renderer including interrupted/failed.
+- replyStatus numeric:0 idle,1 running,2 stopping. error:string|null last execution failure; do not treat transient connection loss as model error.
+
+No new DB/table/authoritative receipt ledger: native Session events incl inbox inserted are sole acceptance/history authority. Transient generation/attempt accumulators and serialization queues are derived runtime state only.

@@ -115,7 +115,8 @@ export function sendJson(response, status, payload) {
  * and the handler differ. Keeping this here is the reason the sibling route
  * module has no second copy of it.
  *
- * @param options - `handle(body, request)` plus how to name this module's errors.
+ * @param options - `handle(body, request)`, module errors, and an optional response
+ * writer. Streaming siblings use that writer after the same admission checks.
  * @returns an async `(request, response)` handler.
  */
 export function postHandler({ fence, handle, HttpError = IdentityError, codePrefix = 'identity', internalMessage, respond = (response, result) => sendJson(response, 200, result) }) {

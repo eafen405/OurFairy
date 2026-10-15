@@ -6,7 +6,7 @@
   "license": "UNLICENSED",
   "main": "./src/index.mjs",
   "exports": { ".": "./src/index.mjs" },
-  "files": ["src"],
+  "files": ["src", "README.md"],
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-llm": "workspace:~",

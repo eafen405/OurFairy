@@ -85,7 +85,11 @@ export class RemoteChat extends Service {
     // Capture BEFORE await: later appended events are not claimed durable by this barrier.
     const through = state.agent.session.seq - 1
     await this.ctx.sessions.flush(state.agent.session)
-    state.durableThroughSeq = Math.max(state.durableThroughSeq, through)
+    if (through > state.durableThroughSeq) {
+      state.durableThroughSeq = through
+      state.version++
+      this._publish(state)
+    }
   }
   async _events(sessionId) {
     const observation = await this.ctx.sessionQuery.observeSession(sessionId, { projectionMode: 'none' })
