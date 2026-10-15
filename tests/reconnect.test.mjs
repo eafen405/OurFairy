@@ -225,3 +225,109 @@ test('a lost page response can be retried at its unchanged frozen cut', async ()
   assert.deepEqual(retried.body.page, expected.body.page)
   await request('/chat/stop', bob.token, { sessionId })
 })
+
+function artifactOf(sessionId) {
+  const root = join(home, 'dsh-home', 'sessions')
+  const relative = readdirSync(root, { recursive: true }).find(name => name.includes(`${sessionId}/`) && /\.jsonl(\.zstd)?$/.test(name))
+  assert.ok(relative, `no real artifact for ${sessionId}`)
+  return join(root, relative)
+}
+
+test('a real writer permission failure cannot advance durable ACK, then retry and cold recovery use the same acceptance', async () => {
+  const sessionId = await session(alice.token)
+  const stream = observe(alice.token, sessionId, 256)
+  await stream.ready
+  const acknowledged = stream.frames.at(-1).durableThroughSeq
+  const artifact = artifactOf(sessionId)
+  const savedHash = createHash('sha256').update(readFileSync(artifact)).digest('hex')
+  const body = { sessionId, requestId: 'writer-failure-request', text: 'flush must fail before this text is acknowledged' }
+  chmodSync(artifact, 0o400)
+  try {
+    const sent = await request('/chat/send', alice.token, body)
+    assert.equal(sent.status, 500, JSON.stringify(sent))
+    const observed = await eventually(async () => stream.frames.at(-1), frame => frame.events.some(event => event.type === 'agent/inbox/spliced' && event.data.inserted.some(message => message.source?.rpcId === body.requestId)))
+    assert.ok(observed.cursor > acknowledged)
+    assert.equal(observed.durableThroughSeq, acknowledged)
+    const checkpoint = await request('/chat/checkpoint', alice.token, { sessionId })
+    assert.equal(checkpoint.status, 500, JSON.stringify(checkpoint))
+    assert.equal(stream.frames.at(-1).durableThroughSeq, acknowledged)
+    assert.equal(createHash('sha256').update(readFileSync(artifact)).digest('hex'), savedHash, 'real JSONL bytes did not save during EACCES')
+  } finally {
+    chmodSync(artifact, 0o600)
+    stream.close()
+  }
+  const checkpoint = await request('/chat/checkpoint', alice.token, { sessionId })
+  assert.equal(checkpoint.status, 200, JSON.stringify(checkpoint))
+  assert.ok(checkpoint.body.durableThroughSeq > acknowledged)
+  const receipt = await request('/chat/receipt', alice.token, { sessionId, requestId: body.requestId })
+  assert.ok(receipt.body.receipt)
+  const retried = await request('/chat/send', alice.token, body)
+  assert.deepEqual(retried.body.receipt, receipt.body.receipt)
+  const beforeRestart = await request('/chat/read', alice.token, { sessionId, maxEvents: 256 })
+  await stop()
+  await start()
+  const recovered = await request('/chat/read', alice.token, { sessionId, maxEvents: 256 })
+  assert.equal(recovered.status, 200, JSON.stringify(recovered))
+  assert.deepEqual(recovered.body.projection.events.slice(0, beforeRestart.body.projection.cursor + 1), beforeRestart.body.projection.events)
+  const coldReceipt = await request('/chat/receipt', alice.token, { sessionId, requestId: body.requestId })
+  assert.deepEqual(coldReceipt.body.receipt, receipt.body.receipt)
+})
+
+test('new history and checkpoint routes keep the cold/live ownership fence and validate exact ranges', async () => {
+  const sessionId = await session(bob.token)
+  for (const [path, body] of [
+    ['/chat/page', { sessionId, throughSeq: -1, beforeSeq: 0, maxEvents: 1 }],
+    ['/chat/checkpoint', { sessionId }],
+  ]) {
+    assert.equal((await request(path, undefined, body)).status, 401)
+    for (const token of [alice.token, admin.token]) assert.equal((await request(path, token, body)).status, 404)
+  }
+  const empty = await request('/chat/read', bob.token, { sessionId, maxEvents: 1 })
+  const cut = empty.body.projection.throughSeq
+  for (const body of [
+    { sessionId, throughSeq: cut + 1, beforeSeq: 0 },
+    { sessionId, throughSeq: cut, beforeSeq: cut + 2 },
+    { sessionId, throughSeq: cut, beforeSeq: 0, maxEvents: 0 },
+    { sessionId, throughSeq: cut, beforeSeq: 0, maxEvents: 257 },
+    { sessionId, throughSeq: cut, beforeSeq: -1 },
+  ]) assert.equal((await request('/chat/page', bob.token, body)).status, 400, JSON.stringify(body))
+  const terminal = await request('/chat/page', bob.token, { sessionId, throughSeq: cut, beforeSeq: 0 })
+  assert.deepEqual(terminal.body.page, { sessionId, throughSeq: cut, fromSeq: 0, beforeSeq: null, hasMore: false, events: [], messages: [] })
+  for (const path of ['/chat/page', '/chat/checkpoint']) {
+    assert.equal((await request(path, alice.token, { sessionId, throughSeq: cut, beforeSeq: 0 })).status, 404)
+  }
+})
+
+test('a crash-orphaned turn is resumed and writer-saved before its recovery closer is acknowledged', async () => {
+  await stop()
+  await model.close()
+  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['stall'], repeatLast: true })
+  await start()
+  const sessionId = await session(bob.token)
+  await request('/chat/send', bob.token, { sessionId, requestId: 'crash-open-turn', text: 'survive process crash' })
+  await eventually(async () => model.requests, requests => requests.length === 1)
+  const checkpoint = await request('/chat/checkpoint', bob.token, { sessionId })
+  assert.equal(checkpoint.status, 200)
+  const before = await request('/chat/read', bob.token, { sessionId, maxEvents: 256 })
+  assert.ok(!before.body.projection.events.some(event => event.type === 'turn/end'))
+  const previousAck = checkpoint.body.durableThroughSeq
+  const { pid } = JSON.parse(readFileSync(join(home, 'run/backend.json'), 'utf8'))
+  process.kill(-pid, 'SIGKILL')
+  await eventually(async () => {
+    const status = await runBackendAsync(['status', '--json'], { OURFAIRY_HOME: home })
+    return JSON.parse(status.stdout)
+  }, state => state.running === false)
+  await start()
+  const stream = observe(bob.token, sessionId, 256)
+  await stream.ready
+  const resumed = stream.frames[0]
+  stream.close()
+  const closer = resumed.events.find(event => event.type === 'turn/end' && event.data.reason.kind === 'interrupted')
+  assert.ok(closer, JSON.stringify(resumed))
+  assert.ok(closer.seq > previousAck)
+  assert.ok(resumed.durableThroughSeq >= closer.seq, 'the native resumed writer actually saves the closer before follow ACK')
+  await stop()
+  await start()
+  const recovered = await request('/chat/read', bob.token, { sessionId, maxEvents: 256 })
+  assert.deepEqual(recovered.body.projection.events.find(event => event.seq === closer.seq), closer)
+})

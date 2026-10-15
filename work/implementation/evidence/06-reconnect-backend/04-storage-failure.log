@@ -1,0 +1,13 @@
+✔ bounded history pages keep the opening cut while new formal events arrive (3345.232763ms)
+✔ a reconnect restores the active cumulative attempt while bounded backfill and live tail proceed independently (1961.158112ms)
+✔ a lost page response can be retried at its unchanged frozen cut (27.236534ms)
+✔ a real writer permission failure cannot advance durable ACK, then retry and cold recovery use the same acceptance (739.183558ms)
+✔ new history and checkpoint routes keep the cold/live ownership fence and validate exact ranges (45.135031ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6422.644902
