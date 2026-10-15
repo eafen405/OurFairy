@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
+import { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES } from '@ourfairy/dsh-attachments'
 
 export function installDelivery(ctx, chat) {
   const store = ctx.identity.store
@@ -74,7 +75,7 @@ export function installDelivery(ctx, chat) {
         if (row.files[index].prepared !== null) continue
         const prepared = await ctx.ourfairyAttachments.prepareDeliveryFile(agent, row.files[index].selector, signal)
         const bytes = row.files.reduce((sum, file) => sum + (file.prepared?.original.bytes ?? 0), prepared.original.bytes)
-        if (bytes > 64 * 1024 * 1024) throw new SessionScopeError(413, 'delivery/too-large', 'delivery files exceed 64 MiB')
+        if (bytes > MAX_MESSAGE_BYTES) throw new SessionScopeError(413, 'delivery/too-large', 'delivery files exceed 64 MiB')
         row = store.prepareDeliveryFile(deliveryId, index, prepared)
       }
       return settle(row)
@@ -92,7 +93,7 @@ export function installDelivery(ctx, chat) {
 }
 
 function fileSelectors(files) {
-  if (!Array.isArray(files) || files.length > 8) throw new SessionScopeError(400, 'delivery/invalid-files', 'select at most 8 files')
+  if (!Array.isArray(files) || files.length > MAX_ATTACHMENTS) throw new SessionScopeError(400, 'delivery/invalid-files', 'select at most 8 files')
   return files.map(file => {
     if (file && typeof file.path === 'string' && file.path.trim() && file.messageId === undefined && file.index === undefined) return { path: file.path }
     if (file && file.path === undefined && typeof file.messageId === 'string' && file.messageId && Number.isSafeInteger(file.index) && file.index >= 0) return { messageId: file.messageId, index: file.index }

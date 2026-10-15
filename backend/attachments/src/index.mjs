@@ -3,6 +3,7 @@ import { postHandler, sendJson } from '@ourfairy/dsh-identity/http'
 import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.mjs'
 import { once } from 'node:events'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
+export { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES } from './service.mjs'
 export const name = 'ourfairy-attachments'
 export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory']
 export function apply(ctx, config) {

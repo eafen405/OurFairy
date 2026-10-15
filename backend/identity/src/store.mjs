@@ -289,7 +289,8 @@ export class IdentityStore {
    * behind a stale decision and then rebuild it a second time. An unsupported
    * version is refused before any DDL runs, leaving the file untouched; v1
    * rebuilds the legacy tables into the v2 shape and v2 only adds the v3 group
-   * tables; v3 adds the upload lifecycle table. All known versions land on the current shape in one commit.
+   * tables; v3 adds uploads, v4 adds deliveries, and v5 adds the file preparation checklist.
+   * All known versions land on the current shape in one commit.
    */
   #migrate() {
     this.#transaction(() => {

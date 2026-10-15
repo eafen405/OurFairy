@@ -10,7 +10,7 @@ import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/ba
 const home = makeHome('ourfairy-file-delivery-')
 const password = 'group-test-password'
 let port, model, modelPort, admin, alice, bob
-let senderSession, heldReply
+let senderSession
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 const modelRequests = []
 async function request(path, token, body = {}) {
@@ -64,16 +64,6 @@ before(async () => {
     res.writeHead(200, { 'content-type': 'text/event-stream' })
     const emit = event => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
     emit({ type: 'message_start', message: { id: 'group-message', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
-    if (!result && JSON.parse(command.text).name === 'hold_reply') {
-      emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Recipient is still writing' } })
-      heldReply = () => {
-        emit({ type: 'content_block_stop', index: 0 })
-        emit({ type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 3 } })
-        emit({ type: 'message_stop' }); res.end(); heldReply = undefined
-      }
-      return
-    }
     if (result) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(result.content)}` } })
@@ -93,7 +83,7 @@ before(async () => {
   alice = await user('group-alice'); bob = await user('group-bob')
 })
 after(async () => {
-  heldReply?.(); await stopBackend(); await new Promise(resolve => model.close(resolve)); removeHome(home)
+  await stopBackend(); await new Promise(resolve => model.close(resolve)); removeHome(home)
 })
 test('selected private file reaches recipient primary as an independent original reference', async () => {
   senderSession = (await request('/sessions/create', alice.token)).session.id
@@ -279,4 +269,49 @@ test('a file delivery flush failure leaves a ready retry and never confirms inco
     assert.equal((await download(bob,target,message.messageId,0)).bytes.toString(),'FLUSH RETRY ORIGINAL')
     db.close()
   }finally{writeFileSync(layer,'[]\n')}
+})
+
+async function observe(who,id) {
+  const controller=new AbortController(),frames=[]
+  const response=await fetch(`http://127.0.0.1:${port}/chat/observe`,{method:'POST',signal:controller.signal,headers:{'content-type':'application/json',authorization:`Bearer ${who.token}`},body:JSON.stringify({sessionId:id})})
+  assert.equal(response.status,200)
+  const reader=response.body.getReader(),decoder=new TextDecoder()
+  const done=(async()=>{
+    let buffer=''
+    while(true){
+      const {done,value}=await reader.read();if(done)return
+      buffer+=decoder.decode(value,{stream:true})
+      let end
+      while((end=buffer.indexOf('\n\n'))>=0){
+        const event=buffer.slice(0,end);buffer=buffer.slice(end+2)
+        const line=event.split('\n').find(line=>line.startsWith('data: '))
+        if(line)frames.push(JSON.parse(line.slice(6)))
+      }
+    }
+  })().catch(error=>{if(!controller.signal.aborted)throw error})
+  return {frames,async close(){controller.abort();await done}}
+}
+test('authorized shared files appear together in live and persisted recipient attachment projection',async()=>{
+  const groupOwner=await user('file-group-owner'),target=await primary(bob)
+  const result=await tool(admin,'group_create',{name:'Delivery file scope',ownerShortId:groupOwner.user.shortId})
+  const groupId=Number(result.match(/\\?"id\\?":(\d+)/)?.[1])
+  assert.ok(groupId)
+  const ownerSession=await primary(groupOwner)
+  await tool(groupOwner,'group_members',{groupId,userShortId:alice.user.shortId,action:1},ownerSession)
+  const groupPath=join(home,'dsh-home','spaces','groups',String(groupId),'group-selected.txt')
+  const publicPath=join(home,'dsh-home','spaces','public','public-selected.txt')
+  await tool(alice,'write',{file_path:groupPath,content:'GROUP SELECTED'},senderSession)
+  await tool(alice,'write',{file_path:publicPath,content:'PUBLIC SELECTED'},senderSession)
+  const follow=await observe(bob,target)
+  try{
+    const args={recipientShortId:bob.user.shortId,text:'Two shared originals',files:[{path:groupPath},{path:publicPath}]}
+    assert.match(await tool(alice,'deliver_message',args,senderSession,'shared-files-stable'),/deliveryId/)
+    const frame=await eventually(async()=>follow.frames.at(-1),p=>p?.messages.some(m=>m.text===args.text))
+    const live=frame.messages.find(m=>m.text===args.text)
+    assert.deepEqual(live.attachments.map(a=>a.name),['group-selected.txt','public-selected.txt'])
+    const saved=(await projection(bob,target)).messages.find(m=>m.messageId===live.messageId)
+    assert.deepEqual(saved.attachments,live.attachments)
+    assert.equal((await download(bob,target,saved.messageId,0)).bytes.toString(),'GROUP SELECTED')
+    assert.match(await tool(bob,'read',{file_path:groupPath},target),/outside|denied|permission/i)
+  }finally{await follow.close()}
 })

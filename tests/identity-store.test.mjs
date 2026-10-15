@@ -397,3 +397,29 @@ test('v3 group membership and credentials survive the additive upload migration'
     assert.equal(store.readUpload(upload.uploadId).status, 0)
   } finally { store.close() }
 })
+
+// Pre-checklist v5 delivery rows: immutable text identities must survive the one-column extension.
+test('v5 text deliveries survive the additive file preparation checklist migration', () => {
+  const path=join(dir,'v5-delivery-checklist.sqlite'),db=new DatabaseSync(path)
+  db.exec(V1_SCHEMA.replaceAll(' UNIQUE','').replaceAll(' REFERENCES users(id)','')
+    .replaceAll('created_at INTEGER NOT NULL','created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER'))
+  db.exec(`CREATE TABLE deliveries (delivery_id TEXT PRIMARY KEY,sender_short_id INTEGER NOT NULL,sender_session_id TEXT NOT NULL,
+    recipient_short_id INTEGER NOT NULL,recipient_session_id TEXT NOT NULL,text TEXT NOT NULL,status INTEGER NOT NULL DEFAULT 0,
+    message_id TEXT,accepted_seq INTEGER,created_by INTEGER NOT NULL,updated_by INTEGER NOT NULL,created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,deleted_at INTEGER);`)
+  db.prepare('INSERT INTO meta (key,value) VALUES (?,?)').run('schema_version','5')
+  db.prepare('INSERT INTO users (short_id,name,is_admin,password,created_at,updated_at) VALUES (1,?,1,?,?,?)')
+    .run('phaethon',hashPassword(PHAETHON_PASSWORD),NOW,NOW)
+  db.prepare(`INSERT INTO deliveries (delivery_id,sender_short_id,sender_session_id,recipient_short_id,recipient_session_id,text,
+    status,message_id,accepted_seq,created_by,updated_by,created_at,updated_at) VALUES ('old-delivery',1,'sender',2,'receiver','Original delivered text',1,'same-message',7,1,1,?,?)`).run(NOW,NOW)
+  db.close()
+  const store=new IdentityStore({path,now:()=>NOW+10})
+  try{
+    assert.equal(store.signIn({name:'phaethon',password:PHAETHON_PASSWORD}).user.shortId,1)
+    const row=store.prepareDelivery({deliveryId:'old-delivery',senderShortId:1,senderSessionId:'sender',recipientShortId:2,sessionId:'receiver',text:'Original delivered text'})
+    assert.deepEqual(row.files,[])
+    assert.equal(row.status,1)
+    assert.equal(row.messageId,'same-message')
+    assert.equal(row.acceptedSeq,7)
+  }finally{store.close()}
+})
