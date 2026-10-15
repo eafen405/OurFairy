@@ -65,32 +65,48 @@ All from `.worktrees/04-owned-sessions` (ticket/04-owned-sessions).
 ## The blocker (not yet resolved)
 
 `SessionHeader.owner` does not survive the round trip through the persistence
-that the **pinned combination actually runs**:
+that the **pinned combination actually runs**: after a successful first create,
+`persistence.stat(primaryId)` returns a header with **no `owner`**, so the very
+next request is refused with 409 `sessions/unowned-primary`.
 
-- dsh source at the pin (`d3fe98f969c3963c6d193e74c776692e33c1eb64`) supports it:
-  `session-format-v3-to-v4/src/codec.ts` encodes and decodes the V4 `owner`
-  header key, and `session-persistence-jsonl/src/index.ts:1181` keeps it.
-- The launched backend does not: the built CLI the launcher runs
-  (`apps/cli/lib`, built 2026-10-15 00:08) contains no `owner` header support —
-  `grep` for the V4 owner key and for `expected format v4 physical Session header`
-  finds nothing in the built artifacts.
+What was actually verified, and what was not:
 
-So the header we persist is written without the owner, and the very next request
-sees an ownerless artifact. The product code is written against the documented,
-real public API; this is a stale/partial build-artifact problem in the pinned dsh
-combination, not a product-logic decision. Two candidate fixes, for the Lead:
+- Verified: the first create works end to end — the response carries
+  `owner: user:<n>` from the live `session.header`, so `SessionStore.create(id,
+  { meta: { owner } })` does put the owner on the in-memory header
+  (core/session/src/index.ts:1187).
+- Verified: removing `sessions.flush` does not change it (`green-02.log`), so the
+  store's flush path is not overwriting the header.
+- Verified: no production code in dsh calls `persistence.create()` when a
+  session is created, so nothing else registers a pending tracked entry that
+  could shadow the artifact `stat` returns.
+- Verified: `combo.json` pins dsh at `d3fe98f969…` and that pin is unchanged by
+  the newer `18e8227` ("pin the reviewed session export consumer").
+- **Not verified, and my first draft of this file asserted it wrongly:** the
+  built CLI artifacts are NOT the cause. `apps/cli/lib` is a bundle of the CLI
+  app only — it contains no session packages — so finding no `owner` support
+  there proves nothing about the runtime. The correct statement is: `owner` is
+  supported in dsh source (session-format-v3-to-v4 `encodeHeader`/`decodeHeader`,
+  session-persistence-jsonl `materializeCreateHeader`) but is dropped somewhere
+  on the write-or-read-back path in the pinned runtime, and the exact seam has
+  not yet been isolated.
 
-- refresh `apps/cli/lib` in the dsh product branch from the current source
-  (`pnpm run build:lib:host`) and re-pin `combo.json`, or
-- if the build cannot be refreshed under this ticket, prove with a dsh-side
-  `vitest` run that `persistence.persistHeader(header-with-owner, 0)` +
-  `stat(id)` round-trips `owner`, which would separate "product wiring wrong"
-  from "running build stale".
+The single next step that resolves it, in order of expected value:
+
+1. In the dsh worktree, run a focused `vitest` against the pinned tree proving
+   `persistHeader({...header, owner}, 0)` then `stat(id)` round-trips `owner`.
+   That one run separates "the runtime drops owner" from "the product wires the
+   wrong seam", and needs no product change to run.
+2. If the round trip holds there, the remaining suspect is the *format catalog*
+   the running composition resolves (a v3 row would drop the V4-only key), so
+   compare `SESSION_FORMAT_VERSION` (4, core/session/src/types.ts:122) with the
+   catalog row actually mounted by `session-persistence-jsonl`'s config.
 
 Not done: no dsh source edit, no `combo.json` edit, no Android work, no
 `/sessions/subscribe` or `/sessions/control` routes (they stay unregistered), and
 the identity/admin/`/api` bypass and cold-ownerless-fixture checks that the plan
 calls for were not reached because the primary create is not yet green.
+
 
 ## Remaining acceptance gates (unexecuted)
 
