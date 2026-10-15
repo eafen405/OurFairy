@@ -1,0 +1,3 @@
+$ tsx scripts/gen-config-catalog.ts --check
+gen-config-catalog: stale — docs/config-catalog.md, docs/config-catalog.zh.md. Run `pnpm run gen-config-catalog` and commit the result.
+[ELIFECYCLE] Command failed with exit code 1.

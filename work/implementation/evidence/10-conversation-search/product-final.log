@@ -1,0 +1,13 @@
+✔ chat searches Chinese message excerpts then reads original event positions (3999.409996ms)
+✔ known foreign IDs and administrator status cannot widen conversation tools (275.1325ms)
+✔ read intervals have inclusive original positions, omit tool results, and bound message text (567.19517ms)
+✔ native index rebuild preserves Chinese search scope and independently authorized range reads (1079.563959ms)
+✔ recipient searches a formal delivered body and reads its original event without sender access (296.583089ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6537.271848

@@ -1,0 +1,2 @@
+$ tsx scripts/verify-translation-pairing.ts packages/session-query/session-query-sqlite/README.md
+verify-translation-pairing: 1 named pair(s) consistent; the corpus-wide check still runs in doc-sync.

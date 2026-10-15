@@ -166,3 +166,22 @@ test('native index rebuild preserves Chinese search scope and independently auth
   assert.match(range.events[0].text, /北京咖啡馆/)
   assert.match(await tool(admin, 'conversation_read', { sessionId: aliceSession, fromSeq: 0, toSeq: 99 }), /unknown-session|visible to you/)
 })
+
+
+test('recipient searches a formal delivered body and reads its original event without sender access', async () => {
+  const text = '共享邮笺：明天去星河书店读诗。'
+  const delivered = valueOf(await tool(bob, 'deliver_message', { recipientShortId: alice.user.shortId, text }, bobSession))
+  const recipientSearch = valueOf(await tool(alice, 'conversation_search', { query: '星河书店', limit: 1 }))
+  const hit = recipientSearch.matches[0]
+  assert.equal(hit.sessionId, delivered.sessionId)
+  assert.equal(hit.type, 'delivery/message')
+  assert.equal(hit.seq, delivered.acceptedSeq)
+  assert.equal(hit.snippet, text)
+  const range = valueOf(await tool(alice, 'conversation_read', { sessionId: hit.sessionId, fromSeq: hit.seq, toSeq: hit.seq }))
+  assert.deepEqual(range.events, [{ seq: delivered.acceptedSeq, type: 'delivery/message', text }])
+  assert.match(await tool(bob, 'conversation_read', { sessionId: hit.sessionId, fromSeq: hit.seq, toSeq: hit.seq }), /unknown-session|visible to you/)
+  const source = modelRequests.at(-1)
+  const systemText = JSON.stringify(source.system ?? source.messages.filter(m => m.role === 'system'))
+  assert.ok(systemText.length > 2, 'actual model request must carry the deployment prompt')
+  assert.doesNotMatch(systemText, /星河书店/)
+})
