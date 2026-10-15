@@ -1,0 +1,46 @@
+▶ migrating a genuine v1 database
+  ✔ keeps the ids and passwords the v1 file already held (58.467461ms)
+  ✔ keeps the v1 session digests usable (0.301073ms)
+  ✔ keeps a v1 unredeemed invite redeemable and refuses the redeemed one (24.022805ms)
+  ✔ refuses a duplicate name without a unique index backing it (0.481937ms)
+  ✔ never reuses a short number once an identity is gone (25.0974ms)
+  ✔ a removed user no longer signs in, authenticates, or appears in a listing (25.384478ms)
+  ✔ a removed name stays reserved, deleted rows included (0.331972ms)
+✔ migrating a genuine v1 database (134.865148ms)
+▶ seeding against a deleted Phaethon
+  ✔ refuses to recreate short number 1 beside a tombstoned row (28.173326ms)
+  ✔ refuses an initial seed whose name belongs to another row (26.429386ms)
+✔ seeding against a deleted Phaethon (54.932491ms)
+▶ the stored schema obeys AGENTS.md
+  ✔ carries logical deletion and update timestamps on the business tables (0.742704ms)
+  ✔ keeps the associated person column on every business table (0.636271ms)
+  ✔ carries no foreign key and no unique constraint beyond the primary key (0.657782ms)
+  ✔ keeps the ordinary lookup index the queries actually need (0.526742ms)
+  ✔ a fresh database lands directly on the migrated schema (25.622751ms)
+  ✔ refuses a database newer than this module understands, leaving it untouched (1.870531ms)
+  ✔ signing out a logically deleted session reports nothing to revoke (75.899909ms)
+✔ the stored schema obeys AGENTS.md (106.300526ms)
+✔ v2 credentials and invites survive the additive group migration (77.306056ms)
+✔ v3 group membership and credentials survive the additive upload migration (55.927605ms)
+✔ a stable send is durably accepted once across concurrent retries and backend restart (3806.681103ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (424.271203ms)
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (344.957952ms)
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply (379.245674ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (1500.356195ms)
+✔ the deployment owner identity is separate from a chat attempt to edit the persona (1022.228639ms)
+✔ stopping the current reply preserves accepted queued input for the next wake (510.987623ms)
+✔ stopping before visible output records interruption rather than a failed reply (1483.302145ms)
+✔ Fairy delivers only selected text to a cold primary without recipient inference (3187.492454ms)
+✔ live delivery remains independent of the recipient active attempt and later model history includes it (168.266056ms)
+✔ native log success with failed business update recovers after restart and exact retry stays single (995.331163ms)
+✔ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (149.689861ms)
+✔ failed native durability checkpoint never confirms and stable retry recovers the same message (867.394035ms)
+✔ notification outlet failure preserves durable delivery and successful sender confirmation (823.971111ms)
+ℹ tests 32
+ℹ suites 3
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9787.05709

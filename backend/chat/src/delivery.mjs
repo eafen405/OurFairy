@@ -17,7 +17,7 @@ export function installDelivery(ctx, chat) {
   }, { surfaceOp: 'append' })
 
   async function settle(row) {
-    return chat._exclusively(row.sessionId, async () => {
+    const result = await chat._exclusively(row.sessionId, async () => {
       let event
       const state = chat._live.get(row.sessionId)
       if (state) {
@@ -40,10 +40,12 @@ export function installDelivery(ctx, chat) {
       }
       const result = { messageId: event.data.message.id, acceptedSeq: event.seq }
       store.completeDelivery(row.deliveryId, result)
-      // Notification consumers can recover from the durable business row even if an outlet fails.
-      try { ctx.emit('ourfairy/delivery', { ...receipt(row), ...result }) } catch {}
       return { ...receipt(row), ...result }
     })
+    // The writer queue ends before notifying; the durable row survives any outlet failure.
+    try { await ctx.parallel('ourfairy/delivery', result) }
+    catch (error) { ctx.logger('ourfairy-delivery').warn('delivery %s notification outlet failed: %s', row.deliveryId, error.message) }
+    return result
   }
   const recovery = (async () => {
     for (const row of store.pendingDeliveries()) {

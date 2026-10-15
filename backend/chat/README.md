@@ -31,3 +31,35 @@ The client keeps three positions distinct: observed native cursor, writer-confir
 A restored cursor without cached body rows cannot skip missing history: this client must refill its projection after process restart. Missing/corrupt records establish a fresh initialization baseline; the record/batch is input for future notifications, not a notification policy. Backend does not keep another client receipt/consumption database. Cold access authorizes before native resume, and uses the resumed writer so query-only synthetic closers are never acknowledged without being saved.
 
 No new DB/table/authoritative receipt ledger: native Session events incl inbox inserted are sole acceptance/history authority. Transient generation/attempt accumulators and serialization queues are derived runtime state only.
+
+## Cross-user text delivery (T11)
+
+The session-scoped `deliver_message({recipientShortId,text})` tool saves only the
+specified text into the recipient's fixed primary session. It returns
+`{deliveryId,sessionId,messageId,acceptedSeq}` after the native writer's durability
+barrier. It returns no recipient history and starts no recipient inference.
+
+The delivery identity is derived from the sender's permanent Session id and the
+native tool call id. The business SQLite `deliveries` table (schema v5) fixes the
+recipient and text before the append, with status 0 pending coordination and
+1 durably delivered. The native `delivery/message` event is the delivery fact:
+it carries the same delivery identity and the real sender Session/owner, and
+contains an assistant-role message with source `delivered-message`. It has no
+fabricated model turn, step, or stream. Pending rows are reconciled against that
+identity on startup; an exact retry finds the same message after a log-success /
+business-update failure. A changed recipient or text under the same identity is
+refused. Failed startup reconciliation leaves the row retryable.
+
+Live delivery appends to the existing Agent's Session and flushes its writer.
+Cold delivery takes the native exclusive write handle, validates/restores a
+detached Session, appends and flushes, then closes the handle. Opening remote
+chat and delivery share the existing per-session queue. No Agent is created for
+a cold delivery, and a recipient's active attempt remains independent of the
+delivered bubble.
+
+Existing read/page/observe projections expose the event as `role:2,status:2`
+with the native message id and exact text. They add no transfer label or new wire
+fields. The durable business row is recoverable notification input; a failed
+`ourfairy/delivery` outlet cannot retract the message or turn a successful
+confirmation into failure. System notification policy belongs to its later ticket.
+This ticket adds no file delivery, outbox, or second history store.

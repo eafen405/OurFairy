@@ -116,10 +116,33 @@ async function eventually(work, check) {
   }
   assert.fail('condition not reached')
 }
+async function observe(token, sessionId) {
+  const controller = new AbortController(), frames = []
+  const response = await fetch(`http://127.0.0.1:${port}/chat/observe`, { method: 'POST', signal: controller.signal,
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({sessionId}) })
+  assert.equal(response.status,200)
+  const reader = response.body.getReader(), decoder = new TextDecoder()
+  const settled = (async () => {
+    let buffer = ''
+    for (;;) {
+      const {done,value} = await reader.read()
+      if (done) return
+      buffer += decoder.decode(value,{stream:true})
+      let end
+      while ((end=buffer.indexOf('\n\n')) >= 0) {
+        const event=buffer.slice(0,end); buffer=buffer.slice(end+2)
+        const line=event.split('\n').find(line=>line.startsWith('data: '))
+        if (line) frames.push(JSON.parse(line.slice(6)))
+      }
+    }
+  })().catch(error=>{ if (!controller.signal.aborted) throw error })
+  return {frames, async close(){controller.abort(); await settled}}
+}
 test('live delivery remains independent of the recipient active attempt and later model history includes it', async () => {
   const target = (await request('/sessions/primary', bob.token)).session.id
   await request('/chat/send', bob.token, { sessionId: target, requestId: 'hold-recipient', text: JSON.stringify({ name: 'hold_reply', args: {} }) })
   const active = await eventually(() => request('/chat/read', bob.token, { sessionId: target }), value => value.projection.attempt?.text === 'Recipient is still writing')
+  const observation = await observe(bob.token,target)
   const before = modelRequests.length
   assert.match(await tool(alice, 'deliver_message', { recipientShortId: bob.user.shortId, text: 'Delivered during your reply' }, senderSession), /deliveryId/)
   const during = (await request('/chat/read', bob.token, { sessionId: target })).projection
@@ -127,6 +150,10 @@ test('live delivery remains independent of the recipient active attempt and late
   assert.equal(during.attempt.text, 'Recipient is still writing')
   assert.equal(during.messages.filter(m => m.text === 'Delivered during your reply').length, 1)
   assert.equal(modelRequests.length - before, 2, 'delivery did not dispatch recipient inference')
+  const frame = await eventually(async()=>observation.frames.at(-1), value=>value?.messages.some(m=>m.text==='Delivered during your reply'))
+  assert.equal(frame.attempt.attemptId,active.projection.attempt.attemptId)
+  assert.equal(frame.attempt.text,'Recipient is still writing')
+  await observation.close()
   heldReply()
   await eventually(() => request('/chat/read', bob.token, { sessionId: target }), value => value.projection.replyStatus === 0)
   await tool(bob, 'groups', {}, target)
