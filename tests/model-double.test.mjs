@@ -63,7 +63,7 @@ test('one real turn reaches the external model double, registers tools, and pers
     toolNames.includes('todo_write'),
     `the mounted tool-todo row must advertise todo_write to the model; catalog was ${JSON.stringify(toolNames)}`,
   )
-  assert.deepEqual([...toolNames].sort(), ['bash', 'edit', 'read', 'read_image', 'todo_write', 'working_directory', 'write'],
+  assert.deepEqual([...toolNames].sort(), ['bash', 'edit', 'group_create', 'groups', 'read', 'read_image', 'todo_write', 'working_directory', 'write'],
     `the model receives only the adapted v1 tool catalog: ${JSON.stringify(toolNames)}`)
 
   // The model interface worked end to end: the turn produced assistant text.

@@ -1,0 +1,30 @@
+✔ chat creates group for designated owner, updates live owner tools and persists membership (3347.004587ms)
+✔ only the target group owner changes membership; members share real files and confined scripts (1270.247634ms)
+✖ removing a member invalidates the same live session cwd and later file/script access (196.612129ms)
+✔ concurrent duplicate membership updates stay singular and restart preserves group access (1258.409475ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6400.578815
+
+✖ failing tests:
+
+test at tests/groups.test.mjs:128:1
+✖ removing a member invalidates the same live session cwd and later file/script access (196.612129ms)
+  AssertionError [ERR_ASSERTION]: chat failed before tool result: path outside authorized spaces
+      at tool (file:///home/eafen405/projects/OurFairy/.worktrees/08-group-spaces/tests/groups.test.mjs:38:34)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/08-group-spaces/tests/groups.test.mjs:133:16)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }

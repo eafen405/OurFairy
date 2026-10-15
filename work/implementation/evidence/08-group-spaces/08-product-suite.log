@@ -1,0 +1,118 @@
+▶ OurFairy v1 baseline composition
+  ✔ real profile boot reports every required service live (keyless) (4453.940156ms)
+  ✔ v1 profile mounts scoped file/shell adapters and excludes unused capabilities (979.63453ms)
+  ✔ the product profile alone boots with no test overlay at all (1097.494082ms)
+  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (572.122093ms)
+  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (579.056082ms)
+✔ OurFairy v1 baseline composition (7683.771346ms)
+✔ chat creates group for designated owner and updates live owner tools (3885.717579ms)
+✔ only the target group owner changes membership; members share real files and confined scripts (1990.08837ms)
+✔ removing a member invalidates the same live session cwd and later file/script access (983.106593ms)
+✔ concurrent duplicate membership updates stay singular and restart preserves group access (1565.142179ms)
+▶ OurFairy identity over real HTTP
+  ✔ the provisioned Phaethon signs in as short number 1 (58.123719ms)
+  ✔ invited agents take the next short numbers in registration order (130.559523ms)
+  ✔ refused registrations leave no identity and consume no short number (126.149792ms)
+  ✔ an ordinary agent is refused the administrator invite operation (76.014088ms)
+  ✔ the credential names its own holder with no user field in the request (82.101439ms)
+  ✔ signing out ends the credential it was presented with (127.207474ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (105.845563ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (381.35451ms)
+✔ OurFairy identity over real HTTP (1088.96506ms)
+▶ migrating a genuine v1 database
+  ✔ keeps the ids and passwords the v1 file already held (88.287033ms)
+  ✔ keeps the v1 session digests usable (0.630501ms)
+  ✔ keeps a v1 unredeemed invite redeemable and refuses the redeemed one (33.269489ms)
+  ✔ refuses a duplicate name without a unique index backing it (0.743035ms)
+  ✔ never reuses a short number once an identity is gone (36.510139ms)
+  ✔ a removed user no longer signs in, authenticates, or appears in a listing (36.461787ms)
+  ✔ a removed name stays reserved, deleted rows included (0.632074ms)
+✔ migrating a genuine v1 database (197.757486ms)
+▶ seeding against a deleted Phaethon
+  ✔ refuses to recreate short number 1 beside a tombstoned row (33.351464ms)
+  ✔ refuses an initial seed whose name belongs to another row (33.960046ms)
+✔ seeding against a deleted Phaethon (67.671795ms)
+▶ the stored schema obeys AGENTS.md
+  ✔ carries logical deletion and update timestamps on the business tables (0.888892ms)
+  ✔ keeps the associated person column on every business table (0.726703ms)
+  ✔ carries no foreign key and no unique constraint beyond the primary key (0.939108ms)
+  ✔ keeps the ordinary lookup index the queries actually need (0.594281ms)
+  ✔ a fresh database lands directly on the migrated schema (35.408161ms)
+  ✔ refuses a database newer than this module understands, leaving it untouched (2.347499ms)
+  ✔ signing out a logically deleted session reports nothing to revoke (119.414366ms)
+✔ the stored schema obeys AGENTS.md (160.782053ms)
+✔ v2 credentials and invites survive the additive group migration (134.699767ms)
+✔ duplicate start is refused, stop is clean, and nothing leaks across cycles (5425.001829ms)
+✔ doctor passes on a clean isolated home and names its checks (873.528993ms)
+✔ a missing dsh checkout fails loudly instead of booting something else (59.902645ms)
+✖ one real turn reaches the external model double, registers tools, and persists the session (3740.585949ms)
+✔ a turn without credentials fails with a diagnostic naming the missing variable (4271.044973ms)
+▶ OurFairy owned sessions over real HTTP
+  ✔ a failed durable create can be retried in the same backend process (144.369838ms)
+  ✔ a session created by a signed-in identity keeps its owner and its primary binding across a restart (1319.953788ms)
+  ✔ a missing or foreign session is refused, and no request is ever served as an implicit user (249.448703ms)
+  ✔ a primary request racing a create still resolves the fixed primary session (177.034797ms)
+  ✔ cold ownerless and foreign sessions are refused without changing durable artifacts (2223.189579ms)
+  ℹ {"coldFixtures":[{"id":"ourfairy-user-7-primary"},{"id":"cold-foreign-session","owner":"user:8"},{"id":"ourfairy-user-9-primary","owner":"user:8"}],"durableArtifacts":{"_no-cwd/cold-foreign-session/session.v4.jsonl.zstd":{"sha256":"3f98eba18d47d93d4e253711611e7de2ebd426aa7f151a2ba4cbc04b2302d928","mtimeNs":"1792071999977000843"},"_no-cwd/ourfairy-user-2-primary/session.v4.jsonl.zstd":{"sha256":"5086da96e35141b0a529954f3ae89f8e578fd77b58c5743509ba732229d1db27","mtimeNs":"1792071997093001290"},"_no-cwd/ourfairy-user-3-134a5618-a6fe-4f7d-b9a0-233c371202ef/session.v4.jsonl.zstd":{"sha256":"b07920d16130e4f62466bdda38d2fd532a6a1f41ea90b0c8a58e5a8ff6e01d95","mtimeNs":"1792071997209001271"},"_no-cwd/ourfairy-user-3-primary/session.v4.jsonl.zstd":{"sha256":"e679db3d959e20c78158460515e5f5606fc49a0b709fc861f20cbfdc153cdf23","mtimeNs":"1792071997197001274"},"_no-cwd/ourfairy-user-4-primary/session.v4.jsonl.zstd":{"sha256":"9da653a7de9747f88dbe11aef94103533a8b9ab90846f98bbd27ce8c74ec5af7","mtimeNs":"1792071998625001052"},"_no-cwd/ourfairy-user-6-c94988c8-5a84-4f72-a1e4-9307a228272d/session.v4.jsonl.zstd":{"sha256":"45fbfa0dd06ac47cd83bdcca0c51d01a02c57c90eb2d3b948cf6c9be7620893d","mtimeNs":"1792071998825001021"},"_no-cwd/ourfairy-user-6-fda5225b-7903-4188-b54a-02441c120a6b/session.v4.jsonl.zstd":{"sha256":"cd45f83cc1de23afaece55e86365f1e05b5c6d9bc957edfeb54da2f7bd9bd131","mtimeNs":"1792071998833001020"},"_no-cwd/ourfairy-user-6-primary/session.v4.jsonl.zstd":{"sha256":"10c040b128a4ab910e14fb226dfaa9f471c99c698c831e23de5e375563b0da7b","mtimeNs":"1792071998789001027"},"_no-cwd/ourfairy-user-7-primary/session.v4.jsonl.zstd":{"sha256":"9cf93200763dfd19ed748dd50412bd6994ef1e0c396243bb13b095cb291ff1f6","mtimeNs":"1792071999965000845"},"_no-cwd/ourfairy-user-9-primary/session.v4.jsonl.zstd":{"sha256":"2687265d36808cceff74a15ca7975faa319444d7bbc2061400af57e56c5dd78c","mtimeNs":"1792071999985000842"}}}
+  ✔ an empty owned session can be resumed by the existing agent factory (1006.057622ms)
+  ℹ {"emptyResume":{"created":{"id":"ourfairy-user-10-primary","owner":"user:10"},"persistedEventCount":0,"resumed":{"id":"ourfairy-user-10-primary","owner":"user:10"},"ownerAfterDispose":"user:10"}}
+✔ OurFairy owned sessions over real HTTP (5121.333512ms)
+✔ bounded history pages keep the opening cut while new formal events arrive (4482.206351ms)
+✔ a reconnect restores the active cumulative attempt while bounded backfill and live tail proceed independently (2818.125526ms)
+✔ a lost page response can be retried at its unchanged frozen cut (60.669936ms)
+✔ a real writer permission failure cannot advance durable ACK, then retry and cold recovery use the same acceptance (1040.718265ms)
+✔ new history and checkpoint routes keep the cold/live ownership fence and validate exact ranges (64.524246ms)
+✔ a crash-orphaned turn is resumed and writer-saved before its recovery closer is acknowledged (2679.627964ms)
+✔ a stable send is durably accepted once across concurrent retries and backend restart (5676.838728ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (561.026167ms)
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (359.847634ms)
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply (421.455126ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (1990.387563ms)
+✔ the deployment owner identity is separate from a chat attempt to edit the persona (1285.238409ms)
+✔ stopping the current reply preserves accepted queued input for the next wake (547.862279ms)
+✔ stopping before visible output records interruption rather than a failed reply (1976.526407ms)
+✔ chat tools write own private files, share public files, and deny another user including administrator (4686.557405ms)
+✔ real child processes share public files, keep private boundaries after cd, and retain networking (1166.523881ms)
+✔ directory changes, edits, image reads and symlinks retain the same owner boundary (1335.376249ms)
+✔ agentless filesystem and script Interface calls refuse instead of inheriting a default user (0.852072ms)
+✔ shell background children stay confined and detached job entry is explicitly unavailable until T13 (460.797508ms)
+✔ a network-installed dependency is available to both users in the one shared environment (819.156325ms)
+✔ ensure restores the owner private root when a persisted working directory disappears (529.09501ms)
+ℹ tests 66
+ℹ suites 6
+ℹ pass 65
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13188.689152
+
+✖ failing tests:
+
+test at tests/model-double.test.mjs:29:1
+✖ one real turn reaches the external model double, registers tools, and persists the session (3740.585949ms)
+  AssertionError [ERR_ASSERTION]: the model receives only the adapted v1 tool catalog: ["bash","edit","group_create","groups","read","read_image","todo_write","working_directory","write"]
+  + actual - expected
+  
+    [
+      'bash',
+      'edit',
+  +   'group_create',
+  +   'groups',
+      'read',
+      'read_image',
+      'todo_write',
+      'working_directory',
+      'write'
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/08-group-spaces/tests/model-double.test.mjs:66:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'bash', 'edit', 'group_create', 'groups', 'read', 'read_image', 'todo_write', 'working_directory', 'write' ],
+    expected: [ 'bash', 'edit', 'read', 'read_image', 'todo_write', 'working_directory', 'write' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
