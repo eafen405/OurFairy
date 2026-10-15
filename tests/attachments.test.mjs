@@ -135,3 +135,69 @@ test('images keep original downloads while official Messages serialization uses 
   assert.equal((await request('/attachments/complete', alice.token, { uploadId: malformed.uploadId })).status, 400)
   assert.equal((await request('/chat/send', alice.token, { sessionId, requestId: 'broken-image', text: '', uploadIds: [malformed.uploadId] })).status, 404)
 })
+
+async function startToolModel() {
+  const { createServer } = await import('node:http'), { once } = await import('node:events')
+  const requests = []
+  const server = createServer(async (req, res) => {
+    let bytes = ''; for await (const chunk of req) bytes += chunk
+    const body = JSON.parse(bytes); requests.push({ body })
+    const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
+    const commandIndex = blocks.findLastIndex(c => c.type === 'text' && c.text.startsWith('{"tool":'))
+    const call = JSON.parse(blocks[commandIndex].text)
+    const result = blocks.slice(commandIndex + 1).findLast(c => c.type === 'tool_result')
+    const handle = blocks.filter(c => c.type === 'text').map(c => c.text.match(/read-only copy saved at ("(?:[^"\\]|\\.)*")/)).findLast(Boolean)
+    const args = JSON.parse(JSON.stringify(call.args).replaceAll('$INPUT', handle ? JSON.parse(handle[1]) : 'NO_QUALIFIED_INPUT_HANDLE'))
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    const emit = event => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+    emit({ type: 'message_start', message: { id: 'attachment-tool-model', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
+    if (result) {
+      emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(result.content)}` } })
+    } else {
+      emit({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'attachment-tool-call', name: call.tool, input: {} } })
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(args) } })
+    }
+    emit({ type: 'content_block_stop', index: 0 })
+    emit({ type: 'message_delta', delta: { stop_reason: result ? 'end_turn' : 'tool_use', stop_sequence: null }, usage: { output_tokens: 3 } })
+    emit({ type: 'message_stop' }); res.end()
+  })
+  server.listen(0, '127.0.0.1'); await once(server, 'listening')
+  return { baseURL: `http://127.0.0.1:${server.address().port}`, requests, close: () => new Promise(resolve => server.close(resolve)) }
+}
+let toolRequest = 0
+async function tool(who, sessionId, name, args, uploadIds = []) {
+  const previous = (await request('/chat/read', who.token, { sessionId })).body.projection.messages.filter(m => m.role === 2).length
+  const sent = await request('/chat/send', who.token, { sessionId, requestId: `attachment-tool-${++toolRequest}`, text: JSON.stringify({ tool: name, args }), uploadIds })
+  assert.equal(sent.status, 200, JSON.stringify(sent))
+  const until = Date.now() + 15000
+  let read
+  do {
+    read = await request('/chat/read', who.token, { sessionId })
+    const messages = read.body.projection.messages.filter(m => m.role === 2)
+    if (messages.length > previous && read.body.projection.replyStatus === 0) return messages.at(-1).text
+    await new Promise(resolve => setTimeout(resolve, 25))
+  } while (Date.now() < until)
+  assert.fail(`tool result not returned: ${JSON.stringify(read.body)}`)
+}
+test('native model file handles permit real read and sandboxed scripts only in the admitted session and stay readonly', async () => {
+  await stop(); await model.close(); model = await startToolModel(); await start()
+  const aliceId = await session(alice), bobId = await session(bob), otherId = await session(alice)
+  const bytes = Buffer.from('REAL_ATTACHMENT_CONTENT_私密\n')
+  const receipt = await upload(alice, aliceId, bytes, 'private.txt', 'text/plain')
+  assert.match(await tool(alice, aliceId, 'read', { file_path: '$INPUT' }, [receipt.uploadId]), /REAL_ATTACHMENT_CONTENT_私密/)
+  const bodyText = model.requests.flatMap(item => item.body.messages).flatMap(m => m.content).filter(c => c.type === 'text').map(c => c.text).join('\n')
+  const handle = bodyText.match(/read-only copy saved at ("(?:[^"\\]|\\.)*")/)
+  assert.ok(handle, 'actual provider text must contain a usable file handle')
+  const path = JSON.parse(handle[1])
+  assert.match(await tool(alice, aliceId, 'bash', { description: 'Read immutable input in actual sandbox', command: `cat '${path}'; printf bad > '${path}'` }), /REAL_ATTACHMENT_CONTENT_私密/)
+  assert.match(await tool(alice, aliceId, 'write', { file_path: path, content: 'bad' }), /denied|outside|permission/i)
+  for (const [who, id] of [[bob, bobId], [alice, otherId]]) {
+    assert.match(await tool(who, id, 'read', { file_path: path }), /denied|outside|permission/i)
+    const denied = await tool(who, id, 'bash', { description: 'Try guessed attachment path', command: `cat '${path}'` })
+    assert.doesNotMatch(denied, /REAL_ATTACHMENT_CONTENT_私密/)
+    assert.match(denied, /No such file|denied|not found/i)
+  }
+  await stop(); await start()
+  assert.match(await tool(alice, aliceId, 'read', { file_path: '$INPUT' }), /REAL_ATTACHMENT_CONTENT_私密/)
+})
