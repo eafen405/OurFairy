@@ -176,3 +176,8 @@
         promoteOnTimeout: false
     - id: fs-observation-policy
       name: '@deepseek-ai/dsh-fs-observation-policy'
+
+    - id: attachments
+      name: '@ourfairy/dsh-attachments'
+      config:
+        root: !!js dshHomePath('uploads')

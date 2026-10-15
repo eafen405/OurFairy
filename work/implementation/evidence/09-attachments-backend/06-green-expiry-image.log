@@ -1,0 +1,12 @@
+✔ upload completes before sending and original downloads by qualified message identity across restart (3505.826883ms)
+✔ unfinished and foreign receipts never grant message or download access, including identical stored bytes (180.448896ms)
+✔ lost chunk ACK retries exact bytes, expired upload cannot be new input, and admitted retry survives expiry (792.792075ms)
+✔ images keep original downloads while official Messages serialization uses normalized native image content (277.086043ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5064.073376
