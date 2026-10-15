@@ -85,3 +85,43 @@ attachment API 5, attachment state 6, chat API 18, chat state 9, **38/38**,
 zero failures/errors/skips. Original evidence is under
 `../12-file-delivery/android/`. No duplicate JVM/APK run; no phone/SAF/Compose
 runtime acceptance claimed. Android still has only existing `?? .worktrees/`.
+
+## T10 merge and independent checks
+
+dsh owner `e55843252b` merged normally as
+`173e155a85305db378dd92b1fa057ac6e6dea86e`; OurFairy owner
+`8162a463cf4023f1be26fc2d826aa744f8c4cd43` merged as `ec5a916` after
+confirming it contained then-current target `a080f42`. Combo pin committed
+as `ce01730`, so downstream T12 can merge the exact source combination.
+
+The ordinary dsh merge initially refused the two dirty catalog files. Only
+these two files were stashed temporarily, the normal merge completed with
+hooks, and stash pop restored them without conflict. Their original
+`client-connection` source-line 92→97 hunks/context remain exact (Git diff
+blob hashes naturally changed). The other 14 files retain exact initial
+SHA-256 bytes; all original 16 paths remain dirty and unstaged. See
+`dsh-preservation.log`, both `*.preserved.patch` and the post-T10 snapshot.
+No pre-existing change was committed or discarded.
+
+`corepack pnpm@11.28.5 run build:lib:host` in the main dsh checkout failed
+on two unchanged, pre-existing dirty test type errors: delivery-message
+test line 92 (`TS2339`) and v3-to-v4 codec test line 60 (`TS2322`). Raw:
+`t10-main-host-build.log`. The clean owner previously passed host/client
+build, typecheck and 116 native regressions; that evidence remains under
+`../10-conversation-search/`. The main full-host command is not reported as
+passing and those unrelated tests were left untouched.
+
+Refreshed only changed production query packages, retaining typechecking:
+`tsc -b packages/session-query/session-query/tsconfig.json packages/session-query/session-query-sqlite/tsconfig.json`
+then normal host `tsdown` with both package-name filters, both exit 0
+(`t10-main-query-build.log`). Native/client source and required existing
+artifacts were unchanged, so no redundant full rebuild ran.
+
+Independent merged run:
+`node --test tests/baseline-boot.test.mjs tests/conversation-search.test.mjs`
+→ **10/10**, no failures/skips (`t10-merged-profile-search.log`). It covers
+the actual configured profile, isolated home, Chinese excerpt/readback,
+owner scope before limits, foreign/admin refusal, bounded Unicode reads,
+real query-DB deletion/rebuild, and T11 recipient-only delivered-body
+search/read. External model requests use local controlled HTTP fixtures.
+Combo verify and diff checks pass. #33 is ready for Lead closure.
