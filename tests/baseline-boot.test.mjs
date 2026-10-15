@@ -35,22 +35,15 @@ const REQUIRED_SERVICES = [
  * would let the two agree with each other while both drifted from the bundle.
  */
 const FORBIDDEN_ROW_IDS = [
-  'tool-fs',
   'tool-fs-search',
   'fs-sandbox',
-  'fs-observation-policy',
   'working-directory',
-  'tool-working-directory',
-  'tool-bash',
   'bash-sandbox',
   'pwsh-sandbox',
   'tool-pwsh',
   'sandbox',
-  'sandbox-policy',
   'approval',
   'permission',
-  'shell-env',
-  'subprocess',
   'skill',
   'skill-filesystem',
   'tool-skill',
@@ -116,7 +109,7 @@ describe('OurFairy v1 baseline composition', () => {
     )
   })
 
-  test('v1 profile does not mount unadapted file/shell/sandbox or excluded capabilities', () => {
+  test('v1 profile mounts scoped file/shell adapters and excludes unused capabilities', () => {
     const run = runBackend(['probe', '--report', reportPath], keylessEnv)
     assert.equal(run.code, 0, describeRun('probe (exclusion check)', run))
     const report = readReport(reportPath)

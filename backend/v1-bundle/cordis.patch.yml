@@ -2,8 +2,8 @@
 #
 # This bundle deliberately does NOT inherit @deepseek-ai/dsh-base. The base
 # bundle also mounts excluded capabilities (skill, goal, subagent, telemetry,
-# the web tools) and default file/shell/sandbox rows whose permission
-# adaptation is not implemented, so every row the product actually runs is
+# the web tools) and default file/shell/sandbox rows with host-wide reads.
+# The scoped T7 providers replace those defaults; every live product row is
 # listed here and the absent rows are asserted absent by tests/baseline-boot.
 #
 # Row order carries no load semantics (activation is service-availability
@@ -32,8 +32,8 @@
       name: '@deepseek-ai/dsh-session-projection'
 
     # The tool registry. Only tools whose own adaptation landed are inserted
-    # below; the filesystem, shell, sandbox, working-directory, subagent, goal,
-    # skill, web, and workflow rows are deliberately absent.
+    # below. T7 mounts the scoped filesystem, shell and directory adapters;
+    # subagent, goal, skill, web, and workflow remain absent.
     - id: tools
       name: '@deepseek-ai/dsh-tools'
 
@@ -150,3 +150,29 @@
     # Narrow authenticated remote chat; reuses native Agent, inbox and SessionQuery.
     - id: chat
       name: '@ourfairy/dsh-chat'
+
+    # Scoped file operations and network-enabled script execution (#30).
+    - id: spaces
+      name: '@ourfairy/dsh-spaces'
+      config:
+        root: !!js dshHomePath('spaces')
+    - id: sandbox-policy
+      name: '@ourfairy/dsh-spaces/policy'
+      config:
+        mode: workspace-write
+    - id: subprocess
+      name: '@deepseek-ai/dsh-subprocess-local'
+    - id: shell-env
+      name: '@deepseek-ai/dsh-shell-env'
+    - id: tool-fs
+      name: '@deepseek-ai/dsh-tool-fs'
+    - id: tool-working-directory
+      name: '@deepseek-ai/dsh-tool-working-directory'
+    - id: tool-bash
+      name: '@deepseek-ai/dsh-tool-bash'
+      config:
+        # Detached jobs/controller integration belongs to T13.
+        enableRunInBackground: false
+        promoteOnTimeout: false
+    - id: fs-observation-policy
+      name: '@deepseek-ai/dsh-fs-observation-policy'
