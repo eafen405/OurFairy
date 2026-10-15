@@ -150,3 +150,23 @@
     # Narrow authenticated remote chat; reuses native Agent, inbox and SessionQuery.
     - id: chat
       name: '@ourfairy/dsh-chat'
+
+    # Scoped file operations and network-enabled script execution (#30).
+    - id: spaces
+      name: '@ourfairy/dsh-spaces'
+      config:
+        root: !!js dshHomePath('spaces')
+    - id: sandbox-policy
+      name: '@deepseek-ai/dsh-sandbox-policy'
+      config:
+        mode: workspace-write
+    - id: subprocess
+      name: '@deepseek-ai/dsh-subprocess-local'
+    - id: shell-env
+      name: '@deepseek-ai/dsh-shell-env'
+    - id: tool-fs
+      name: '@deepseek-ai/dsh-tool-fs'
+    - id: tool-working-directory
+      name: '@deepseek-ai/dsh-tool-working-directory'
+    - id: tool-bash
+      name: '@deepseek-ai/dsh-tool-bash'

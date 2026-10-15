@@ -65,6 +65,7 @@ const IDENTITY_PACKAGE = '@ourfairy/dsh-identity'
 // product package must also be a profile dependency for its dsh peers to resolve.
 const SESSIONS_PACKAGE = '@ourfairy/dsh-sessions'
 const CHAT_PACKAGE = '@ourfairy/dsh-chat'
+const SPACES_PACKAGE = '@ourfairy/dsh-spaces'
 const BUNDLE_DIR = join(repoRoot, COMBINATION.bundlePathInRepo)
 const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
 const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
@@ -90,6 +91,8 @@ const PRODUCT_SOURCES = [
   'backend/chat/src/service.mjs',
   'backend/chat/src/projection.mjs',
   'backend/chat/src/persona.mjs',
+  'backend/spaces/package.json',
+  ...['index', 'scope', 'bwrap', 'fs'].map(name => `backend/spaces/src/${name}.mjs`),
 ]
 
 function fail(message, code = 1) {
@@ -197,6 +200,7 @@ const profileManifest = () => ({
     [IDENTITY_PACKAGE]: `file:${join(repoRoot, 'backend', 'identity')}`,
     [SESSIONS_PACKAGE]: `file:${join(repoRoot, 'backend', 'sessions')}`,
     [CHAT_PACKAGE]: `file:${join(repoRoot, 'backend', 'chat')}`,
+    [SPACES_PACKAGE]: `file:${join(repoRoot, 'backend', 'spaces')}`,
   },
   dsh: { profile: { bundles: [BUNDLE_PACKAGE] } },
 })
