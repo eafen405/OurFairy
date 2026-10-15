@@ -1,0 +1,29 @@
+✖ Fairy delivers only selected text to a cold primary without recipient inference (6303.745092ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6619.365118
+
+✖ failing tests:
+
+test at tests/text-delivery.test.mjs:77:1
+✖ Fairy delivers only selected text to a cold primary without recipient inference (6303.745092ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /deliveryId/. Input:
+  
+  '[{"type":"text","text":"Error: unknown tool \\"deliver_message\\""}]'
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/11-text-delivery/tests/text-delivery.test.mjs:81:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '[{"type":"text","text":"Error: unknown tool \\"deliver_message\\""}]',
+    expected: /deliveryId/,
+    operator: 'match',
+    diff: 'simple'
+  }
