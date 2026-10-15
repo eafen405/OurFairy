@@ -13,6 +13,7 @@
  * @module @ourfairy/dsh-sessions/src/service
  */
 import { randomUUID } from 'node:crypto'
+import { Service } from '@deepseek-ai/cordis'
 
 /** Error carrying the HTTP status one request path must answer with. */
 export class SessionScopeError extends Error {
@@ -58,7 +59,7 @@ export function sessionIdOf(shortId) {
 }
 
 /** The product-owned service the composition reads as `ctx.ourfairySessions`. */
-export class OwnedSessionService {
+export class OwnedSessionService extends Service {
   #inFlight = new Map()
 
   /**
@@ -66,7 +67,7 @@ export class OwnedSessionService {
    * @param options - the dsh session store, its persistence, and identity.
    */
   constructor(ctx, { sessions, persistence, identity }) {
-    this.ctx = ctx
+    super(ctx, 'ourfairySessions')
     this.sessions = sessions
     this.persistence = persistence
     this.identity = identity

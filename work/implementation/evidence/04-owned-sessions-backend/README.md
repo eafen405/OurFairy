@@ -103,6 +103,12 @@ Future #28 code must reuse that live session/writer, not create a second writer.
 Cold message resume is still #28 work; these read/select endpoints return only
 the authorized header.
 
+`OwnedSessionService` follows the existing identity module's Cordis `Service`
+pattern and publishes the one instance as `ctx.ourfairySessions`. The next
+consumer can inject that service to reuse the same ownership checks and
+per-owner operation queue. Its package already declares the Cordis peer and
+exports this service; no additional registry or ownership state was added.
+
 The HTTP regression places a regular file at JSONL's `_no-cwd` directory,
 causing a real filesystem materialization error. After removing it, another
 create in the **same backend process** must succeed. Before the fix, the retry
@@ -163,6 +169,8 @@ All from `.worktrees/04-owned-sessions` (ticket/04-owned-sessions).
    `node --test tests/owned-sessions.test.mjs tests/identity-http.test.mjs`
    → `green-05-cold-and-retry.log`, **13 pass, 0 fail**. Host execution was used
    for the real loopback backend, without a model/cloud request.
+9. The same command after publishing `ctx.ourfairySessions`
+   → `green-06-published-service.log`, **13 pass, 0 fail**.
 
 ### Merge state
 
@@ -205,3 +213,4 @@ the time it was written, not the current ancestry.
 - `red-05-durable-retry-host.log` — initial failure-test setup ENOENT
 - `red-06-durable-retry.log` — actual failed-write retry exposes live duplicate
 - `green-05-cold-and-retry.log` — 13/13, with cold fixture durable hash/mtime evidence
+- `green-06-published-service.log` — 13/13 after the service publication
