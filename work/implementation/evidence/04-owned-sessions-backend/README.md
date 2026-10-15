@@ -102,11 +102,17 @@ All from `.worktrees/04-owned-sessions` (ticket/04-owned-sessions).
 
 ### Merge state
 
-`git merge-base --is-ancestor 18e8227 HEAD` → **true**. `18e8227`
-("pin the reviewed session export consumer") is already an ancestor of this
-branch; the merge bringing it in is `ffff103`. The earlier note that the branch
-merged only `de2ded1` described the merge at the time it was written, not the
-current ancestry.
+`doctor` is what caught the real merge state: it failed with *"worktree HEAD is
+not based on integration/ourfairy-v1 (f8bb706…)"*, i.e. integration had moved
+past `18e8227`. After `git merge integration/ourfairy-v1` (clean, no conflicts,
+merge commit `296def5`):
+
+- `git merge-base --is-ancestor f8bb706 HEAD` → **true**
+- `node --test tests/lifecycle.test.mjs tests/owned-sessions.test.mjs tests/identity-http.test.mjs`
+  → **14/14 pass, 0 fail**, including `doctor` → `green-04-postmerge.log`
+
+The earlier note that the branch merged only `de2ded1` described the merge at
+the time it was written, not the current ancestry.
 
 ## Remaining gates (honest status)
 
