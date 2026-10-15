@@ -1,0 +1,16 @@
+✔ selected private file reaches recipient primary as an independent original reference (3721.350435ms)
+✔ same identity resumes unfinished preparation after restart without rereading its already prepared file (1685.495588ms)
+✔ source scope and recipient exact-file references stay separate from private spaces and unrelated users (381.012895ms)
+✔ admitted original and image selections can be forwarded without assistant images or sender history rights (432.677081ms)
+✔ a CAS-prepared item whose checklist write fails is retried under the same delivery identity (391.191336ms)
+✔ file delivery recovers durable log success before business completion without recopying changed sources (1635.572172ms)
+✔ a file delivery flush failure leaves a ready retry and never confirms incomplete durability (1477.992436ms)
+✔ authorized shared files appear together in live and persisted recipient attachment projection (533.828947ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10613.721683

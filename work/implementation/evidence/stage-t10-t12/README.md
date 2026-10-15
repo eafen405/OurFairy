@@ -125,3 +125,36 @@ owner scope before limits, foreign/admin refusal, bounded Unicode reads,
 real query-DB deletion/rebuild, and T11 recipient-only delivered-body
 search/read. External model requests use local controlled HTTP fixtures.
 Combo verify and diff checks pass. #33 is ready for Lead closure.
+
+## T12 backend merge and final pre-review combination
+
+Owner `403797a2341638c0ff9050375eb9419693464792` contained target
+`6e3ad41`; merged normally as `cc1350e25603dc63687f4300a35ab702f9a72272`.
+Diff inspection matches the scoped file preparation extension, one additive
+delivery checklist column/schema v6, existing attachment qualification and
+bounded regressions. Native/Android production source did not change for T12.
+
+Independent merged `node --test tests/file-delivery.test.mjs` → **8/8**,
+zero skips/failures (`t12-merged-file-delivery.log`). This exercises private
+and shared readable files, current-session admitted originals/images,
+recipient-qualified exact originals versus source-space authority, live and
+persisted projection, per-item retry/restart, actual SQLite-trigger failures,
+and injected native flush failure. JSONL, SQLite, CAS, file tools and local
+HTTP are real. Model/Files endpoints are controlled fixtures; Files404 uses
+the existing native bounded inline fallback and is not cloud acceptance.
+No duplicate owner 39-test, Android 38-test or native 116-test run occurred.
+
+`node scripts/combo.mjs verify`,
+`node scripts/ourfairy-backend.mjs doctor --home /tmp/ourfairy-stage1012-merger-doctor --json`,
+and `git diff --check` passed. Raw combo/doctor output is adjacent.
+
+Final source review ranges (evidence commits may follow in OurFairy):
+
+- OurFairy: `20144666d97becf82af3a3c24553ec28c639adda...cc1350e25603dc63687f4300a35ab702f9a72272`
+- dsh: `d3fe98f969c3963c6d193e74c776692e33c1eb64...173e155a85305db378dd92b1fa057ac6e6dea86e`
+- rikkahub: `e58352f202ae1add0e9c4bd08b14807f4c84a9bb...b0911d34bdbe6ee8f559167ede41da95a9f082f8`
+
+Product source is frozen pending Lead's single independent Standards/Spec
+review. No publication, tracker closure or worktree cleanup is performed by
+this merger. #33 and #35 await that stage review; #34 was closed by Lead to
+unblock T12.
