@@ -45,11 +45,12 @@ export function installDelivery(ctx, chat) {
       return { ...receipt(row), ...result }
     })
   }
-  let recovery = Promise.resolve()
-  const recover = async () => { for (const row of store.pendingDeliveries()) await settle(row) }
-  recovery = recover()
-  // Retain a rejection for calls to await, while also reporting failed startup recovery.
-  recovery.catch(error => ctx.logger('ourfairy-delivery').warn(error))
+  const recovery = (async () => {
+    for (const row of store.pendingDeliveries()) {
+      try { await settle(row) }
+      catch (error) { ctx.logger('ourfairy-delivery').warn('pending delivery %s: %s', row.deliveryId, error.message) }
+    }
+  })()
   chat.deliver = async (agent, callId, { recipientShortId, text }) => {
     await recovery
     const senderShortId = Number(agent.session.header.owner?.replace(/^user:/, ''))
