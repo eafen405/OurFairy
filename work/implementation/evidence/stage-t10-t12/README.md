@@ -39,3 +39,17 @@ branches before reporting completion. Merger waits for Lead's explicit
 merge instruction, merges completed ticket branches only, and records
 bounded checks for changed product interfaces/native contracts. Lead
 coordinates publication, tracker closure and worktree cleanup.
+
+## T11 Android compatibility merge
+
+Merged owner `4c4b5a09f910a340d49c8089e850d53caf5739fb` into rikkahub
+`product/ourfairy-v1` as `d80dfcb9a3ded6e78d78da67edb33f4b88131332`.
+The owner contains the pre-merge target integration tip. Diff inspection
+confirmed only two test files changed; production already represents a
+committed Fairy delivery independently of an active attempt.
+
+Parsed original JUnit XML: API 18, state 9, recovery 14, **41/41**, zero
+failures/errors/skips. Full owner log and XML are archived at
+`../11-text-delivery/android/`; no duplicate JVM run was needed for this
+test-only merge. Post-merge Android retains only pre-existing
+`?? .worktrees/`. No device/Compose runtime acceptance is claimed.
