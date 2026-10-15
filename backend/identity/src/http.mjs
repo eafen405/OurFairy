@@ -118,7 +118,7 @@ export function sendJson(response, status, payload) {
  * @param options - `handle(body, request)` plus how to name this module's errors.
  * @returns an async `(request, response)` handler.
  */
-export function postHandler({ fence, handle, HttpError = IdentityError, codePrefix = 'identity', internalMessage }) {
+export function postHandler({ fence, handle, HttpError = IdentityError, codePrefix = 'identity', internalMessage, respond = (response, result) => sendJson(response, 200, result) }) {
   return async (request, response) => {
     try {
       if (fence(request) !== undefined) {
@@ -130,7 +130,7 @@ export function postHandler({ fence, handle, HttpError = IdentityError, codePref
         return
       }
       const body = await readJsonBody(request, HttpError, codePrefix)
-      sendJson(response, 200, await handle(body, request))
+      await respond(response, await handle(body, request))
     } catch (error) {
       const status = error instanceof HttpError ? error.status : 500
       const code = error instanceof HttpError ? error.code : `${codePrefix}/internal`
