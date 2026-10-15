@@ -1,0 +1,42 @@
+✔ chat creates group for designated owner, updates live owner tools and persists membership (3452.645531ms)
+✔ only the target group owner changes membership; members share real files and confined scripts (1288.825947ms)
+✔ removing a member invalidates the same live session cwd and later file/script access (755.423038ms)
+✔ concurrent duplicate membership updates stay singular and restart preserves group access (1234.491024ms)
+▶ migrating a genuine v1 database
+  ✔ keeps the ids and passwords the v1 file already held (70.257221ms)
+  ✔ keeps the v1 session digests usable (0.298138ms)
+  ✔ keeps a v1 unredeemed invite redeemable and refuses the redeemed one (27.0558ms)
+  ✔ refuses a duplicate name without a unique index backing it (0.546972ms)
+  ✔ never reuses a short number once an identity is gone (26.385675ms)
+  ✔ a removed user no longer signs in, authenticates, or appears in a listing (25.916351ms)
+  ✔ a removed name stays reserved, deleted rows included (0.332533ms)
+✔ migrating a genuine v1 database (151.667524ms)
+▶ seeding against a deleted Phaethon
+  ✔ refuses to recreate short number 1 beside a tombstoned row (27.416835ms)
+  ✔ refuses an initial seed whose name belongs to another row (30.388435ms)
+✔ seeding against a deleted Phaethon (58.054194ms)
+▶ the stored schema obeys AGENTS.md
+  ✔ carries logical deletion and update timestamps on the business tables (1.430103ms)
+  ✔ keeps the associated person column on every business table (0.643786ms)
+  ✔ carries no foreign key and no unique constraint beyond the primary key (0.745038ms)
+  ✔ keeps the ordinary lookup index the queries actually need (0.414139ms)
+  ✔ a fresh database lands directly on the migrated schema (31.091133ms)
+  ✔ refuses a database newer than this module understands, leaving it untouched (2.148641ms)
+  ✔ signing out a logically deleted session reports nothing to revoke (83.964355ms)
+✔ the stored schema obeys AGENTS.md (120.990207ms)
+✔ v2 credentials and invites survive the additive group migration (87.369711ms)
+✔ chat tools write own private files, share public files, and deny another user including administrator (3623.338192ms)
+✔ real child processes share public files, keep private boundaries after cd, and retain networking (653.462771ms)
+✔ directory changes, edits, image reads and symlinks retain the same owner boundary (1079.469325ms)
+✔ agentless filesystem and script Interface calls refuse instead of inheriting a default user (0.880356ms)
+✔ shell background children stay confined and detached job entry is explicitly unavailable until T13 (386.74248ms)
+✔ a network-installed dependency is available to both users in the one shared environment (938.600243ms)
+✔ ensure restores the owner private root when a persisted working directory disappears (492.561707ms)
+ℹ tests 28
+ℹ suites 3
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7519.61627

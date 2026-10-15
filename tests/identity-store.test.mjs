@@ -247,9 +247,9 @@ describe('seeding against a deleted Phaethon', () => {
 })
 
 describe('the stored schema obeys AGENTS.md', () => {
-  test('carries logical deletion and update timestamps on the three business tables', () => {
+  test('carries logical deletion and update timestamps on the business tables', () => {
     const facts = schemaFacts(v1Path)
-    for (const table of ['users', 'invites', 'sessions']) {
+    for (const table of ['users', 'invites', 'sessions', 'groups', 'group_members']) {
       const columns = facts[`columns_${table}`]
       assert.ok(columns.includes('deleted_at'), `${table} must carry a logical deletion field`)
       assert.ok(columns.includes('updated_at'), `${table} must carry an update timestamp`)
@@ -265,11 +265,13 @@ describe('the stored schema obeys AGENTS.md', () => {
     const facts = schemaFacts(v1Path)
     assert.ok(facts.columns_invites.includes('created_by') && facts.columns_invites.includes('redeemed_by'))
     assert.ok(facts.columns_sessions.includes('user_id'))
+    assert.ok(facts.columns_groups.includes('owner_short_id') && facts.columns_groups.includes('created_by'))
+    assert.ok(facts.columns_group_members.includes('user_short_id') && facts.columns_group_members.includes('updated_by'))
   })
 
   test('carries no foreign key and no unique constraint beyond the primary key', () => {
     const facts = schemaFacts(v1Path)
-    for (const table of ['users', 'invites', 'sessions', 'meta']) {
+    for (const table of ['users', 'invites', 'sessions', 'groups', 'group_members', 'meta']) {
       assert.deepEqual(facts[`foreign_key_list_${table}`], [], `${table} must declare no foreign key`)
     }
     for (const row of facts.indexes) {
@@ -291,7 +293,7 @@ describe('the stored schema obeys AGENTS.md', () => {
     const fresh = new IdentityStore({ path: freshPath, now: () => NOW })
     try {
       const facts = schemaFacts(freshPath)
-      for (const table of ['users', 'invites', 'sessions']) {
+      for (const table of ['users', 'invites', 'sessions', 'groups', 'group_members']) {
         assert.ok(facts[`columns_${table}`].includes('deleted_at'))
       }
       assert.deepEqual(facts.foreign_key_list_users, [])
@@ -344,4 +346,26 @@ describe('the stored schema obeys AGENTS.md', () => {
       // the handle was closed above; nothing left to release
     }
   })
+})
+
+// A frozen v2 fixture, before any group tables existed. Raw SQL is only fixture
+// construction/schema inspection; behavior is exercised through the store API.
+test('v2 credentials and invites survive the additive group migration', () => {
+  const path = join(dir, 'frozen-v2.sqlite')
+  const db = new DatabaseSync(path)
+  db.exec(V1_SCHEMA.replaceAll(' UNIQUE', '').replaceAll(' REFERENCES users(id)', '')
+    .replaceAll('created_at INTEGER NOT NULL', 'created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER'))
+  db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run('schema_version', '2')
+  db.prepare('INSERT INTO users (short_id, name, is_admin, password, created_at, updated_at) VALUES (1, ?, 1, ?, ?, ?)')
+    .run('phaethon', hashPassword(PHAETHON_PASSWORD), NOW, NOW)
+  db.prepare('INSERT INTO invites (code, created_by, created_at, updated_at) VALUES (?, 1, ?, ?)').run('V2INVITECODE', NOW, NOW)
+  db.close()
+  const migrated = new IdentityStore({ path, now: () => NOW + 10 })
+  try {
+    assert.equal(migrated.signIn({ name: 'phaethon', password: PHAETHON_PASSWORD }).user.shortId, 1)
+    const owner = migrated.register({ name: 'v2-owner', password: MEMBER_PASSWORD, inviteCode: 'V2INVITECODE' }).user
+    const group = migrated.createGroup(1, { name: 'Retained credentials lab', ownerShortId: owner.shortId })
+    assert.deepEqual(migrated.groupsForMember(owner.shortId), [group])
+    assert.deepEqual(migrated.groupsForMember(1), [])
+  } finally { migrated.close() }
 })
