@@ -53,6 +53,9 @@ async function stopBackend() {
 before(async () => {
   model = http.createServer(async (req, res) => {
     let data = ''; for await (const chunk of req) data += chunk
+    if (req.url.endsWith('/files')) {
+      res.writeHead(404,{'content-type':'application/json'}); res.end(JSON.stringify({error:{type:'not_found_error',message:'model double uses inline image fallback'}})); return
+    }
     const body = JSON.parse(data); modelRequests.push(body)
     const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
     const commandIndex = blocks.findLastIndex(c => c.type === 'text' && c.text.startsWith('{"name":'))
@@ -172,4 +175,38 @@ test('source scope and recipient exact-file references stay separate from privat
   const lastRecipientRequest = modelRequests.findLast(body=>JSON.stringify(body).includes('T12 original') && JSON.stringify(body).includes('read-only copy'))
   assert.ok(lastRecipientRequest)
   assert.equal(lastRecipientRequest.messages.filter(m=>m.role==='assistant').flatMap(m=>m.content).some(c=>c.type==='image'),false)
+})
+
+async function upload(who,id,bytes,name,mime) {
+  const {createHash} = await import('node:crypto')
+  const {upload} = await request('/attachments/propose',who.token,{sessionId:id,name,mime,size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')})
+  const chunk = await fetch(`http://127.0.0.1:${port}/attachments/chunk`,{method:'POST',headers:{authorization:`Bearer ${who.token}`,'content-type':'application/octet-stream','x-upload-id':upload.uploadId,'x-upload-offset':'0'},body:bytes})
+  assert.equal(chunk.status,200)
+  return (await request('/attachments/complete',who.token,{uploadId:upload.uploadId})).upload
+}
+async function eventually(work,check) {
+  for(let i=0;i<300;i++){const result=await work();if(check(result))return result;await delay(25)}
+  assert.fail('expected file delivery state did not arrive')
+}
+test('admitted original and image selections can be forwarded without assistant images or sender history rights', async () => {
+  const text = Buffer.from('ADMITTED ORIGINAL TEXT'), image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNgZGIGAAAOAAeCcsnOAAAAAElFTkSuQmCC','base64')
+  const items = await Promise.all([upload(alice,senderSession,text,'inbound.txt','text/plain'),upload(alice,senderSession,image,'source.png','image/png')])
+  const sent = await request('/chat/send',alice.token,{sessionId:senderSession,requestId:'inbound-original-input',text:JSON.stringify({name:'groups',args:{},callId:'inbound-original-call'}),uploadIds:items.map(item=>item.uploadId)})
+  await eventually(()=>projection(alice,senderSession),value=>value.replyStatus===0)
+  const args = {recipientShortId:bob.user.shortId,text:'Two selected admitted originals',files:[{messageId:sent.receipt.messageId,index:0},{messageId:sent.receipt.messageId,index:1}]}
+  assert.match(await tool(alice,'deliver_message',args,senderSession,'admitted-file-delivery'),/deliveryId/)
+  const target=await primary(bob), after=await projection(bob,target), message=after.messages.find(m=>m.text===args.text)
+  assert.deepEqual(message.attachments.map(a=>[a.type,a.name,a.bytes]),[[1,'inbound.txt',text.length],[2,'source.png',image.length]])
+  assert.deepEqual((await download(bob,target,message.messageId,0)).bytes,text)
+  assert.deepEqual((await download(bob,target,message.messageId,1)).bytes,image)
+  assert.match(await tool(bob,'deliver_message',{...args,recipientShortId:admin.user.shortId},target,'foreign-message-selector'),/unavailable/)
+  const input=after.events.find(e=>e.type==='delivery/message' && e.data.message.id===message.messageId).data.message.source.attachments[1]
+  const digest=input.original.attachmentId.slice(7), path=join(home,'dsh-home','attachments','v1','files',digest.slice(0,2),digest,input.original.name)
+  assert.match(await tool(bob,'read_image',{file_path:path},target),/image/)
+  const captured=modelRequests.findLast(body=>body.messages.some(m=>Array.isArray(m.content) && m.content.some(c=>c.type==='tool_result' && Array.isArray(c.content) && c.content.some(p=>p.type==='image'))))
+  assert.ok(captured,'qualified read_image must use official user tool_result image serialization')
+  const deliveredInput=captured.messages.filter(m=>m.role==='assistant').flatMap(m=>m.content)
+  assert.ok(deliveredInput.every(c=>c.type!=='image'),'delivered assistant has only legal text/file handle projection')
+  assert.match(JSON.stringify(deliveredInput),/verbatim read-only copy/)
+  assert.ok(!JSON.stringify(deliveredInput).includes('UNSELECTED SOURCE SECRET'))
 })
