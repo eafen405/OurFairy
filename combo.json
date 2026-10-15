@@ -38,7 +38,7 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/rikkahub.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "ffc88e306b0f55cf52c3592ac93151be0492b864",
+      "productCommit": "f84e6c5abecfb65d5f0c12a1423b055edb3acc9a",
       "researchUpstreamSha": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
       "researchUpstreamRef": "origin/master",
       "note": "productCommit is the fork's integration branch tip and has now advanced past researchUpstreamSha: ticket #26 landed the Android identity entry (one APK, one navigation, identity decides where you land; every screen this version does not deliver maps to no destination and is refused for all identities including the administrator, so the old local-execution and system-management paths are impassable rather than merely unlisted; the chat page is deliberately undelivered because it drives local model execution, pending ticket #28). Verified: 25 identity unit tests green and a real debug APK built from these sources (app-universal-debug.apk 100,997,424 bytes, 55s incremental build). researchUpstreamSha stays fixed at the upstream commit the readiness research was written against and is never a product deliverable."

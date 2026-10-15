@@ -1,0 +1,33 @@
+Calculating task graph as no cached configuration is available for tasks: :app:generateReleaseBuildConfig
+> Task :build-logic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :build-logic:compileKotlin UP-TO-DATE
+> Task :build-logic:compileJava NO-SOURCE
+> Task :build-logic:pluginDescriptors UP-TO-DATE
+> Task :build-logic:processResources UP-TO-DATE
+> Task :build-logic:classes UP-TO-DATE
+> Task :build-logic:jar UP-TO-DATE
+
+> Configure project :app
+w: file:///home/eafen405/projects/rikkahub/.worktrees/review-24-26-identity/app/build.gradle.kts:138:41: 'fun srcDirs(vararg srcDirs: Any): Any' is deprecated. Use `directories` mutable set instead.
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:generateReleaseBuildConfig FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:generateReleaseBuildConfig' (registered by plugin 'com.android.internal.application').
+> A release build must be told where the OurFairy backend is:
+    ./gradlew assembleRelease -Pourfairy.identityEndpoint=https://<host>
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 3s
+5 actionable tasks: 1 executed, 4 up-to-date
+Configuration cache entry stored.
+EXIT=1
