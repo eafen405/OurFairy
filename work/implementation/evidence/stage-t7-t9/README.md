@@ -51,5 +51,36 @@ A later attempt to delegate code reuse to mcode was blocked by automatic
 approval review. That was an execution-approval restriction, not a model
 or mcode CLI error. This read-only task remains a successful invocation.
 
-This directory records preparation only. Runtime acceptance and staged
-review evidence will be added after the related implementations complete.
+Runtime and review evidence is recorded below as implementations complete.
+
+## T7 integration
+
+Merged `ticket/07-space-execution` at
+`606101a1ec8317a6a660301dab813092d01218ef` with a normal no-fast-forward
+merge, producing `bc089a828135c5f65df0a2ddb28d49a370a07184`.
+The ticket worktree was clean and `git merge-base --is-ancestor
+integration/ourfairy-v1 HEAD` succeeded before the merge. Its diff was
+limited to product space providers, profile/launcher/probe wiring, related
+tests and evidence. The owner reported 61/61 full-suite results; merger
+read the test source and original logs, and independently ran the bounded
+runtime suite on the merged source. This is integration verification,
+not the staged two-axis code review scheduled after T7–T9.
+
+Actual commands on merged OurFairy:
+
+- `node scripts/combo.mjs verify`: exit 0 (`t7-merged-combo.log`).
+- `node scripts/ourfairy-backend.mjs doctor`: exit 0, all checks passed
+  (`t7-merged-doctor.log`).
+- `node --test tests/spaces.test.mjs`: exit 0, 7/7, no skips
+  (`t7-merged-runtime.log`), with real Loader/HTTP, SQLite/JSONL, files and
+  bubblewrap subprocesses; external model and package source are local
+  deterministic fixtures. Network and shared dependency use succeeded.
+- `git diff --check`: exit 0.
+- Recomputed all 16 pre-existing dsh dirty-file hashes and compared the
+  complete dirty path set: unchanged.
+
+There are no dsh or Android source changes in T7, so `combo.json` retains
+the existing exact external commits. No full-suite rerun, device, official
+cloud inference, detached-job controller or production acceptance was
+performed by merger. Original T7 evidence and limitations are in
+[`07-space-execution/README.md`](../07-space-execution/README.md).

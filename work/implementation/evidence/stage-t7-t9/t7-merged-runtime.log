@@ -1,0 +1,15 @@
+✔ chat tools write own private files, share public files, and deny another user including administrator (3129.172946ms)
+✔ real child processes share public files, keep private boundaries after cd, and retain networking (562.97205ms)
+✔ directory changes, edits, image reads and symlinks retain the same owner boundary (918.714724ms)
+✔ agentless filesystem and script Interface calls refuse instead of inheriting a default user (0.825181ms)
+✔ shell background children stay confined and detached job entry is explicitly unavailable until T13 (316.279972ms)
+✔ a network-installed dependency is available to both users in the one shared environment (841.785712ms)
+✔ ensure restores the owner private root when a persisted working directory disappears (423.113779ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6516.380253
