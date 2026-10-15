@@ -1,0 +1,31 @@
+{
+  "backend": "minimax",
+  "cwd": "/home/eafen405/projects/OurFairy/.worktrees/08-group-spaces",
+  "command": [
+    "/home/eafen405/.minimax-code/bin/mcode",
+    "exec",
+    "--cwd",
+    "/home/eafen405/projects/OurFairy/.worktrees/08-group-spaces",
+    "--permission",
+    "smart",
+    "--timeout",
+    "500s",
+    "--max-steps",
+    "12",
+    "--output-format",
+    "text",
+    "--input",
+    "-"
+  ],
+  "status": "completed",
+  "timeout": 500.0,
+  "started_at": 1792071371.8155725,
+  "run_dir": "/tmp/delegate-minimax-35u71aa6",
+  "task_path": "/tmp/delegate-minimax-35u71aa6/task.md",
+  "stdout_path": "/tmp/delegate-minimax-35u71aa6/stdout.txt",
+  "stderr_path": "/tmp/delegate-minimax-35u71aa6/stderr.txt",
+  "pid": 151962,
+  "exit_code": 0,
+  "child_exit_code": 0,
+  "duration_seconds": 69.601
+}

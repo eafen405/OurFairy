@@ -1,4 +1,5 @@
 /** Product providers over native dsh file, directory and sandbox Interfaces. */
+import { installGroups } from './groups.mjs'
 import { SpaceScope, pathInside } from './scope.mjs'
 import { ScopedFileSystem } from './fs.mjs'
 import { SandboxProvider, SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
@@ -44,7 +45,13 @@ class ScopedDirectory extends WorkingDirectoryService {
   ensure(agent, signal) {
     const scope = this.ctx.ourfairySpaces
     return scope.run(agent.session, async () => {
-      const target = await this.ctx.fs.resolve(this.get(agent.session), { signal })
+      const current = this.get(agent.session)
+      // A former group cwd can outlive membership; restore an authorized base
+      // before building the next prompt, rather than stranding that session.
+      if (!scope.writeRoots(agent.session).some(root => pathInside(root, current))) {
+        return super.set(agent, scope.privateRoot(agent.session), signal)
+      }
+      const target = await this.ctx.fs.resolve(current, { signal })
       const info = await this.ctx.fs.stat(target, signal)
       // Native fallback is header.cwd/deployment cwd; old chat headers have no
       // private cwd. Recovery must use the same owner-derived private root.
@@ -57,6 +64,7 @@ class ScopedDirectory extends WorkingDirectoryService {
 }
 export function apply(ctx, config) {
   const scope = new SpaceScope(ctx, config)
+  ctx.inject(['identity', 'agents'], context => installGroups(context))
   ctx.on('tools/execute', (exec, next) => scope.calls.run(exec.agent?.session, () => next()), { global: true, prepend: true })
   ctx.plugin(ScopedFileSystem, { cwd: config.root, diffBasisMaxBytes: 10 * 1024 * 1024 })
   ctx.plugin(ScopedSandbox)
