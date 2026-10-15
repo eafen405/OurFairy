@@ -169,3 +169,28 @@ performance acceptance is implied. Backend and Android original evidence
 state their precise remaining integration limits. Formal two-axis stage
 review follows the frozen published combination; this section records
 integration verification only.
+
+## Reviewed closeout and cleanup
+
+The one staged two-axis review is archived at
+[`review-t7-t9/README.md`](../review-t7-t9/README.md): Standards 1 P2,
+corrected with independent merged 6/6 download/attachment regressions;
+Spec 0 findings. Final source merge is OurFairy `fcd4502c45ca8e36cbded529a4cd8d8f5e00dd59`;
+later commits contain review evidence and the stop handoff only. Android
+remains `e58352f202ae1add0e9c4bd08b14807f4c84a9bb`, dsh remains
+`d3fe98f969c3963c6d193e74c776692e33c1eb64`.
+
+All seven stage worktrees were safely removed, retaining their branches
+and every older worktree. Four OurFairy worktrees used normal removal.
+Android's UI worktree used normal removal; main/API needed Git's submodule
+`--force` removal switch after ordinary refusal, clean deinit and explicit
+Lead authorization. Original intern artifacts were checked byte for byte
+and preserved in evidence plus local archival branches before removal.
+[cleanup.md](cleanup.md), [android-cleanup.md](android-cleanup.md) and the
+adjacent JSON checks record exact scope, source/ignored-content checks,
+publication methods and unchanged 16-file dsh hash baseline.
+
+No task-owned implementation/build sessions remain running. Lead will
+close #32 and update #23. Stop after T9; use the final resolved published
+combination as the next review baseline. See the durable
+[`stage-t7-t9-handoff.md`](../../notes/stage-t7-t9-handoff.md).

@@ -3,8 +3,8 @@
 Authorized stage: T7/#30, T8/#31 and T9/#32, one independent two-axis
 code review and bounded correction. All implementations and the single
 review finding are integrated. Stop here; do not start T10 or later work
-without the user's resumption. Lead handles final #32/#23 tracker updates
-and separately authorizes safe cleanup of this stage's worktrees.
+without the user's resumption. Lead will close #32 and update #23 in the
+tracker. Stage cleanup is complete as recorded below.
 
 ## Final combination
 
@@ -76,13 +76,22 @@ was performed.
 
 ## Preserved state and worktrees
 
+All seven current-stage worktrees have been removed after source/archive
+checks; branches and older worktrees remain. Four OurFairy paths and the
+Android UI scratch path used ordinary removal. Android main/API required
+Git's submodule `--force` worktree-removal switch after normal refusal,
+clean deinit and explicit Lead authorization; no force push/reset was used.
+See `work/implementation/evidence/stage-t7-t9/cleanup.md` and its Android
+report for exact commands and byte-for-byte archive checks.
+
 The 16 pre-existing dsh dirty files remain byte-for-byte equal to
 `/tmp/ourfairy-t7-t9-dsh-dirty-baseline.json` (committed copy under stage
 evidence). Do not reset, include or clean those files. Older worktrees
-remain outside this stage's cleanup scope. mcode Android API/UI draft
-worktrees contain uncommitted intern work; original tracked diffs and
-untracked Kotlin sources are archived in the Android evidence directory.
-They require explicit archive comparison before normal safe removal.
+remain outside this stage's cleanup scope. mcode Android API/UI original
+tracked diffs and untracked Kotlin sources are archived in the Android
+evidence directory and retained local archival branches; their worktrees
+were removed only after exact comparisons. No task-owned implementation
+or build execution remains running.
 
 mcode CLI worked; source-transfer automatic approval rejection was not a
 model failure. Bounded mcode schema/API/UI work was inspected and corrected
