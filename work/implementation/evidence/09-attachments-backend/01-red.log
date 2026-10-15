@@ -1,0 +1,31 @@
+✖ upload completes before sending and original downloads by qualified message identity across restart (5960.562508ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6271.534556
+
+✖ failing tests:
+
+test at tests/attachments.test.mjs:43:1
+✖ upload completes before sending and original downloads by qualified message identity across restart (5960.562508ms)
+  AssertionError [ERR_ASSERTION]: {"status":404,"headers":{},"bytes":{"type":"Buffer","data":[]},"body":null}
+  
+  404 !== 200
+  
+      at propose (file:///home/eafen405/projects/OurFairy/.worktrees/09-attachments/tests/attachments.test.mjs:28:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async upload (file:///home/eafen405/projects/OurFairy/.worktrees/09-attachments/tests/attachments.test.mjs:32:19)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/09-attachments/tests/attachments.test.mjs:45:19)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
