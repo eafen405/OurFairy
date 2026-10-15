@@ -1,0 +1,31 @@
+{
+  "backend": "minimax",
+  "cwd": "/home/eafen405/projects/rikkahub/.worktrees/05-remote-chat",
+  "command": [
+    "/home/eafen405/.minimax-code/bin/mcode",
+    "exec",
+    "--cwd",
+    "/home/eafen405/projects/rikkahub/.worktrees/05-remote-chat",
+    "--permission",
+    "smart",
+    "--timeout",
+    "1200s",
+    "--max-steps",
+    "40",
+    "--output-format",
+    "text",
+    "--input",
+    "-"
+  ],
+  "status": "failed",
+  "timeout": 1200.0,
+  "started_at": 1792065070.147761,
+  "run_dir": "/tmp/ourfairy-t5-android-evidence/delegate-minimax-pp5vpwou",
+  "task_path": "/tmp/ourfairy-t5-android-evidence/delegate-minimax-pp5vpwou/task.md",
+  "stdout_path": "/tmp/ourfairy-t5-android-evidence/delegate-minimax-pp5vpwou/stdout.txt",
+  "stderr_path": "/tmp/ourfairy-t5-android-evidence/delegate-minimax-pp5vpwou/stderr.txt",
+  "pid": 92520,
+  "exit_code": 7,
+  "child_exit_code": 7,
+  "duration_seconds": 508.208
+}

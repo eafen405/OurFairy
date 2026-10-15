@@ -38,10 +38,10 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/rikkahub.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "fd04aab78919a7816e6eb962949a6eaf13a41532",
+      "productCommit": "07c0df403a54aa0532840244adec63a6a91a81b4",
       "researchUpstreamSha": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
       "researchUpstreamRef": "origin/master",
-      "note": "productCommit is the fork's integration branch tip and has now advanced past researchUpstreamSha: ticket #26 landed the Android identity entry (one APK, one navigation, identity decides where you land; every screen this version does not deliver maps to no destination and is refused for all identities including the administrator, so the old local-execution and system-management paths are impassable rather than merely unlisted; the chat page is deliberately undelivered because it drives local model execution, pending ticket #28). Verified: 25 identity unit tests green and a real debug APK built from these sources (app-universal-debug.apk 100,997,424 bytes, 55s incremental build). researchUpstreamSha stays fixed at the upstream commit the readiness research was written against and is never a product deliverable."
+      "note": "productCommit is the fork integration tip after T5/#28 remote chat: authenticated native-session send/receipt/read/observe/stop, one credential/session-scoped StateFlow, stable unresolved request identities, cumulative raw-text SSE snapshots, plain active text and existing MarkdownBlock for terminal replies. Reuses the shared identity endpoint and OkHttp client; no local model execution or Room history. T5 targeted remote/identity/session tests passed 68/68 and debug APKs built from the merged source tree. No emulator/phone, APK-to-real-backend, official model or signed-release acceptance was run. T6 paging/recovery is pending. researchUpstreamSha remains the research baseline, not a product deliverable."
     }
   },
   "backend": {
@@ -66,8 +66,12 @@
   },
   "androidToolchain": {
     "androidHome": "/home/eafen405/Android/Sdk",
-    "platforms": ["android-37.2"],
-    "buildTools": ["37.0.0"],
+    "platforms": [
+      "android-37.2"
+    ],
+    "buildTools": [
+      "37.0.0"
+    ],
     "ndk": "28.2.13676358",
     "cmake": true,
     "java": "Temurin 21 (/home/eafen405/.local/bin/java)",

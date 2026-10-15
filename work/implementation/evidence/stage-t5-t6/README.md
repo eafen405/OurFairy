@@ -8,4 +8,12 @@
 - On that integration tree, `node --test 'tests/**/*.test.mjs'` exited 0: **48 tests passed, 0 failed/skipped**. Raw output: `t5-integrated-product-suite.log`. Tests used normal loopback access through the escalated tool, real local product boot/persistence and an external-model double; no official model request is claimed.
 - `git diff --check` passed.
 
-Android merge and combination update are pending its worker handoff. This evidence does not claim a device/emulator run, cross-end runtime acceptance, official cloud service acceptance, signed release, or CI. No publication or issue closure performed by this merger.
+## T5 Android and combination
+
+- Reviewed the seven incoming Kotlin paths from `fd04aab78919a7816e6eb962949a6eaf13a41532` to `aedbf7e348099844e46257550f5db644a4b7d1d5`; no unrelated source changes. Literal route names, POST/Bearer documents, SSE `projection` event, message/attempt/projection/receipt fields and numeric role/status values match `backend/chat/README.md` and the backend source.
+- Normal no-conflict merge into rikkahub `product/ourfairy-v1`: `07c0df403a54aa0532840244adec63a6a91a81b4`. `git diff --exit-code aedbf7e348099844e46257550f5db644a4b7d1d5 HEAD` passed, confirming the worker's tested source tree was preserved exactly. Root's pre-existing untracked `.worktrees/` remains untouched.
+- Worker evidence copied to `../05-remote-chat-android/`, including raw red/green/build logs, per-suite results (**68 passed, 0 failed/errors/skipped**), APK metadata and the two bounded mcode run/task summaries. Harness stdout/stderr were omitted. A secret-pattern scan of the copied files found no suspect files. Independently rehashed all three APKs; sizes and SHA-256 match `apk.json`.
+- `combo.json` pins the actual Android integration merge commit and records the T5 behavior and runtime limits. dsh remains `d3fe98f969c3963c6d193e74c776692e33c1eb64`; its 16 pre-existing dirty-file hashes all match the saved baseline (`t5-dsh-dirty-preservation.json`).
+- `node scripts/combo.mjs verify` passed (`t5-combo-verify.log`). `node scripts/ourfairy-backend.mjs doctor` passed all checks (`t5-combination-doctor.log`). `git diff --check` passed for both incoming Android range and final OurFairy edits. Full product suite was not repeated because these subsequent OurFairy changes only collect evidence and pin the Android combination.
+
+This evidence does not claim a device/emulator run, cross-end runtime acceptance, official cloud service acceptance, signed release, or CI. No issue closure performed by this merger. Publication status is recorded separately after checking remote refs.
