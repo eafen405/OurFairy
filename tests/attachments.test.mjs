@@ -59,3 +59,25 @@ test('upload completes before sending and original downloads by qualified messag
   assert.deepEqual(retry.body.receipt, sends[0].body.receipt)
   assert.deepEqual((await request('/attachments/download', alice.token, { sessionId, messageId, index: 0 })).bytes, bytes)
 })
+
+test('unfinished and foreign receipts never grant message or download access, including identical stored bytes', async () => {
+  const aliceId = await session(alice), aliceOther = await session(alice), bobId = await session(bob)
+  const bytes = Buffer.from('same hash gives no authority')
+  const pending = await propose(alice, aliceId, bytes)
+  assert.equal((await request('/attachments/complete', alice.token, { uploadId: pending.uploadId })).status, 409)
+  assert.equal((await request('/chat/send', alice.token, { sessionId: aliceId, requestId: 'unfinished', text: '', uploadIds: [pending.uploadId] })).status, 404)
+  const accepted = await upload(alice, aliceId, bytes), bobUpload = await upload(bob, bobId, bytes)
+  for (const [who, sessionId] of [[bob, bobId], [alice, aliceOther]]) {
+    assert.equal((await request('/chat/send', who.token, { sessionId, requestId: 'foreign-input', text: '', uploadIds: [accepted.uploadId] })).status, 404)
+  }
+  const sent = await request('/chat/send', alice.token, { sessionId: aliceId, requestId: 'own-input', text: '', uploadIds: [accepted.uploadId] })
+  const messageId = sent.body.receipt.messageId
+  for (const who of [bob, admin]) {
+    assert.equal((await request('/attachments/propose', who.token, { sessionId: aliceId, name: 'bad', mime: 'text/plain', size: bytes.length, sha256: accepted.sha256 })).status, 404)
+    assert.equal((await request('/attachments/download', who.token, { sessionId: aliceId, messageId, index: 0 })).status, 404)
+    assert.equal((await request('/attachments/complete', who.token, { uploadId: accepted.uploadId })).status, 404)
+  }
+  assert.equal((await request('/attachments/download', bob.token, { sessionId: bobId, messageId, index: 0 })).status, 404)
+  assert.equal((await request('/attachments/download', alice.token, { sessionId: aliceId, uploadId: bobUpload.uploadId, index: 0 })).status, 404)
+  assert.equal((await request('/chat/send', alice.token, { sessionId: aliceId, requestId: 'own-input', text: '', uploadIds: [pending.uploadId] })).status, 409)
+})

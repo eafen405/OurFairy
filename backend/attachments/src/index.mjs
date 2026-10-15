@@ -2,12 +2,13 @@
 import { postHandler, sendJson } from '@ourfairy/dsh-identity/http'
 import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.mjs'
 import { once } from 'node:events'
+import { SessionScopeError } from '@ourfairy/dsh-sessions'
 export const name = 'ourfairy-attachments'
 export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel']
 export function apply(ctx, config) {
   const service = new AttachmentService(ctx, config)
   const register = (path, handler) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path, handler }), `ourfairy-attachments: ${path}`)
-  const json = (handle, respond) => postHandler({ fence: req => ctx.connection.fence(req), HttpError: AttachmentError,
+  const json = (handle, respond) => postHandler({ fence: req => ctx.connection.fence(req), HttpError: SessionScopeError,
     codePrefix: 'attachments', internalMessage: 'attachment request failed', handle: (body, req) => handle(service.caller(req), body), respond })
   register('/attachments/propose', json(async (owner, body) => ({ ok: true, upload: await service.propose(owner, body) })))
   register('/attachments/complete', json(async (owner, body) => ({ ok: true, upload: await service.complete(owner, body) })))
@@ -27,9 +28,9 @@ export function apply(ctx, config) {
       }
       sendJson(res, 200, { ok: true, upload: await service.chunk(owner, req.headers['x-upload-id'], Number(offset), Buffer.concat(chunks)) })
     } catch (error) {
-      sendJson(res, error instanceof AttachmentError ? error.status : 500, { ok: false, error: {
-        code: error instanceof AttachmentError ? error.code : 'attachments/internal',
-        message: error instanceof AttachmentError ? error.message : 'attachment upload failed' } })
+      sendJson(res, error instanceof SessionScopeError ? error.status : 500, { ok: false, error: {
+        code: error instanceof SessionScopeError ? error.code : 'attachments/internal',
+        message: error instanceof SessionScopeError ? error.message : 'attachment upload failed' } })
     }
   })
   register('/attachments/download', json((owner, body) => service.download(owner, body), async (res, input) => {
