@@ -84,3 +84,36 @@ the existing exact external commits. No full-suite rerun, device, official
 cloud inference, detached-job controller or production acceptance was
 performed by merger. Original T7 evidence and limitations are in
 [`07-space-execution/README.md`](../07-space-execution/README.md).
+
+## T8 integration
+
+Merged `ticket/08-group-spaces` at
+`2dbe49acfd05a080e8775084c54c5d4085bb3d6c` with a normal no-fast-forward
+merge, producing `6083cc15e12e282f8e7ee59da29360a7b62a6478`.
+The ticket worktree was clean, and the current integration tip was an
+ancestor before merging. Merger inspected the additive schema v3 migration,
+numeric membership actions, actor/timestamp/deletion fields, absence of
+foreign keys and unique secondary indexes, transaction checks and scoped
+group root wiring. Existing v1/v2 identity records are retained; no separate
+business database or client group-management flow was added.
+
+The owner recorded 66/66 full-suite and 28/28 related results. Merger read
+the source and original logs, then independently ran the following on the
+merged tree, without repeating the full suite or initiating stage review:
+
+- `node --test tests/groups.test.mjs tests/identity-store.test.mjs`: 21/21,
+  no skips (`t8-merged-runtime.log`). This covers real chat/SQLite/JSONL,
+  restricted subprocess file access, current membership revocation,
+  restart, duplicate member updates and v1/v2 migrations; model HTTP is a
+  deterministic double.
+- `node scripts/combo.mjs verify`: exit 0 (`t8-merged-combo.log`).
+- `node scripts/ourfairy-backend.mjs doctor --json`: `ok: true`
+  (`t8-merged-doctor.log`).
+- `git diff --check`: exit 0.
+
+Only OurFairy changed, so the exact external commits in `combo.json` remain
+unchanged. T8 original evidence and execution limits are in
+[`08-group-spaces/README.md`](../08-group-spaces/README.md). In particular,
+already-running processes retain their initial mounts until termination;
+membership removal applies to subsequent operations. No device or actual
+official-cloud acceptance is claimed.
