@@ -1,0 +1,31 @@
+{
+  "backend": "minimax",
+  "cwd": "/home/eafen405/projects/OurFairy",
+  "command": [
+    "/home/eafen405/.minimax-code/bin/mcode",
+    "exec",
+    "--cwd",
+    "/home/eafen405/projects/OurFairy",
+    "--permission",
+    "smart",
+    "--timeout",
+    "900s",
+    "--max-steps",
+    "35",
+    "--output-format",
+    "text",
+    "--input",
+    "-"
+  ],
+  "status": "completed",
+  "timeout": 900.0,
+  "started_at": 1792069738.9273407,
+  "run_dir": "/tmp/delegate-minimax-6350pv3v",
+  "task_path": "/tmp/delegate-minimax-6350pv3v/task.md",
+  "stdout_path": "/tmp/delegate-minimax-6350pv3v/stdout.txt",
+  "stderr_path": "/tmp/delegate-minimax-6350pv3v/stderr.txt",
+  "pid": 136825,
+  "exit_code": 0,
+  "child_exit_code": 0,
+  "duration_seconds": 113.625
+}
