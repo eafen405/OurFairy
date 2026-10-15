@@ -1,0 +1,70 @@
+▶ OurFairy v1 baseline composition
+  ✔ real profile boot reports every required service live (keyless) (2800.552854ms)
+  ✔ v1 profile does not mount unadapted file/shell/sandbox or excluded capabilities (404.609337ms)
+  ✔ the product profile alone boots with no test overlay at all (652.940121ms)
+  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (386.702282ms)
+  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (385.183664ms)
+✔ OurFairy v1 baseline composition (4634.794279ms)
+▶ OurFairy identity over real HTTP
+  ✔ the provisioned Phaethon signs in as short number 1 (48.914686ms)
+  ✔ invited agents take the next short numbers in registration order (88.086068ms)
+  ✔ refused registrations leave no identity and consume no short number (89.244659ms)
+  ✔ an ordinary agent is refused the administrator invite operation (69.018249ms)
+  ✔ the credential names its own holder with no user field in the request (57.411873ms)
+  ✔ signing out ends the credential it was presented with (87.24989ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (62.718887ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (219.173299ms)
+✔ OurFairy identity over real HTTP (722.890312ms)
+▶ migrating a genuine v1 database
+  ✔ keeps the ids and passwords the v1 file already held (70.786077ms)
+  ✔ keeps the v1 session digests usable (0.402266ms)
+  ✔ keeps a v1 unredeemed invite redeemable and refuses the redeemed one (27.11346ms)
+  ✔ refuses a duplicate name without a unique index backing it (0.578151ms)
+  ✔ never reuses a short number once an identity is gone (27.448527ms)
+  ✔ a removed user no longer signs in, authenticates, or appears in a listing (27.640914ms)
+  ✔ a removed name stays reserved, deleted rows included (0.408448ms)
+✔ migrating a genuine v1 database (155.214995ms)
+▶ seeding against a deleted Phaethon
+  ✔ refuses to recreate short number 1 beside a tombstoned row (36.007152ms)
+  ✔ refuses an initial seed whose name belongs to another row (30.573487ms)
+✔ seeding against a deleted Phaethon (66.978296ms)
+▶ the stored schema obeys AGENTS.md
+  ✔ carries logical deletion and update timestamps on the three business tables (0.860769ms)
+  ✔ keeps the associated person column on every business table (0.504791ms)
+  ✔ carries no foreign key and no unique constraint beyond the primary key (0.559054ms)
+  ✔ keeps the ordinary lookup index the queries actually need (0.338845ms)
+  ✔ a fresh database lands directly on the migrated schema (27.113139ms)
+  ✔ refuses a database newer than this module understands, leaving it untouched (2.060523ms)
+  ✔ signing out a logically deleted session reports nothing to revoke (78.113966ms)
+✔ the stored schema obeys AGENTS.md (109.910411ms)
+✔ duplicate start is refused, stop is clean, and nothing leaks across cycles (4041.598563ms)
+✔ doctor passes on a clean isolated home and names its checks (416.253273ms)
+✔ a missing dsh checkout fails loudly instead of booting something else (36.333222ms)
+✔ one real turn reaches the external model double, registers tools, and persists the session (2587.009063ms)
+✔ a turn without credentials fails with a diagnostic naming the missing variable (3641.096833ms)
+▶ OurFairy owned sessions over real HTTP
+  ✔ a failed durable create can be retried in the same backend process (103.115963ms)
+  ✔ a session created by a signed-in identity keeps its owner and its primary binding across a restart (802.880307ms)
+  ✔ a missing or foreign session is refused, and no request is ever served as an implicit user (138.319682ms)
+  ✔ a primary request racing a create still resolves the fixed primary session (91.925738ms)
+  ✔ cold ownerless and foreign sessions are refused without changing durable artifacts (1594.297123ms)
+  ℹ {"coldFixtures":[{"id":"ourfairy-user-7-primary"},{"id":"cold-foreign-session","owner":"user:8"},{"id":"ourfairy-user-9-primary","owner":"user:8"}],"durableArtifacts":{"_no-cwd/cold-foreign-session/session.v4.jsonl.zstd":{"sha256":"68d2882511e559bb93e8afbc82f19e1693ae1b10873ee754e163317d6bb1424e","mtimeNs":"1792065882661955375"},"_no-cwd/ourfairy-user-2-primary/session.v4.jsonl.zstd":{"sha256":"9658ad8ecafe733785c0025d6ab399bfc0629512a57f458d6471954b3399305b","mtimeNs":"1792065880869955712"},"_no-cwd/ourfairy-user-3-48266d93-a30e-4193-a644-9d0b06d824ee/session.v4.jsonl.zstd":{"sha256":"e7f9da0e214796188442993118e8d8b591e34bb1500854b3eb7022aa7924b743","mtimeNs":"1792065880949955698"},"_no-cwd/ourfairy-user-3-primary/session.v4.jsonl.zstd":{"sha256":"bbaae5166116ff8f2c454799272c243aee7e733df6d2efa6e0ff975cc55bece3","mtimeNs":"1792065880937955701"},"_no-cwd/ourfairy-user-4-primary/session.v4.jsonl.zstd":{"sha256":"d3674d5d6c28f4f5a34dcb74760ed6d10f3b8b13dc2f0f8d66ee6510c5781a74","mtimeNs":"1792065881793955549"},"_no-cwd/ourfairy-user-6-a53456ed-47c6-4705-80b2-e4edfb9e36b6/session.v4.jsonl.zstd":{"sha256":"f24ee0c7d9eaa3366751bd9f0a6bfb4e4347fe95bcdaf7c041aeaab75e520229","mtimeNs":"1792065881893955529"},"_no-cwd/ourfairy-user-6-ea305277-9b31-4e7f-84de-adbc2edaed94/session.v4.jsonl.zstd":{"sha256":"4f3dd04c25bba57472ee6f49733e6526c45ad109e0bbd6a77338f031a82f9c33","mtimeNs":"1792065881901955527"},"_no-cwd/ourfairy-user-6-primary/session.v4.jsonl.zstd":{"sha256":"c7be6f09e2a53576effeeebd2bc5c8b97ff5058e64d5e26fc14403fb136bfc54","mtimeNs":"1792065881877955532"},"_no-cwd/ourfairy-user-7-primary/session.v4.jsonl.zstd":{"sha256":"3215430b344715361b98165ecfa05fb0e76cbc35ff6c027eda38650192a2a4ab","mtimeNs":"1792065882653955377"},"_no-cwd/ourfairy-user-9-primary/session.v4.jsonl.zstd":{"sha256":"e6ac3b9686a38787d08c49d21da9b7b192ff56f49690afbb0a10808f6afffcde","mtimeNs":"1792065882665955374"}}}
+  ✔ an empty owned session can be resumed by the existing agent factory (775.675401ms)
+  ℹ {"emptyResume":{"created":{"id":"ourfairy-user-10-primary","owner":"user:10"},"persistedEventCount":0,"resumed":{"id":"ourfairy-user-10-primary","owner":"user:10"},"ownerAfterDispose":"user:10"}}
+✔ OurFairy owned sessions over real HTTP (3507.202178ms)
+✔ a stable send is durably accepted once across concurrent retries and backend restart (4033.643207ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (434.225949ms)
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (346.508763ms)
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply (380.198241ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (1490.190476ms)
+✔ the deployment owner identity is separate from a chat attempt to edit the persona (1000.40377ms)
+✔ stopping the current reply preserves accepted queued input for the next wake (492.631381ms)
+✔ stopping before visible output records interruption rather than a failed reply (1484.313927ms)
+ℹ tests 48
+ℹ suites 6
+ℹ pass 48
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9996.473748
