@@ -4,7 +4,7 @@ import { RemoteChat } from './service.mjs'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 
 export const name = 'ourfairy-chat'
-export const inject = ['webServer', 'connection', 'ourfairySessions', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt']
+export const inject = ['webServer', 'connection', 'ourfairySessions', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments']
 export function apply(ctx) {
   const chat = new RemoteChat(ctx)
   const register = (path, handle, respond) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,

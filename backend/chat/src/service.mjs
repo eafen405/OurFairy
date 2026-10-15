@@ -103,16 +103,21 @@ export class RemoteChat extends Service {
     try { return { events: observation.events, cursor: observation.cursor } }
     finally { observation[Symbol.dispose]() }
   }
-  async send(owner, { sessionId, requestId, text }) {
+  async send(owner, { sessionId, requestId, text, uploadIds = [] }) {
     requestIdOf(requestId)
-    if (typeof text !== 'string' || !text.trim()) throw new ChatError(400, 'chat/invalid-request', 'text must be nonempty')
+    uploadIds = this.ctx.ourfairyAttachments.validateIds(uploadIds)
+    if (typeof text !== 'string' || (!text.trim() && uploadIds.length === 0)) throw new ChatError(400, 'chat/invalid-request', 'provide text or an attachment')
     const state = await this._agent(owner, sessionId)
     return this._exclusively(sessionId, async () => {
       let found = receiptIn((await this._events(sessionId)).events, sessionId, requestId)
-      if (found !== null && found.text !== text) throw new ChatError(409, 'chat/request-conflict', 'this requestId already accepted different text')
+      if (found !== null && (found.text !== text || JSON.stringify(found.uploadIds) !== JSON.stringify(uploadIds))) throw new ChatError(409, 'chat/request-conflict', 'this requestId already accepted different text')
       if (found === null) {
         state.error = null
-        state.agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user', rpcId: requestId } }))
+        const attachments = await this.ctx.ourfairyAttachments.inputs(owner, sessionId, uploadIds)
+        state.agent.followup(createUserMessage({ content: [
+          ...(text ? [{ type: 'text', text }] : []),
+          ...attachments.map(item => item.image ? { type: 'image', attachment: item.image } : { type: 'file', attachment: item.original }),
+        ], source: { kind: 'user', rpcId: requestId, ...(attachments.length ? { attachments } : {}) } }))
         found = receiptIn((await this._events(sessionId)).events, sessionId, requestId)
       }
       await this._barrier(state)

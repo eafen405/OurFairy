@@ -34,7 +34,7 @@ import {
 export const PHAETHON_SHORT_ID = 1
 
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 /**
  * The current shape. No UNIQUE constraint and no REFERENCES clause: AGENTS.md
@@ -126,6 +126,29 @@ CREATE INDEX IF NOT EXISTS group_members_by_user ON group_members(user_short_id)
 CREATE INDEX IF NOT EXISTS group_members_by_group ON group_members(group_id);
 `
 
+/** Upload lifecycle only; native session messages own admitted references. */
+const UPLOAD_SCHEMA = `
+CREATE TABLE IF NOT EXISTS uploads (
+  upload_id TEXT PRIMARY KEY,
+  owner_short_id INTEGER NOT NULL,
+  session_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  status INTEGER NOT NULL DEFAULT 0, -- 0 uploading, 1 complete, 2 expired
+  offset INTEGER NOT NULL DEFAULT 0,
+  original_ref TEXT,
+  image_ref TEXT,
+  expires_at INTEGER NOT NULL,
+  created_by INTEGER NOT NULL,
+  updated_by INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+`
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
@@ -134,6 +157,7 @@ CREATE TABLE IF NOT EXISTS meta (
 ${Object.values(TABLE_DDL).map(ddl => ddl.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')).join(';\n')};
 ${INDEX_DDL}
 ${GROUP_SCHEMA}
+${UPLOAD_SCHEMA}
 `
 
 /**
@@ -271,7 +295,7 @@ export class IdentityStore {
           `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${row.value}`)
       }
       if (version === SCHEMA_VERSION) return
-      if (version !== 1 && version !== 2) {
+      if (version !== 1 && version !== 2 && version !== 3) {
         throw new IdentityError(500, 'identity/schema-unsupported',
           `unsupported identity schema version ${row.value}`)
       }
@@ -282,9 +306,37 @@ export class IdentityStore {
         this.#db.exec(INDEX_DDL)
       }
       this.#db.exec(GROUP_SCHEMA)
+      this.#db.exec(UPLOAD_SCHEMA)
       this.#db.prepare('UPDATE meta SET value = ? WHERE key = ?')
         .run(String(SCHEMA_VERSION), 'schema_version')
     })
+  }
+
+  /** Insert an opaque upload receipt after the staging file exists. */
+  insertUpload(row) {
+    this.#db.prepare(`INSERT INTO uploads
+      (upload_id,owner_short_id,session_id,name,mime,size,sha256,status,offset,expires_at,created_by,updated_by,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(row.uploadId,row.owner,row.sessionId,row.name,row.mime,row.size,row.sha256,
+        row.status,row.offset,row.expiresAt,row.owner,row.owner,row.createdAt,row.updatedAt)
+  }
+  /** Read lifecycle facts. Session ownership is checked by the attachment service. */
+  readUpload(id) {
+    const row = this.#db.prepare('SELECT * FROM uploads WHERE upload_id = ? AND deleted_at IS NULL').get(id)
+    if (!row) return undefined
+    return { uploadId: row.upload_id, owner: row.owner_short_id, sessionId: row.session_id,
+      name: row.name, mime: row.mime, size: row.size, sha256: row.sha256, status: row.status, offset: row.offset,
+      expiresAt: row.expires_at, createdAt: row.created_at, updatedAt: row.updated_at,
+      original: row.original_ref === null ? null : JSON.parse(row.original_ref),
+      image: row.image_ref === null ? null : JSON.parse(row.image_ref) }
+  }
+  /** One atomic lifecycle update; no message-acceptance state is stored here. */
+  updateUpload(id, changes) {
+    const columns = { status: 'status', offset: 'offset', original: 'original_ref', image: 'image_ref' }
+    const entries = Object.entries(changes)
+    if (entries.some(([key]) => !Object.hasOwn(columns, key))) throw new Error('unknown upload lifecycle field')
+    const values = entries.map(([key, value]) => key === 'original' || key === 'image' ? value === null ? null : JSON.stringify(value) : value)
+    this.#db.prepare(`UPDATE uploads SET ${entries.map(([key]) => columns[key] + ' = ?').join(', ')},
+      updated_by = owner_short_id, updated_at = ? WHERE upload_id = ? AND deleted_at IS NULL`).run(...values,this.now(),id)
   }
 
   /** A group's public state; membership is read from the same business store. */
