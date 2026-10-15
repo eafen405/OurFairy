@@ -17,3 +17,11 @@
 - `node scripts/combo.mjs verify` passed (`t5-combo-verify.log`). `node scripts/ourfairy-backend.mjs doctor` passed all checks (`t5-combination-doctor.log`). `git diff --check` passed for both incoming Android range and final OurFairy edits. Full product suite was not repeated because these subsequent OurFairy changes only collect evidence and pin the Android combination.
 
 This evidence does not claim a device/emulator run, cross-end runtime acceptance, official cloud service acceptance, signed release, or CI. No issue closure performed by this merger. Publication status is recorded separately after checking remote refs.
+
+## T6 backend merge
+
+- Reviewed incoming `ticket/06-reconnect` at `fbad2dc1621bd2bdb9e521343fbc45a505f367ed` against integration `ee181023b2ff893ef676e6720fa3822e5ef2ce1d`. Its 11 paths only change the existing chat routes/service/wire contract, add reconnect behavior tests, and retain raw ticket evidence. No database, fork source, or unrelated source changes were included.
+- Normal conflict-free merge: `5bf559751de535da61d932c5320bf857e5b6fce5`.
+- On this integration tree, `node --test 'tests/**/*.test.mjs'` exited 0: **54 tests passed, 0 failed/skipped**. Raw output: `t6-integrated-product-suite.log`. The suite used real local HTTP/SSE, native persistence and restarts; the external model was a loopback double.
+- `git diff --check` passed. All 16 saved dsh dirty-file SHA-256 values remained unchanged.
+- Android T6 integration and the two-axis staged review are pending. No T6 publication or issue closure was performed at this checkpoint.
