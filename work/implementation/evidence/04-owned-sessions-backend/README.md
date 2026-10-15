@@ -245,3 +245,7 @@ the time it was written, not the current ancestry.
 ## Lead final product verification
 
 At `01dd084` (before the handoff correction above), Lead independently ran the complete product suite on the host: `node --test 'tests/**/*.test.mjs'` → **39 passed, 0 failed**, 6 suites. Raw output: `final-product-suite.log`. The final handoff correction is covered by the later focused 14-test run; this earlier full run does not cover it. Neither run claims Android completion, real cloud service validation, or closure of #27.
+
+## Lead final combined verification
+
+After the header-only creation/close handoff and proxy-safe Service correction were integrated, Lead ran `node --test 'tests/**/*.test.mjs'` against the final product combination: **40 passed / 0 failed**. `final-product-suite.log` is this final run, superseding the earlier39-test run that predated the empty-resume case. `combo.json` now pins rikkahub#27 integration `fd04aab78919a7816e6eb962949a6eaf13a41532`; Android targeted42 tests and debugAPK evidence live in `../04-owned-sessions-android/`. Real device/UI/cloud conditions remain unexecuted and are not implied by these checks.
