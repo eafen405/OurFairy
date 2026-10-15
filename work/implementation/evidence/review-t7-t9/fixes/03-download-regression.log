@@ -1,0 +1,14 @@
+✔ disconnecting an original download during backpressure settles its handler and closes its file source (25.083927ms)
+✔ upload completes before sending and original downloads by qualified message identity across restart (7551.230529ms)
+✔ unfinished and foreign receipts never grant message or download access, including identical stored bytes (184.969272ms)
+✔ lost chunk ACK retries exact bytes, expired upload cannot be new input, and admitted retry survives expiry (804.702801ms)
+✔ images keep original downloads while official Messages serialization uses normalized native image content (305.393962ms)
+✔ native model file handles permit real read and sandboxed scripts only in the admitted session and stay readonly (2412.824402ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11594.751518
