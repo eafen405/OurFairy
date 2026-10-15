@@ -4,13 +4,21 @@
   "private": true,
   "type": "module",
   "main": "./src/index.mjs",
-  "files": ["src", "README.md"],
+  "files": [
+    "src",
+    "README.md"
+  ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-fs": "workspace:~",
     "@deepseek-ai/dsh-fs-local": "workspace:~",
     "@deepseek-ai/dsh-sandbox": "workspace:~",
     "@deepseek-ai/dsh-bash-sandbox": "workspace:~",
-    "@deepseek-ai/dsh-working-directory": "workspace:~"
+    "@deepseek-ai/dsh-working-directory": "workspace:~",
+    "@deepseek-ai/dsh-sandbox-policy": "workspace:~"
+  },
+  "exports": {
+    ".": "./src/index.mjs",
+    "./policy": "./src/policy.mjs"
   }
 }

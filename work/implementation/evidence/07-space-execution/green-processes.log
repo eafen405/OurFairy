@@ -1,0 +1,10 @@
+✔ chat tools write own private files, share public files, and deny another user including administrator (3141.112947ms)
+✔ real child processes share public files, keep private boundaries after cd, and retain networking (613.060647ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4060.361394

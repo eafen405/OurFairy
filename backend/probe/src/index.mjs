@@ -45,6 +45,8 @@ const SERVICE_ROWS = [
   ['sessionQuery', 'session-query-sqlite', '@deepseek-ai/dsh-session-query-sqlite'],
   ['jobs', 'jobs-local', '@deepseek-ai/dsh-jobs-local'],
   ['attachments', 'attachment-local', '@deepseek-ai/dsh-attachment-local'],
+  ...['ourfairySpaces', 'fs', 'shell', 'sandbox', 'workingDirectory'].map(service => [service, 'spaces', '@ourfairy/dsh-spaces']),
+  ['sandboxPolicy', 'sandbox-policy', '@ourfairy/dsh-spaces/policy'],
 ]
 
 /**
@@ -204,7 +206,7 @@ async function runTurn(ctx, report) {
   const sessionId = process.env.OURFAIRY_PROBE_SESSION_ID ?? `ourfairy-baseline-${Date.now()}`
   const handle = await agents.create({
     sessionId,
-    meta: { cwd: process.cwd() },
+    meta: { owner: 'user:1' },
     agentOptions: { provider, model },
   })
   const agent = handle.agent
@@ -298,6 +300,15 @@ async function runProbe(ctx) {
     report.services = services.services
     report.failures.push(...services.failures)
     report.tools = collectTools(ctx)
+    // Direct provider calls have no authenticated session; cwd must never supply one.
+    report.agentless = {}
+    for (const [name, operation] of [
+      ['file', () => ctx.get('fs').resolve(join(process.env.DSH_HOME, 'spaces', 'public'))],
+      ['process', () => ctx.get('shell').execute(ctx.get('shell').resolve({ command: 'true' }))],
+    ]) {
+      try { await operation(); report.agentless[name] = 'ALLOWED'; report.failures.push(`agentless ${name} unexpectedly allowed`) }
+      catch (error) { report.agentless[name] = error.code ?? error.message }
+    }
 
     const sessionsRoot = process.env.DSH_HOME === undefined ? undefined : join(process.env.DSH_HOME, 'sessions')
     report.sessions.root = sessionsRoot ?? null

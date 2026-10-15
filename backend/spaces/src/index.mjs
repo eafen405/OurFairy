@@ -41,7 +41,18 @@ class ScopedDirectory extends WorkingDirectoryService {
   get(session) {
     return this.ctx.sessionProjections.stateOf(session, 'workingDirectory') ?? this.ctx.ourfairySpaces.privateRoot(session)
   }
-  ensure(agent, signal) { return this.ctx.ourfairySpaces.run(agent.session, () => super.ensure(agent, signal)) }
+  ensure(agent, signal) {
+    const scope = this.ctx.ourfairySpaces
+    return scope.run(agent.session, async () => {
+      const target = await this.ctx.fs.resolve(this.get(agent.session), { signal })
+      const info = await this.ctx.fs.stat(target, signal)
+      // Native fallback is header.cwd/deployment cwd; old chat headers have no
+      // private cwd. Recovery must use the same owner-derived private root.
+      return info?.type === 'directory'
+        ? super.ensure(agent, signal)
+        : super.set(agent, scope.privateRoot(agent.session), signal)
+    })
+  }
   set(agent, path, signal) { return this.ctx.ourfairySpaces.run(agent.session, () => super.set(agent, path, signal)) }
 }
 export function apply(ctx, config) {
