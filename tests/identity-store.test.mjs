@@ -7,8 +7,8 @@
  * `node:sqlite` before any IdentityStore sees the file. IdentityStore must then
  * migrate it in place, keep every previously stored credential and invite usable,
  * and drop the forbidden constraints. Only the public store API drives the
- * behavioural assertions; the raw database is inspected only to prove the schema
- * itself obeys AGENTS.md.
+ * behavioural assertions; the raw database is used to plant a logical deletion and
+ * to prove the schema itself obeys AGENTS.md.
  */
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -60,7 +60,23 @@ const dir = mkdtempSync(join(tmpdir(), 'ourfairy-v1-migration-'))
 const v1Path = join(dir, 'legacy-v1.sqlite')
 const freshPath = join(dir, 'fresh-v2.sqlite')
 const futurePath = join(dir, 'future-v99.sqlite')
+const tombstonePath = join(dir, 'tombstoned-v2.sqlite')
 let store
+
+/**
+ * Plant a logical deletion straight into the durable file with a real SQLite
+ * connection, the way any future operator-side removal would write it.
+ *
+ * The store has no deletion operation to call, so this is the only honest way to
+ * put a row into the deleted state; every assertion afterwards goes back through
+ * the public store API.
+ */
+function tombstone(path, table, column, value) {
+  const db = new DatabaseSync(path)
+  db.prepare(`UPDATE ${table} SET deleted_at = ?, updated_at = ? WHERE ${column} = ? AND deleted_at IS NULL`)
+    .run(NOW + 20, NOW + 20, value)
+  db.close()
+}
 
 /** Write the v1 fixture with real hashes, real digests, and no IdentityStore involved. */
 function seedV1Database(path) {
@@ -154,26 +170,79 @@ describe('migrating a genuine v1 database', () => {
   })
 
   test('never reuses a short number once an identity is gone', () => {
-    const before = store.listUsers().map(user => user.shortId)
-    assert.deepEqual(before, [1, 2, 3])
-    assert.ok(store.removeUser(3), 'removing a soft-deletable identity reports that it happened')
+    assert.deepEqual(store.listUsers().map(user => user.shortId), [1, 2, 3])
+    tombstone(v1Path, 'users', 'short_id', 3)
 
     const fresh = store.createInvite(PHAETHON_SHORT_ID)
     const replacement = store.register({ inviteCode: fresh.code, name: 'widget', password: 'another-password' })
     assert.equal(replacement.user.shortId, 4, 'a deleted identity keeps its number out of circulation')
   })
 
-  test('a removed user no longer signs in, authenticates, or holds the name', () => {
+  test('a removed user no longer signs in, authenticates, or appears in a listing', () => {
     const token = store.signIn({ name: 'widget', password: 'another-password' }).token
     assert.ok(store.authenticate(token) !== undefined)
 
-    assert.ok(store.removeUser(4))
+    tombstone(v1Path, 'users', 'short_id', 4)
     assert.throws(() => store.signIn({ name: 'widget', password: 'another-password' }),
       error => error.code === 'identity/bad-credentials' && error.status === 401)
     assert.equal(store.authenticate(token), undefined, 'a removed user must not authenticate')
     assert.equal(store.userByName('widget'), undefined)
     assert.deepEqual(store.listUsers().map(user => user.shortId), [1, 2],
       'listing hides the removed identities')
+  })
+
+  test('a removed name stays reserved, deleted rows included', () => {
+    assert.throws(() => store.register({ inviteCode: store.createInvite(PHAETHON_SHORT_ID).code, name: 'widget', password: 'another-password' }),
+      error => error.code === 'identity/name-taken',
+      'a name freed by deletion is not reusable: checking all rows is the original invariant')
+  })
+})
+
+describe('seeding against a deleted Phaethon', () => {
+  test('refuses to recreate short number 1 beside a tombstoned row', () => {
+    const seeded = new IdentityStore({ path: tombstonePath, now: () => NOW })
+    try {
+      assert.equal(seeded.seedPhaethon({ name: 'phaethon', password: PHAETHON_PASSWORD }).created, true)
+      assert.equal(seeded.seedPhaethon({ name: 'phaethon' }).created, false, 'a live Phaethon is left alone')
+    } finally {
+      seeded.close()
+    }
+
+    tombstone(tombstonePath, 'users', 'short_id', PHAETHON_SHORT_ID)
+
+    const reopened = new IdentityStore({ path: tombstonePath, now: () => NOW })
+    try {
+      assert.throws(() => reopened.seedPhaethon({ name: 'phaethon', password: PHAETHON_PASSWORD }),
+        error => error.code === 'identity/phaethon-removed' && error.status === 409,
+        'a deleted Phaethon must be refused explicitly, not silently recreated')
+      const db = new DatabaseSync(tombstonePath)
+      const rows = Number(db.prepare('SELECT COUNT(*) AS value FROM users WHERE short_id = ?').get(PHAETHON_SHORT_ID).value)
+      db.close()
+      assert.equal(rows, 1, 'the deleted row must not be joined by a second short number 1')
+    } finally {
+      reopened.close()
+    }
+  })
+
+  test('refuses an initial seed whose name belongs to another row', () => {
+    const path = join(dir, 'named-v2.sqlite')
+    const empty = new IdentityStore({ path, now: () => NOW })
+    empty.close()
+
+    // Another identity already holds the requested login name.
+    const db = new DatabaseSync(path)
+    db.prepare('INSERT INTO users (short_id, name, is_admin, password, created_at, updated_at) VALUES (?, ?, 0, ?, ?, ?)')
+      .run(2, 'rosie', hashPassword(MEMBER_PASSWORD), NOW, NOW)
+    db.close()
+
+    const seeded = new IdentityStore({ path, now: () => NOW })
+    try {
+      assert.throws(() => seeded.seedPhaethon({ name: 'rosie', password: PHAETHON_PASSWORD }),
+        error => error.code === 'identity/name-taken' && error.status === 409,
+        'seeding must refuse a name another row already owns')
+    } finally {
+      seeded.close()
+    }
   })
 })
 
@@ -232,7 +301,7 @@ describe('the stored schema obeys AGENTS.md', () => {
     }
   })
 
-  test('refuses a database newer than this module understands', () => {
+  test('refuses a database newer than this module understands, leaving it untouched', () => {
     const db = new DatabaseSync(futurePath)
     db.exec(V1_SCHEMA)
     db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run('schema_version', '99')
@@ -240,5 +309,39 @@ describe('the stored schema obeys AGENTS.md', () => {
 
     assert.throws(() => new IdentityStore({ path: futurePath }),
       error => error.code === 'identity/schema-too-new')
+
+    const facts = schemaFacts(futurePath)
+    assert.ok(!facts.columns_users.includes('deleted_at'),
+      'a refused file must not be rebuilt: the version is checked before any DDL')
+    assert.equal(new DatabaseSync(futurePath).prepare('SELECT value FROM meta WHERE key = ?').get('schema_version').value, '99')
+  })
+
+  test('signing out a logically deleted session reports nothing to revoke', () => {
+    const live = new IdentityStore({ path: join(dir, 'signout-v2.sqlite'), now: () => NOW })
+    const path = join(dir, 'signout-v2.sqlite')
+    try {
+      live.seedPhaethon({ name: 'phaethon', password: PHAETHON_PASSWORD })
+      const { token } = live.signIn({ name: 'phaethon', password: PHAETHON_PASSWORD })
+      assert.equal(live.signOut(token), true, 'a live session revokes')
+      assert.equal(live.signOut(token), false, 'a revoked session is not revoked twice')
+      assert.equal(live.signOut(token), false)
+    } finally {
+      live.close()
+    }
+
+    const again = new IdentityStore({ path, now: () => NOW })
+    try {
+      const { token } = again.signIn({ name: 'phaethon', password: PHAETHON_PASSWORD })
+      again.close()
+      tombstone(path, 'sessions', 'digest', sessionTokenDigest(token))
+      const third = new IdentityStore({ path, now: () => NOW })
+      try {
+        assert.equal(third.signOut(token), false, 'a deleted session is skipped rather than re-stamped')
+      } finally {
+        third.close()
+      }
+    } finally {
+      // the handle was closed above; nothing left to release
+    }
   })
 })

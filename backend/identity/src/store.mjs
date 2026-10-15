@@ -12,9 +12,9 @@
  * existence are all checked explicitly inside the transaction.
  *
  * The business tables carry a logical deletion field and an update timestamp;
- * reads skip deleted rows and writes refresh `updated_at`. Short numbers are
- * allocated from the highest number ever issued, including deleted ones, so a
- * removed identity's number is never handed to someone else.
+ * reads skip deleted rows and writes refresh `updated_at`. Deletion is a stored
+ * state, not an operation: nothing here removes an identity, so a login name and
+ * a short number stay reserved once they are issued.
  *
  * @module @ourfairy/dsh-identity/src/store
  */
@@ -177,12 +177,21 @@ export class IdentityStore {
     }
     mkdirSync(dirname(path), { recursive: true })
     this.#db = new DatabaseSync(path)
-    this.#db.exec('PRAGMA journal_mode = WAL')
-    // The current schema declares no foreign key; a v1 file may still carry the
-    // clauses it used to, and rebuilding those tables must not enforce them.
-    this.#db.exec('PRAGMA foreign_keys = OFF')
-    this.#db.exec(SCHEMA)
-    this.#migrate()
+    try {
+      this.#db.exec('PRAGMA journal_mode = WAL')
+      // The current schema declares no foreign key; a v1 file may still carry the
+      // clauses it used to, and rebuilding those tables must not enforce them.
+      this.#db.exec('PRAGMA foreign_keys = OFF')
+      this.#migrate()
+    } catch (error) {
+      // A constructor that fails leaves no open handle behind.
+      try {
+        this.#db.close()
+      } catch {
+        // Nothing to close if the handle never opened.
+      }
+      throw error
+    }
     this.#sessionTtlMilliseconds = sessionTtlDays * DAY_MILLISECONDS
     this.now = now
   }
@@ -190,24 +199,38 @@ export class IdentityStore {
   /**
    * Bring an existing file up to `SCHEMA_VERSION`, atomically.
    *
-   * A file with no recorded version is new and already carries the current
-   * shape. A version newer than this module understands is refused rather than
-   * downgraded, so a downgrade never silently discards later data.
+   * The version is read and every schema change happens inside one
+   * `BEGIN IMMEDIATE` transaction, so a second opener cannot migrate a v1 file
+   * behind a stale decision and then rebuild it a second time. An unsupported
+   * version is refused before any DDL runs, leaving the file untouched; only v1
+   * (rebuild) and v2 (already current) are known.
    */
   #migrate() {
-    const row = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version')
-    if (row === undefined) {
-      this.#db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
-        .run('schema_version', String(SCHEMA_VERSION))
-      return
-    }
-    const version = Number(row.value)
-    if (!Number.isInteger(version) || version > SCHEMA_VERSION) {
-      throw new IdentityError(500, 'identity/schema-too-new',
-        `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${row.value}`)
-    }
-    if (version === SCHEMA_VERSION) return
     this.#transaction(() => {
+      const hasMeta = Number(this.#db.prepare(
+        "SELECT COUNT(*) AS value FROM sqlite_master WHERE type = 'table' AND name = 'meta'",
+      ).get().value) > 0
+      if (!hasMeta) {
+        // A new file: create the current shape, then record its version.
+        this.#db.exec(SCHEMA)
+        this.#db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
+          .run('schema_version', String(SCHEMA_VERSION))
+        return
+      }
+      const row = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version')
+      if (row === undefined) {
+        // A file that tracks no version yet is already in the current shape.
+        this.#db.exec(SCHEMA)
+        this.#db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
+          .run('schema_version', String(SCHEMA_VERSION))
+        return
+      }
+      const version = Number(row.value)
+      if (version > SCHEMA_VERSION) {
+        throw new IdentityError(500, 'identity/schema-too-new',
+          `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${row.value}`)
+      }
+      if (version !== 1) return
       for (const table of Object.keys(TABLE_DDL)) rebuildTable(this.#db, table)
       this.#db.exec(INDEX_DDL)
       this.#db.prepare('UPDATE meta SET value = ? WHERE key = ?')
@@ -242,7 +265,9 @@ export class IdentityStore {
    *
    * Idempotent: an existing Phaethon keeps its identity and short number 1. A
    * password is only written while the account has none, so restarting with a
-   * different environment value cannot silently change the credential.
+   * different environment value cannot silently change the credential. Short
+   * number 1 is reserved for good, so a Phaethon row that exists but is
+   * logically deleted is refused rather than recreated beside itself.
    *
    * @param options - Phaethon's name and, when the operator provisioned one, its password.
    * @returns the stored user, and whether this call created it.
@@ -250,14 +275,21 @@ export class IdentityStore {
   seedPhaethon({ name = 'phaethon', password } = {}) {
     const login = assertName(name)
     return this.#transaction(() => {
-      const existing = this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(PHAETHON_SHORT_ID)
-      if (existing !== undefined) {
+      const existing = this.#db.prepare('SELECT * FROM users WHERE short_id = ?').get(PHAETHON_SHORT_ID)
+      if (existing !== undefined && existing.deleted_at === null) {
         if (password !== undefined && password !== '' && existing.password === null) {
           this.#db.prepare('UPDATE users SET password = ?, updated_at = ? WHERE id = ?')
             .run(hashPassword(assertPassword(password)), this.now(), existing.id)
           return { user: publicUser(this.#db.prepare('SELECT * FROM users WHERE id = ?').get(existing.id)), created: false }
         }
         return { user: publicUser(existing), created: false }
+      }
+      if (existing !== undefined) {
+        throw new IdentityError(409, 'identity/phaethon-removed',
+          'the Phaethon identity has been removed and its short number stays reserved')
+      }
+      if (this.#db.prepare('SELECT 1 FROM users WHERE name = ?').get(login) !== undefined) {
+        throw new IdentityError(409, 'identity/name-taken', 'that name is already registered')
       }
       const now = this.now()
       const info = this.#db.prepare(
@@ -286,29 +318,6 @@ export class IdentityStore {
   }
 
   /**
-   * Logically remove one identity.
-   *
-   * The row stays, so the short number it was issued is never handed to another
-   * identity and the removal is auditable. A removed identity stops signing in,
-   * stops authenticating, and gives its name back only after this process.
-   *
-   * @param shortId - short number to remove.
-   * @returns whether a live identity was removed.
-   */
-  removeUser(shortId) {
-    const now = this.now()
-    return this.#transaction(() => {
-      const info = this.#db.prepare(
-        'UPDATE users SET deleted_at = ?, updated_at = ? WHERE short_id = ? AND deleted_at IS NULL',
-      ).run(now, now, Number(shortId))
-      if (info.changes === 0) return false
-      this.#db.prepare('UPDATE sessions SET deleted_at = ?, updated_at = ? WHERE user_id = ? AND deleted_at IS NULL')
-        .run(now, now, Number(this.#db.prepare('SELECT id FROM users WHERE short_id = ?').get(Number(shortId)).id))
-      return true
-    })
-  }
-
-  /**
    * Mint one invite code for an administrator.
    * @param adminShortId - short number the authenticated caller speaks for.
    * @returns the created invite.
@@ -325,17 +334,6 @@ export class IdentityStore {
       this.#db.prepare('INSERT INTO invites (code, created_by, created_at, updated_at) VALUES (?, ?, ?, ?)')
         .run(code, admin.id, now, now)
       return { code, createdAt: now }
-    })
-  }
-
-  /** Logically remove one invite so it can no longer be redeemed. */
-  removeInvite(code) {
-    const now = this.now()
-    return this.#transaction(() => {
-      const info = this.#db.prepare(
-        'UPDATE invites SET deleted_at = ?, updated_at = ? WHERE code = ? AND deleted_at IS NULL',
-      ).run(now, now, canonicalInviteCode(code))
-      return info.changes > 0
     })
   }
 
@@ -370,12 +368,12 @@ export class IdentityStore {
       if (invite.redeemed_by !== null) {
         throw new IdentityError(409, 'identity/invite-used', 'that invite code has already been used')
       }
-      if (this.#db.prepare('SELECT 1 FROM users WHERE name = ? AND deleted_at IS NULL').get(login) !== undefined) {
+      if (this.#db.prepare('SELECT 1 FROM users WHERE name = ?').get(login) !== undefined) {
         throw new IdentityError(409, 'identity/name-taken', 'that name is already registered')
       }
       const now = this.now()
       // Allocation reads every row, deleted ones included, so a removed identity's
-      // short number is never reused and a name freed by removal can be taken again.
+      // short number is never handed out a second time.
       const next = this.#db.prepare('SELECT COALESCE(MAX(short_id), 0) + 1 AS value FROM users').get()
       const shortId = Number(next.value)
       if (shortId <= PHAETHON_SHORT_ID) {
@@ -434,8 +432,10 @@ export class IdentityStore {
    * @returns whether a live session was revoked.
    */
   signOut(token) {
-    const info = this.#db.prepare('UPDATE sessions SET revoked_at = ?, updated_at = ? WHERE digest = ? AND revoked_at IS NULL')
-      .run(this.now(), this.now(), sessionTokenDigest(token))
+    const now = this.now()
+    const info = this.#db.prepare(
+      'UPDATE sessions SET revoked_at = ?, updated_at = ? WHERE digest = ? AND revoked_at IS NULL AND deleted_at IS NULL',
+    ).run(now, now, sessionTokenDigest(token))
     return info.changes > 0
   }
 

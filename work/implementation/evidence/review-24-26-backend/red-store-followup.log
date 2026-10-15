@@ -1,0 +1,109 @@
+▶ migrating a genuine v1 database
+  ✔ keeps the ids and passwords the v1 file already held (54.881105ms)
+  ✔ keeps the v1 session digests usable (0.230228ms)
+  ✔ keeps a v1 unredeemed invite redeemable and refuses the redeemed one (23.533313ms)
+  ✔ refuses a duplicate name without a unique index backing it (0.5147ms)
+  ✔ never reuses a short number once an identity is gone (24.474667ms)
+  ✔ a removed user no longer signs in, authenticates, or appears in a listing (23.717635ms)
+  ✖ a removed name stays reserved, deleted rows included (23.741421ms)
+✖ migrating a genuine v1 database (151.859918ms)
+▶ seeding against a deleted Phaethon
+  ✖ refuses to recreate short number 1 beside a tombstoned row (47.888001ms)
+  ✖ refuses an initial seed whose name belongs to another row (49.480173ms)
+✖ seeding against a deleted Phaethon (97.648828ms)
+▶ the stored schema obeys AGENTS.md
+  ✔ carries logical deletion and update timestamps on the three business tables (0.766951ms)
+  ✔ keeps the associated person column on every business table (0.417765ms)
+  ✔ carries no foreign key and no unique constraint beyond the primary key (0.539938ms)
+  ✔ keeps the ordinary lookup index the queries actually need (0.343965ms)
+  ✔ a fresh database lands directly on the migrated schema (24.579686ms)
+  ✔ refuses a database newer than this module understands, leaving it untouched (1.779097ms)
+  ✖ signing out a logically deleted session reports nothing to revoke (71.511176ms)
+✖ the stored schema obeys AGENTS.md (100.235703ms)
+ℹ tests 16
+ℹ suites 3
+ℹ pass 12
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 481.518285
+
+✖ failing tests:
+
+test at tests/identity-store.test.mjs:194:3
+✖ a removed name stays reserved, deleted rows included (23.741421ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception: a name freed by deletion is not reusable: checking all rows is the original invariant
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/review-24-26-backend/tests/identity-store.test.mjs:195:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/identity-store.test.mjs:202:3
+✖ refuses to recreate short number 1 beside a tombstoned row (47.888001ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception: a deleted Phaethon must be refused explicitly, not silently recreated
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/review-24-26-backend/tests/identity-store.test.mjs:215:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at node:internal/test_runner/test:1792:71
+      at node:internal/per_context/primordials:466:82
+      at new Promise (<anonymous>)
+      at new SafePromise (node:internal/per_context/primordials:435:3)
+      at node:internal/per_context/primordials:466:9
+      at Array.map (<anonymous>) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/identity-store.test.mjs:227:3
+✖ refuses an initial seed whose name belongs to another row (49.480173ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception: seeding must refuse a name another row already owns
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/review-24-26-backend/tests/identity-store.test.mjs:240:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/identity-store.test.mjs:319:3
+✖ signing out a logically deleted session reports nothing to revoke (71.511176ms)
+  AssertionError [ERR_ASSERTION]: a deleted session is skipped rather than re-stamped
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/review-24-26-backend/tests/identity-store.test.mjs:339:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

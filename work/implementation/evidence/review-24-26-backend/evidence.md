@@ -15,9 +15,14 @@ Every duplicate refusal is now an explicit check inside the existing
 unchanged — no transaction was weakened and no generic storage framework was
 introduced:
 
-- duplicate name: `SELECT 1 FROM users WHERE name = ? AND deleted_at IS NULL` before insert in `register`
+- duplicate name: `SELECT 1 FROM users WHERE name = ?` before insert in `register`
+  and in `seedPhaethon`
 - short-number allocation: `SELECT COALESCE(MAX(short_id), 0) + 1 FROM users` inside the same transaction
 - association existence: the admin row is loaded and checked in `createInvite`
+
+Both name checks read **all** rows, deleted ones included, so a login name is
+reserved for good once issued. That is the original invariant, kept deliberately:
+the store does not promise that a removed identity's name can be taken again.
 
 `PRAGMA foreign_keys = ON` is gone; the connection now sets `PRAGMA foreign_keys = OFF`
 because a legacy v1 file may still carry those clauses and the rebuild must not enforce them.
@@ -34,23 +39,40 @@ associations the tables already had: `invites.created_by`, `invites.redeemed_by`
 
 - every read filters `deleted_at IS NULL`, including the `authenticate` join, so a
   removed user or session cannot authenticate
-- every write sets `updated_at`: user insert, Phaethon password update, invite
-  insert, invite redemption, session insert, sign-out revocation, removals
+- every write sets `updated_at` from a single `now` value: user insert, Phaethon
+  password update, invite insert, invite redemption, session insert, sign-out
 - `revoked_at` is untouched and still means credential revocation only; it is not
-  used as a substitute for business deletion
+  used as a substitute for business deletion. `signOut` skips a session that is
+  already logically deleted or already revoked instead of re-stamping it
+
+Deletion is a **stored state, not a store operation**. No removal API exists on
+`IdentityStore`: nothing in the product or in #24/#26 asks for one, and a
+speculative management surface is not part of this fix. The tests plant the
+tombstone by writing `deleted_at` through a real `node:sqlite` connection against
+the durable file, then verify behaviour only through the public API (sign-in,
+authentication, listing, invite state, seeding). Short numbers and login names
+stay reserved afterwards.
 
 Number allocation reads `MAX(short_id)` over **all** rows including deleted ones,
-so a removed identity's short number is never reissued. Verified: after removing
+so a removed identity's short number is never reissued. Verified: after tombstoning
 short numbers 3 and 4, the next registration got 4.
 
-Two store-level soft-delete methods were added — `removeUser(shortId)` and
-`removeInvite(code)` — because a logical-deletion field that can never be written
-is not a deletion field. They are plain store methods with no HTTP surface.
+## Seeding over a removed Phaethon
+
+`seedPhaethon` looks up short number 1 across **all** rows. A live Phaethon is
+returned as before; a row that exists but is logically deleted is refused with
+`IdentityError(409, 'identity/phaethon-removed')` instead of being silently
+recreated beside itself, which would have produced a second `short_id = 1`. An
+initial seed whose name is already owned by another row is refused with
+`identity/name-taken`, reusing the same in-transaction check `register` already
+performs. No validator framework was added.
 
 ## Schema migration (v1 → v2)
 
-One local migration, reusing the existing `meta.schema_version`. The migration runs
-in a single `BEGIN IMMEDIATE` transaction, so it either lands whole or not at all.
+One local migration, reusing the existing `meta.schema_version`. The version is
+**read and every schema change happens inside one `BEGIN IMMEDIATE` transaction**,
+so a second opener cannot decide on a stale version and then rebuild the file a
+second time, discarding columns a newer writer added.
 
 - a file with no recorded version is new and already carries the v2 shape
 - `schema_version = 1` is migrated by rebuilding each table through a temporary
@@ -60,7 +82,11 @@ in a single `BEGIN IMMEDIATE` transaction, so it either lands whole or not at al
 - the copy carries every v1 value across, ids included: `updated_at` is seeded from
   `created_at` and `deleted_at` from `NULL`
 - a version **newer** than 2 (or a non-integer one) is refused with
-  `IdentityError(500, 'identity/schema-too-new')` rather than downgraded
+  `IdentityError(500, 'identity/schema-too-new')`, and the check runs **before any
+  DDL**, so a refused file is left untouched. Only `1` and `2` are known: an
+  integer below 2 that is not 1 is refused too, rather than treated as v1
+- a constructor whose initialization fails closes its database handle before
+  rethrowing
 
 Preserved across the migration, verified by the test: row ids, password hashes,
 unredeemed invites, redeemed invites, and unrevoked session digests.
@@ -83,15 +109,23 @@ genuine v1 database with the verbatim shipped v1 DDL including its UNIQUE and
 
 ```
 $ node --test tests/identity-store.test.mjs
-✔ migrating a genuine v1 database (132.02723ms)
-✔ the stored schema obeys AGENTS.md (27.238134ms)
+✔ migrating a genuine v1 database
+✔ seeding against a deleted Phaethon
+✔ the stored schema obeys AGENTS.md
+ℹ tests 16  ℹ pass 16  ℹ fail 0
 green exit: 0
 ```
 
-RED was captured on the same test file with the two source files reverted
-(`git stash push -- backend/identity/src/store.mjs backend/probe/src/index.mjs`),
-so it shows the findings rather than a broken fixture — `red-store.log`, exit 1,
-6 failing tests.
+RED for this follow-up round was captured on the new tests with only
+`backend/identity/src/store.mjs` reverted (`git stash push -- backend/identity/src/store.mjs`),
+so it shows the four corrections rather than a broken fixture —
+`red-store-followup.log`, exit 1, 4 failing tests: the reserved deleted name, the
+deleted Phaethon, the duplicate initial seed name, and sign-out of a deleted
+session. The earlier `red-store.log` (exit 1, 6 failures) covers the original
+findings.
+
+Identity HTTP acceptance against the **real launcher** was rerun after the store
+change — see the suite output above in `identity-http.log`, 8 passing, exit 0.
 
 Manual schema inspection (raw `node:sqlite` against a migrated file, not a
 compilation pass) confirmed for every business table:
