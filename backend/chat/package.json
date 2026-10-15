@@ -1,0 +1,17 @@
+{
+  "name": "@ourfairy/dsh-chat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./src/index.mjs",
+  "exports": { ".": "./src/index.mjs" },
+  "files": ["src", "README.md"],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-llm": "workspace:~",
+    "@deepseek-ai/dsh-session": "workspace:~",
+    "@ourfairy/dsh-identity": "workspace:~",
+    "@ourfairy/dsh-sessions": "workspace:~"
+  }
+}

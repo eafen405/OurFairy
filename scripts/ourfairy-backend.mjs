@@ -64,6 +64,7 @@ const IDENTITY_PACKAGE = '@ourfairy/dsh-identity'
 // The owned-session module, mounted by the bundle for the same reason: a linked
 // product package must also be a profile dependency for its dsh peers to resolve.
 const SESSIONS_PACKAGE = '@ourfairy/dsh-sessions'
+const CHAT_PACKAGE = '@ourfairy/dsh-chat'
 const BUNDLE_DIR = join(repoRoot, COMBINATION.bundlePathInRepo)
 const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
 const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
@@ -84,6 +85,11 @@ const PRODUCT_SOURCES = [
   'backend/sessions/src/service.mjs',
   'backend/sessions/src/http.mjs',
   'backend/sessions/src/index.mjs',
+  'backend/chat/package.json',
+  'backend/chat/src/index.mjs',
+  'backend/chat/src/service.mjs',
+  'backend/chat/src/projection.mjs',
+  'backend/chat/src/persona.mjs',
 ]
 
 function fail(message, code = 1) {
@@ -190,6 +196,7 @@ const profileManifest = () => ({
     // resolves its dsh peers when it is a profile dependency too.
     [IDENTITY_PACKAGE]: `file:${join(repoRoot, 'backend', 'identity')}`,
     [SESSIONS_PACKAGE]: `file:${join(repoRoot, 'backend', 'sessions')}`,
+    [CHAT_PACKAGE]: `file:${join(repoRoot, 'backend', 'chat')}`,
   },
   dsh: { profile: { bundles: [BUNDLE_PACKAGE] } },
 })

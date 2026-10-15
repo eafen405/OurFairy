@@ -1,0 +1,13 @@
+✔ a stable send is durably accepted once across concurrent retries and backend restart (3920.936094ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (395.965405ms)
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (354.11096ms)
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply (368.015199ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (1474.410273ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6824.580486

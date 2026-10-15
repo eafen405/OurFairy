@@ -1,0 +1,16 @@
+✔ a stable send is durably accepted once across concurrent retries and backend restart (4194.350037ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (443.67226ms)
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (364.516407ms)
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply (421.175318ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (1558.424751ms)
+✔ the deployment owner identity is separate from a chat attempt to edit the persona (1057.435835ms)
+✔ stopping the current reply preserves accepted queued input for the next wake (523.891844ms)
+✔ stopping before visible output records interruption rather than a failed reply (1744.998577ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10640.864091

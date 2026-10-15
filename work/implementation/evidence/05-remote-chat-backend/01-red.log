@@ -1,0 +1,19 @@
+✖ a stable send is durably accepted once across concurrent retries and backend restart (2975.908823ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3281.330059
+
+✖ failing tests:
+
+test at tests/remote-chat.test.mjs:71:1
+✖ a stable send is durably accepted once across concurrent retries and backend restart (2975.908823ms)
+  Error: 404: 
+      at IncomingMessage.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/05-remote-chat/tests/remote-chat.test.mjs:34:24)
+      at IncomingMessage.emit (node:events:521:24)
+      at endReadableNT (node:internal/streams/readable:1729:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21)

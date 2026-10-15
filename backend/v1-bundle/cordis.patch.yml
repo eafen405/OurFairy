@@ -21,12 +21,12 @@
     - id: llm
       name: '@deepseek-ai/dsh-llm'
 
-    # The deployment persona is a product decision and stays empty in the
-    # baseline; product tickets add their own persona sections.
+    # The chat module contributes the deployment Fairy persona and scoped identity.
     - id: system-prompt
       name: '@deepseek-ai/dsh-system-prompt'
       config:
         personaPrefix: ''
+        includeHarnessIdentity: false
 
     - id: session-projection
       name: '@deepseek-ai/dsh-session-projection'
@@ -146,3 +146,7 @@
     - id: sessions
       name: '@ourfairy/dsh-sessions'
 
+
+    # Narrow authenticated remote chat; reuses native Agent, inbox and SessionQuery.
+    - id: chat
+      name: '@ourfairy/dsh-chat'
