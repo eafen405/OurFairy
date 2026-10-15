@@ -77,16 +77,18 @@
     - id: session-checkpoint-policy
       name: '@deepseek-ai/dsh-session-checkpoint-policy'
 
-    # Content search is opt-in for v1, so this is stated explicitly rather than
-    # inherited: `ctx.sessionQuery` mounts and its exact reads/titles stay
-    # available, while search fails with SESSION_QUERY_SEARCH_DISABLED and the
-    # SQLite file stays unopened. The path is still an isolated, durable path so
-    # enabling search later cannot silently point at the host.
+    # Rebuildable conversation index; literal substring matching supports Chinese
+    # without a second tokenizer/index. Ownership stays in native session headers.
     - id: session-query-sqlite
       name: '@deepseek-ai/dsh-session-query-sqlite'
       config:
         path: !!js dshHomePath('query/sessions.sqlite')
-        openAt: never
+        openAt: first-search
+        literalSubstring: true
+        snippetChars: 80
+
+    - id: conversation-search
+      name: '@ourfairy/dsh-search'
 
     # ── process-local support services ───────────────────────────────────────
     # In-memory job registry only; the shell-backed job tools are not mounted.

@@ -67,6 +67,7 @@ const SESSIONS_PACKAGE = '@ourfairy/dsh-sessions'
 const CHAT_PACKAGE = '@ourfairy/dsh-chat'
 const SPACES_PACKAGE = '@ourfairy/dsh-spaces'
 const ATTACHMENTS_PACKAGE = '@ourfairy/dsh-attachments'
+const SEARCH_PACKAGE = '@ourfairy/dsh-search'
 const BUNDLE_DIR = join(repoRoot, COMBINATION.bundlePathInRepo)
 const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
 const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
@@ -93,6 +94,8 @@ const PRODUCT_SOURCES = [
   'backend/chat/src/projection.mjs',
   'backend/chat/src/persona.mjs',
   'backend/chat/src/delivery.mjs',
+  'backend/search/package.json',
+  'backend/search/src/index.mjs',
   'backend/attachments/package.json',
   ...['index', 'service'].map(name => `backend/attachments/src/${name}.mjs`),
   'backend/spaces/package.json',
@@ -204,6 +207,7 @@ const profileManifest = () => ({
     [IDENTITY_PACKAGE]: `file:${join(repoRoot, 'backend', 'identity')}`,
     [SESSIONS_PACKAGE]: `file:${join(repoRoot, 'backend', 'sessions')}`,
     [CHAT_PACKAGE]: `file:${join(repoRoot, 'backend', 'chat')}`,
+    [SEARCH_PACKAGE]: `file:${join(repoRoot, 'backend', 'search')}`,
     [ATTACHMENTS_PACKAGE]: `file:${join(repoRoot, 'backend', 'attachments')}`,
     [SPACES_PACKAGE]: `file:${join(repoRoot, 'backend', 'spaces')}`,
   },

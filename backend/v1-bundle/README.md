@@ -27,7 +27,7 @@ listed here and tests assert the absent rows stay absent.
 | `llm-deepseek-api-key` | `dsh-llm-deepseek-api-key` | Official route; credential resolved per request |
 | `session-persistence-jsonl` | `dsh-session-persistence-jsonl` | Durable JSONL sessions under the isolated `DSH_HOME` |
 | `session-checkpoint-policy` | `dsh-session-checkpoint-policy` | Durability barrier before model/tool side effects |
-| `session-query-sqlite` | `dsh-session-query-sqlite` | `sessionQuery`; explicit path and `openAt: never` (search opt-in) |
+| `session-query-sqlite` | `dsh-session-query-sqlite` | `sessionQuery`; explicit path and `openAt: first-search` (T10 search) |
 | `jobs-local` | `dsh-jobs-local` | In-memory job registry |
 | `attachment-local` | `dsh-attachment-local` | Content-addressed attachment storage under the isolated home |
 
@@ -53,16 +53,12 @@ is required.
 
 ## Two deliberate choices a reviewer will ask about
 
-**`session-query-sqlite` is mounted with `openAt: never` on purpose.** The
-readiness research records that `never` is the *base bundle's* patch value, not
-the plugin's own default (the plugin's own default is `startup`). Because this
-bundle does not inherit `@deepseek-ai/dsh-base`, that inherited value is not in
-play: the `never` written here is an explicit choice, so the v1 baseline mounts
-the query plugin (its exact reads and titles stay available) while content
-search stays off. Ticket #33 enables search by turning this into
-`startup`/`first-search` against the same isolated home; it is not a missing
-configuration, and it must not be flipped silently by an unrelated profile
-change.
+**Conversation search uses the existing disposable query index.** T10 enables
+`openAt: first-search`, `snippetChars: 80`, and `literalSubstring: true` for
+Chinese substring matching. The product's `@ourfairy/dsh-search` tools first
+restrict native SQL results to IDs from the current owner's formal headers.
+No second ownership table or search HTTP endpoint is introduced. See
+[`backend/search/README.md`](../search/README.md) for interval semantics and rebuild.
 
 **The model route is declared twice on purpose, from one source.** The
 `agent-default-model` row states `deepseek-official`/`deepseek-flash` for the
