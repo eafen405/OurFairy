@@ -1,0 +1,31 @@
+{
+  "backend": "minimax",
+  "cwd": "/home/eafen405/projects/rikkahub/.worktrees/09-attachments-ui",
+  "command": [
+    "/home/eafen405/.minimax-code/bin/mcode",
+    "exec",
+    "--cwd",
+    "/home/eafen405/projects/rikkahub/.worktrees/09-attachments-ui",
+    "--permission",
+    "smart",
+    "--timeout",
+    "1500s",
+    "--max-steps",
+    "60",
+    "--output-format",
+    "text",
+    "--input",
+    "-"
+  ],
+  "status": "completed",
+  "timeout": 1500.0,
+  "started_at": 1792071563.9199066,
+  "run_dir": "/tmp/delegate-minimax-tfl1zwey",
+  "task_path": "/tmp/delegate-minimax-tfl1zwey/task.md",
+  "stdout_path": "/tmp/delegate-minimax-tfl1zwey/stdout.txt",
+  "stderr_path": "/tmp/delegate-minimax-tfl1zwey/stderr.txt",
+  "pid": 154103,
+  "exit_code": 0,
+  "child_exit_code": 0,
+  "duration_seconds": 395.122
+}

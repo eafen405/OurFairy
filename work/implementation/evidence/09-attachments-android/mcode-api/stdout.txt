@@ -1,0 +1,1 @@
+The build is compiling the app for the first time in this worktree (the uninitialized submodule had to be fetched first). I'll pick up as soon as it finishes rather than polling.

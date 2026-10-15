@@ -1,0 +1,37 @@
+✔ upload completes before sending and original downloads by qualified message identity across restart (3805.62478ms)
+✔ unfinished and foreign receipts never grant message or download access, including identical stored bytes (171.243416ms)
+✔ lost chunk ACK retries exact bytes, expired upload cannot be new input, and admitted retry survives expiry (793.513357ms)
+✔ images keep original downloads while official Messages serialization uses normalized native image content (262.302722ms)
+✔ native model file handles permit real read and sandboxed scripts only in the admitted session and stay readonly (2351.446241ms)
+▶ migrating a genuine v1 database
+  ✔ keeps the ids and passwords the v1 file already held (62.659486ms)
+  ✔ keeps the v1 session digests usable (0.267559ms)
+  ✔ keeps a v1 unredeemed invite redeemable and refuses the redeemed one (23.862912ms)
+  ✔ refuses a duplicate name without a unique index backing it (0.502366ms)
+  ✔ never reuses a short number once an identity is gone (24.232505ms)
+  ✔ a removed user no longer signs in, authenticates, or appears in a listing (24.242073ms)
+  ✔ a removed name stays reserved, deleted rows included (0.333024ms)
+✔ migrating a genuine v1 database (136.786955ms)
+▶ seeding against a deleted Phaethon
+  ✔ refuses to recreate short number 1 beside a tombstoned row (27.100827ms)
+  ✔ refuses an initial seed whose name belongs to another row (26.064764ms)
+✔ seeding against a deleted Phaethon (53.470581ms)
+▶ the stored schema obeys AGENTS.md
+  ✔ carries logical deletion and update timestamps on the business tables (0.748676ms)
+  ✔ keeps the associated person column on every business table (0.668804ms)
+  ✔ carries no foreign key and no unique constraint beyond the primary key (0.607597ms)
+  ✔ keeps the ordinary lookup index the queries actually need (0.416132ms)
+  ✔ a fresh database lands directly on the migrated schema (26.017324ms)
+  ✔ refuses a database newer than this module understands, leaving it untouched (1.773806ms)
+  ✔ signing out a logically deleted session reports nothing to revoke (75.39393ms)
+✔ the stored schema obeys AGENTS.md (105.960165ms)
+✔ v2 credentials and invites survive the additive group migration (74.719677ms)
+✔ v3 group membership and credentials survive the additive upload migration (50.697812ms)
+ℹ tests 23
+ℹ suites 3
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7696.83313

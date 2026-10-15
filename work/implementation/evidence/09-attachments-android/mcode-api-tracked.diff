@@ -1,0 +1,179 @@
+diff --git a/app/src/main/java/me/rerere/rikkahub/data/remote/RemoteChatApi.kt b/app/src/main/java/me/rerere/rikkahub/data/remote/RemoteChatApi.kt
+index 8184dba8..faf29510 100644
+--- a/app/src/main/java/me/rerere/rikkahub/data/remote/RemoteChatApi.kt
++++ b/app/src/main/java/me/rerere/rikkahub/data/remote/RemoteChatApi.kt
+@@ -20,6 +20,16 @@ import java.io.IOException
+ import java.io.InputStreamReader
+ import java.util.concurrent.TimeUnit
+ 
++/** One attachment of a projected message, as the backend stores it. Type: 1 file, 2 image. */
++@Serializable
++data class RemoteChatAttachment(
++    val index: Int,
++    val type: Int,
++    val name: String,
++    val mime: String,
++    val bytes: Long,
++)
++
+ /** Wire role: 1 user, 2 Fairy. Status: 1 pending, 2 complete, 3 interrupted, 4 failed. */
+ @Serializable
+ data class RemoteChatMessage(
+@@ -29,6 +39,7 @@ data class RemoteChatMessage(
+     val role: Int,
+     val status: Int,
+     val text: String,
++    val attachments: List<RemoteChatAttachment> = emptyList(),
+ )
+ 
+ /** Cumulative raw text; attempt identity is scoped to the projection generation. */
+@@ -80,7 +91,14 @@ data class ChatHistoryPage(
+ interface RemoteChatBackend {
+     suspend fun read(token: String, sessionId: String): RemoteChatProjection
+ 
+-    suspend fun send(token: String, sessionId: String, requestId: String, text: String): ChatReceipt
++    /** [uploadIds] are completed uploads in the order the message shows them. */
++    suspend fun send(
++        token: String,
++        sessionId: String,
++        requestId: String,
++        text: String,
++        uploadIds: List<String> = emptyList(),
++    ): ChatReceipt
+ 
+     suspend fun receipt(token: String, sessionId: String, requestId: String): ChatReceipt?
+ 
+@@ -109,8 +127,14 @@ internal data class ChatEnvelope(
+ @Serializable
+ private data class SessionRef(val sessionId: String)
+ 
++/** The same requestId carries this exact text and these exact ids, forever. */
+ @Serializable
+-private data class SendDocument(val sessionId: String, val requestId: String, val text: String)
++private data class SendDocument(
++    val sessionId: String,
++    val requestId: String,
++    val text: String,
++    val uploadIds: List<String> = emptyList(),
++)
+ 
+ @Serializable
+ private data class PageDocument(val sessionId: String, val throughSeq: Long, val beforeSeq: Long)
+@@ -136,10 +160,11 @@ class RemoteChatApi(
+         sessionId: String,
+         requestId: String,
+         text: String,
++        uploadIds: List<String>,
+     ): ChatReceipt =
+         call(
+             "/chat/send",
+-            json.encodeToString(SendDocument(sessionId, requestId, text)),
++            json.encodeToString(SendDocument(sessionId, requestId, text, uploadIds)),
+             token,
+         ).receipt ?: throw IdentityUnreachable(
+             // Accepted but unacknowledged is exactly the state the wire says is
+diff --git a/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatApiTest.kt b/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatApiTest.kt
+index e0b86fee..a41c4e0f 100644
+--- a/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatApiTest.kt
++++ b/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatApiTest.kt
+@@ -8,6 +8,7 @@ import kotlinx.coroutines.cancelAndJoin
+ import kotlinx.coroutines.flow.toList
+ import kotlinx.coroutines.flow.onEach
+ import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.jsonArray
+ import kotlinx.serialization.json.jsonObject
+ import kotlinx.serialization.json.jsonPrimitive
+ import kotlinx.coroutines.launch
+@@ -383,14 +384,64 @@ class RemoteChatApiTest {
+         assertEquals("""{"sessionId":"s-1"}""", onlyRequest().body)
+     }
+ 
++    @Test
++    fun `send presents the completed uploads in order and the same text under one identity`() = runTest {
++        reply(
++            200,
++            """{"ok":true,"receipt":{"sessionId":"s-1","requestId":"r-1","messageId":"m-2","acceptedSeq":2}}""",
++        )
++
++        api.send(TOKEN, "s-1", "r-1", TEXT, listOf("u-b", "u-a"))
++
++        val document = Json.parseToJsonElement(onlyRequest().body).jsonObject
++        // The same requestId has to carry the same original text and the same
++        // ordered ids on every attempt, or the backend refuses it as a conflict.
++        assertEquals(TEXT, document.getValue("text").jsonPrimitive.content)
++        assertEquals(
++            listOf("u-b", "u-a"),
++            document.getValue("uploadIds").jsonArray.map { it.jsonPrimitive.content },
++        )
++    }
++
++    @Test
++    fun `a send with no attachments still presents an empty ordered list`() = runTest {
++        reply(
++            200,
++            """{"ok":true,"receipt":{"sessionId":"s-1","requestId":"r-1","messageId":"m-2","acceptedSeq":2}}""",
++        )
++
++        api.send(TOKEN, "s-1", "r-1", TEXT)
++
++        assertEquals(
++            emptyList<String>(),
++            Json.parseToJsonElement(onlyRequest().body).jsonObject
++                .getValue("uploadIds").jsonArray.map { it.jsonPrimitive.content },
++        )
++    }
++
++    @Test
++    fun `a projected message carries its original attachment metadata`() = runTest {
++        reply(200, """{"ok":true,"projection":$FIRST_SNAPSHOT}""")
++
++        val projection = api.read(TOKEN, "s-1")
++
++        val attachment = projection.messages.single().attachments.single()
++        assertEquals(0, attachment.index)
++        assertEquals(1, attachment.type)
++        assertEquals("photo.png", attachment.name)
++        assertEquals("image/png", attachment.mime)
++        assertEquals(600000L, attachment.bytes)
++    }
++
+     private companion object {
+         const val TOKEN = "cred-alice"
+         const val TEXT = "  hello\n\tworld  "
+ 
+-        /** A reply still being produced, with exact original text and Markdown. */
++        /** A reply still being produced, with exact original text, Markdown and one attachment. */
+         const val FIRST_SNAPSHOT =
+             """{"sessionId":"s-1","generation":"gen-1","version":1,"cursor":1,"durableThroughSeq":-1,""" +
+-                """"messages":[{"messageId":"m-1","seq":1,"requestId":"r-1","role":1,"status":2,"text":"  hello\n\tworld  "}],""" +
++                """"messages":[{"messageId":"m-1","seq":1,"requestId":"r-1","role":1,"status":2,"text":"  hello\n\tworld  ",""" +
++                """"attachments":[{"index":0,"type":1,"name":"photo.png","mime":"image/png","bytes":600000}]}],""" +
+                 """"attempt":{"attemptId":"a-1","revision":3,"text":"thinking"},"replyStatus":2,"error":"the model fell over"}"""
+ 
+         /** A later, cumulative snapshot: two messages, no attempt left. */
+diff --git a/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatRecoveryTest.kt b/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatRecoveryTest.kt
+index 085eedb8..f7de89b5 100644
+--- a/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatRecoveryTest.kt
++++ b/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatRecoveryTest.kt
+@@ -64,7 +64,7 @@ class RemoteChatRecoveryTest {
+             return ack
+         }
+         override suspend fun read(token:String,sessionId:String)=projection(0,1)
+-        override suspend fun send(token:String,sessionId:String,requestId:String,text:String):ChatReceipt {
++        override suspend fun send(token:String,sessionId:String,requestId:String,text:String,uploadIds:List<String>):ChatReceipt {
+             sendCount++; onSend?.invoke()
+             sendGate?.await()
+             throw IdentityUnreachable(IOException("response lost"))
+diff --git a/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatStateTest.kt b/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatStateTest.kt
+index a1c03670..24e6547c 100644
+--- a/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatStateTest.kt
++++ b/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatStateTest.kt
+@@ -28,7 +28,7 @@ class RemoteChatStateTest {
+             ChatHistoryPage(sessionId, throughSeq, 0, events = (0 until beforeSeq).map(RemoteChatRecoveryTest::event))
+         override suspend fun checkpoint(token: String, sessionId: String) = ack
+         override suspend fun read(token: String, sessionId: String) = projection(sessionId)
+-        override suspend fun send(token: String, sessionId: String, requestId: String, text: String): ChatReceipt {
++        override suspend fun send(token: String, sessionId: String, requestId: String, text: String, uploadIds: List<String>): ChatReceipt {
+             sent += Triple(sessionId, requestId, text)
+             sendGate?.let { withContext(NonCancellable) { it.await() } }
+             failure?.let { throw it }

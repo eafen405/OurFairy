@@ -38,10 +38,10 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/rikkahub.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "d8567891533e6bc725f48382c43b2096de4e422b",
+      "productCommit": "e58352f202ae1add0e9c4bd08b14807f4c84a9bb",
       "researchUpstreamSha": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
       "researchUpstreamRef": "origin/master",
-      "note": "productCommit is the fork integration tip after T5/#28 remote chat and T6/#29 recovery. Remote chat reuses authenticated identity endpoint/shared OkHttp, native-session receipt identities, cumulative exact-text SSE and existing MarkdownBlock for settled replies; the phone does not execute a model or keep authoritative Room history. T6 backfills bounded fixed-cut native events while preserving live attempt/status, reconnects automatically, and advances consumed W only after contiguous applied coverage, writer checkpoint and awaited local preference commit. A small endpoint/user/session record persists W/initialization and unresolved request identity/text; restart still reloads body history. Staged review fixes add actual Navigation3 back-stack serialization and new-generation reconciliation of unsaved observed tails while retaining consumption/pending records; same-generation conflicts remain strict. Targeted remote/identity/session JVM tests passed 85/85 and debug APKs built from the exact merged source tree. No Android preference runtime/failure, emulator/phone, APK-to-real-backend, official model or signed-release acceptance was run. researchUpstreamSha remains the research baseline."
+      "note": "productCommit is the fork integration tip after T5/T6 remote chat/recovery and T9 attachments. Attachments use authenticated remote propose/chunk/complete, persist ordered upload IDs with the existing unknown-send request identity, expose original-byte downloads by session/message/index, and discard delayed work across account/session switches. Existing Markdown rendering and native session history remain in use. Owner relevant JVM suite passed 98/98 and debug APKs built; merger verifies source-tree equality and APK hashes and runs bounded attachment regressions. No phone/emulator, actual Android preference-disk fault, APK-to-real-backend, official-cloud image, signed-release or performance acceptance was run. researchUpstreamSha remains the research baseline."
     }
   },
   "backend": {

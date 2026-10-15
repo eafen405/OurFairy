@@ -1,0 +1,16 @@
+[
+  {
+    "name": "me.rerere.rikkahub.data.remote.RemoteAttachmentApiTest",
+    "tests": "5",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest",
+    "tests": "5",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  }
+]

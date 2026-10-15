@@ -117,3 +117,55 @@ unchanged. T8 original evidence and execution limits are in
 already-running processes retain their initial mounts until termination;
 membership removal applies to subsequent operations. No device or actual
 official-cloud acceptance is claimed.
+
+## T9 integration and stage freeze
+
+Backend `ticket/09-attachments` at
+`d84c9d738b570580f04be70a2141875b66e18f0a` was clean and included the
+published T8 integration tip. Normal merge produced OurFairy source head
+`6b4f9899342eddaa744f6378cef0c6b90695fb1d`. Merger inspected the additive
+v4 upload lifecycle table, native message manifests/receipt reuse,
+authenticated routes and exact readonly file grants. It adds no separate
+message ledger, database or session-history authority.
+
+Android `ticket/09-attachments` at
+`bf4db2d6ff29df9d1fa195fa81460ae12757e21d` was clean and based on the
+current product tip. Normal merge produced
+`e58352f202ae1add0e9c4bd08b14807f4c84a9bb`; both commits have identical
+tracked source tree `51e98c61fc824c7897d4f882c58cf3493f778d6d`.
+`combo.json` now pins that exact Android integration commit; dsh remains
+unchanged. Android original run evidence, bounded mcode source/diff/task
+archives and limits were copied from `/tmp/ourfairy-t9-android-evidence/`
+to [`09-attachments-android/`](../09-attachments-android/README.md).
+
+Independent checks on the merged trees:
+
+- `node --test tests/attachments.test.mjs tests/identity-store.test.mjs`:
+  23/23 with no skips (`t9-merged-backend.log`), using real product
+  HTTP/SQLite/JSONL/CAS and bwrap processes with external HTTP model double.
+- Android `ANDROID_HOME=/home/eafen405/Android/Sdk
+  PATH=/tmp/ourfairy-stage-review/bin:$PATH ./gradlew
+  :app:testDebugUnitTest --tests
+  'me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest' --tests
+  'me.rerere.rikkahub.data.remote.RemoteAttachmentApiTest'
+  '-Dorg.gradle.jvmargs=-Xmx8g -Dfile.encoding=UTF-8' --max-workers=4
+  --parallel --console=plain`: successful; 10/10, zero failures/errors/skips
+  (`t9-merged-android.log`, `t9-merged-android-tests.json`).
+- All three existing owner-built debug APK sizes and SHA-256 hashes match
+  the original manifest, and their final tracked source tree equals the
+  merged source (`t9-apk-verification.json`). No second APK build was run.
+- `node scripts/combo.mjs verify`, `node scripts/ourfairy-backend.mjs doctor
+  --json` and `git diff --check`: passed (`t9-merged-combo.log`,
+  `t9-merged-doctor.log`).
+- dsh's complete pre-existing dirty path set and all 16 SHA-256 hashes
+  remain identical to the stage-start manifest.
+
+Owner's complete product suite was 71/71 and Android relevant suite 98/98;
+merger intentionally ran the bounded checks above instead of repeating
+those full suites. The APK build used the fake Firebase-key stub. No
+device/Compose lifecycle, actual Android preference-disk failure,
+APK-to-real-backend, official cloud/image semantic, signed-release or
+performance acceptance is implied. Backend and Android original evidence
+state their precise remaining integration limits. Formal two-axis stage
+review follows the frozen published combination; this section records
+integration verification only.
