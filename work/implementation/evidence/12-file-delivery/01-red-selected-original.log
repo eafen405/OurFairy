@@ -1,0 +1,39 @@
+✖ selected private file reaches recipient primary as an independent original reference (7047.64023ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7356.895648
+
+✖ failing tests:
+
+test at tests/file-delivery.test.mjs:95:1
+✖ selected private file reaches recipient primary as an independent original reference (7047.64023ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   {
+  -     bytes: 25,
+  -     index: 0,
+  -     mime: 'text/plain',
+  -     name: 'selected.txt',
+  -     type: 1
+  -   }
+  - ]
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/12-file-delivery/tests/file-delivery.test.mjs:106:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ { index: 0, type: 1, name: 'selected.txt', mime: 'text/plain', bytes: 25 } ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

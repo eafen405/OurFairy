@@ -1,0 +1,12 @@
+✔ selected private file reaches recipient primary as an independent original reference (3345.422355ms)
+✔ same identity resumes unfinished preparation after restart without rereading its already prepared file (1363.591477ms)
+✔ source scope and recipient exact-file references stay separate from private spaces and unrelated users (345.337621ms)
+✔ admitted original and image selections can be forwarded without assistant images or sender history rights (350.713817ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5720.379653

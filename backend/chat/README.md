@@ -63,3 +63,11 @@ fields. The durable business row is recoverable notification input; a failed
 `ourfairy/delivery` outlet cannot retract the message or turn a successful
 confirmation into failure. System notification policy belongs to its later ticket.
 This ticket adds no file delivery, outbox, or second history store.
+
+## File delivery (T12)
+
+The existing `deliver_message` tool additionally accepts optional ordered `files`, up to the shared attachment limits: 8 files, 32 MiB per original, 64 MiB total. Each item is either `{path:string}` in the sender's current authorized file world, or `{messageId:string,index:integer}` for an admitted original in the current sender session. Text and recipient remain explicit. The same native call ID derives the same delivery identity; changed target/text/ordered selectors conflict rather than silently changing the delivery.
+
+The existing business row's one `attachments_json` column keeps ordered `{selector,prepared}` entries. Numeric delivery status 2 means files still being prepared. Each immutable snapshot is committed to the checklist before preparing the next; a same-ID retry skips committed entries and continues null entries. A CAS write whose checklist update failed has not committed that item and may be repeated. Only a complete checklist becomes status 0 (ready for the existing writer/flush coordination); status 1 means durably delivered. Startup reconciles ready rows and never sends preparing rows as plain text. This is the same delivery flow and table used for text, with no additional outbox.
+
+The formal receiving `delivery/message` retains only the explicitly selected text and original attachment manifest. It contains no private source selector path and no copied conversation context. Ordinary Fairy role-2 rows use the existing public `{index,type,name,mime,bytes}` attachment metadata and `/attachments/download` session/message/index original route. Files become native readable text handles for later model requests, including delivered images; assistant image blocks and model provider/turn/replay facts are not fabricated. The recipient can use authorized `read`/`read_image` without gaining source workspace access. Delivery itself never starts recipient inference.

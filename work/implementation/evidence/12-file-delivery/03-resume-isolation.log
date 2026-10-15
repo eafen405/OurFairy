@@ -1,0 +1,11 @@
+✔ selected private file reaches recipient primary as an independent original reference (3271.081705ms)
+✔ same identity resumes unfinished preparation after restart without rereading its already prepared file (1379.489861ms)
+✔ source scope and recipient exact-file references stay separate from private spaces and unrelated users (338.008451ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5299.980411

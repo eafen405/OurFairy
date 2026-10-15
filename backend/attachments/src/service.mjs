@@ -4,7 +4,7 @@ import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { createHash, randomBytes } from 'node:crypto'
 import { mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { createReadStream, realpathSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, basename, extname } from 'node:path'
 
 export const MAX_FILE_BYTES = 32 * 1024 * 1024
 export const MAX_MESSAGE_BYTES = 64 * 1024 * 1024
@@ -137,6 +137,27 @@ export class AttachmentService extends Service {
       if (!info.inputModalities?.includes('image')) fail(400, 'image-unsupported', 'the shared model cannot accept image input')
     }
     return inputs
+  }
+  /** Snapshot only an explicitly selected source through the sender's existing scope. */
+  async prepareDeliveryFile(agent, selector, signal) {
+    const owner = this.ctx.identity.store.userByShortId(Number(this.ctx.ourfairySpaces.owner(agent.session)))
+    if (!selector.path) {
+      const input = await this.download(owner, { sessionId: agent.session.id, messageId: selector.messageId, index: selector.index })
+      // A saved reference must still have readable original bytes before it is shared.
+      for await (const _ of this.ctx.attachments.readFileStream(input.original, signal)) {}
+      return { name: input.name, mime: input.mime, original: input.original, ...(input.image ? { image: input.image } : {}) }
+    }
+    await this.refresh(agent.session)
+    return this.ctx.ourfairySpaces.run(agent.session, async () => {
+      const target = await this.ctx.fs.resolve(selector.path, { cwd: this.ctx.workingDirectory.get(agent.session), signal })
+      const bytes = await this.ctx.fs.readBytes(target, signal, MAX_FILE_BYTES)
+      const name = basename(target.displayPath)
+      const mime = ({ '.txt': 'text/plain', '.md': 'text/markdown', '.json': 'application/json', '.pdf': 'application/pdf',
+        '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' })[extname(name).toLowerCase()] ?? 'application/octet-stream'
+      const original = await this.ctx.attachments.saveFile({ data: bytes, name })
+      const image = mime.startsWith('image/') ? await this.ctx.attachments.saveImage({ data: bytes, name, mediaType: mime }) : null
+      return { name: original.name, mime, original, ...(image ? { image } : {}) }
+    })
   }
   async _events(sessionId) {
     const observation = await this.ctx.sessionQuery.observeSession(sessionId, { projectionMode: 'none' })
