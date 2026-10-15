@@ -6,8 +6,15 @@
  * Every mutation that spans more than one statement runs inside one
  * `BEGIN IMMEDIATE` transaction on a synchronous connection, so a failed
  * registration leaves no identity behind and two racing registrations cannot
- * share a short number. The UNIQUE constraints are the second line of defence:
- * they hold even if a caller forgets the transaction.
+ * share a short number. That transaction is the only guard the module needs:
+ * the schema declares no UNIQUE constraint and no foreign key, because AGENTS.md
+ * forbids both, so duplicate names, short-number allocation, and association
+ * existence are all checked explicitly inside the transaction.
+ *
+ * The business tables carry a logical deletion field and an update timestamp;
+ * reads skip deleted rows and writes refresh `updated_at`. Short numbers are
+ * allocated from the highest number ever issued, including deleted ones, so a
+ * removed identity's number is never handed to someone else.
  *
  * @module @ourfairy/dsh-identity/src/store
  */
@@ -27,37 +34,89 @@ import {
 export const PHAETHON_SHORT_ID = 1
 
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
+
+/**
+ * The current shape. No UNIQUE constraint and no REFERENCES clause: AGENTS.md
+ * forbids both, and the `BEGIN IMMEDIATE` transactions below already refuse the
+ * duplicates and orphan rows those constraints used to catch. Only ordinary
+ * primary keys and the lookup indexes the queries actually use remain.
+ *
+ * Held per table so the v1 migration can rebuild one table at a time.
+ */
+const TABLE_DDL = {
+  users: `CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  short_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  is_admin INTEGER NOT NULL DEFAULT 0,
+  password TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
+)`,
+  invites: `CREATE TABLE invites (
+  code TEXT PRIMARY KEY,
+  created_by INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  redeemed_by INTEGER,
+  redeemed_at INTEGER,
+  deleted_at INTEGER
+)`,
+  sessions: `CREATE TABLE sessions (
+  digest TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  revoked_at INTEGER,
+  deleted_at INTEGER
+)`,
+}
+
+/** The v1 column list of each table, in the order the rebuild copies them. */
+const V1_COLUMNS = {
+  users: ['id', 'short_id', 'name', 'is_admin', 'password', 'created_at'],
+  invites: ['code', 'created_by', 'created_at', 'redeemed_by', 'redeemed_at'],
+  sessions: ['digest', 'user_id', 'created_at', 'expires_at', 'revoked_at'],
+}
+
+const INDEX_DDL = `
+CREATE INDEX IF NOT EXISTS sessions_by_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS users_by_short_id ON users(short_id);
+CREATE INDEX IF NOT EXISTS users_by_name ON users(name);
+`
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  short_id INTEGER NOT NULL UNIQUE,
-  name TEXT NOT NULL UNIQUE,
-  is_admin INTEGER NOT NULL DEFAULT 0,
-  password TEXT,
-  created_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS invites (
-  code TEXT PRIMARY KEY,
-  created_by INTEGER NOT NULL REFERENCES users(id),
-  created_at INTEGER NOT NULL,
-  redeemed_by INTEGER REFERENCES users(id),
-  redeemed_at INTEGER
-);
-CREATE TABLE IF NOT EXISTS sessions (
-  digest TEXT PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  created_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  revoked_at INTEGER
-);
-CREATE INDEX IF NOT EXISTS sessions_by_user ON sessions(user_id);
+${Object.values(TABLE_DDL).map(ddl => ddl.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')).join(';\n')};
+${INDEX_DDL}
 `
+
+/**
+ * Rebuild one v1 table into the current shape inside the caller's transaction.
+ *
+ * v1 declared UNIQUE constraints and `REFERENCES users(id)` clauses that
+ * AGENTS.md forbids, and carried no deletion or update columns. Rebuilding
+ * through a temporary table is the only way SQLite drops them; every value the
+ * v1 file held is copied across, ids included, so credentials, invite
+ * redemptions and session digests survive untouched.
+ */
+function rebuildTable(db, table) {
+  const carried = V1_COLUMNS[table].join(', ')
+  db.exec(`ALTER TABLE ${table} RENAME TO ${table}_v1`)
+  db.exec(TABLE_DDL[table])
+  db.prepare(`
+    INSERT INTO ${table} (${carried}, updated_at, deleted_at)
+    SELECT ${carried}, created_at, NULL FROM ${table}_v1
+  `).run()
+  db.exec(`DROP TABLE ${table}_v1`)
+}
+
 
 /** Error carrying the HTTP status a request path must answer with. */
 export class IdentityError extends Error {
@@ -119,12 +178,41 @@ export class IdentityStore {
     mkdirSync(dirname(path), { recursive: true })
     this.#db = new DatabaseSync(path)
     this.#db.exec('PRAGMA journal_mode = WAL')
-    this.#db.exec('PRAGMA foreign_keys = ON')
+    // The current schema declares no foreign key; a v1 file may still carry the
+    // clauses it used to, and rebuilding those tables must not enforce them.
+    this.#db.exec('PRAGMA foreign_keys = OFF')
     this.#db.exec(SCHEMA)
-    this.#db.prepare('INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)')
-      .run('schema_version', String(SCHEMA_VERSION))
+    this.#migrate()
     this.#sessionTtlMilliseconds = sessionTtlDays * DAY_MILLISECONDS
     this.now = now
+  }
+
+  /**
+   * Bring an existing file up to `SCHEMA_VERSION`, atomically.
+   *
+   * A file with no recorded version is new and already carries the current
+   * shape. A version newer than this module understands is refused rather than
+   * downgraded, so a downgrade never silently discards later data.
+   */
+  #migrate() {
+    const row = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version')
+    if (row === undefined) {
+      this.#db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
+        .run('schema_version', String(SCHEMA_VERSION))
+      return
+    }
+    const version = Number(row.value)
+    if (!Number.isInteger(version) || version > SCHEMA_VERSION) {
+      throw new IdentityError(500, 'identity/schema-too-new',
+        `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${row.value}`)
+    }
+    if (version === SCHEMA_VERSION) return
+    this.#transaction(() => {
+      for (const table of Object.keys(TABLE_DDL)) rebuildTable(this.#db, table)
+      this.#db.exec(INDEX_DDL)
+      this.#db.prepare('UPDATE meta SET value = ? WHERE key = ?')
+        .run(String(SCHEMA_VERSION), 'schema_version')
+    })
   }
 
   /** Close the underlying database. */
@@ -162,19 +250,19 @@ export class IdentityStore {
   seedPhaethon({ name = 'phaethon', password } = {}) {
     const login = assertName(name)
     return this.#transaction(() => {
-      const existing = this.#db.prepare('SELECT * FROM users WHERE short_id = ?').get(PHAETHON_SHORT_ID)
+      const existing = this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(PHAETHON_SHORT_ID)
       if (existing !== undefined) {
         if (password !== undefined && password !== '' && existing.password === null) {
-          this.#db.prepare('UPDATE users SET password = ? WHERE id = ?')
-            .run(hashPassword(assertPassword(password)), existing.id)
+          this.#db.prepare('UPDATE users SET password = ?, updated_at = ? WHERE id = ?')
+            .run(hashPassword(assertPassword(password)), this.now(), existing.id)
           return { user: publicUser(this.#db.prepare('SELECT * FROM users WHERE id = ?').get(existing.id)), created: false }
         }
         return { user: publicUser(existing), created: false }
       }
       const now = this.now()
       const info = this.#db.prepare(
-        'INSERT INTO users (short_id, name, is_admin, password, created_at) VALUES (?, ?, 1, ?, ?)',
-      ).run(PHAETHON_SHORT_ID, login, password === undefined || password === '' ? null : hashPassword(assertPassword(password)), now)
+        'INSERT INTO users (short_id, name, is_admin, password, created_at, updated_at) VALUES (?, ?, 1, ?, ?, ?)',
+      ).run(PHAETHON_SHORT_ID, login, password === undefined || password === '' ? null : hashPassword(assertPassword(password)), now, now)
       const row = this.#db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid)
       return { user: publicUser(row), created: true }
     })
@@ -182,19 +270,42 @@ export class IdentityStore {
 
   /** One user by short number, or undefined. */
   userByShortId(shortId) {
-    const row = this.#db.prepare('SELECT * FROM users WHERE short_id = ?').get(Number(shortId))
+    const row = this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(shortId))
     return row === undefined ? undefined : publicUser(row)
   }
 
   /** One user by login name, or undefined. */
   userByName(name) {
-    const row = this.#db.prepare('SELECT * FROM users WHERE name = ?').get(String(name ?? '').trim())
+    const row = this.#db.prepare('SELECT * FROM users WHERE name = ? AND deleted_at IS NULL').get(String(name ?? '').trim())
     return row === undefined ? undefined : publicUser(row)
   }
 
-  /** Every user, in short-number order. */
+  /** Every user, in short-number order; removed identities are not listed. */
   listUsers() {
-    return this.#db.prepare('SELECT * FROM users ORDER BY short_id').all().map(publicUser)
+    return this.#db.prepare('SELECT * FROM users WHERE deleted_at IS NULL ORDER BY short_id').all().map(publicUser)
+  }
+
+  /**
+   * Logically remove one identity.
+   *
+   * The row stays, so the short number it was issued is never handed to another
+   * identity and the removal is auditable. A removed identity stops signing in,
+   * stops authenticating, and gives its name back only after this process.
+   *
+   * @param shortId - short number to remove.
+   * @returns whether a live identity was removed.
+   */
+  removeUser(shortId) {
+    const now = this.now()
+    return this.#transaction(() => {
+      const info = this.#db.prepare(
+        'UPDATE users SET deleted_at = ?, updated_at = ? WHERE short_id = ? AND deleted_at IS NULL',
+      ).run(now, now, Number(shortId))
+      if (info.changes === 0) return false
+      this.#db.prepare('UPDATE sessions SET deleted_at = ?, updated_at = ? WHERE user_id = ? AND deleted_at IS NULL')
+        .run(now, now, Number(this.#db.prepare('SELECT id FROM users WHERE short_id = ?').get(Number(shortId)).id))
+      return true
+    })
   }
 
   /**
@@ -204,22 +315,33 @@ export class IdentityStore {
    */
   createInvite(adminShortId) {
     return this.#transaction(() => {
-      const admin = this.#db.prepare('SELECT * FROM users WHERE short_id = ?').get(Number(adminShortId))
+      const admin = this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(adminShortId))
       if (admin === undefined) throw new IdentityError(403, 'identity/forbidden', 'the caller is not a known identity')
       if (admin.is_admin !== 1) {
         throw new IdentityError(403, 'identity/forbidden', 'only Phaethon may create invites')
       }
       const code = mintInviteCode()
       const now = this.now()
-      this.#db.prepare('INSERT INTO invites (code, created_by, created_at) VALUES (?, ?, ?)')
-        .run(code, admin.id, now)
+      this.#db.prepare('INSERT INTO invites (code, created_by, created_at, updated_at) VALUES (?, ?, ?, ?)')
+        .run(code, admin.id, now, now)
       return { code, createdAt: now }
+    })
+  }
+
+  /** Logically remove one invite so it can no longer be redeemed. */
+  removeInvite(code) {
+    const now = this.now()
+    return this.#transaction(() => {
+      const info = this.#db.prepare(
+        'UPDATE invites SET deleted_at = ?, updated_at = ? WHERE code = ? AND deleted_at IS NULL',
+      ).run(now, now, canonicalInviteCode(code))
+      return info.changes > 0
     })
   }
 
   /** One invite's state, without exposing who redeemed it. */
   inviteState(code) {
-    const row = this.#db.prepare('SELECT * FROM invites WHERE code = ?').get(canonicalInviteCode(code))
+    const row = this.#db.prepare('SELECT * FROM invites WHERE code = ? AND deleted_at IS NULL').get(canonicalInviteCode(code))
     if (row === undefined) return undefined
     return {
       code: row.code,
@@ -243,25 +365,27 @@ export class IdentityStore {
     const login = assertName(name)
     const secret = assertPassword(password)
     return this.#transaction(() => {
-      const invite = this.#db.prepare('SELECT * FROM invites WHERE code = ?').get(code)
+      const invite = this.#db.prepare('SELECT * FROM invites WHERE code = ? AND deleted_at IS NULL').get(code)
       if (invite === undefined) throw new IdentityError(403, 'identity/unknown-invite', 'that invite code was not issued here')
       if (invite.redeemed_by !== null) {
         throw new IdentityError(409, 'identity/invite-used', 'that invite code has already been used')
       }
-      if (this.#db.prepare('SELECT 1 FROM users WHERE name = ?').get(login) !== undefined) {
+      if (this.#db.prepare('SELECT 1 FROM users WHERE name = ? AND deleted_at IS NULL').get(login) !== undefined) {
         throw new IdentityError(409, 'identity/name-taken', 'that name is already registered')
       }
       const now = this.now()
+      // Allocation reads every row, deleted ones included, so a removed identity's
+      // short number is never reused and a name freed by removal can be taken again.
       const next = this.#db.prepare('SELECT COALESCE(MAX(short_id), 0) + 1 AS value FROM users').get()
       const shortId = Number(next.value)
       if (shortId <= PHAETHON_SHORT_ID) {
         throw new IdentityError(500, 'identity/unseeded', 'the Phaethon identity has not been seeded')
       }
       const info = this.#db.prepare(
-        'INSERT INTO users (short_id, name, is_admin, password, created_at) VALUES (?, ?, 0, ?, ?)',
-      ).run(shortId, login, hashPassword(secret), now)
-      this.#db.prepare('UPDATE invites SET redeemed_by = ?, redeemed_at = ? WHERE code = ?')
-        .run(info.lastInsertRowid, now, code)
+        'INSERT INTO users (short_id, name, is_admin, password, created_at, updated_at) VALUES (?, ?, 0, ?, ?, ?)',
+      ).run(shortId, login, hashPassword(secret), now, now)
+      this.#db.prepare('UPDATE invites SET redeemed_by = ?, redeemed_at = ?, updated_at = ? WHERE code = ?')
+        .run(info.lastInsertRowid, now, now, code)
       const user = publicUser(this.#db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid))
       return { user, token: this.#mintSession(info.lastInsertRowid, now) }
     })
@@ -273,7 +397,7 @@ export class IdentityStore {
    * @returns the user and a fresh session token.
    */
   signIn({ name, password } = {}) {
-    const row = this.#db.prepare('SELECT * FROM users WHERE name = ?').get(String(name ?? '').trim())
+    const row = this.#db.prepare('SELECT * FROM users WHERE name = ? AND deleted_at IS NULL').get(String(name ?? '').trim())
     if (row === undefined || row.password === null || !verifyPassword(String(password ?? ''), row.password)) {
       throw new IdentityError(401, 'identity/bad-credentials', 'name and password do not match an identity')
     }
@@ -296,7 +420,7 @@ export class IdentityStore {
     const row = this.#db.prepare(`
       SELECT sessions.digest AS digest, sessions.expires_at AS expires_at, sessions.revoked_at AS revoked_at, users.*
       FROM sessions JOIN users ON users.id = sessions.user_id
-      WHERE sessions.digest = ?
+      WHERE sessions.digest = ? AND sessions.deleted_at IS NULL AND users.deleted_at IS NULL
     `).get(sessionTokenDigest(token))
     if (row === undefined) return undefined
     if (row.revoked_at !== null) return undefined
@@ -310,25 +434,26 @@ export class IdentityStore {
    * @returns whether a live session was revoked.
    */
   signOut(token) {
-    const info = this.#db.prepare('UPDATE sessions SET revoked_at = ? WHERE digest = ? AND revoked_at IS NULL')
-      .run(this.now(), sessionTokenDigest(token))
+    const info = this.#db.prepare('UPDATE sessions SET revoked_at = ?, updated_at = ? WHERE digest = ? AND revoked_at IS NULL')
+      .run(this.now(), this.now(), sessionTokenDigest(token))
     return info.changes > 0
   }
 
   /** Every live session count for one short number; used to observe revocation. */
   liveSessionCount(shortId) {
-    const user = this.#db.prepare('SELECT id FROM users WHERE short_id = ?').get(Number(shortId))
+    const user = this.#db.prepare('SELECT id FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(shortId))
     if (user === undefined) return 0
     return Number(this.#db.prepare(
-      'SELECT COUNT(*) AS value FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?',
+      'SELECT COUNT(*) AS value FROM sessions WHERE user_id = ? AND deleted_at IS NULL AND revoked_at IS NULL AND expires_at > ?',
     ).get(user.id, this.now()).value)
   }
 
   /** Mint and store one session for a user row id. */
   #mintSession(userId, now) {
     const token = mintSessionToken()
-    this.#db.prepare('INSERT INTO sessions (digest, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
-      .run(sessionTokenDigest(token), userId, now, now + this.#sessionTtlMilliseconds)
+    this.#db.prepare(
+      'INSERT INTO sessions (digest, user_id, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?)',
+    ).run(sessionTokenDigest(token), userId, now, now, now + this.#sessionTtlMilliseconds)
     return token
   }
 }

@@ -124,27 +124,19 @@ function collectServices(ctx, rows) {
 }
 
 /**
- * Best-effort tool registry discovery. The authoritative tool catalog evidence
+ * Tool registry discovery.
+ *
+ * The pinned dsh `ToolRuntime` (packages/core/tools/src/index.ts at 2f084be06e)
+ * exposes no enumeration API, and this probe does not invent one: guessing at
+ * accessor names would only ever report `not-enumerable` while maintaining a
+ * compatibility branch with no consumer. The authoritative tool catalog evidence
  * is the model request captured by the external model double; this section only
- * reports what the registry exposes to introspection and never claims an empty
- * catalog when it simply could not enumerate.
+ * reports that the registry cannot be enumerated and never claims an empty
+ * catalog.
  */
 function collectTools(ctx) {
   const tools = ctx.get('tools')
   if (tools === undefined) return { available: false, discovery: 'service-absent', names: null, count: null }
-  for (const method of ['names', 'list', 'specs', 'describe', 'snapshot', 'all', 'entries']) {
-    if (typeof tools[method] !== 'function') continue
-    try {
-      const result = tools[method]()
-      if (!Array.isArray(result)) continue
-      const names = [...new Set(result
-        .map(item => (typeof item === 'string' ? item : item?.name))
-        .filter(value => typeof value === 'string'))].sort()
-      return { available: true, discovery: `method:${method}`, names, count: result.length }
-    } catch {
-      // Try the next candidate accessor.
-    }
-  }
   return { available: true, discovery: 'not-enumerable', names: null, count: null }
 }
 

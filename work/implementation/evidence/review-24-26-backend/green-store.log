@@ -1,0 +1,24 @@
+▶ migrating a genuine v1 database
+  ✔ keeps the ids and passwords the v1 file already held (61.012619ms)
+  ✔ keeps the v1 session digests usable (0.262459ms)
+  ✔ keeps a v1 unredeemed invite redeemable and refuses the redeemed one (23.345213ms)
+  ✔ refuses a duplicate name without a unique index backing it (0.470285ms)
+  ✔ never reuses a short number once an identity is gone (23.691652ms)
+  ✔ a removed user no longer signs in, authenticates, or holds the name (22.611705ms)
+✔ migrating a genuine v1 database (132.02723ms)
+▶ the stored schema obeys AGENTS.md
+  ✔ carries logical deletion and update timestamps on the three business tables (0.665236ms)
+  ✔ keeps the associated person column on every business table (0.37783ms)
+  ✔ carries no foreign key and no unique constraint beyond the primary key (0.53017ms)
+  ✔ keeps the ordinary lookup index the queries actually need (0.387077ms)
+  ✔ a fresh database lands directly on the migrated schema (23.704045ms)
+  ✔ refuses a database newer than this module understands (1.166671ms)
+✔ the stored schema obeys AGENTS.md (27.238134ms)
+ℹ tests 12
+ℹ suites 2
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 292.749668
