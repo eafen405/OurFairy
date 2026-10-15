@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs'
 import { before, after, test } from 'node:test'
 import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
 
+const devFlags = process.env.OURFAIRY_DSH_DIR ? ['--allow-drift'] : []
 const home = makeHome('ourfairy-search-')
 const password = 'group-test-password'
 let port, model, modelPort, admin, alice, bob
@@ -64,14 +65,14 @@ before(async () => {
     res.end()
   })
   model.listen(0, '127.0.0.1'); await once(model, 'listening'); modelPort = model.address().port
-  const run = await runBackendAsync(['start', '--json'], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+  const run = await runBackendAsync(['start', '--json', ...devFlags], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     DEEPSEEK_API_KEY: 'mock-search-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
   assert.equal(run.code, 0, describeRun('start', run)); port = JSON.parse(run.stdout).listeningPorts[0]
   admin = await request('/identity/sign-in', undefined, { name: 'phaethon', password })
   alice = await user('group-alice'); bob = await user('group-bob')
 })
 after(async () => {
-  const run = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home })
+  const run = await runBackendAsync(['stop', '--json', ...devFlags], { OURFAIRY_HOME: home })
   assert.equal(run.code, 0, describeRun('stop', run)); await new Promise(resolve => model.close(resolve)); removeHome(home)
 })
 test('chat searches Chinese message excerpts then reads original event positions', async () => {
