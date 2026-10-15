@@ -1,0 +1,50 @@
+✔ Fairy delivers only selected text to a cold primary without recipient inference (3820.057421ms)
+✔ live delivery remains independent of the recipient active attempt and later model history includes it (159.402003ms)
+✖ native log success with failed business update recovers after restart and exact retry stays single (888.607967ms)
+✖ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (122.419584ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5316.662852
+
+✖ failing tests:
+
+test at tests/text-delivery.test.mjs:138:1
+✖ native log success with failed business update recovers after restart and exact retry stays single (888.607967ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /deliveryId/. Input:
+  
+  '[{"type":"text","text":"Error: injected business update failure"}]'
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/11-text-delivery/tests/text-delivery.test.mjs:152:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '[{"type":"text","text":"Error: injected business update failure"}]',
+    expected: /deliveryId/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/text-delivery.test.mjs:164:1
+✖ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (122.419584ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /deliveryId/. Input:
+  
+  '[{"type":"text","text":"Error: injected business update failure"}]'
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/11-text-delivery/tests/text-delivery.test.mjs:173:49)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '[{"type":"text","text":"Error: injected business update failure"}]',
+    expected: /deliveryId/,
+    operator: 'match',
+    diff: 'simple'
+  }
