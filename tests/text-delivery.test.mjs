@@ -106,6 +106,11 @@ test('Fairy delivers only selected text to a cold primary without recipient infe
   assert.equal(delivered.data.origin.owner, `user:${alice.user.shortId}`)
   for (const key of ['turn','step','stream']) assert.equal(key in delivered.data, false)
   assert.equal(modelRequests.length - before, 2)
+  assert.equal(projection.activity.status, 1)
+  assert.deepEqual(projection.activity.reasons, [4])
+  assert.equal(projection.activity.delivery.seq, delivered.seq)
+  assert.equal(projection.activity.completed.startedSeq, delivered.seq)
+  assert.equal(projection.activity.completed.finishedSeq, delivered.seq)
 })
 
 async function eventually(work, check) {
@@ -146,6 +151,10 @@ test('live delivery remains independent of the recipient active attempt and late
   const before = modelRequests.length
   assert.match(await tool(alice, 'deliver_message', { recipientShortId: bob.user.shortId, text: 'Delivered during your reply' }, senderSession), /deliveryId/)
   const during = (await request('/chat/read', bob.token, { sessionId: target })).projection
+  assert.equal(during.activity.status, 2)
+  assert.equal(during.activity.episodeId, active.projection.activity.episodeId)
+  assert.ok(during.activity.reasons.includes(4))
+  assert.equal(during.activity.delivery.episodeId, active.projection.activity.episodeId)
   assert.equal(during.attempt.attemptId, active.projection.attempt.attemptId)
   assert.equal(during.attempt.text, 'Recipient is still writing')
   assert.equal(during.messages.filter(m => m.text === 'Delivered during your reply').length, 1)

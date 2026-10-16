@@ -6,13 +6,33 @@ const STATUS = Object.freeze({ running: 1, stopping: 2, completed: 3, killed: 4,
 const keyOf = (generation, id) => `${generation}/${id}`
 const terminal = status => status >= 3
 
-/** Fold job/report records and existing inbox/turn facts without a second activity log. */
-export function projectTasks(ctx, events, sessionId) {
+/** One report's state comes only from the native decision, inbox and turn records. */
+function reportState(row, reports, messages, endings) {
+  const report = reports.get(row.taskId)
+  if (report === undefined) return { status: 0 }
+  let state = { status: report.delivery === 'failed' ? 5 : ['wakeup', 'busy-context'].includes(report.delivery) ? 1 : 0,
+    ...(report.messageId === undefined ? {} : { messageId: report.messageId }) }
+  const consumed = messages.get(report.messageId)
+  if (consumed !== undefined) {
+    state = { ...state, ...consumed }
+    const ending = endings.get(consumed.turn)
+    if (ending !== undefined) state.status = ending === 'completed' ? 3 : ['aborted', 'interrupted', 'forked'].includes(ending) ? 4 : 5
+  }
+  if (state.status === 1 && consumed === undefined) {
+    const ending = endings.get(report.scheduledTurn)
+    if (ending !== undefined) state.status = ['aborted', 'interrupted', 'forked'].includes(ending) ? 4 : ending === 'completed' ? 0 : 5
+  }
+  return state
+}
+
+/** Fold once; activity and the task roster share the same report interpretation. */
+export function taskHistory(events, visit) {
   const rows = new Map()
   const reports = new Map()
   const messages = new Map()
   const queues = new Map()
   const endings = new Map()
+  const snapshot = () => [...rows.values()].map(row => ({ ...row, report: reportState(row, reports, messages, endings) }))
   let turn
   for (const event of events) {
     const data = event.data
@@ -35,37 +55,28 @@ export function projectTasks(ctx, events, sessionId) {
     } else if (event.type === 'user/message' && data.source?.kind === 'tool-jobs') {
       messages.set(data.id, { status: 2, turn })
     }
+    if (visit !== undefined) visit(event, snapshot(), [...queues.values()].flat())
   }
+  return snapshot()
+}
+
+/** Enrich native task history with current registry availability; no second task store. */
+export function projectTasks(ctx, events, sessionId) {
   const live = new Map(ctx.jobs.list(sessionId).filter(job => job.owner === sessionId).map(job => [job.id, job]))
-  return [...rows.values()].map(row => {
+  return taskHistory(events).map(row => {
     const job = row.generation === ctx.jobs.generation ? live.get(row.id) : undefined
     const available = job !== undefined
     const current = job ?? row
     const status = STATUS[current.status]
-    const report = reports.get(row.taskId)
-    let state = { status: 0 }
-    if (report !== undefined) {
-      state = { status: report.delivery === 'failed' ? 5 : ['wakeup', 'busy-context'].includes(report.delivery) ? 1 : 0,
-        ...(report.messageId === undefined ? {} : { messageId: report.messageId }) }
-      const consumed = messages.get(report.messageId)
-      if (consumed !== undefined) {
-        state = { ...state, ...consumed }
-        const ending = endings.get(consumed.turn)
-        if (ending !== undefined) state.status = ending === 'completed' ? 3 : ['aborted', 'interrupted', 'forked'].includes(ending) ? 4 : 5
-      }
-      if (state.status === 1 && consumed === undefined) {
-        const ending = endings.get(report.scheduledTurn)
-        if (ending !== undefined) state.status = ['aborted', 'interrupted', 'forked'].includes(ending) ? 4 : ending === 'completed' ? 0 : 5
-      }
-      // A queue can survive a Host restart, but it does not schedule inference by itself.
-      if (!available && [1, 2].includes(state.status)) state.status = 6
-    }
+    const report = { ...row.report }
+    // A restored queue does not schedule inference by itself.
+    if (!available && [1, 2].includes(report.status)) report.status = 6
     return { taskId: row.taskId, kind: current.kind, label: current.label,
       status: !available && !terminal(status) ? 0 : status, availability: available ? 1 : 0,
       startedAt: current.startedAt, ...(current.finishedAt === undefined ? {} : { finishedAt: current.finishedAt }),
       ...(current.detail === undefined ? {} : { detail: current.detail }),
       ...(current.progress === undefined ? {} : { progress: current.progress }),
-      output: { earliest: current.output.earliest, total: current.output.total }, report: state }
+      output: { earliest: current.output.earliest, total: current.output.total }, report }
   })
 }
 

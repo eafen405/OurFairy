@@ -5,6 +5,7 @@ import { createUserMessage, BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { receiptIn, transcript } from './projection.mjs'
 import { FAIRY_PERSONA } from './persona.mjs'
 import { projectTasks } from './jobs.mjs'
+import { projectActivity } from './activity.mjs'
 
 export class ChatError extends SessionScopeError {}
 function requestIdOf(requestId) {
@@ -146,10 +147,11 @@ export class RemoteChat extends Service {
     range.throughSeq = throughSeq
     range.fromSeq = fromSeq
     const included = events.slice(fromSeq)
+    const tasks = projectTasks(this.ctx, events, state.agent.session.id)
     return { sessionId: state.agent.session.id, generation: state.generation, version: state.version, cursor,
       durableThroughSeq: Math.min(cursor, state.durableThroughSeq),
       throughSeq, fromSeq, events: included, hasMore: fromSeq > 0, beforeSeq: fromSeq > 0 ? fromSeq : null,
-      tasks: projectTasks(this.ctx, events, state.agent.session.id),
+      tasks, activity: projectActivity(events, state.agent.session.id, tasks, state.agent.status !== 'idle'),
       messages: transcript(events, state.agent.session.id).filter(message => message.seq >= fromSeq),
       attempt: attempt === null ? null : { attemptId: attempt.attemptId, revision: attempt.revision,
         text: attempt.assembler.interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('') },

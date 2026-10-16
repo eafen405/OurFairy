@@ -1,0 +1,40 @@
+All three changes are in place and verified by inspection. `ignoreUnknownKeys = true` plus the field default means a server that omits `activity` decodes to status `0` (unknown) — exactly the effective-unknown state the owner needs during disconnect/recovery.
+
+## Changes
+
+**1. New — [RemoteActivity.kt](file:///home/eafen405/projects/rikkahub/.worktrees/14-activity/app/src/main/java/me/rerere/rikkahub/data/remote/RemoteActivity.kt)** (45 lines)
+
+Exact approved-root schema, `package me.rerere.rikkahub.data.remote`, all three `@Serializable data class`es:
+
+- `RemoteActivity(status=0, reasons=emptyList(), episodeId=null, startedSeq=null, throughSeq=-1, completed=null, delivery=null)`
+- `RemoteCompletedActivity(episodeId, startedSeq, finishedSeq, outputSeq=null)`
+- `RemoteActivityDelivery(episodeId, seq)`
+
+Compact KDoc records the numeric codes in Chinese per the repo rule that enums travel as numbers with meaning kept in comments/frontend constants. It states explicitly that unknown ≠ quiet, that `reasons` is only meaningful at `status == 2`, and that a quiet run carrying `delivery`/`completed` is a fact, not running work.
+
+**2. Modified — [RemoteChatApi.kt:71](file:///home/eafen405/projects/rikkahub/.worktrees/14-activity/app/src/main/java/me/rerere/rikkahub/data/remote/RemoteChatApi.kt#L71)** (+1 line)
+
+`val activity: RemoteActivity = RemoteActivity()` appended at the **END** of the `RemoteChatProjection` constructor; all 14 existing positional params untouched. Same package, so no import needed.
+
+**3. New — [RemoteActivityCard.kt](file:///home/eafen405/projects/rikkahub/.worktrees/14-activity/app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteActivityCard.kt)** (63 lines)
+
+`internal fun RemoteActivityCard(activity: RemoteActivity, modifier: Modifier = Modifier)` — pure display of passed state.
+
+- Status: `1 → 会话静默`, `2 → Fairy 正在工作`, everything else (incl. out-of-range) `→ 活动状态未知`, so unknown can never read as quiet.
+- Reasons render **only** when `status == 2`, from a `REASON_LABELS` table (`1 执行 / 2 任务 / 3 报告 / 4 投递`) filtered by membership, so order is stable and unrecognized future codes are silently dropped.
+- Reuses the sibling `RemoteTaskCards.kt` convention exactly: `Card` + `surfaceContainerHigh` + `16.dp` column + `titleSmallEmphasized`, giving the MD3 Expressive look without new styling.
+- No event scanning, no network, no local derivation, no notification/setting logic — the KDoc says so. Quiet-with-delivery stays status 1 and shows no reason lines, so running is never faked.
+
+## Checks performed (read-only)
+
+- Read `AGENTS.md`, `/home/eafen405/projects/OurFairy/AGENTS.md`, and `CODING_STANDARDS.md`; reused the adjacent module's pattern instead of inventing one (`RemoteTaskCards.kt`, `RemoteJobApi.kt`).
+- Grepped every `RemoteChatProjection` construction in `app/src`: all use named args or pass only `sessionId` first, so appending a defaulted param is source-compatible.
+- Confirmed `Json { ignoreUnknownKeys = true }` at `RemoteChatApi.kt:150` → absent `activity` decodes to unknown, present-but-newer keys are ignored.
+- Read the owner's concurrently-added `RemoteActivityStateTest.kt` read-only: it uses exactly my field names (`status`, `reasons`, `episodeId`, `startedSeq`, `throughSeq`, `activity =`) — contract matches.
+
+## Notes / blockers
+
+- **No compile was run** — Gradle was out of scope, so type-correctness is verified by inspection only, not by a build.
+- `RemoteActivityCard` currently has **no call site** (panel wiring is yours); an unused `internal` composable is a warning at most, not an error.
+- Your test asserts `state.snapshot.value.activity`; `RemoteChatState` does not expose that yet — expected pending lifecycle work in your scope, which I left untouched.
+- Unrelated `?? web-ui/node_modules` left alone; no commits, pushes, or builds performed.

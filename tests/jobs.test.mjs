@@ -66,7 +66,7 @@ before(async () => {
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: noticeIndex > latestUser ? 'REPORT: original job finished' : result ? `RESULT:${JSON.stringify(result.content)}` : 'CHAT: independent reply' } })
     }
     emit({ type: 'content_block_stop', index: 0 })
-    emit({ type: 'message_delta', delta: { stop_reason: command?.text.startsWith('{"name":') && !result && noticeIndex < latestUser ? 'tool_use' : 'end_turn', stop_sequence: null }, usage: { output_tokens: 3 } })
+    emit({ type: 'message_delta', delta: { stop_reason: command?.text.startsWith('{"name":') && !result && noticeIndex < latestUser ? 'tool_use' : noticeIndex > latestUser && command?.text.includes('FAIL_REPORT') ? 'max_tokens' : 'end_turn', stop_sequence: null }, usage: { output_tokens: 3 } })
     emit({ type: 'message_stop' }); res.end()
   })
   model.listen(0, '127.0.0.1'); await once(model, 'listening'); modelPort = model.address().port
@@ -88,6 +88,9 @@ test('actual confined job survives phone observation, permits dialogue, and repo
   const sessionId = (await request('/sessions/create', alice.token)).session.id
   const task = await startJob(alice, sessionId, "printf '你好'; sleep 1; printf '完成'")
   assert.equal(task.status, 1); assert.equal(task.availability, 1)
+  const startedActivity = (await projection(alice, sessionId)).activity
+  assert.equal(startedActivity.status, 2)
+  assert.ok(startedActivity.reasons.includes(2))
   const observer = new AbortController()
   const response = await fetch(`http://127.0.0.1:${port}/chat/observe`, { method: 'POST', headers: { authorization: `Bearer ${alice.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ sessionId }), signal: observer.signal })
   const reader = response.body.getReader(); await reader.read(); observer.abort()
@@ -95,6 +98,8 @@ test('actual confined job survives phone observation, permits dialogue, and repo
   await until(() => projection(alice, sessionId), p => p.messages.some(m => m.text === 'CHAT: independent reply'), 'dialogue while job runs')
   const terminal = await until(() => projection(alice, sessionId), p => p.tasks[0].status === 3 && p.tasks[0].report.status === 3, 'original completion report')
   assert.ok(terminal.messages.some(m => m.text === 'REPORT: original job finished'))
+  assert.equal(terminal.activity.status, 1)
+  assert.equal(terminal.activity.completed.episodeId, startedActivity.episodeId)
   const { output } = await request('/chat/jobs/output', alice.token, { sessionId, taskId: task.taskId, from: 0 })
   assert.equal(output.availability, 1); assert.equal(output.next, 12); assert.equal(output.lossy, false)
   assert.equal(output.chunks.map(c => c.text).join(''), '你好完成')
@@ -129,6 +134,7 @@ test('stopping a reply and stopping its real background process are independent,
   await request('/chat/stop', alice.token, { sessionId })
   const canceledReport = await until(() => projection(alice, sessionId), p => p.replyStatus === 0, 'held report reply stopped')
   assert.equal(canceledReport.tasks[0].report.status, 4)
+  assert.equal(canceledReport.activity.status, 1)
   await send(alice, sessionId, '__CHAT__')
   await until(() => projection(alice, sessionId), p => p.replyStatus === 0 && p.tasks[0].report.status >= 3, 'cancel/report settled')
 })
@@ -185,12 +191,15 @@ test('confined detached scripts cannot read another user and old task identities
   const lost = recovered.tasks.find(t => t.taskId === live.taskId)
   assert.equal(lost.availability, 0)
   assert.equal(lost.status, 0)
+  assert.equal(recovered.activity.status, 0)
   const unavailable = (await request('/chat/jobs/output', alice.token, { sessionId, taskId: denied.taskId, from: 0 })).output
   assert.equal(unavailable.availability, 0); assert.equal(unavailable.lossy, true); assert.deepEqual(unavailable.chunks, [])
   assert.equal((await request('/chat/jobs/stop', alice.token, { sessionId, taskId: denied.taskId })).outcome, 0)
   const fresh = await startJob(alice, sessionId, 'printf fresh')
   assert.notEqual(fresh.taskId, denied.taskId)
-  await until(() => projection(alice, sessionId), p => p.tasks.find(t => t.taskId === fresh.taskId)?.report.status === 3, 'fresh post-restart work settled')
+  const freshProjection = await until(() => projection(alice, sessionId), p => p.tasks.find(t => t.taskId === fresh.taskId)?.report.status === 3, 'fresh post-restart work settled')
+  assert.notEqual(freshProjection.activity.completed.episodeId, recovered.activity.episodeId)
+  assert.ok(freshProjection.activity.completed.finishedSeq > recovered.activity.throughSeq)
   // The crashed Host cannot settle the original record. The fixture's bounded orphan, if any, must finish before global teardown checks it.
   await new Promise(resolve => setTimeout(resolve, 2000))
   if (process.env.T13_WIRE_SAMPLE) {
@@ -198,4 +207,103 @@ test('confined detached scripts cannot read another user and old task identities
     writeFileSync(process.env.T13_WIRE_SAMPLE, JSON.stringify({ task: known, output: unavailable,
       stop: await request('/chat/jobs/stop', alice.token, { sessionId, taskId: denied.taskId }) }, null, 2) + '\n')
   }
+})
+
+
+async function activityObserver(user, sessionId) {
+  const controller = new AbortController(), frames = []
+  const response = await fetch(`http://127.0.0.1:${port}/chat/observe`, { method: 'POST', headers: {
+    authorization: `Bearer ${user.token}`, 'content-type': 'application/json',
+  }, body: JSON.stringify({ sessionId }), signal: controller.signal })
+  const done = (async () => {
+    let buffered = ''
+    const decoder = new TextDecoder()
+    for await (const chunk of response.body) {
+      buffered += decoder.decode(chunk, { stream: true })
+      let end
+      while ((end = buffered.indexOf('\n\n')) >= 0) {
+        const frame = buffered.slice(0, end); buffered = buffered.slice(end + 2)
+        const data = frame.split('\n').find(line => line.startsWith('data: '))
+        if (data) frames.push(JSON.parse(data.slice(6)))
+      }
+    }
+  })().catch(error => { if (!controller.signal.aborted) throw error })
+  return { frames, async close() { controller.abort(); await done } }
+}
+
+test('two sessions stay independent and real job settlement never publishes an intermediate quiet episode', async () => {
+  const first = (await request('/sessions/create', alice.token)).session.id
+  const second = (await request('/sessions/create', alice.token)).session.id
+  await startJob(alice, first, 'sleep .8; printf done')
+  const observation = await activityObserver(alice, first)
+  try {
+    await until(async () => observation.frames, frames => frames.length > 0, 'activity observer opened')
+    const episodeId = observation.frames[0].activity.episodeId
+    await send(alice, second, '__CHAT__')
+    const quietSecond = await until(() => projection(alice, second), p => p.replyStatus === 0 && p.messages.length >= 2, 'second session finished')
+    assert.equal(quietSecond.activity.status, 1)
+    assert.notEqual(quietSecond.activity.episodeId, episodeId)
+    assert.equal((await projection(alice, first)).activity.status, 2)
+    await until(() => projection(alice, first), p => p.tasks[0].report.status === 3 && p.activity.status === 1, 'first session finished')
+    await until(async () => observation.frames, frames => frames.at(-1)?.activity.status === 1, 'final activity frame')
+    const states = observation.frames.map(p => p.activity)
+    assert.ok(states.every(activity => activity.episodeId === episodeId))
+    const firstQuiet = states.findIndex(activity => activity.status === 1)
+    assert.ok(firstQuiet > 0)
+    assert.ok(states.slice(firstQuiet).every(activity => activity.status === 1))
+    assert.equal(states.at(-1).completed.episodeId, episodeId)
+    if (process.env.T14_WIRE_SAMPLE) {
+      const { writeFileSync } = await import('node:fs')
+      writeFileSync(process.env.T14_WIRE_SAMPLE, JSON.stringify(states.at(-1), null, 2) + '\n')
+    }
+  } finally { await observation.close() }
+})
+
+test('an awaited result and a failed report both settle without holding terminal tasks active', async () => {
+  const awaitedSession = (await request('/sessions/create', alice.token)).session.id
+  const task = await startJob(alice, awaitedSession, 'sleep .7; printf collected')
+  const nativeId = task.taskId.slice(task.taskId.indexOf('/') + 1)
+  await send(alice, awaitedSession, JSON.stringify({ name: 'job_output', args: { job_id: nativeId, wait: true } }))
+  const awaited = await until(() => projection(alice, awaitedSession), p => p.tasks[0].status === 3 && p.replyStatus === 0, 'awaited job result')
+  assert.equal(awaited.tasks[0].report.status, 0)
+  assert.equal(awaited.activity.status, 1)
+  const failedSession = (await request('/sessions/create', alice.token)).session.id
+  await startJob(alice, failedSession, 'sleep .3; printf FAIL_REPORT')
+  const failed = await until(() => projection(alice, failedSession), p => p.tasks[0].report.status === 5 && p.replyStatus === 0, 'failed report settled')
+  assert.equal(failed.activity.status, 1)
+  assert.ok(!failed.activity.reasons.includes(3))
+})
+
+test('configured quiet completion leaves context for later without inventing pending inference', async () => {
+  await stop()
+  const { writeFileSync } = await import('node:fs')
+  writeFileSync(`${home}/dsh-home/profiles/ourfairy/cordis.patch.yml`, '- id: tool-jobs\n  config:\n    completionDelivery: quiet\n')
+  await start()
+  const sessionId = (await request('/sessions/create', alice.token)).session.id
+  await startJob(alice, sessionId, 'sleep .3; printf quiet-result')
+  const quiet = await until(() => projection(alice, sessionId), p => p.tasks[0].status === 3 && p.replyStatus === 0, 'quiet result retained')
+  assert.equal(quiet.tasks[0].report.status, 0)
+  assert.equal(quiet.activity.status, 1)
+  assert.ok(!quiet.messages.some(message => message.text.startsWith('REPORT:')))
+  assert.ok(quiet.events.some(event => event.type === 'jobs/report' && event.data.delivery === 'quiet-context'))
+  await send(alice, sessionId, '__CHAT__')
+  const later = await until(() => projection(alice, sessionId), p => p.tasks[0].report.status === 3, 'quiet context entered later real turn')
+  assert.equal(later.activity.status, 1)
+  assert.notEqual(later.activity.completed.episodeId, quiet.activity.completed.episodeId)
+})
+
+test('accepted consecutive turns form one execution episode and canceled parked input does not stay active', async () => {
+  const sessionId = (await request('/sessions/create', alice.token)).session.id
+  await send(alice, sessionId, '__HOLD__')
+  const first = await until(() => projection(alice, sessionId), p => p.attempt !== null, 'first held execution')
+  await send(alice, sessionId, '__CHAT__')
+  // Keep the second accepted input while ending the held turn, then explicitly wake it.
+  await request('/chat/stop', alice.token, { sessionId })
+  const parked = await until(() => projection(alice, sessionId), p => p.replyStatus === 0, 'input parked after stop')
+  assert.equal(parked.activity.status, 1)
+  await send(alice, sessionId, '__CHAT__')
+  const final = await until(() => projection(alice, sessionId), p => p.replyStatus === 0 && p.messages.filter(m => m.role === 2).length >= 2, 'queued turns drained')
+  const waking = final.events.find(event => event.type === 'agent/inbox/spliced' && event.seq > parked.cursor && event.data.inserted.some(message => message.source?.kind === 'user'))
+  assert.equal(final.activity.completed.startedSeq, waking.seq)
+  assert.notEqual(final.activity.completed.episodeId, first.activity.episodeId)
 })
