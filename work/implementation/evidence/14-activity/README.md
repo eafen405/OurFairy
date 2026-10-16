@@ -1,6 +1,6 @@
 # T14 — one derived activity projection
 
-Scope: #37 / `work/tickets/ourfairy-v1/14-activity.md`, parent stories 49–51. OurFairy `ticket/14-activity` starts from published T13 integration `69d7eaaeb1d27bbad62b89b11591337a149adb80`. No dsh changes, database/table, activity journal, owner copy or notification policy.
+Scope: #37 / `work/tickets/ourfairy-v1/14-activity.md`, parent stories 49–51. OurFairy behavior commit `27ee4073fe8f2d74e219a143a46b6416caf84691` on `ticket/14-activity` starts from published T13 integration `69d7eaaeb1d27bbad62b89b11591337a149adb80`. No dsh changes, database/table, activity journal, owner copy or notification policy.
 
 ## Design and source
 
@@ -21,4 +21,4 @@ TDD logs preserve initial missing activity, post-restart summary loss, and conse
 
 Actual backend JSON: `actual-backend-activity.json`. Android owner `fa83e9ce` decoded the actual payload with compiled production serializers; its **57/57** JVM checks and debug APK evidence are under `android/`, including the bounded mcode handoff. Builds and serializer checks do not establish APK connected to backend, emulator/phone or cloud-model behavior.
 
-The final normal commit hooks run the required full `npm test` and `npm run combo:verify`; their result will be appended to this evidence after completion. Runtime checks use the current published native production artifacts, not the pre-T13 stale build. No official cloud API, device, performance or final whole-product acceptance is claimed.
+Final normal commit hooks ran full `npm test`: **102/102 passed**, then `npm run combo:verify`: **passed**, with the current root native production build at `fc5c7ac0220cf48c404cda34d1584901387eea06` and Android `fa83e9ce29e33f4aa506f209903c54f85bce8cff`. Raw output is `normal-hooks-102.log.gz`. The earlier hook attempt passed 101/102 while Android moved before the matching combo reached this ticket; its doctor correctly rejected that transient pin mismatch (`first-hook-combo-transition.log.gz`). No hook was bypassed. Latest integration `7d7fafdd` was merged before the passing commit. Runtime checks use the current published native production artifacts, not the pre-T13 stale build. No official cloud API, device, performance or final whole-product acceptance is claimed.
