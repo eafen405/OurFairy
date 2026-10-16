@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.ui.identity.IdentityNavigationTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-16T10:55:53.720Z" hostname="LAPTOP-45RC44AF" time="0.058">
+  <properties/>
+  <testcase name="no remembered credential leaves the stack on sign-in" classname="me.rerere.rikkahub.ui.identity.IdentityNavigationTest" time="0.006"/>
+  <testcase name="a restore that answers after a newer sign-in does not override it" classname="me.rerere.rikkahub.ui.identity.IdentityNavigationTest" time="0.003"/>
+  <testcase name="a credential the backend rejects leaves the stack on sign-in" classname="me.rerere.rikkahub.ui.identity.IdentityNavigationTest" time="0.003"/>
+  <testcase name="sessions destination survives the navigation library back stack save and restore" classname="me.rerere.rikkahub.ui.identity.IdentityNavigationTest" time="0.042"/>
+  <testcase name="a remembered credential replaces the seeded sign-in stack once it is accepted" classname="me.rerere.rikkahub.ui.identity.IdentityNavigationTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.ui.identity.IdentityAccessPolicyTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-16T11:08:43.595Z" hostname="LAPTOP-45RC44AF" time="0.001">
+  <properties/>
+  <testcase name="while signed out only the sign-in areas may be composed" classname="me.rerere.rikkahub.ui.identity.IdentityAccessPolicyTest" time="0.001"/>
+  <testcase name="a legacy destination stays impassable even for the administrator" classname="me.rerere.rikkahub.ui.identity.IdentityAccessPolicyTest" time="0.0"/>
+  <testcase name="phaethon reaches the invite operation and the same account area" classname="me.rerere.rikkahub.ui.identity.IdentityAccessPolicyTest" time="0.0"/>
+  <testcase name="an undelivered area is refused for every identity" classname="me.rerere.rikkahub.ui.identity.IdentityAccessPolicyTest" time="0.0"/>
+  <testcase name="an agent lands on the account area and never on the invite operation" classname="me.rerere.rikkahub.ui.identity.IdentityAccessPolicyTest" time="0.0"/>
+  <testcase name="the conversation is refused while it would still run models locally" classname="me.rerere.rikkahub.ui.identity.IdentityAccessPolicyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

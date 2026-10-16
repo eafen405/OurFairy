@@ -1,0 +1,23 @@
+{
+  "artifacts": [
+    {
+      "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications/app/build/outputs/apk/debug/app-x86_64-debug.apk",
+      "bytes": 87237592,
+      "sha256": "27f10333ba6945fec33936d35ce312824822e098ebbe3d9e31a7a8df74b4d2f0"
+    },
+    {
+      "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications/app/build/outputs/apk/debug/app-universal-debug.apk",
+      "bytes": 97805292,
+      "sha256": "17625e4e67400c6f21eca59ba7234102e381f36bae5602e238d64ce6ac02d795"
+    },
+    {
+      "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk",
+      "bytes": 86381648,
+      "sha256": "a5d19ff26eac26f208a93c2f8f2eeacfb3a95a9e424f792703e85fe34011b985"
+    }
+  ],
+  "productionCommit": "ea04fa37",
+  "finalCommit": "3ee4bc26dc2f7627b97fc9bd2800643e29a6c7b6",
+  "firebase": "fake build-time stub; not runtime verified",
+  "deviceTested": false
+}

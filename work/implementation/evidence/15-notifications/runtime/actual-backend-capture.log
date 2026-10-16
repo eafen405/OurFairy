@@ -1,0 +1,10 @@
+Captured actual native durable delivery, authenticated full projection and real SSE framing; model service is controlled local double.
+✔ capture real durable recipient projection and SSE for Android notification fixture (5840.735038ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6161.2042

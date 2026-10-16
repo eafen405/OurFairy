@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.data.remote.RemoteJobApiTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-16T11:08:43.376Z" hostname="LAPTOP-45RC44AF" time="0.049">
+  <properties/>
+  <testcase name="known terminal task can have unavailable output after server restart" classname="me.rerere.rikkahub.data.remote.RemoteJobApiTest" time="0.011"/>
+  <testcase name="output uses absolute byte cursor and authenticated original session task identity" classname="me.rerere.rikkahub.data.remote.RemoteJobApiTest" time="0.007"/>
+  <testcase name="stop task is distinct from reply stop and returns only admission outcome" classname="me.rerere.rikkahub.data.remote.RemoteJobApiTest" time="0.01"/>
+  <testcase name="chat projection carries native lifecycle and report facts without another roster" classname="me.rerere.rikkahub.data.remote.RemoteJobApiTest" time="0.008"/>
+  <testcase name="a refused owner does not adopt a success shaped payload" classname="me.rerere.rikkahub.data.remote.RemoteJobApiTest" time="0.012"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

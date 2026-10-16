@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.data.remote.RemoteActivityStateTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-16T11:08:42.031Z" hostname="LAPTOP-45RC44AF" time="0.034">
+  <properties/>
+  <testcase name="finished report follows authoritative quiet without retaining old job reason" classname="me.rerere.rikkahub.data.remote.RemoteActivityStateTest" time="0.022"/>
+  <testcase name="quiet remains unknown until recovery writer barrier and detach never implies silence" classname="me.rerere.rikkahub.data.remote.RemoteActivityStateTest" time="0.003"/>
+  <testcase name="restart generation retires previous active facts and waits for recovered unknown" classname="me.rerere.rikkahub.data.remote.RemoteActivityStateTest" time="0.002"/>
+  <testcase name="shared activity follows backend job report handoff without guessing from idle reply" classname="me.rerere.rikkahub.data.remote.RemoteActivityStateTest" time="0.002"/>
+  <testcase name="one session job does not keep another quiet delivery active or fabricate reply" classname="me.rerere.rikkahub.data.remote.RemoteActivityStateTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.data.remote.RemoteAttachmentApiTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-16T11:08:42.070Z" hostname="LAPTOP-45RC44AF" time="0.573">
+  <properties/>
+  <testcase name="a lost completion answer is repeated once under the same upload id" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentApiTest" time="0.192"/>
+  <testcase name="upload proposes the original file and sends it as ordered sequential chunks" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentApiTest" time="0.201"/>
+  <testcase name="a lost chunk answer is repeated with the same bytes and offset, not reproposed" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentApiTest" time="0.157"/>
+  <testcase name="a truncated download is refused and leaves nothing behind" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentApiTest" time="0.009"/>
+  <testcase name="download writes exactly the original bytes the message describes" classname="me.rerere.rikkahub.data.remote.RemoteAttachmentApiTest" time="0.014"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

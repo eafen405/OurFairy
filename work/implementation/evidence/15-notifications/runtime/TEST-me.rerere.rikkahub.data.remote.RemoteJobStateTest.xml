@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.data.remote.RemoteJobStateTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-16T11:08:43.426Z" hostname="LAPTOP-45RC44AF" time="0.015">
+  <properties/>
+  <testcase name="overlapping whole UTF8 chunks append only unseen bytes and retain explicit loss at terminal" classname="me.rerere.rikkahub.data.remote.RemoteJobStateTest" time="0.003"/>
+  <testcase name="task details retain UTF8 output and closing observation never stops work" classname="me.rerere.rikkahub.data.remote.RemoteJobStateTest" time="0.002"/>
+  <testcase name="reply stop task stop and view cancel are independent commands" classname="me.rerere.rikkahub.data.remote.RemoteJobStateTest" time="0.002"/>
+  <testcase name="unavailable completed task retains known outcome without claiming complete output" classname="me.rerere.rikkahub.data.remote.RemoteJobStateTest" time="0.002"/>
+  <testcase name="a moving retention window trims an old overlapping UTF8 chunk at a byte boundary" classname="me.rerere.rikkahub.data.remote.RemoteJobStateTest" time="0.003"/>
+  <testcase name="late output from old account cannot enter the new binding" classname="me.rerere.rikkahub.data.remote.RemoteJobStateTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

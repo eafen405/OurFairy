@@ -1,0 +1,38 @@
+Both edits complete and verified.
+
+## Changed paths
+
+**1. `/home/eafen405/projects/rikkahub/.worktrees/15-notifications-platform/app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteReceiveSetupCard.kt`** (new, 100 lines)
+
+Internal composable with the exact signature requested, following the neighboring `RemoteActivityCard.kt` pattern (`Card` + `CardDefaults.cardColors(containerColor = surfaceContainerHigh)` + `Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp))`).
+
+Structure — plain `Column` with two `Row`s, no nesting beyond that:
+- Title row: `后台接收` (`titleSmallEmphasized`, `weight(1f)`) + `Switch(checked = enabled, onCheckedChange = onEnabledChange)`
+- `接收服务运行中` shown only when `receiving` is true
+- `status` rendered verbatim as supplied by the owner
+- Caveat line (`bodySmall`, `onSurfaceVariant`): 后台接收需用户开启；进程回收、Doze、强行停止可能中断，重新打开应用恢复；不承诺持续在线。
+- When `notificationsAllowed` is false: a hint line plus an `OutlinedButton` labelled `请求通知权限` wired to `onRequestPermission` — user-initiated only, nothing auto-fires
+- Button row always retains `打开通知通知设置`/`后台与电池设置` (`onSettings`, `onBackgroundSettings`); the row uses `horizontalScroll(rememberScrollState())` so three Chinese button labels cannot clip on narrow screens
+
+Callback-only confirmed by import audit: no `LocalContext`, `ActivityResult`, permission API, prefs/DataStore, or `LaunchedEffect` — all state arrives as parameters.
+
+**2. `/home/eafen405/projects/rikkahub/.worktrees/15-notifications-platform/app/src/main/AndroidManifest.xml`** (additive, +8 lines)
+
+New `<service>` inserted directly after `WebServerService` inside `<application>`: `.service.RemoteReceiveService`, `android:exported="false"`, `android:foregroundServiceType="specialUse"`, with the child `<property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE">` carrying the required subtype string. No other manifest lines touched; `FOREGROUND_SERVICE_SPECIAL_USE` remains declared exactly once at line 17 and was not duplicated.
+
+## Checks performed
+
+- `git diff` on the manifest shows a single +8-line additive hunk, no removals
+- Manifest parsed with `xml.dom.minidom` — well-formed; the new service node serialized correctly
+- Grep confirms one `FOREGROUND_SERVICE_SPECIAL_USE` permission and one `RemoteReceiveService` entry
+- Import audit on the composable confirms zero prefs/permission/runtime dependencies
+- `git status --porcelain` shows only these two paths (`web-ui/node_modules` was already untracked and untouched)
+
+## Unresolved blockers
+
+None for this scope. Two things to flag:
+
+- **Not compiled.** Gradle was explicitly out of scope for this subtask, so the Kotlin file is verified by inspection and pattern-matching against `RemoteActivityCard.kt`/`RemoteTaskCards.kt`, not by a build. Per the OurFairy standard 编译成功只证明对应环节, treat compilation as unverified until you run it.
+- **`RemoteReceiveService` does not exist yet.** The manifest now references a class owned by the runtime-wiring task; the build will fail on manifest processing until that class lands at `app/src/main/java/me/rerere/rikkahub/service/RemoteReceiveService.kt`. This is the expected seam, not a defect in these edits.
+
+No commits, pushes, or Gradle invocations were performed.

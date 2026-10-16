@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.ui.identity.RemoteNotificationNavigationTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-16T11:08:43.621Z" hostname="LAPTOP-45RC44AF" time="0.004">
+  <properties/>
+  <testcase name="another account or deployment never initiates a session query" classname="me.rerere.rikkahub.ui.identity.RemoteNotificationNavigationTest" time="0.002"/>
+  <testcase name="ownership refusal cannot navigate and late old account answer cannot navigate" classname="me.rerere.rikkahub.ui.identity.RemoteNotificationNavigationTest" time="0.001"/>
+  <testcase name="cold restore settles before a qualified notification opens its owned session" classname="me.rerere.rikkahub.ui.identity.RemoteNotificationNavigationTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
