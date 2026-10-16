@@ -1,0 +1,110 @@
+{
+  "ourfairy": {
+    "path": "/home/eafen405/projects/OurFairy",
+    "branch": "integration/retro-guardrails",
+    "HEAD": "ecd345327225100e252d665039e9ad668ea4c3bb",
+    "branches": "e1deaec15486013c9e2dfd495d869b276a487e04 refs/heads/docs/retro-standards\n361cff1cca949ea8593dc82306ee70109285829b refs/heads/fix/retro-checks\n109a692f9db85fd9c6cc7cdce700b4ac306cf2da refs/heads/fix/review-24-26-backend\n028f10cfdc05cc77c2d150b09524fef2056cd074 refs/heads/fix/review-t7-t9\n8ac025bb906592e2b7a05459690fa3998b377393 refs/heads/integration/ourfairy-v1\necd345327225100e252d665039e9ad668ea4c3bb refs/heads/integration/retro-guardrails\nc3d45c60edd778479f84f08cdc8bff992d47148d refs/heads/main\n5b27817352424960749b6edbfc256c634b8851ed refs/heads/research/backend-references\n1fbb988328b38f816d5ff6cac39a56c544a72414 refs/heads/research/dsh-skeleton\n210a3eedc2323fb641ad864ab374984d13bc1e76 refs/heads/research/fairybot-features\n96a2cedb3f6be1661b5b7d7a6c72a5020f9bef5e refs/heads/research/frontend-pruning\n4999e91af87b9876d0db3da45e4e88127855618d refs/heads/research/rikkahub-architecture\n9260757619f2847281017849b6025f69702ff527 refs/heads/research/v1-backend-readiness\nf5e77f294ddb9ad26a4c950d5fdc27d5c92b29f8 refs/heads/research/v1-client-contract\n409d52462ac7207866c7da60e7fbb0cbcaa8e450 refs/heads/research/v1-input-path\n4fb8ee42a54e1b1a2a1bdf1a8a0819858d33cc0b refs/heads/ticket/01-baseline\n160f68da345ada144963baf9c9a096c3398e97e3 refs/heads/ticket/03-identity\nf677cca2ffe1a3bcfb3ab0a2b2c0dd0e2354aa6e refs/heads/ticket/04-owned-sessions\nb50a2c5a893090c4a7d8c42168ef868f5ebeb9e4 refs/heads/ticket/05-remote-chat\nfbad2dc1621bd2bdb9e521343fbc45a505f367ed refs/heads/ticket/06-reconnect\n606101a1ec8317a6a660301dab813092d01218ef refs/heads/ticket/07-space-execution\n2dbe49acfd05a080e8775084c54c5d4085bb3d6c refs/heads/ticket/08-group-spaces\nd84c9d738b570580f04be70a2141875b66e18f0a refs/heads/ticket/09-attachments\n8162a463cf4023f1be26fc2d826aa744f8c4cd43 refs/heads/ticket/10-conversation-search\na04a33a57cb9691be26113f44a6dd4f1f5d5953d refs/heads/ticket/11-text-delivery\n403797a2341638c0ff9050375eb9419693464792 refs/heads/ticket/12-file-delivery\n57ea2d113e7656b0bfe120cc37ec61408b063514 refs/heads/work/wayfinder-grill-frontend",
+    "dirty": []
+  },
+  "dsh": {
+    "path": "/home/eafen405/projects/deepseek-harness",
+    "branch": "product/ourfairy-v1",
+    "HEAD": "173e155a85305db378dd92b1fa057ac6e6dea86e",
+    "branches": "d3fe98f969c3963c6d193e74c776692e33c1eb64 refs/heads/fix/review-24-26-export\nd743267388641bc76f17c45ce8b4c231aed1d32c refs/heads/master\n173e155a85305db378dd92b1fa057ac6e6dea86e refs/heads/product/ourfairy-v1\n5a7615a12884dbf756fc7a8cb3e6355e35659c66 refs/heads/ticket/03-identity\n0095f586cc415c86fb8e783db649857e21fcaca8 refs/heads/ticket/10-conversation-search\n0284c1d01989e2c300626ae3e81d16c23fb34923 refs/heads/ticket/25-session-format",
+    "dirty": [
+      {
+        "status": " M",
+        "path": "docs/config-catalog.md",
+        "sha256": "4dbfb90ee46357b4f7b95366c3daaae2183ad2b23cb86529234583a8887f925a"
+      },
+      {
+        "status": " M",
+        "path": "docs/config-catalog.zh.md",
+        "sha256": "6fdb171b138365274f2c92bfe535ae6ba7d24fd73e6854ea6f49d9117f5579ba"
+      },
+      {
+        "status": " M",
+        "path": "docs/event-producer-consumer.md",
+        "sha256": "bdc7046dac4655083137933677958689ee62beabfc18e5eada10a4d197b1d081"
+      },
+      {
+        "status": " M",
+        "path": "docs/event-producer-consumer.zh.md",
+        "sha256": "066763646a775acf26a004db38b7f1d36da53c9b47ae8879effcb820fa50f229"
+      },
+      {
+        "status": " M",
+        "path": "docs/subsystems/llm-streaming.md",
+        "sha256": "af3467db91e47daaf019dce72f2b8afeea2a33f33525f4c0f3d76b0a952e20bb"
+      },
+      {
+        "status": " M",
+        "path": "docs/subsystems/llm-streaming.zh.md",
+        "sha256": "2666cdf574f7f1a4b75e027acdab4d5b3c4c14e0853b32d82d0dbdd08a37ef25"
+      },
+      {
+        "status": " M",
+        "path": "docs/subsystems/persistence.md",
+        "sha256": "778e52e079ea99ec21553676f90f56d3933ab57c464804de5e886b6a38e17da4"
+      },
+      {
+        "status": " M",
+        "path": "docs/subsystems/persistence.zh.md",
+        "sha256": "401d0df81540d5063bd23cc7318e6fa53d2b4bd4c87696f439d36a626b378047"
+      },
+      {
+        "status": " M",
+        "path": "docs/subsystems/session.md",
+        "sha256": "40d199237cfc2db35d90376d2198b67db6f24ea50d16be8cc0d01a7133beb0a7"
+      },
+      {
+        "status": " M",
+        "path": "docs/subsystems/session.zh.md",
+        "sha256": "3e48bce4099e39afc347c76bd85ae0043e5550312ac54485401490d630d4cf8f"
+      },
+      {
+        "status": " M",
+        "path": "packages/client/connection/tests/principal-admission.host.spec.ts",
+        "sha256": "ca5f1d5668fd7a6361daa277e35357ba4a0255f2d9ea86c238d037f52be45559"
+      },
+      {
+        "status": " M",
+        "path": "packages/core/session/tests/delivery-message.spec.ts",
+        "sha256": "2df24d325ccf67ccd452f19a990f8e94dfc146f6452169dd6f7156e2eeb5523c"
+      },
+      {
+        "status": " M",
+        "path": "packages/extensions/tool-cordis/src/api-catalog.ts",
+        "sha256": "1827f359ff02eaf0c2643c3c9eb8d8b142839565a65a4ab49bc01c2ae75cb824"
+      },
+      {
+        "status": " M",
+        "path": "packages/session/session-format-v1-to-v2/tests/codec.spec.ts",
+        "sha256": "20b09ef8aff16a4cbfeec3f2420d560f9800c58933c4025006652f3f3fe0f558"
+      },
+      {
+        "status": " M",
+        "path": "packages/session/session-format-v3-to-v4/tests/codec.spec.ts",
+        "sha256": "8b3e2f4aef6523f8ab366e9b76bbcdacfe2cf6a293aa53340a89be16ce9383e7"
+      },
+      {
+        "status": " M",
+        "path": "packages/session/session-persistence-jsonl/tests/jsonl.spec.ts",
+        "sha256": "3d22418cd41fbfefc830b20921c9de2654ac2f80cf498fc29861d22c8701dd5f"
+      }
+    ]
+  },
+  "android": {
+    "path": "/home/eafen405/projects/rikkahub",
+    "branch": "product/ourfairy-v1",
+    "HEAD": "b0911d34bdbe6ee8f559167ede41da95a9f082f8",
+    "branches": "6a58446e889de9a56e0bcdc9af8ded6f2ef76af6 refs/heads/fix/review-24-26-identity\n8b2eaf0dc85b33dbb1dc7dd7ebf513a493c8b2c9 refs/heads/fix/review-t5-t6\n0966502c4d65c1ee4b2a3e49a19703bb1978016c refs/heads/master\nb0911d34bdbe6ee8f559167ede41da95a9f082f8 refs/heads/product/ourfairy-v1\n20c5a0a3d20b9a1d2380d7e03eb58ad73468d6c8 refs/heads/subtask/09-attachments-api\ne57e9108413f20e5ac7bd3bf24b0f13588a72f31 refs/heads/subtask/09-attachments-ui\naf65606d065615f825188b73614b4abbce27578a refs/heads/ticket/03-identity\nfd04aab78919a7816e6eb962949a6eaf13a41532 refs/heads/ticket/04-owned-sessions\naedbf7e348099844e46257550f5db644a4b7d1d5 refs/heads/ticket/05-remote-chat\nebcb5536a95292c64764aab020d820a7c09926e1 refs/heads/ticket/06-reconnect\nbf4db2d6ff29df9d1fa195fa81460ae12757e21d refs/heads/ticket/09-attachments\n4c4b5a09f910a340d49c8089e850d53caf5739fb refs/heads/ticket/11-text-delivery\n55ce5f8de2dfb2b9ec3864eeee4acb04004d07cd refs/heads/ticket/12-file-delivery",
+    "dirty": [
+      {
+        "status": "??",
+        "path": ".worktrees/",
+        "kind": "directory"
+      }
+    ]
+  }
+}
