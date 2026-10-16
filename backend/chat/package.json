@@ -12,6 +12,7 @@
     "@deepseek-ai/dsh-llm": "workspace:~",
     "@deepseek-ai/dsh-tools": "workspace:~",
     "@deepseek-ai/dsh-session": "workspace:~",
+    "@deepseek-ai/dsh-jobs": "workspace:~",
     "@ourfairy/dsh-identity": "workspace:~",
     "@ourfairy/dsh-attachments": "workspace:~",
     "@ourfairy/dsh-sessions": "workspace:~"

@@ -1,0 +1,31 @@
+{
+  "backend": "mcode",
+  "cwd": "/home/eafen405/projects/rikkahub/.worktrees/13-jobs",
+  "command": [
+    "/home/eafen405/.minimax-code/bin/mcode",
+    "exec",
+    "--cwd",
+    "/home/eafen405/projects/rikkahub/.worktrees/13-jobs",
+    "--permission",
+    "smart",
+    "--timeout",
+    "900s",
+    "--output-format",
+    "text",
+    "--input",
+    "-"
+  ],
+  "status": "completed",
+  "timeout": 900.0,
+  "started_at": 1792143613.9848874,
+  "run_dir": "/tmp/ourfairy-stage1315-android-harness/delegate-mcode-u6704i9r",
+  "task_path": "/tmp/ourfairy-stage1315-android-harness/delegate-mcode-u6704i9r/task.md",
+  "stdout_path": "/tmp/ourfairy-stage1315-android-harness/delegate-mcode-u6704i9r/stdout.txt",
+  "stderr_path": "/tmp/ourfairy-stage1315-android-harness/delegate-mcode-u6704i9r/stderr.txt",
+  "pid": 53665,
+  "exit_code": 0,
+  "child_exit_code": 0,
+  "duration_seconds": 80.539,
+  "stderr_tail": "",
+  "notification_exit_code": 1
+}

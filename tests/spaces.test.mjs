@@ -132,12 +132,12 @@ test('agentless filesystem and script Interface calls refuse instead of inheriti
   assert.deepEqual(report.agentless, { file: 'FS_PERMISSION_DENIED', process: 'FS_PERMISSION_DENIED' })
 })
 
-test('shell background children stay confined and detached job entry is explicitly unavailable until T13', async () => {
+test('shell background children and admitted detached jobs retain the same file scope', async () => {
   const root = join(home, 'dsh-home', 'spaces')
   const proof = join(root, 'private', String(alice.user.shortId), 'background-proof.txt')
   const foreign = join(root, 'private', String(bob.user.shortId), 'secret.txt')
-  const detached = await tool(alice, 'bash', { description: 'Try not-yet-enabled detached job entry', run_in_background: true, command: `cat '${foreign}'` })
-  assert.match(detached, /disabled/)
+  const detached = await tool(alice, 'bash', { description: 'Start a confined detached job', run_in_background: true, command: `cat '${foreign}'` })
+  assert.match(detached, /bash-\d+/)
   await tool(alice, 'bash', { description: 'Verify actual background child file isolation',
     command: `(sleep .1; if cat '${foreign}'; then printf LEAK > '${proof}'; else printf blocked > '${proof}'; fi) & wait` })
   assert.equal(readFileSync(proof, 'utf8'), 'blocked')

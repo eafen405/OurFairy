@@ -94,6 +94,7 @@ const PRODUCT_SOURCES = [
   'backend/chat/src/projection.mjs',
   'backend/chat/src/persona.mjs',
   'backend/chat/src/delivery.mjs',
+  'backend/chat/src/jobs.mjs',
   'backend/search/package.json',
   'backend/search/src/index.mjs',
   'backend/attachments/package.json',

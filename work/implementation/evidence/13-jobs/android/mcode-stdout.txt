@@ -1,0 +1,33 @@
+Naming and field order match the owner's existing test's positional construction exactly. Done.
+
+## Changed files
+
+**`app/src/main/java/me/rerere/rikkahub/data/remote/RemoteJobApi.kt`** (new, 6217 bytes) — the T13 wire adapter.
+
+**`app/src/main/java/me/rerere/rikkahub/data/remote/RemoteChatApi.kt`** — one additive line, `tasks: List<RemoteTask> = emptyList()`, placed after `messages` inside `RemoteChatProjection`.
+
+No other file touched. `git status` shows only these two of mine; `app/src/test/.../RemoteJobStateTest.kt` and `web-ui/node_modules` were already untracked before I started and I left them alone. No commit, no push, no Gradle run.
+
+## What was built
+
+DTOs are top-level `@Serializable data class`es matching the wire exactly: `RemoteTask`, `RemoteTaskOutputWindow`, `RemoteTaskReport`, `RemoteJobOutput`, `RemoteJobChunk`. `availability:Int` throughout — no `available:Boolean` anywhere.
+
+`RemoteJobBackend` has the two agreed suspend methods (`output`, `stop:Int`). `RemoteJobApi(baseUrl, client, json = Json { ignoreUnknownKeys = true })` implements it via a private `exchange` helper modeled on `RemoteChatApi.call`: `withContext(Dispatchers.IO)` around the whole OkHttp call, `IOException` → `IdentityUnreachable`, unreadable body → `IdentityUnreachable`, and the `!envelope.ok || !response.isSuccessful` gate so a 200-shaped body can't launder a failed status. `POST /chat/jobs/output` and `/chat/jobs/stop` with `{sessionId,taskId,from}` / `{sessionId,taskId}` bodies and `Authorization: Bearer`. An `ok` envelope missing its promised `output`/`outcome` throws `IdentityUnreachable`, matching `RemoteChatApi.receipt`/`checkpoint`. Refusal code falls back to `"chat/jobs/unknown"`, following the `chat/unknown` / `attachments/unknown` naming of the adjacent APIs.
+
+Reused `IdentityRefused`/`IdentityUnreachable` unchanged — no new error hierarchy, no new client or redirect-hardening infrastructure (the closer sibling `RemoteChatApi` doesn't harden redirects either, and adding it here would be scope creep).
+
+## Checks performed
+
+Read `AGENTS.md`, `OurFairy/AGENTS.md`, `OurFairy/CODING_STANDARDS.md`, and both adjacent APIs before writing. Confirmed no pre-existing `RemoteJob`/`RemoteTask` symbols anywhere in the repo, and located `IdentityRefused`/`IdentityUnreachable` at `data/remote/IdentityApi.kt:34` and `:41`.
+
+Cross-checked the pre-existing `RemoteJobStateTest.kt` against my field ordering — its positional constructions (`RemoteJobOutput("gen/bash-1", 1, listOf(RemoteJobChunk(0, "你好")), 6, 0, 6, false, 3)`, `RemoteTask(..., 1, 1, 10, output = …, report = …)`, `RemoteTaskOutputWindow(0, 6)`, `RemoteTaskReport(0)`, and `RemoteChatProjection(..., tasks = listOf(task))`) all line up with the agreed order and my additive projection field name.
+
+Not verified: compilation and behavior. Per instructions I did not run Gradle — that's the owner's validation step.
+
+## Two judgment calls worth your review
+
+1. **`RemoteTask.output` and `RemoteTask.report` are defaulted** (`RemoteTaskOutputWindow(0L, 0L)` and `RemoteTaskReport()`) rather than required, since the wire contract marks them with no nullability. Because `RemoteTask` is decoded out of a *snapshot*, an older backend that omits them would otherwise fail the whole projection decode and take the chat down with it — which is exactly why `RemoteChatProjection` defaults `replyStatus`, `error`, and `generation`. This matches the local snapshot-DTO convention, but it is a slight loosening of the literal contract. Say the word if you'd rather they be required.
+
+2. **`RemoteJobOutput` fields stay required** (only `chunks` defaults to `emptyList()`, as every list field in this repo does). A direct response envelope is a different shape from a snapshot, so I didn't extend snapshot-level tolerance to it.
+
+No contract ambiguity blocked the work; the only open question is item 1 above.

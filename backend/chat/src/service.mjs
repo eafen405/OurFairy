@@ -4,6 +4,7 @@ import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { createUserMessage, BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { receiptIn, transcript } from './projection.mjs'
 import { FAIRY_PERSONA } from './persona.mjs'
+import { projectTasks } from './jobs.mjs'
 
 export class ChatError extends SessionScopeError {}
 function requestIdOf(requestId) {
@@ -148,6 +149,7 @@ export class RemoteChat extends Service {
     return { sessionId: state.agent.session.id, generation: state.generation, version: state.version, cursor,
       durableThroughSeq: Math.min(cursor, state.durableThroughSeq),
       throughSeq, fromSeq, events: included, hasMore: fromSeq > 0, beforeSeq: fromSeq > 0 ? fromSeq : null,
+      tasks: projectTasks(this.ctx, events, state.agent.session.id),
       messages: transcript(events, state.agent.session.id).filter(message => message.seq >= fromSeq),
       attempt: attempt === null ? null : { attemptId: attempt.attemptId, revision: attempt.revision,
         text: attempt.assembler.interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('') },

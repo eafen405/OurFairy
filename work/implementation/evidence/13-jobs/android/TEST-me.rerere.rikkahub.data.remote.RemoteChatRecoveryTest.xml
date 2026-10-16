@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-10-16T09:51:55.126Z" hostname="LAPTOP-45RC44AF" time="0.067">
+  <properties/>
+  <testcase name="account changed during pending commit cannot send under the previous credential" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.018"/>
+  <testcase name="failed page or local commit cannot advance consumed prefix and retry recovers" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.012"/>
+  <testcase name="fixed cut backfills raw facts while live terminal remains newest" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.004"/>
+  <testcase name="a late old session page is discarded even when cancellation cannot stop its response" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.005"/>
+  <testcase name="pending command is saved before network and restored with same identity after process recreation" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.003"/>
+  <testcase name="recovered generation replaces observed unsaved event with interrupted closer without losing pending or W" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.003"/>
+  <testcase name="writer acknowledgement failure cannot publish a completed batch" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.002"/>
+  <testcase name="lost send response cannot resurrect a command already reconciled from durable messages" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.002"/>
+  <testcase name="saved consumption without a message cache still reloads all history" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.002"/>
+  <testcase name="pending save failure retains editable text for explicit retry without network side effects" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.002"/>
+  <testcase name="shorter new generation removes orphan bubbles and refills body despite saved consumption" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.004"/>
+  <testcase name="live tail arriving during local commit is consumed without another server event" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.004"/>
+  <testcase name="automatic reconnect preserves active prefix and settles without cancellation" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.004"/>
+  <testcase name="failed pending commit prevents network send" classname="me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

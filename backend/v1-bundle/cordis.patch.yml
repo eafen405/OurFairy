@@ -91,7 +91,7 @@
       name: '@ourfairy/dsh-search'
 
     # ── process-local support services ───────────────────────────────────────
-    # In-memory job registry only; the shell-backed job tools are not mounted.
+    # Native process-local job registry; durable lifecycle facts stay in Session logs.
     - id: jobs-local
       name: '@deepseek-ai/dsh-jobs-local'
 
@@ -173,9 +173,12 @@
     - id: tool-bash
       name: '@deepseek-ai/dsh-tool-bash'
       config:
-        # Detached jobs/controller integration belongs to T13.
-        enableRunInBackground: false
-        promoteOnTimeout: false
+        enableRunInBackground: true
+        promoteOnTimeout: true
+    - id: tool-jobs
+      name: '@deepseek-ai/dsh-tool-jobs'
+      config:
+        completionDelivery: wakeup
     - id: fs-observation-policy
       name: '@deepseek-ai/dsh-fs-observation-policy'
 
