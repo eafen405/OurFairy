@@ -1,0 +1,11 @@
+--- original-capture-backend.mjs
++++ final/capture-backend.mjs
+@@ -5,7 +5,7 @@
+ import { readFileSync, writeFileSync } from 'node:fs'
+ import { DatabaseSync } from 'node:sqlite'
+ import { before, after, test } from 'node:test'
+-import { makeHome, removeHome, runBackendAsync, describeRun } from 'file:///home/eafen405/projects/OurFairy/.worktrees/15-notifications/tests/helpers/backend.mjs'
++import { makeHome, removeHome, runBackendAsync, describeRun } from '../../../../../tests/helpers/backend.mjs'
+ 
+ const home = makeHome('ourfairy-delivery-')
+ const password = 'group-test-password'
