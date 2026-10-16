@@ -171,6 +171,17 @@ export class AttachmentService extends Service {
     if (!input) fail(404, 'unknown-input', 'message attachment is unavailable')
     return input
   }
+  /** File handles are usable only when an admitted message in this session grants them. */
+  async qualifiedFile(session, path) {
+    this.ctx.ourfairySpaces.owner(session)
+    for (const message of admittedMessages(await this._events(session.id))) {
+      for (const input of attachmentManifest(message)) {
+        const originalPath = this.ctx.attachments.fileHostPath(input.original)
+        if (typeof path === 'string' && (path === originalPath || path === realpathSync(originalPath))) return input
+      }
+    }
+    fail(404, 'unknown-input', 'qualified session attachment is unavailable')
+  }
   async refresh(session) {
     this.ctx.ourfairySpaces.owner(session)
     const paths = new Set()

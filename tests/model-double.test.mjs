@@ -75,6 +75,8 @@ test('one real turn reaches the external model double, registers tools, and pers
     'job_kill',
     'job_list',
     'job_output',
+    'pdf_info',
+    'pdf_read_pages',
     'read',
     'read_image',
     'todo_write',

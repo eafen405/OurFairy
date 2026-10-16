@@ -1,0 +1,33 @@
+✔ PDF upload, selected page text with citation, and immutable original use actual authorized tools (28637.698867ms)
+✔ PDF tools report encrypted, damaged, empty, partial and over-limit documents without reading other pages (3054.869132ms)
+✖ PDF text is explicitly truncated and a compressed costly page hits an actual process resource budget (3407.04242ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 35418.962162
+
+✖ failing tests:
+
+test at tests/pdf.test.mjs:153:1
+✖ PDF text is explicitly truncated and a compressed costly page hits an actual process resource budget (3407.04242ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - 'resource-limit'
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/17-pdf-text/tests/pdf.test.mjs:162:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'resource-limit',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

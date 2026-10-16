@@ -99,7 +99,9 @@ const PRODUCT_SOURCES = [
   'backend/search/package.json',
   'backend/search/src/index.mjs',
   'backend/attachments/package.json',
-  ...['index', 'service'].map(name => `backend/attachments/src/${name}.mjs`),
+  ...['index', 'service', 'pdf'].map(name => `backend/attachments/src/${name}.mjs`),
+  'backend/attachments/src/pdf-worker.py',
+  'backend/attachments/pdf/pypdf-6.21.0-py3-none-any.whl',
   'backend/spaces/package.json',
   ...['index', 'scope', 'bwrap', 'fs', 'policy', 'groups'].map(name => `backend/spaces/src/${name}.mjs`),
 ]

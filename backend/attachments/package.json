@@ -1,5 +1,24 @@
 {
-  "name":"@ourfairy/dsh-attachments","version":"0.1.0","private":true,"type":"module","license":"UNLICENSED",
-  "main":"./src/index.mjs","exports":{".":"./src/index.mjs"},"files":["src","README.md"],
-  "peerDependencies":{"@deepseek-ai/cordis":"workspace:~","@deepseek-ai/dsh-llm":"workspace:~","@ourfairy/dsh-identity":"workspace:~","@ourfairy/dsh-sessions":"workspace:~"}
+  "name": "@ourfairy/dsh-attachments",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "pdf"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-llm": "workspace:~",
+    "@ourfairy/dsh-identity": "workspace:~",
+    "@ourfairy/dsh-sessions": "workspace:~",
+    "@deepseek-ai/dsh-tools": "workspace:~",
+    "@ourfairy/dsh-spaces": "workspace:~"
+  }
 }

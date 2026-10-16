@@ -20,6 +20,7 @@
   },
   "exports": {
     ".": "./src/index.mjs",
-    "./policy": "./src/policy.mjs"
+    "./policy": "./src/policy.mjs",
+    "./bwrap": "./src/bwrap.mjs"
   }
 }
