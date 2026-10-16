@@ -1,0 +1,1410 @@
+[
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/benchmarks/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/benchmarks/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/python/sdk-runtime/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/python/sdk-runtime/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/settings/settings/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/settings/settings/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/document/office-to-pdf/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/document/office-to-pdf/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session-query/session-query/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session-query/session-query/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session-query/session-query-sqlite/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session-query/session-query-sqlite/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session-query/session-log-export/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session-query/session-log-export/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/bundle/web-app/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/bundle/web-app/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/bundle/sdk-app/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/bundle/sdk-app/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/bundle/acp-app/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/bundle/acp-app/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/bundle/base/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/bundle/base/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/bundle/headless/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/bundle/headless/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/bundle/sdk-minimal/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/bundle/sdk-minimal/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/workspace/workspace/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/workspace/workspace/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subprocess/subprocess-local/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subprocess/subprocess-local/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subprocess/subprocess/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subprocess/subprocess/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subprocess/win32-process/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subprocess/win32-process/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/extensions/ui-cordis/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/extensions/ui-cordis/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/extensions/tool-cordis/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/extensions/tool-cordis/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/extensions/cordis-host-runner/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/extensions/cordis-host-runner/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/extensions/cordis-client-runner/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/extensions/cordis-client-runner/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/guard/timeout-policy/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/guard/timeout-policy/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/guard/repeat-tool-reminder/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/guard/repeat-tool-reminder/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/storage/storage-sqlite/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/storage/storage-sqlite/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/storage/storage/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/storage/storage/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/storage/storage-domain/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/storage/storage-domain/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/storage/storage-json/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/storage/storage-json/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/shell/bash-sandbox/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/shell/bash-sandbox/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/shell/tool-pwsh-persistent/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/shell/tool-pwsh-persistent/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/shell/bash-local/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/shell/bash-local/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/shell/pwsh-sandbox/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/shell/pwsh-sandbox/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/shell/shell/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/shell/shell/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/shell/tool-bash-persistent/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/shell/tool-bash-persistent/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/shell/pwsh-local/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/shell/pwsh-local/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/shell/shell-env/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/shell/shell-env/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/shell/tool-pwsh/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/shell/tool-pwsh/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/shell/tool-bash/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/shell/tool-bash/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/llm/token-meter/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/llm/token-meter/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/llm/llm-deepseek/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/llm/llm-deepseek/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/llm/llm/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/llm/llm/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/llm/llm-retry/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/llm/llm-retry/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/llm/llm-pi-ai/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/llm/llm-pi-ai/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/llm/llm-deepseek-api-key/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/llm/llm-deepseek-api-key/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/llm/plugin-package-inventory-deepseek/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/llm/plugin-package-inventory-deepseek/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/llm/llm-deepseek-account/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/llm/llm-deepseek-account/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/llm/deepseek-llm-api-extensions/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/llm/deepseek-llm-api-extensions/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subagent/subagent-spawn-in-process/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subagent/subagent-spawn-in-process/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subagent/subagent-dsh-sdk/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subagent/subagent-dsh-sdk/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subagent/tool-subagent/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subagent/tool-subagent/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subagent/subagent/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subagent/subagent/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subagent/subagent-acp/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subagent/subagent-acp/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subagent/subagent-codex/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subagent/subagent-codex/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subagent/tool-subagent-control/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subagent/tool-subagent-control/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subagent/subagent-fork-in-process/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subagent/subagent-fork-in-process/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/subagent/subagent-claude-code/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/subagent/subagent-claude-code/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/test-support/loader-smoke/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/test-support/loader-smoke/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/test-support/agent-loop-testkit/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/test-support/agent-loop-testkit/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/test-support/remote-mock/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/test-support/remote-mock/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/test-support/llm-replay/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/test-support/llm-replay/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/test-support/client-runtime/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/test-support/client-runtime/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/test-support/session-snapshot/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/test-support/session-snapshot/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/test-support/llm-mock-server/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/test-support/llm-mock-server/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/deque/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/deque/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/values/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/values/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/home-paths/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/home-paths/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/http-proxy/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/http-proxy/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/output-retention/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/output-retention/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/package-manifest/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/package-manifest/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/code-language/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/code-language/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/brand/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/brand/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/launch-environment/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/launch-environment/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/native-command/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/native-command/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/atomic-write/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/atomic-write/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/timeout/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/timeout/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/lazy-require/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/lazy-require/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/chunked-list/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/chunked-list/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/workspace-path/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/workspace-path/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/crypto/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/crypto/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/util/time/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/util/time/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/ptc-runtime/ptc-runtime/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/ptc-runtime/ptc-runtime/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/ptc-runtime/ptc-runtime-node/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/ptc-runtime/ptc-runtime-node/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-telemetry-otel/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-telemetry-otel/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-title-llm/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-title-llm/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-format-v3-to-v4/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-format-v3-to-v4/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-format-catalog/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-format-catalog/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-format-v1-to-v2/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-format-v1-to-v2/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-projection/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-projection/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-checkpoint-policy/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-checkpoint-policy/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-stats/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-stats/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-persistence/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-persistence/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-telemetry/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-telemetry/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-title-first-prompt-llm/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-title-first-prompt-llm/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/tool-working-directory/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/tool-working-directory/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-persistence-jsonl/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-persistence-jsonl/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-format/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-format/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/working-directory/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/working-directory/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-format-v2-to-v3/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-format-v2-to-v3/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-title/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-title/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-log-deepseek/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-log-deepseek/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-projection-cache/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-projection-cache/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-format-v0-to-v1/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-format-v0-to-v1/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/session/session-turn-outline/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/session/session-turn-outline/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/preset/agent-preset-registry/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/preset/agent-preset-registry/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/preset/agent-preset/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/preset/agent-preset/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/preset/persona/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/preset/persona/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/core/agent-loop/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/core/agent-loop/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/core/system-prompt/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/core/system-prompt/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/core/scope/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/core/scope/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/core/session/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/core/session/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/core/tools/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/core/tools/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/core/agent-tool-presentation/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/core/agent-tool-presentation/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/core/agent-default-model/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/core/agent-default-model/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/core/agent/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/core/agent/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/web/web-search-deepseek/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/web/web-search-deepseek/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/web/web-fetch-http/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/web/web-fetch-http/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/web/web/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/web/web/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/web/web-search-exa/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/web/web-search-exa/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/web/web-search-perplexity/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/web/web-search-perplexity/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/web/tool-web/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/web/tool-web/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/lsp/tool-lsp/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/lsp/tool-lsp/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/lsp/lsp-stdio/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/lsp/lsp-stdio/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/lsp/lsp/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/lsp/lsp/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/computer-use/computer-use/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/computer-use/computer-use/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/goal/tool-goal/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/goal/tool-goal/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/goal/goal-round-driver/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/goal/goal-round-driver/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/goal/goal/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/goal/goal/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/goal/command-goal/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/goal/command-goal/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/terminal/terminal/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/terminal/terminal/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/terminal/terminal-bash/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/terminal/terminal-bash/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/browser-use/browser-use/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/browser-use/browser-use/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/interaction/commands/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/interaction/commands/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/interaction/user-approval/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/interaction/user-approval/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/interaction/tool-ask-user/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/interaction/tool-ask-user/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/interaction/user-questions/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/interaction/user-questions/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/interaction/permission-presets/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/interaction/permission-presets/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/workflow/tool-workflow/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/workflow/tool-workflow/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/workflow/workflow/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/workflow/workflow/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/workflow/workflow-ptc/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/workflow/workflow-ptc/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/credentials/authorization/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/credentials/authorization/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/credentials/credentials/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/credentials/credentials/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/credentials/deepseek-account/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/credentials/deepseek-account/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/credentials/credentials-local/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/credentials/credentials-local/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/credentials/deepseek-account-platform/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/credentials/deepseek-account-platform/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/api/settings-controller/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/api/settings-controller/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/api/remotes/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/api/remotes/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/api/session-controller/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/api/session-controller/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/api/account-controller/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/api/account-controller/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/api/gateway/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/api/gateway/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/api/job-controller/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/api/job-controller/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/api/workspace-files/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/api/workspace-files/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/api/workspace-controller/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/api/workspace-controller/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/api/terminal-controller/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/api/terminal-controller/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/sdk/server/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/sdk/server/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/sdk/protocol/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/sdk/protocol/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/sdk/client/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/sdk/client/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/deliverables/tool-present/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/deliverables/tool-present/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/deliverables/workspace-changes/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/deliverables/workspace-changes/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/attachment/attachment-local/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/attachment/attachment-local/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/attachment/attachment/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/attachment/attachment/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/boot/cmdline/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/boot/cmdline/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/boot/plugin-manager/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/boot/plugin-manager/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/boot/hmr/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/boot/hmr/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/boot/config-editor/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/boot/config-editor/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/boot/app-boot/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/boot/app-boot/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/sandbox/sandbox-local/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/sandbox/sandbox-local/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/sandbox/sandbox/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/sandbox/sandbox/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/sandbox/sandbox-policy/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/sandbox/sandbox-policy/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/sandbox/sandbox-windows-acl/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/sandbox/sandbox-windows-acl/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/ssh/sandbox-ssh/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/ssh/sandbox-ssh/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/ssh/subprocess-ssh/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/ssh/subprocess-ssh/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/ssh/ssh-helper-runtime/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/ssh/ssh-helper-runtime/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/ssh/ssh/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/ssh/ssh/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/ssh/fs-ssh/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/ssh/fs-ssh/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/host/plugin-inventory/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/host/plugin-inventory/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/host/directory-picker-auto/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/host/directory-picker-auto/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/host/frontend-static/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/host/frontend-static/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/host/directory-picker-native/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/host/directory-picker-native/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/host/webserver/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/host/webserver/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/host/directory-picker-browse/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/host/directory-picker-browse/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/host/open-in-app/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/host/open-in-app/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/host/product-telemetry-otel/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/host/product-telemetry-otel/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/host/directory-picker/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/host/directory-picker/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/fs/tool-fs/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/fs/tool-fs/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/fs/tool-fs-search/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/fs/tool-fs-search/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/fs/tool-str-replace-editor/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/fs/tool-str-replace-editor/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/fs/fs-local/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/fs/fs-local/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/fs/fs-sandbox/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/fs/fs-sandbox/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/fs/fs/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/fs/fs/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/fs/fs-observation-policy/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/fs/fs-observation-policy/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/feedback/command-feedback/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/feedback/command-feedback/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/feedback/message-feedback/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/feedback/message-feedback/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/plan/plan-mode/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/plan/plan-mode/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/webworker-packer/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/webworker-packer/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/worktree/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/worktree/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/browser-use-stagehand-native/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/browser-use-stagehand-native/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/translator/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/translator/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/client-ui-voice-input/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/client-ui-voice-input/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/cot-translation-bundle/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/cot-translation-bundle/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/tool-worktree/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/tool-worktree/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/session-title-all-prompts-llm/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/session-title-all-prompts-llm/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/agent-team-profile/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/agent-team-profile/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/ptc-runtime-python/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/ptc-runtime-python/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/computer-use-cua-driver-mcp/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/computer-use-cua-driver-mcp/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/tool-agent-team/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/tool-agent-team/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/tool-ralph/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/tool-ralph/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/client-ui-claude-code-mods/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/client-ui-claude-code-mods/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/claude-code-mods/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/claude-code-mods/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/ralph-bundle/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/ralph-bundle/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/speech-to-text/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/speech-to-text/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/tool-terminal/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/tool-terminal/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/webhook-github/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/webhook-github/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/browser-use-runtime/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/browser-use-runtime/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/badge-skill-bundle/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/badge-skill-bundle/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/tool-session-query/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/tool-session-query/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/api-speech-to-text/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/api-speech-to-text/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/hook-protocol/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/hook-protocol/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/browser-use-chrome-devtools-mcp/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/browser-use-chrome-devtools-mcp/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/webworker-runtime/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/webworker-runtime/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/agent-team/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/agent-team/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/inspector-profile/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/inspector-profile/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/computer-use-cua-driver-native/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/computer-use-cua-driver-native/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/terminal-bundle/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/terminal-bundle/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/webhook/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/webhook/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/skill-badge/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/skill-badge/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/auto-review/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/auto-review/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/hooks-codex/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/hooks-codex/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/inspector/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/inspector/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/client-ui-agent-team/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/client-ui-agent-team/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/session-titles-bundle/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/session-titles-bundle/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/browser-use-playwright-mcp/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/browser-use-playwright-mcp/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/session-inspector/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/session-inspector/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/hooks-claude-code/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/hooks-claude-code/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/client-ui-cot-translation/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/client-ui-cot-translation/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/voice-input-bundle/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/voice-input-bundle/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/session-search/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/session-search/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/experimental/speech-to-text-sensevoice/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/experimental/speech-to-text-sensevoice/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/spill/spill-policy/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/spill/spill-policy/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/spill/spill/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/spill/spill/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/spill/spill-local/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/spill/spill-local/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/mcp/mcp-resources/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/mcp/mcp-resources/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/mcp/mcp-client/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/mcp/mcp-client/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/compaction/command-compact/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/compaction/command-compact/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/compaction/compaction-tool-result-pruner/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/compaction/compaction-tool-result-pruner/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/compaction/compaction-image-offload/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/compaction/compaction-image-offload/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/compaction/compaction/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/compaction/compaction/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/compaction/compaction-basic/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/compaction/compaction-basic/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/acp/acp/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/acp/acp/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/todo/tool-todo/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/todo/tool-todo/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/identity/anonymous-user-id/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/identity/anonymous-user-id/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/telemetry/otel/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/telemetry/otel/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/context/file-reference/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/context/file-reference/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/context/file-reference-local/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/context/file-reference-local/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/context/time-context/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/context/time-context/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/context/tmux-context/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/context/tmux-context/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/context/agent-instructions/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/context/agent-instructions/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/context/session-reference/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/context/session-reference/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/typert/generator/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/typert/generator/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/typert/protocol/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/typert/protocol/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/typert/loader/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/typert/loader/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/typert/registry/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/typert/registry/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/schedule/tool-schedule/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/schedule/tool-schedule/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/schedule/schedule/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/schedule/schedule/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/skill/tool-workspace-dependencies/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/skill/tool-workspace-dependencies/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/skill/skill-filesystem/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/skill/skill-filesystem/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/skill/tool-skill/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/skill/tool-skill/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/skill/skill-office/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/skill/skill-office/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/skill/skill/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/skill/skill/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/store/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/store/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-chat/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-chat/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-model-selection/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-model-selection/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-renderer/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-renderer/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-layout/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-layout/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-jobs/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-jobs/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-permission-presets/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-permission-presets/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/shortcuts/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/shortcuts/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/connection/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/connection/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-skill/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-skill/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings-agent-loop/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings-agent-loop/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-sidebar-right/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-sidebar-right/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-sidebar-terminal/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-sidebar-terminal/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings-session-log/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings-session-log/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/hmr/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/hmr/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-approval/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-approval/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings-plugins/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings-plugins/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-primitives/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-primitives/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-workspace/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-workspace/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-sidebar-files/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-sidebar-files/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-attachment/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-attachment/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-sidebar-documentpreview/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-sidebar-documentpreview/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/locale/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/locale/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-user-questions/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-user-questions/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings-plugin-inventory/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings-plugin-inventory/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-directory-picker-browse/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-directory-picker-browse/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-message-feedback/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-message-feedback/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings-subagent/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings-subagent/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-brand-official/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-brand-official/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-dockkit/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-dockkit/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/file-upload/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/file-upload/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings-web-search/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings-web-search/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-sidebar/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-sidebar/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-conversation/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-conversation/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-subagent/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-subagent/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/web/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/web/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-slots/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-slots/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings-models/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings-models/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-shortcuts/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-shortcuts/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-deliverables/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-deliverables/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-commands/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-commands/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-goal/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-goal/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-schedule/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-schedule/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-session/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-session/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/product-analytics/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/product-analytics/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-directory-picker-native/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-directory-picker-native/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-sidebar-browser/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-sidebar-browser/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings-general/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings-general/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-plugin-manager/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-plugin-manager/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-workflow-run/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-workflow-run/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-theme/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-theme/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-open-in-app/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-open-in-app/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings-shell/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings-shell/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-tool/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-tool/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-reference/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-reference/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings-account/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings-account/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/resources/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/resources/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/modules/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/modules/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-plan/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-plan/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-trajectory/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-trajectory/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-input-trigger/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-input-trigger/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-settings/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-settings/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/client/ui-agent-preset/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/client/ui-agent-preset/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/jobs/jobs-local/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/jobs/jobs-local/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/jobs/tool-jobs/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/jobs/tool-jobs/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/packages/jobs/jobs/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/packages/jobs/jobs/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/website/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/website/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/apps/desktop/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/apps/desktop/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/apps/cli/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/apps/cli/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/apps/web/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/apps/web/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/apps/desktop-host/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/apps/desktop-host/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/vendor/cordis/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/vendor/cordis/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/vendor/hmr/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/vendor/hmr/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/vendor/timer/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/vendor/timer/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/vendor/schemastery/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/vendor/schemastery/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/vendor/include/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/vendor/include/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/vendor/logger-console/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/vendor/logger-console/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/vendor/group/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/vendor/group/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/vendor/loader/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/vendor/loader/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/native/system/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/native/system/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix/native/system/packages/entry/node_modules",
+    "target": "/home/eafen405/projects/deepseek-harness/native/system/packages/entry/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/13-jobs/web-ui/node_modules",
+    "target": "/home/eafen405/projects/rikkahub/web-ui/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/14-activity/web-ui/node_modules",
+    "target": "/home/eafen405/projects/rikkahub/web-ui/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications/web-ui/node_modules",
+    "target": "/home/eafen405/projects/rikkahub/.worktrees/14-activity/web-ui/node_modules"
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications-platform/web-ui/node_modules",
+    "target": "/home/eafen405/projects/rikkahub/web-ui/node_modules"
+  }
+]

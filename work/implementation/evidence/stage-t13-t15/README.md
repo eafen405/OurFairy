@@ -22,3 +22,7 @@
 本阶段计划见 `../../notes/stage-t13-t15-plan.md`。后续票面证据归各票目录，本目录用于阶段整合与审查。
 
 首次文档提交的正常 pre-commit 检查出现既有 reconnect 测试读取尚未完整 JSON 的失败（92/93）；失败摘录在 `baseline/initial-commit-hook-failure.log`。未修改产品或测试，随后正常重试提交并保留检查结果。
+
+## 阶段收尾
+
+T13/#36、T14/#37、T15/#38 均已关闭；两轴审查 Standards 唯一 P3 已修、Spec 0。最终发布组合及精确 11 个 worktree 清理结果见 `closeout/README.md`，恢复指针为 `../../notes/stage-t13-t15-handoff.md`。本阶段完成后已停止，不启动后续票。

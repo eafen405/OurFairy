@@ -9,3 +9,9 @@
 根 dsh 16 个既有未提交路径完整保留，逐文件 post-T13 哈希见 `work/implementation/evidence/review-t13-t15/final/dirty-preservation.json`。根完整 host build 的两个既有测试类型错误未扩散修复；发布在干净 fix worktree 运行正常 pre-push。已有文档 doc-sync 四项漂移保留，见 T13 原生证据。Android 原有 `.worktrees/` 保留。
 
 发布完成后由 Lead 更新 #38 和父票上下文，并按精确清理清单移除本阶段 worktree。实现分支保留。无需重复本轮 code-review；最终整产品审查和服务/设备验收仍在后续既定票中。
+
+## 发布与停止状态
+
+三仓发布并远端核验：OurFairy `826e26b402939e0335065a9f97a9e57850cb02b8`（随后仅增加本收尾文档提交）、dsh `fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee`、Android `3ee4bc26dc2f7627b97fc9bd2800643e29a6c7b6`。
+
+#36、#37、#38 均 closed，父 #23 open；关闭证据链接与发布/清理原文在 `work/implementation/evidence/stage-t13-t15/closeout/README.md`。本阶段 11 个 worktree 全部移除，分支、旧 worktree 与原有 16 个 dsh 脏文件完整保留；没有阶段后台进程或待清资源。阶段收尾结束后停止，不推进 T16。

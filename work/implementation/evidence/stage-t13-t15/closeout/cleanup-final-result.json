@@ -1,0 +1,79 @@
+{
+  "removedCount": 11,
+  "results": [
+    {
+      "path": "/home/eafen405/projects/OurFairy/.worktrees/13-jobs",
+      "removed": true,
+      "branch": "ticket/13-jobs",
+      "preservedTip": "40bb5153a7ce60e50c749059cbb539ab83975e6d"
+    },
+    {
+      "path": "/home/eafen405/projects/OurFairy/.worktrees/14-activity",
+      "removed": true,
+      "branch": "ticket/14-activity",
+      "preservedTip": "450418776f73f925ff8429acc5af50c0f9ba8263"
+    },
+    {
+      "path": "/home/eafen405/projects/OurFairy/.worktrees/15-notifications",
+      "removed": true,
+      "branch": "ticket/15-notifications",
+      "preservedTip": "5f00d871275684e257f1ff577aa83369aa554470"
+    },
+    {
+      "path": "/home/eafen405/projects/OurFairy/.worktrees/stage1315-fixture-fix",
+      "removed": true,
+      "branch": "fix/stage1315-fixture",
+      "preservedTip": "4a031b7b8e4068b6cbb7d7099f31703ebffcc67f"
+    },
+    {
+      "path": "/home/eafen405/projects/OurFairy/.worktrees/stage1315-review-fix",
+      "removed": true,
+      "branch": "fix/stage1315-review",
+      "preservedTip": "a9b86711c0300efce17b0a347f6e48ed003a9cac"
+    },
+    {
+      "path": "/home/eafen405/projects/deepseek-harness/.worktrees/13-jobs",
+      "removed": true,
+      "branch": "ticket/13-jobs",
+      "preservedTip": "fc5c7ac0220cf48c404cda34d1584901387eea06"
+    },
+    {
+      "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix",
+      "removed": true,
+      "branch": "fix/stage1315-review",
+      "preservedTip": "fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee"
+    },
+    {
+      "path": "/home/eafen405/projects/rikkahub/.worktrees/13-jobs",
+      "removed": true,
+      "branch": "ticket/13-jobs",
+      "preservedTip": "bb29c98b9a626e7c9781ac24b4fa185c092a6f4c"
+    },
+    {
+      "path": "/home/eafen405/projects/rikkahub/.worktrees/14-activity",
+      "removed": true,
+      "branch": "ticket/14-activity",
+      "preservedTip": "fa83e9ce29e33f4aa506f209903c54f85bce8cff"
+    },
+    {
+      "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications",
+      "removed": true,
+      "branch": "ticket/15-notifications",
+      "preservedTip": "3ee4bc26dc2f7627b97fc9bd2800643e29a6c7b6"
+    },
+    {
+      "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications-platform",
+      "removed": true,
+      "branch": "ticket/15-notifications-platform",
+      "preservedTip": "ea04fa37160ce1cc7132094bd111d8fd9e446ac6"
+    }
+  ],
+  "allBranchesPreserved": true,
+  "all16DshDirtyHashesPreserved": true,
+  "stageWorktreeProcesses": [],
+  "remainingWorktrees": {
+    "ourfairy": "worktree /home/eafen405/projects/OurFairy\nHEAD 826e26b402939e0335065a9f97a9e57850cb02b8\nbranch refs/heads/integration/ourfairy-v1\n\nworktree /home/eafen405/projects/OurFairy/.worktrees/01-baseline\nHEAD 4fb8ee42a54e1b1a2a1bdf1a8a0819858d33cc0b\nbranch refs/heads/ticket/01-baseline\n\nworktree /home/eafen405/projects/OurFairy/.worktrees/03-identity\nHEAD 160f68da345ada144963baf9c9a096c3398e97e3\nbranch refs/heads/ticket/03-identity\n\nworktree /home/eafen405/projects/OurFairy/.worktrees/04-owned-sessions\nHEAD f677cca2ffe1a3bcfb3ab0a2b2c0dd0e2354aa6e\nbranch refs/heads/ticket/04-owned-sessions\n\nworktree /home/eafen405/projects/OurFairy/.worktrees/review-24-26-backend\nHEAD 109a692f9db85fd9c6cc7cdce700b4ac306cf2da\nbranch refs/heads/fix/review-24-26-backend\n\nworktree /tmp/ourfairy-grill-frontend\nHEAD 57ea2d113e7656b0bfe120cc37ec61408b063514\nbranch refs/heads/work/wayfinder-grill-frontend\nprunable gitdir file points to non-existent location\n\nworktree /tmp/ourfairy-research-backend-readiness\nHEAD 9260757619f2847281017849b6025f69702ff527\nbranch refs/heads/research/v1-backend-readiness\nprunable gitdir file points to non-existent location\n\nworktree /tmp/ourfairy-research-client-contract\nHEAD f5e77f294ddb9ad26a4c950d5fdc27d5c92b29f8\nbranch refs/heads/research/v1-client-contract\nprunable gitdir file points to non-existent location\n\nworktree /tmp/ourfairy-research-input-path\nHEAD 409d52462ac7207866c7da60e7fbb0cbcaa8e450\nbranch refs/heads/research/v1-input-path\nprunable gitdir file points to non-existent location\n\n",
+    "dsh": "worktree /home/eafen405/projects/deepseek-harness\nHEAD fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee\nbranch refs/heads/product/ourfairy-v1\n\nworktree /home/eafen405/projects/deepseek-harness/.worktrees/03-identity\nHEAD 5a7615a12884dbf756fc7a8cb3e6355e35659c66\nbranch refs/heads/ticket/03-identity\n\nworktree /home/eafen405/projects/deepseek-harness/.worktrees/25-session-format\nHEAD 0284c1d01989e2c300626ae3e81d16c23fb34923\nbranch refs/heads/ticket/25-session-format\n\nworktree /home/eafen405/projects/deepseek-harness/.worktrees/review-24-26-export\nHEAD d3fe98f969c3963c6d193e74c776692e33c1eb64\nbranch refs/heads/fix/review-24-26-export\n\n",
+    "android": "worktree /home/eafen405/projects/rikkahub\nHEAD 3ee4bc26dc2f7627b97fc9bd2800643e29a6c7b6\nbranch refs/heads/product/ourfairy-v1\n\nworktree /home/eafen405/projects/rikkahub/.worktrees/03-identity\nHEAD af65606d065615f825188b73614b4abbce27578a\nbranch refs/heads/ticket/03-identity\n\nworktree /home/eafen405/projects/rikkahub/.worktrees/04-owned-sessions\nHEAD fd04aab78919a7816e6eb962949a6eaf13a41532\nbranch refs/heads/ticket/04-owned-sessions\n\nworktree /home/eafen405/projects/rikkahub/.worktrees/review-24-26-identity\nHEAD 6a58446e889de9a56e0bcdc9af8ded6f2ef76af6\nbranch refs/heads/fix/review-24-26-identity\n\n"
+  }
+}

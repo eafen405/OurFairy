@@ -1,0 +1,107 @@
+[
+  {
+    "path": "/home/eafen405/projects/OurFairy/.worktrees/13-jobs",
+    "operation": "worktree remove",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/OurFairy/.worktrees/14-activity",
+    "operation": "worktree remove",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/OurFairy/.worktrees/15-notifications",
+    "operation": "worktree remove",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/OurFairy/.worktrees/stage1315-fixture-fix",
+    "operation": "worktree remove",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/OurFairy/.worktrees/stage1315-review-fix",
+    "operation": "worktree remove",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/13-jobs",
+    "operation": "worktree remove",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/deepseek-harness/.worktrees/stage1315-review-fix",
+    "operation": "worktree remove",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/13-jobs",
+    "operation": "submodule deinit --all",
+    "exit": 0,
+    "stdout": "Cleared directory 'material3/material-color-utilities'\nSubmodule 'material3/material-color-utilities' (https://github.com/material-foundation/material-color-utilities.git) unregistered for path 'material3/material-color-utilities'\n",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/13-jobs",
+    "operation": "worktree remove",
+    "exit": 128,
+    "stdout": "",
+    "stderr": "fatal: working trees containing submodules cannot be moved or removed\n"
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/14-activity",
+    "operation": "submodule deinit --all",
+    "exit": 0,
+    "stdout": "Cleared directory 'material3/material-color-utilities'\n",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/14-activity",
+    "operation": "worktree remove",
+    "exit": 128,
+    "stdout": "",
+    "stderr": "fatal: working trees containing submodules cannot be moved or removed\n"
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications",
+    "operation": "submodule deinit --all",
+    "exit": 0,
+    "stdout": "Cleared directory 'material3/material-color-utilities'\n",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications",
+    "operation": "worktree remove",
+    "exit": 128,
+    "stdout": "",
+    "stderr": "fatal: working trees containing submodules cannot be moved or removed\n"
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications-platform",
+    "operation": "submodule deinit --all",
+    "exit": 0,
+    "stdout": "Cleared directory 'material3/material-color-utilities'\n",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications-platform",
+    "operation": "worktree remove",
+    "exit": 128,
+    "stdout": "",
+    "stderr": "fatal: working trees containing submodules cannot be moved or removed\n"
+  }
+]

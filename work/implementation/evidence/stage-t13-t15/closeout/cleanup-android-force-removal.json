@@ -1,0 +1,30 @@
+[
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/13-jobs",
+    "operation": "worktree remove --force (clean registered submodule normal refusal)",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/14-activity",
+    "operation": "worktree remove --force (clean registered submodule normal refusal)",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications",
+    "operation": "worktree remove --force (clean registered submodule normal refusal)",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "/home/eafen405/projects/rikkahub/.worktrees/15-notifications-platform",
+    "operation": "worktree remove --force (clean registered submodule normal refusal)",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]
