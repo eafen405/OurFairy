@@ -5,13 +5,17 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
+- **Read an issue**: start with the local copy below. For live metadata use `gh issue view <number> --json number,title,state,labels`; request `--json body` only when the body is needed. For a newer decision or copy conflict, fetch `--json comments` and select the relevant comments; avoid reprinting the full discussion.
+- **List issues**: `gh issue list --state open --json number,title,state,labels --jq '[.[] | {number, title, state, labels: [.labels[].name]}]'` with appropriate `--label` and `--state` filters. Add `body` or `comments` to the `--json` list only for the issues you are about to act on.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
+
+## Local copies
+
+When the repo keeps local working copies of specs and issues (ours live under `docs/` and `work/tickets/`, see `work/implementation/CONVENTIONS.md`), **read the local copy first**: GitHub stays the publication authority and native blocked-by dependencies stay the live state authority, so a stale copy never overrides the tracker. Fetch from `gh` only what the decision needs — issue number, state, and blocker summary (`gh api repos/<owner>/<repo>/issues/<n> --jq '{number, state, blocked: .issue_dependencies_summary.blocked_by}'`), plus the blocker list when a gate is unclear.
 
 ## Pull requests as a triage surface
 
@@ -19,8 +23,8 @@ Infer the repo from `git remote -v`; `gh` does this automatically when run insid
 
 When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
 
-- **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
-- **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
+- **Read a PR**: `gh pr view <number> --json title,state,labels`; add `body` or `comments` to the field list when needed, and use `gh pr diff <number>` for the diff.
+- **List external PRs for triage**: `gh pr list --state open --json number,title,state,labels,author,authorAssociation` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
 - **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
 
 GitHub shares one number space across issues and PRs, so a bare `#42` may be either: resolve with `gh pr view 42` and fall back to `gh issue view 42`.
@@ -31,7 +35,7 @@ Create a GitHub issue.
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `gh issue view <number> --comments`.
+Read the local copy if the repo keeps one (see **Local copies** above); otherwise fetch the fields the task needs. Reach for `gh issue view <number> --comments` only when a newer decision or a copy/issue conflict is suspected.
 
 ## Wayfinding operations
 

@@ -10,7 +10,12 @@
 4. 装配与适配研究：`docs/research/v1-backend-readiness.md`、`docs/research/v1-client-contract.md`、`docs/research/v1-input-path.md`、`docs/research/rikkahub-architecture.md`
 5. 术语：`GLOSSARY.md`
 
-票的依赖图以 GitHub 原生 blocked-by 为准（可用 `gh api graphql` 查询）。**票未解除阻塞前不要开始实现该票。**
+票的依赖图以 GitHub 原生 blocked-by 为准（最小字段查询见 `docs/agents/issue-tracker.md`）。**票未解除阻塞前不要开始实现该票。**
+
+- **本地副本是工作副本，默认先读。** `docs/specs/`、`docs/decisions/`、`work/tickets/` 下的副本是实施时读取的版本；GitHub issue 是**发布权威**，票的**原生 blocked-by 是实时状态权威**，两者冲突时以 GitHub 为准并刷新副本。
+- **只取需要的字段。** 需要权威数据时只查票号、状态与阻塞摘要（命令形式见 `docs/agents/issue-tracker.md`），需要时再取阻塞清单。不要默认拉全部票面正文与评论。
+- **按需刷新副本。** issue 上出现更晚的明确决定时，或用户要求同步时，才刷新对应的本地副本。
+- **上下文压缩后恢复**：读交接指针（`work/implementation/notes/*-handoff.md`）与当前任务切片，不重读全部文档。
 
 ## 1. 仓库拓扑与固定版本
 
@@ -105,15 +110,13 @@ corepack pnpm@11.28.5 exec vitest run <path>
 - `README.md`：做了什么、影响哪些仓库与提交、**实际执行的命令**、**实际输出摘要**、未执行/失败项及原因。
 - 运行日志原文放同目录（`*.log`），不要只写结论。
 - 明确区分：**替身测试**（模型/网络/平台替身）与**真实服务**（官方 DeepSeek、硅基流动 ASR）证据；**模拟器/构建成功**与**真机**证据。
-- 断言真实行为：禁止用「编译通过」「Loader 未抛异常」「构建成功」冒充运行时就绪或验收通过。
+- 结论用词纪律（「编译通过」不等于验收通过、不降标准不换指标）见 `CODING_STANDARDS.md`。
 
 ## 6. 工作纪律
 
-- **先测试后实现。** 开工时调用 Skill 工具加载 `tdd`，按红—绿—重构推进；测试断言用户可观察行为，不断言私有实现细节。
-- **不要猜。** 不确定的 API、字段、行为一律去读固定提交的源码或派同伴查证；写到报告里的每条事实都要有来源（文件路径 + 行号 或 命令输出）。
-- **不要伪造通过。** 条件不具备（无凭据、无设备、无内核隔离能力）时如实记录为未完成门槛，不降低标准、不换指标、不静默跳过。
-- **小步提交。** 每个有意义的红→绿循环提交一次，提交信息说明行为变化。
 - **只做本票范围。** 发现范围外问题时记录到 `work/implementation/notes/` 并通知 Lead，不顺手扩散改动。
+
+编码与验证规则见 `CODING_STANDARDS.md`。
 
 ## 7. 沟通
 
@@ -132,4 +135,4 @@ corepack pnpm@11.28.5 exec vitest run <path>
 | C | 并行能力适配过半后（#30/#32/#34/#36 一类） | 该批合并的增量 |
 | D | 最终集成（#44）之后 | 整个首版组合的完整 diff，作为总规格交付门槛 |
 
-每次评审用 `code-review` skill；Spec 轴引用对应 issue（`gh issue view <n>`）与父规格 #23。发现的问题**回到所属模块修**，不由 Lead 在集成分支上直接打补丁掩盖。检查点只是防止问题堆积，**不替代** #44 之后的最终两轴评审。
+每次评审用 `code-review` skill；Spec 轴引用**本地票面副本**（`work/tickets/ourfairy-v1/<NN>-*.md`）与**本地父规格副本**（`docs/specs/ourfairy-v1.md`）。仅在票面与规格冲突、或 issue 上出现更晚的明确决定时，才 `gh issue view <n> --comments` 核对。发现的问题**回到所属模块修**，不由 Lead 在集成分支上直接打补丁掩盖。检查点只是防止问题堆积，**不替代** #44 之后的最终两轴评审。
