@@ -49,3 +49,20 @@ Android 初次构建发现新 worktree 的已有颜色库子模块未初始化�
 平台替身、Android 编译和 JVM 状态测试均不替代这些验收。
 最小真实场景交付给最终集成/真机票：`real-siliconflow-scene.md`。
 最终批次合并后须由 merger 再运行 `npm test`、`combo:verify` 及阶段评审。
+
+## T17 集成同步（2026-10-16）
+
+T16 票分支正常 merge 最新集成 `9bf2b4f85d17140115d44dd3723e510a9d34456b`
+（包含 T17 PDF 与其集成证据），自动生成合并提交
+`a67ddd410b2f0a855d93295126c988e98bb2cdd4`。`scripts/ourfairy-backend.mjs`
+自动合并无冲突，保留 PDF worker/wheel 源清单与 Speech 包接线；未新增功能。
+Android 不变 `3426401c10379dfcbef819a7a299a60c0d0d23eb`，其集成仍为 3ee4bc26。
+
+合并后完整 `npm test` **107/107 通过**，`npm run combo:verify` 通过，原始日志
+分别为 `npm-test-after-t17-final.log`、`combo-after-t17-final.log`。
+
+第一次在 `git merge --no-commit` 状态运行测试，106 通过、唯一 doctor 失败：
+组合检查读取的是仍未包含 T17 的旧 HEAD。这是待提交合并的检查时序问题，
+原始失败保留于 `npm-test-after-t17.log`。随后撤销该待提交合并并使用普通
+`git merge --no-edit integration/ourfairy-v1` 正常生成合并提交，再执行上述完整
+检查；未覆盖 hooksPath、未修改检查规则。证据提交继续使用正常 pre-commit。
