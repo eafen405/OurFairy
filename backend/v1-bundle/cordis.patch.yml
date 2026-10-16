@@ -186,3 +186,14 @@
       name: '@ourfairy/dsh-attachments'
       config:
         root: !!js dshHomePath('uploads')
+
+    - id: speech
+      name: '@ourfairy/dsh-speech'
+      config:
+        model: !!js process.env.OURFAIRY_ASR_MODEL ?? 'FunAudioLLM/SenseVoiceSmall'
+        endpoint: !!js process.env.OURFAIRY_ASR_ENDPOINT ?? 'https://api.siliconflow.cn/v1/audio/transcriptions'
+        maxDurationMs: !!js Number(process.env.OURFAIRY_ASR_MAX_DURATION_MS ?? 60000)
+        maxAudioBytes: !!js Number(process.env.OURFAIRY_ASR_MAX_AUDIO_BYTES ?? 1920044)
+        timeoutMs: !!js Number(process.env.OURFAIRY_ASR_TIMEOUT_MS ?? 45000)
+        maxGlobalInFlight: !!js Number(process.env.OURFAIRY_ASR_MAX_GLOBAL_IN_FLIGHT ?? 2)
+        maxUserInFlight: !!js Number(process.env.OURFAIRY_ASR_MAX_USER_IN_FLIGHT ?? 1)

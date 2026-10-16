@@ -67,6 +67,7 @@ const SESSIONS_PACKAGE = '@ourfairy/dsh-sessions'
 const CHAT_PACKAGE = '@ourfairy/dsh-chat'
 const SPACES_PACKAGE = '@ourfairy/dsh-spaces'
 const ATTACHMENTS_PACKAGE = '@ourfairy/dsh-attachments'
+const SPEECH_PACKAGE = '@ourfairy/dsh-speech'
 const SEARCH_PACKAGE = '@ourfairy/dsh-search'
 const BUNDLE_DIR = join(repoRoot, COMBINATION.bundlePathInRepo)
 const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
@@ -96,10 +97,15 @@ const PRODUCT_SOURCES = [
   'backend/chat/src/delivery.mjs',
   'backend/chat/src/jobs.mjs',
   'backend/chat/src/activity.mjs',
+  'backend/speech/package.json',
+  'backend/speech/src/index.mjs',
+  'backend/speech/src/service.mjs',
   'backend/search/package.json',
   'backend/search/src/index.mjs',
   'backend/attachments/package.json',
-  ...['index', 'service'].map(name => `backend/attachments/src/${name}.mjs`),
+  ...['index', 'service', 'pdf'].map(name => `backend/attachments/src/${name}.mjs`),
+  'backend/attachments/src/pdf-worker.py',
+  'backend/attachments/pdf/pypdf-6.21.0-py3-none-any.whl',
   'backend/spaces/package.json',
   ...['index', 'scope', 'bwrap', 'fs', 'policy', 'groups'].map(name => `backend/spaces/src/${name}.mjs`),
 ]
@@ -209,6 +215,7 @@ const profileManifest = () => ({
     [IDENTITY_PACKAGE]: `file:${join(repoRoot, 'backend', 'identity')}`,
     [SESSIONS_PACKAGE]: `file:${join(repoRoot, 'backend', 'sessions')}`,
     [CHAT_PACKAGE]: `file:${join(repoRoot, 'backend', 'chat')}`,
+    [SPEECH_PACKAGE]: `file:${join(repoRoot, 'backend', 'speech')}`,
     [SEARCH_PACKAGE]: `file:${join(repoRoot, 'backend', 'search')}`,
     [ATTACHMENTS_PACKAGE]: `file:${join(repoRoot, 'backend', 'attachments')}`,
     [SPACES_PACKAGE]: `file:${join(repoRoot, 'backend', 'spaces')}`,
