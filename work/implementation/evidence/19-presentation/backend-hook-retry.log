@@ -1,0 +1,22 @@
+✔ one real turn reaches the external model double, registers tools, and persists the session (3095.462684ms)
+✔ a turn without credentials fails with a diagnostic naming the missing variable (15194.155981ms)
+✔ bounded history pages keep the opening cut while new formal events arrive (16014.670037ms)
+✔ a reconnect restores the active cumulative attempt while bounded backfill and live tail proceed independently (2026.444605ms)
+✔ a lost page response can be retried at its unchanged frozen cut (39.009255ms)
+✔ a real writer permission failure cannot advance durable ACK, then retry and cold recovery use the same acceptance (787.179644ms)
+✔ new history and checkpoint routes keep the cold/live ownership fence and validate exact ranges (49.126049ms)
+✔ a crash-orphaned turn is resumed and writer-saved before its recovery closer is acknowledged (2059.204839ms)
+✔ Fairy delivers only selected text to a cold primary without recipient inference (3319.06338ms)
+✔ live delivery remains independent of the recipient active attempt and later model history includes it (166.585805ms)
+✔ native log success with failed business update recovers after restart and exact retry stays single (1020.447546ms)
+✔ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (130.14794ms)
+✔ failed native durability checkpoint never confirms and stable retry recovers the same message (894.920473ms)
+✔ notification outlet failure preserves durable delivery and successful sender confirmation (826.196022ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 21304.493035
