@@ -1,0 +1,25 @@
+Done. Two files changed, both within the allowed scope.
+
+## Changes
+
+**`RemoteSpeechApi.kt`** — reformatted to the `RemoteAttachmentApi.kt` conventions the task asked for:
+- KDoc on the public surface, `RemoteSpeechBackend` documented as "operations this app performs", envelope nested `Failure` type separated onto its own line, trailing commas.
+- Same hardened client builder as the neighbor (`followRedirects(false)`, `followSslRedirects(false)`, `retryOnConnectionFailure(false)`) with the "a redirect would carry the Bearer credential somewhere it was not granted" rationale. I dropped the previous `callTimeout(0)` override so the injected client's timeout governs — that was silently defeating the caller's configured budget.
+- Error handling now matches neighbors: an undecodable body is `IdentityUnreachable`, while a refusal carries the backend's own code (`speech/unknown` fallback, following the `attachments/unknown` / `chat/unknown` convention). The `200`-shaped-body-is-not-success rule is kept, commented consistently.
+- `transcribe` rejects an empty recording up front and treats a blank transcript as `IdentityRefused(422, "speech/no-match", …)` rather than returning an empty string that could overwrite what the user already typed.
+- Cancellation still cancels the OkHttp `Call` via `invokeOnCancellation`; response decoding moved into a `decode` helper with `runCatching` so a decode failure can't skip resuming.
+
+**`RemoteSpeechApiTest.kt`** (new) — 3 tests: authenticated `GET /speech` reporting backend ceilings; raw WAV posted to `/speech/transcriptions` with byte-exact body and `audio/wav`, transcript returned verbatim; a 429 refusal keeping status + the backend's own `speech/rate-limited` code.
+
+## Two findings worth flagging
+
+1. **MockWebServer is not available in this repo** — the task assumed it. `app/build.gradle.kts` has no `mockwebserver` dependency and no catalog entry. The existing convention for these adapter tests is the JDK's `com.sun.net.httpserver.HttpServer` on loopback, which `RemoteAttachmentApiTest` and `RemoteJobApiTest` both use with the same stated rationale. I followed the repo convention rather than adding a dependency outside my edit scope.
+2. **Backend source was unreadable** — the permission gate blocked reads under `/home/eafen405/projects/OurFairy/backend`, so the wire contract comes from the task description, not from reading the route implementation. Worth a second pair of eyes against `backend/speech/src/index.mjs` before integration.
+
+## Checks
+
+Read back both files and confirmed the two consumers still line up: `RemoteChatState.speechAvailability`/`transcribeSpeech` call `availability(token)` / `transcribe(token, wav)` with unchanged signatures, and `IdentityModule` still constructs `RemoteSpeechApi(identityEndpoint, get<OkHttpClient>())`. No Gradle build was run per instructions, so **this is not compile- or test-verified**. I caught and fixed two self-inflicted errors by review (a nested `runBlocking` inside `runTest`, and a non-suspend lambda that couldn't call `transcribe`). No chat-send path was added, no cloud credential or provider enum exists in the file, and no commit or push was made.
+
+Files:
+- /home/eafen405/projects/rikkahub/.worktrees/16-asr/app/src/main/java/me/rerere/rikkahub/data/remote/RemoteSpeechApi.kt
+- /home/eafen405/projects/rikkahub/.worktrees/16-asr/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteSpeechApiTest.kt

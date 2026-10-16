@@ -1,0 +1,1 @@
+{"name":"@ourfairy/dsh-speech","version":"0.1.0","private":true,"type":"module","license":"UNLICENSED","main":"./src/index.mjs","exports":{".":"./src/index.mjs"},"files":["src","README.md"],"peerDependencies":{"@ourfairy/dsh-identity":"workspace:~"}}
