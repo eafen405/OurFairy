@@ -1,0 +1,50 @@
+Updating 3426401c..af9491ec
+Fast-forward
+ app/src/main/AndroidManifest.xml                   |   6 +
+ app/src/main/assets/licenses/FAIRYBOT_MIT.txt      |  21 +
+ app/src/main/assets/presentation/workload.md       | 120 +++++
+ .../rikkahub/ui/components/richtext/Markdown.kt    |   5 +-
+ .../rerere/rikkahub/ui/fairy/AgoraMotionPolicy.kt  | 106 +++++
+ .../rerere/rikkahub/ui/fairy/FairyDialogPanel.kt   | 183 ++++++++
+ .../me/rerere/rikkahub/ui/fairy/FairyEmblem.kt     | 472 ++++++++++++++++++++
+ .../me/rerere/rikkahub/ui/fairy/FairyEyeMotion.kt  | 492 +++++++++++++++++++++
+ .../java/me/rerere/rikkahub/ui/fairy/FairyPanel.kt |  66 +++
+ .../me/rerere/rikkahub/ui/fairy/FairyPresence.kt   |  13 +
+ .../me/rerere/rikkahub/ui/fairy/FairyScreenHud.kt  | 120 +++++
+ .../rerere/rikkahub/ui/fairy/FairyScreenPaint.kt   | 112 +++++
+ .../me/rerere/rikkahub/ui/fairy/FairyTokens.kt     |  76 ++++
+ .../me/rerere/rikkahub/ui/fairy/FairyTypography.kt |  10 +
+ .../me/rerere/rikkahub/ui/fairy/FairyWindow.kt     | 377 ++++++++++++++++
+ .../java/me/rerere/rikkahub/ui/fairy/README.md     |  12 +
+ .../ui/identity/PresentationBenchmarkActivity.kt   | 163 +++++++
+ .../rerere/rikkahub/ui/identity/RemoteChatPanel.kt | 130 +-----
+ .../ui/identity/RemoteDisplayPreferences.kt        |  73 +++
+ .../rikkahub/ui/identity/RemotePresentation.kt     |  42 ++
+ .../rikkahub/ui/identity/RemoteTranscript.kt       | 256 +++++++++++
+ app/src/main/res/font/label_black.ttf              | Bin 0 -> 45276 bytes
+ app/src/main/res/font/title_heavy.ttf              | Bin 0 -> 988792 bytes
+ .../ui/identity/RemotePresentationBaselineTest.kt  |  22 +
+ .../rikkahub/ui/identity/RemotePresentationTest.kt |  75 ++++
+ 25 files changed, 2839 insertions(+), 113 deletions(-)
+ create mode 100644 app/src/main/assets/licenses/FAIRYBOT_MIT.txt
+ create mode 100644 app/src/main/assets/presentation/workload.md
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/AgoraMotionPolicy.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyDialogPanel.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyEmblem.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyEyeMotion.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyPanel.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyPresence.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyScreenHud.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyScreenPaint.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyTokens.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyTypography.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyWindow.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/fairy/README.md
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/identity/PresentationBenchmarkActivity.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteDisplayPreferences.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/identity/RemotePresentation.kt
+ create mode 100644 app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteTranscript.kt
+ create mode 100644 app/src/main/res/font/label_black.ttf
+ create mode 100644 app/src/main/res/font/title_heavy.ttf
+ create mode 100644 app/src/test/java/me/rerere/rikkahub/ui/identity/RemotePresentationBaselineTest.kt
+ create mode 100644 app/src/test/java/me/rerere/rikkahub/ui/identity/RemotePresentationTest.kt
