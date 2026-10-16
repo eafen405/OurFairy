@@ -15,6 +15,7 @@
     "backend:start": "node scripts/ourfairy-backend.mjs start",
     "backend:stop": "node scripts/ourfairy-backend.mjs stop",
     "backend:status": "node scripts/ourfairy-backend.mjs status",
-    "backend:doctor": "node scripts/ourfairy-backend.mjs doctor"
+    "backend:doctor": "node scripts/ourfairy-backend.mjs doctor",
+    "hooks:install": "git config core.hooksPath .githooks"
   }
 }
