@@ -1,0 +1,21 @@
+All six files are on disk in `/tmp/t19-synthetic`, and the generator ran successfully.
+
+## What was built
+
+**`workload.md`** (5,875 B, ~3,635 chars) — a Chinese long-reply template on the fictional "星桥网关 v4.2 灰度评估" scenario. All six required elements are present and verified: 8 headings, 7 reference-style links each cited from 2+ different paragraphs with all 7 definitions at the very end, one ```` ```kotlin ```` block (`GatewayLimiter`), a 3-column table (6 rows, every row exactly 3 cells), one `$$ … $$` block formula, and a final section 「终局保留文本」 whose text is preserved after a stop/error.
+
+**`generate.py`** (stdlib only — `json`, `pathlib`; no network, no subprocess, no git, writes only next to `__file__`).
+
+**Generated outputs:**
+- `long-single.md` (376,064 B) — template repeated exactly 64×, byte-identical to `"\n".join([tpl]*64)+"\n"`; contains 64 Kotlin blocks, 64 LaTeX blocks, 64 tables, 448 link definitions.
+- `history.json` — exactly **200** text messages, stable ids `msg-0001`…`msg-0200` (200 unique), `role` alternating user/assistant.
+- `burst.json` — **29** frames from the same 3,635-char text, `version` strictly 1…29, each `text` a full cumulative snapshot of 128-char chunks (frame sizes 128, 256, 384 … 3584, 3635), `terminal=true` only on the last frame, whose text equals the full template and still contains the preserved closing paragraph.
+- `RESULT.md` — the full record.
+
+## Checks performed
+
+Determinism (two consecutive runs → identical SHA-256 for all three artifacts), strict structural assertions (copy counts, table column counts, `$$` pairing, `used ⊆ defined` reference check, no unused definitions), incremental-growth assertion for burst frames (every step ≤128), and dependency inspection confirming stdlib-only.
+
+## One deviation to flag
+
+`workload.md` is 5,875 bytes rather than "约4KB" — Chinese chars are 3 bytes each, and I kept all six required elements rather than truncating prose. Trimming the risk list in §6 and the derivation in §5 would bring it to ~4KB without losing any required element; say the word and I'll do it and regenerate. No blockers, nothing committed or published.

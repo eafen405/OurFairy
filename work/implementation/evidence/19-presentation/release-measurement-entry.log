@@ -1,0 +1,7 @@
+            A: http://schemas.android.com/apk/res/android:name(0x01010003)="me.rerere.rikkahub.ui.identity.PresentationBenchmarkActivity" (Raw: "me.rerere.rikkahub.ui.identity.PresentationBenchmarkActivity")
+            A: http://schemas.android.com/apk/res/android:exported(0x01010010)=true
+          E: activity (line=91)
+            A: http://schemas.android.com/apk/res/android:theme(0x01010000)=@0x7f140375
+            A: http://schemas.android.com/apk/res/android:label(0x01010001)=@0x7f13078f
+            A: http://schemas.android.com/apk/res/android:name(0x01010003)="me.rerere.rikkahub.ui.activity.SafeModeActivity" (Raw: "me.rerere.rikkahub.ui.activity.SafeModeActivity")
+            A: http://schemas.android.com/apk/res/android:exported(0x01010010)=false

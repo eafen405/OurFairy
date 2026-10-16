@@ -1,0 +1,17 @@
+usage: measure-presentation.py [-h] [--adb ADB] [--serial SERIAL]
+                               [--package PACKAGE]
+                               [--scenario {history,single,format,stream,burst,all}]
+                               --out OUT [--scroll]
+
+Run the release APK's offline presentation workloads and save their own
+metrics.
+
+options:
+  -h, --help            show this help message and exit
+  --adb ADB
+  --serial SERIAL
+  --package PACKAGE
+  --scenario {history,single,format,stream,burst,all}
+  --out OUT
+  --scroll              Alternate swipes during stream to exercise user scroll
+                        priority

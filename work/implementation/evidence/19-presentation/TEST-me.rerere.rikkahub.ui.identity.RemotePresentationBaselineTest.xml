@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.ui.identity.RemotePresentationBaselineTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-16T12:53:20.045Z" hostname="LAPTOP-45RC44AF" time="1.566">
+  <properties/>
+  <testcase name="record fixed complete document parsing baseline" classname="me.rerere.rikkahub.ui.identity.RemotePresentationBaselineTest" time="1.562"/>
+  <system-out><![CDATA[PRESENTATION_HOST_BASELINE chars=232703 samples=49.105543,56.602828,87.474215,90.266158,113.659649,148.006162,156.435912 medianMs=90.266158 p95Ms=156.435912
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
