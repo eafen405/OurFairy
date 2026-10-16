@@ -1,0 +1,88 @@
+%PDF-1.3
+%‚„œ”
+1 0 obj
+<<
+/Producer (pypdf)
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 1
+/Kids [ 4 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+4 0 obj
+<<
+/Type /Page
+/Resources <<
+/Font <<
+/F1 <<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+/Encoding /WinAnsiEncoding
+>>
+>>
+>>
+/MediaBox [ 0.0 0.0 400 400 ]
+/Parent 2 0 R
+/Contents 5 0 R
+>>
+endobj
+5 0 obj
+<<
+/Length 316
+>>
+stream
+q
+1.000 0.000 0.000 rg
+40 40 80 40 re f
+0.000 1.000 0.000 rg
+160 40 80 80 re f
+0.000 0.000 1.000 rg
+280 40 80 120 re f
+Q
+q 0 0 0 rg
+0 38 400 2 re f Q
+BT
+/F1 12 Tf
+/F1 24 Tf
+1 0 0 1 150 360 Tm
+(T18_CHART) Tj
+/F1 12 Tf
+1 0 0 1 60 20 Tm
+(10) Tj
+/F1 12 Tf
+1 0 0 1 180 20 Tm
+(20) Tj
+/F1 12 Tf
+1 0 0 1 300 20 Tm
+(30) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000054 00000 n 
+0000000113 00000 n 
+0000000162 00000 n 
+0000000370 00000 n 
+trailer
+<<
+/Size 6
+/Root 3 0 R
+/Info 1 0 R
+/ID [ <3031373064646661313762306334653463396630613464386637623665356134> <3031373064646661313762306334653463396630613464386637623665356134> ]
+>>
+startxref
+737
+%%EOF

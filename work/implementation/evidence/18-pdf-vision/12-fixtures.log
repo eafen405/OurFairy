@@ -1,0 +1,6 @@
+scan.pdf: 2002 bytes
+chart.pdf: 1074 bytes
+mixed.pdf: 2441 bytes
+c1c0999743c507e4fc36a24bfd86cc0b5c2dc9edbf1c0c8900cdd0297e479029  tests/fixtures/pdf/scan.pdf
+b5c4fa85c690f21811f678b2ca67a696c0f4a1036c6755f0fad21e382a6143f0  tests/fixtures/pdf/chart.pdf
+4dab49ea7906d757a5ff479eb2e4f0db5ecc643cac796b14336db344e1473f62  tests/fixtures/pdf/mixed.pdf

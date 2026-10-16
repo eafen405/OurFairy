@@ -1,0 +1,26 @@
+T18 fixtures are done and verified. Only the four allowed paths changed (plus the README append); the other agent's concurrent edits to `backend/` and `tests/*.mjs` are untouched, and nothing was committed.
+
+## Changed files
+
+- [generate-vision.py](/home/eafen405/projects/OurFairy/.worktrees/18-pdf-vision/tests/fixtures/pdf/generate-vision.py) — new generator (stdlib + vendored pypdf wheel only, no installs/network)
+- [scan.pdf](/home/eafen405/projects/OurFairy/.worktrees/18-pdf-vision/tests/fixtures/pdf/scan.pdf) (2002 B), [chart.pdf](/home/eafen405/projects/OurFairy/.worktrees/18-pdf-vision/tests/fixtures/pdf/chart.pdf) (1074 B), [mixed.pdf](/home/eafen405/projects/OurFairy/.worktrees/18-pdf-vision/tests/fixtures/pdf/mixed.pdf) (2441 B)
+- [README.md](/home/eafen405/projects/OurFairy/.worktrees/18-pdf-vision/tests/fixtures/pdf/README.md) — appended a T18 section (+64 lines, ticket-17 content preserved)
+
+## What was built
+
+`generate-vision.py` builds the rasters itself as raw 400×400 RGB bytes in a `bytearray`, Flate-compresses with `zlib`, and embeds them as DeviceRGB image XObjects — no external renderer touches the samples. Pages are 400×400 pt with rasters mapped 1:1, so `pdftoppm -scale-to 1600` (the runtime's flag) yields 1600×1600 where 1 pt = exactly 4 px. Shared geometry across all three charts: bars 80 pt wide at x = 40/160/280, on an axis at y = 40, heights 40 (red) / 80 (green) / 120 (blue), pure `#ff0000` / `#00ff00` / `#0000ff` on white.
+
+## Checks run
+
+1. **Determinism** — two consecutive generator runs, `sha256sum` + `diff`: byte-identical (`scan c1c09997…`, `chart b5c4fa85…`, `mixed 4dab49ea…`).
+2. **Structure/text via the vendored pypdf** — `scan.pdf` 1 page, `chart.pdf` 1 page, `mixed.pdf` 2 pages, all 400×400; text is `''`, `'T18_CHART\n10 20 30'`, and `'MIXED_TEXT_PAGE'` / `'MIXED_SCAN_CAPTION'`.
+3. **Real renders** — `pdftoppm -scale-to 1600 -png` on every page, decoded with a pure-Python PNG reader and probed: all pages render 1600×1600; bar midpoints read exactly red/green/blue; white above each bar; black axis beneath; measured bar heights 40.0 / 80.0 / 120.0 pt in both `scan.pdf` and `chart.pdf`. `scan.pdf` has **zero** text ink (its 12800 dark px are exactly the 400×2 pt axis), while `chart.pdf`'s title and all three labels and both `mixed.pdf` captions render as real ink.
+
+## Two defects found and fixed
+
+- **Raster axis ate 2 pt off every bar.** The axis was drawn over the bars' bottom rows, so `scan.pdf` measured 38/78/118 pt while the vector `chart.pdf` measured 40/80/120. Axis now sits below the baseline, matching the vector version.
+- **Fonts were attached as stream objects, so no text rendered at all.** This is inherited from the ticket-17 generator: poppler reports `Syntax Error: font resource is not a dictionary` / `Unknown font tag 'F1'` and paints nothing — `text.pdf` renders with zero text ink even though its text extracts. My generator writes the font as a plain inline dictionary, so `T18_CHART`, the labels, and both `MIXED_*` captions are genuinely visible. I left `generate.py` and the ticket-17 fixtures alone as instructed, and documented the difference in the README — worth a follow-up if those samples ever need to be *seen* rather than merely read.
+
+## Not done / notes
+
+No integration test was run and no runtime file was touched, per scope. `mixed.pdf` page 2 deliberately has both a text layer and visual content, so a text-only read would miss the chart. Current hashes are the post-fix ones; earlier intermediate hashes were from before the axis and font corrections.

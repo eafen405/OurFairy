@@ -1,8 +1,8 @@
-/** Two PDF tools over existing admitted attachment qualification, with no derived store. */
+/** Bounded PDF tools over existing admitted attachment qualification, with no derived store. */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { buildBwrapArgv } from '@ourfairy/dsh-spaces/bwrap'
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm, chmod } from 'node:fs/promises'
+import { mkdtemp, rm, chmod, readFile } from 'node:fs/promises'
 import { createWriteStream } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
 import { tmpdir } from 'node:os'
@@ -15,8 +15,8 @@ const worker = join(root, 'pdf-worker.py')
 const failure = error => ({ status: 3, error }) // 1 成功，2 部分页失败，3 失败。
 
 function runWorker(directory, request, signal) {
-  const argv = buildBwrapArgv('bwrap', { workspaceRoot: directory, readRoots: [worker, wheel], writable: false },
-    ['/usr/bin/prlimit', '--as=536870912', '--cpu=5', '--fsize=1048576', '--nofile=64', '--',
+  const argv = buildBwrapArgv('bwrap', { workspaceRoot: directory, readRoots: [worker, wheel, ...(request.mode === 'render' ? ['/etc/fonts'] : [])], writable: request.mode === 'render' },
+    ['/usr/bin/prlimit', '--as=536870912', '--cpu=5', request.mode === 'render' ? '--fsize=8388608' : '--fsize=1048576', '--nofile=64', '--',
       '/usr/bin/python3', '-B', worker, wheel, join(directory, 'input.pdf'), JSON.stringify(request)])
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted()
@@ -45,8 +45,13 @@ export function installPdf(ctx, service) {
   const execute = async (agent, args, mode, signal) => {
     const input = await service.qualifiedFile(agent.session, args.file_path)
     if (input.mime !== 'application/pdf') return failure('not-pdf')
-    if (mode === 'pages' && (!Array.isArray(args.pages) || args.pages.length < 1 || args.pages.length > 5
+    if (mode !== 'info' && (!Array.isArray(args.pages) || args.pages.length < 1 || args.pages.length > (mode === 'render' ? 3 : 5)
       || args.pages.some(page => !Number.isSafeInteger(page) || page < 1) || new Set(args.pages).size !== args.pages.length)) return failure('invalid-pages')
+    if (mode === 'render') {
+      const routed = agent.session.requestHeader()?.config
+      const model = await ctx.llm.resolveModelInfo(routed?.provider ?? agent.options.provider, routed?.model ?? agent.options.model, signal)
+      if (!model.inputModalities?.includes('image')) return failure('image-unsupported')
+    }
     if (active >= 2) return failure('busy')
     active++
     let directory
@@ -54,7 +59,18 @@ export function installPdf(ctx, service) {
       directory = await mkdtemp(join(tmpdir(), 'ourfairy-pdf-'))
       await chmod(directory, 0o700)
       await pipeline(ctx.attachments.readFileStream(input.original, signal), createWriteStream(join(directory, 'input.pdf'), { mode: 0o600 }), { signal })
-      return await runWorker(directory, { mode, ...(mode === 'pages' ? { pages: args.pages } : {}) }, signal)
+      const result = await runWorker(directory, { mode, ...(mode !== 'info' ? { pages: args.pages } : {}) }, signal)
+      if (mode === 'render' && result.pages) {
+        result.file_path = args.file_path
+        result.name = input.name
+        for (const page of result.pages) {
+          if (page.status === 3) continue
+          page.image = await ctx.attachments.saveImage({ data: await readFile(join(directory, `page-${page.page}.png`)),
+            mediaType: 'image/png', name: `${input.name}-page-${page.page}.png` })
+        }
+        result.scope = 'Only returned pages were rendered. Cite their page numbers; visual reading may not perfectly recover complex tables.'
+      }
+      return result
     } finally {
       if (directory) await rm(directory, { recursive: true, force: true })
       active--
@@ -63,10 +79,12 @@ export function installPdf(ctx, service) {
   const register = agent => {
     for (const [name, mode, description] of [
       ['pdf_info', 'info', 'Get the page count and a bounded first-page text sample from a qualified PDF file handle. Only the sample page is read; do not claim to understand unread pages.'],
+      ['pdf_render_pages', 'render', 'Render 1–3 selected 1-based pages of a qualified PDF and return page images through the current official vision route. Use for scans, charts and layout only as needed; cite page numbers.'],
       ['pdf_read_pages', 'pages', 'Read 1–5 selected 1-based PDF pages from a qualified file handle. Returns page numbers, bounded text, truncation and empty-page/image-reading hints. Original downloads are unchanged.'],
     ]) agent.ctx.tools.register(defineTool({ name, description,
-      parameters: { file_path: { type: 'string', required: true }, ...(mode === 'pages' ? { pages: { type: 'array', required: true, items: { type: 'integer' } } } : {}) },
-      output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+      parameters: { file_path: { type: 'string', required: true }, ...(mode !== 'info' ? { pages: { type: 'array', required: true, items: { type: 'integer' } } } : {}) },
+      output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) },
+        ...(value.pages ?? []).filter(page => page.image).map(page => ({ type: 'image', attachment: page.image }))] },
       execute: (args, exec) => execute(exec.agent, args, mode, exec.signal),
     }))
   }

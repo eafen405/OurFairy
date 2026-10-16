@@ -1,0 +1,23 @@
+✔ PDF upload, selected page text with citation, and immutable original use actual authorized tools (5330.909751ms)
+✔ PDF tools report encrypted, damaged, empty, partial and over-limit documents without reading other pages (3483.196459ms)
+✔ PDF text is explicitly truncated and a compressed costly page hits an actual process resource budget (4156.188807ms)
+✖ selected PDF pages become real images in official user tool results without replacing the original (838.149527ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14137.95499
+
+✖ failing tests:
+
+test at tests/pdf.test.mjs:170:1
+✖ selected PDF pages become real images in official user tool results without replacing the original (838.149527ms)
+  SyntaxError: Unexpected non-whitespace character after JSON at position 543 (line 2 column 1)
+      at JSON.parse (<anonymous>)
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/18-pdf-vision/tests/pdf.test.mjs:173:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)

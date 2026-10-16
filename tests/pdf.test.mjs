@@ -3,10 +3,11 @@ import { before, after, test } from 'node:test'
 import { createHash } from 'node:crypto'
 import { deflateSync } from 'node:zlib'
 import { join } from 'node:path'
+import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { makeHome, removeHome, runBackendAsync, describeRun, repoRoot } from './helpers/backend.mjs'
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json')))
-const { startMockLlmServer } = await import(join(combo.repos.dsh.localPath, 'packages/test-support/llm-mock-server/lib/index.js'))
+const sharp = createRequire(join(combo.repos.dsh.localPath, 'packages/attachment/attachment-local/package.json'))('sharp')
 const home = makeHome('ourfairy-pdf-'), password = 'attachment-password'
 let model, port, admin, alice, bob
 async function start() {
@@ -36,7 +37,7 @@ async function upload(user, sessionId, bytes, name, mime) {
   assert.equal(complete.status, 200, JSON.stringify(complete)); return complete.body.upload
 }
 before(async () => {
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['success'], repeatLast: true, successText: 'attachment received' })
+  model = await startToolModel()
   await start(); admin = (await request('/identity/sign-in', null, { name: 'phaethon', password })).body
   alice = await user('attachment-alice'); bob = await user('attachment-bob')
 })
@@ -46,6 +47,9 @@ async function startToolModel() {
   const requests = []
   const server = createServer(async (req, res) => {
     let bytes = ''; for await (const chunk of req) bytes += chunk
+    if (req.url !== '/v1/messages') {
+      res.writeHead(404, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { type: 'not_found_error', message: 'inline image fallback' } })); return
+    }
     const body = JSON.parse(bytes); requests.push({ body })
     const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
     const commandIndex = blocks.findLastIndex(c => c.type === 'text' && c.text.startsWith('{"tool":'))
@@ -58,7 +62,7 @@ async function startToolModel() {
     emit({ type: 'message_start', message: { id: 'attachment-tool-model', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
     if (result) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(result.content)}` } })
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(result.content.filter(block => block.type === 'text'))}` } })
     } else {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'attachment-tool-call', name: call.tool, input: {} } })
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(args) } })
@@ -72,7 +76,7 @@ async function startToolModel() {
 }
 let toolRequest = 0
 async function tool(who, sessionId, name, args, uploadIds = []) {
-  const previous = (await request('/chat/read', who.token, { sessionId })).body.projection.messages.filter(m => m.role === 2).length
+  const previous = (await request('/chat/read', who.token, { sessionId })).body.projection.messages.filter(m => m.role === 2).at(-1)?.messageId
   const sent = await request('/chat/send', who.token, { sessionId, requestId: `attachment-tool-${++toolRequest}`, text: JSON.stringify({ tool: name, args }), uploadIds })
   assert.equal(sent.status, 200, JSON.stringify(sent))
   const until = Date.now() + 15000
@@ -80,7 +84,7 @@ async function tool(who, sessionId, name, args, uploadIds = []) {
   do {
     read = await request('/chat/read', who.token, { sessionId })
     const messages = read.body.projection.messages.filter(m => m.role === 2)
-    if (messages.length > previous && read.body.projection.replyStatus === 0) return JSON.parse(messages.at(-1).text.slice(7)).map(block => block.text ?? '').join('\n')
+    if (messages.at(-1)?.messageId !== previous && read.body.projection.replyStatus === 0) return JSON.parse(messages.at(-1).text.slice(7)).find(block => block.type === 'text').text
     await new Promise(resolve => setTimeout(resolve, 25))
   } while (Date.now() < until)
   assert.fail(`tool result not returned: ${JSON.stringify(read.body)}`)
@@ -88,7 +92,6 @@ async function tool(who, sessionId, name, args, uploadIds = []) {
 
 const pdf = name => readFileSync(new URL(`./fixtures/pdf/${name}.pdf`, import.meta.url))
 test('PDF upload, selected page text with citation, and immutable original use actual authorized tools', async () => {
-  await stop(); await model.close(); model = await startToolModel(); await start()
   const id = await session(alice)
   const receipt = await upload(alice, id, pdf('text'), 'book.pdf', 'application/pdf')
   const info = await tool(alice, id, 'pdf_info', { file_path: '$INPUT' }, [receipt.uploadId])
@@ -116,6 +119,8 @@ test('PDF tools report encrypted, damaged, empty, partial and over-limit documen
     const id = await session(alice), receipt = await upload(alice, id, pdf(name), `${name}.pdf`, 'application/pdf')
     const result = JSON.parse(await tool(alice, id, 'pdf_info', { file_path: '$INPUT' }, [receipt.uploadId]))
     assert.equal(result.status, 3, name); assert.equal(result.error, expected, name)
+    const rendered = JSON.parse(await tool(alice, id, 'pdf_render_pages', { file_path: '$INPUT', pages: [1] }))
+    assert.equal(rendered.status, 3, name); assert.equal(rendered.error, expected, name)
   }
   const blankId = await session(alice), blank = await upload(alice, blankId, pdf('empty'), 'scan.pdf', 'application/pdf')
   const empty = JSON.parse(await tool(alice, blankId, 'pdf_read_pages', { file_path: '$INPUT', pages: [1] }, [blank.uploadId]))
@@ -125,6 +130,9 @@ test('PDF tools report encrypted, damaged, empty, partial and over-limit documen
   assert.equal(partial.status, 2)
   assert.equal(partial.pages[0].text, 'PAGE_ONE_ALPHA')
   assert.equal(partial.pages[1].error, 'page-unreadable')
+  const renderedPartial = JSON.parse(await tool(alice, partialId, 'pdf_render_pages', { file_path: '$INPUT', pages: [1, 2] }))
+  assert.equal(renderedPartial.status, 2)
+  assert.ok(renderedPartial.pages.some(page => page.warning === 'renderer-warning'))
   for (const pages of [[0], [3], [1, 1], [1, 2, 3, 4, 5, 6]]) {
     const invalid = JSON.parse(await tool(alice, partialId, 'pdf_read_pages', { file_path: '$INPUT', pages }))
     assert.equal(invalid.error, 'invalid-pages')
@@ -161,4 +169,68 @@ test('PDF text is explicitly truncated and a compressed costly page hits an actu
   const bounded = JSON.parse(await tool(alice, costlyId, 'pdf_read_pages', { file_path: '$INPUT', pages: [1] }, [uploaded.uploadId]))
   assert.equal(bounded.error, 'resource-limit', JSON.stringify(bounded))
   assert.equal(bounded.status, 3)
+  const rendered = JSON.parse(await tool(alice, costlyId, 'pdf_render_pages', { file_path: '$INPUT', pages: [1] }))
+  assert.equal(rendered.status, 3, JSON.stringify(rendered))
+  assert.equal(rendered.error ?? rendered.pages[0].error, 'resource-limit')
+})
+
+
+test('selected PDF pages become real images in official user tool results without replacing the original', async () => {
+  const id = await session(alice), bytes = pdf('mixed')
+  const receipt = await upload(alice, id, bytes, 'book.pdf', 'application/pdf')
+  const rendered = JSON.parse(await tool(alice, id, 'pdf_render_pages', { file_path: '$INPUT', pages: [1] }, [receipt.uploadId]))
+  assert.equal(rendered.status, 1)
+  assert.equal(rendered.pageCount, 2)
+  assert.deepEqual(rendered.pages.map(page => page.page), [1])
+  assert.equal(rendered.pages[0].image.mediaType, 'image/png')
+  assert.ok(rendered.pages[0].image.width > 200)
+  assert.ok(Math.max(rendered.pages[0].image.width, rendered.pages[0].image.height) <= 1600)
+  const resultRequest = model.requests.findLast(({ body }) => body.messages.some(message => Array.isArray(message.content)
+    && message.content.some(block => block.type === 'tool_result' && Array.isArray(block.content) && block.content.some(part => part.type === 'image'))))
+  assert.ok(resultRequest, 'real official provider must serialize the generated image')
+  const resultMessage = resultRequest.body.messages.findLast(message => Array.isArray(message.content)
+    && message.content.some(block => block.type === 'tool_result' && Array.isArray(block.content) && block.content.some(part => part.type === 'image')))
+  assert.equal(resultMessage.role, 'user')
+  const blocks = resultMessage.content.find(block => block.type === 'tool_result').content
+  assert.equal(blocks.filter(block => block.type === 'image').length, 1)
+  assert.match(blocks.find(block => block.type === 'text').text, /"page":1/)
+  const image = Buffer.from(blocks.find(block => block.type === 'image').source.data, 'base64')
+  assert.equal(blocks.find(block => block.type === 'image').source.media_type, 'image/jpeg')
+  assert.deepEqual([...image.subarray(0, 3)], [255, 216, 255])
+  const textPixels = await sharp(image).raw().toBuffer()
+  assert.ok(textPixels.filter(value => value < 100).length > 100, 'rendered text page must contain visible ink')
+  const message = (await request('/chat/read', alice.token, { sessionId: id })).body.projection.messages.find(message => message.attachments?.length)
+  assert.deepEqual((await request('/attachments/download', alice.token, { sessionId: id, messageId: message.messageId, index: 0 })).bytes, bytes)
+  for (const [who, other] of [[bob, await session(bob)], [alice, await session(alice)]]) {
+    const denied = await tool(who, other, 'pdf_render_pages', { file_path: rendered.file_path, pages: [2] })
+    assert.match(denied, /unavailable|denied|qualified/i)
+    assert.doesNotMatch(denied, /attachmentId/)
+  }
+})
+
+
+test('scan, mixed and chart pages retain visible chart colors through real rendering and the official image request', async () => {
+  for (const [name, page, text, centers] of [
+    ['scan', 1, '', [[0.2, 0.85], [0.5, 0.8], [0.8, 0.75]]],
+    ['mixed', 2, 'MIXED_SCAN_CAPTION', [[0.29, 0.645], [0.5, 0.61], [0.71, 0.575]]],
+    ['chart', 1, 'T18_CHART', [[0.2, 0.85], [0.5, 0.8], [0.8, 0.75]]],
+  ]) {
+    const id = await session(alice), receipt = await upload(alice, id, pdf(name), `${name}.pdf`, 'application/pdf')
+    const extracted = JSON.parse(await tool(alice, id, 'pdf_read_pages', { file_path: '$INPUT', pages: [page] }, [receipt.uploadId]))
+    assert.ok(extracted.pages[0].text.includes(text), name)
+    assert.equal(extracted.pages[0].needsImage, name === 'scan', name)
+    const rendered = JSON.parse(await tool(alice, id, 'pdf_render_pages', { file_path: '$INPUT', pages: [page] }))
+    assert.equal(rendered.status, 1, name)
+    assert.deepEqual(rendered.pages.map(value => value.page), [page])
+    const image = model.requests.at(-1).body.messages.flatMap(message => message.content)
+      .filter(block => block.type === 'tool_result').at(-1).content.find(block => block.type === 'image')
+    const pixels = await sharp(Buffer.from(image.source.data, 'base64')).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+    for (const [channel, [x, y]] of centers.entries()) {
+      const offset = (Math.floor(y * pixels.info.height) * pixels.info.width + Math.floor(x * pixels.info.width)) * 3
+      const rgb = [...pixels.data.subarray(offset, offset + 3)]
+      assert.ok(rgb[channel] > 230 && rgb.filter((_, index) => index !== channel).every(value => value < 25), `${name}: ${rgb}`)
+    }
+    const invalid = JSON.parse(await tool(alice, id, 'pdf_render_pages', { file_path: '$INPUT', pages: [1, 2, 3, 4] }))
+    assert.equal(invalid.error, 'invalid-pages')
+  }
 })

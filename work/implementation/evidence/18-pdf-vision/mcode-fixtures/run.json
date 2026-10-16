@@ -1,0 +1,31 @@
+{
+  "backend": "mcode",
+  "cwd": "/home/eafen405/projects/OurFairy/.worktrees/18-pdf-vision",
+  "command": [
+    "/home/eafen405/.minimax-code/bin/mcode",
+    "exec",
+    "--cwd",
+    "/home/eafen405/projects/OurFairy/.worktrees/18-pdf-vision",
+    "--permission",
+    "smart",
+    "--timeout",
+    "900s",
+    "--output-format",
+    "text",
+    "--input",
+    "-"
+  ],
+  "status": "completed",
+  "timeout": 900,
+  "started_at": 1792157385.455313,
+  "run_dir": "/tmp/delegate-mcode-20mab563",
+  "task_path": "/tmp/delegate-mcode-20mab563/task.md",
+  "stdout_path": "/tmp/delegate-mcode-20mab563/stdout.txt",
+  "stderr_path": "/tmp/delegate-mcode-20mab563/stderr.txt",
+  "pid": 63060,
+  "exit_code": 0,
+  "child_exit_code": 0,
+  "duration_seconds": 345.634,
+  "stderr_tail": "",
+  "notification_exit_code": 1
+}

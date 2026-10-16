@@ -1,14 +1,23 @@
 # Remote attachments
 
-`pdf_info` and `pdf_read_pages` use the admitted original file handle already
+`pdf_info`, `pdf_read_pages` and `pdf_render_pages` use the admitted original file handle already
 projected to the model. Qualification comes from that agent's actual owned
 session; knowing another user's path or a bare hash grants no access. The tools
 return numeric status (1 success, 2 partial page failure, 3 failure), page count,
 1-based page numbers, bounded text, truncation and no-text/image-reading hints.
 They report damaged, encrypted, invalid-page, page-limit and resource-limit
 results explicitly. `pdf_info` samples only the first page; unread pages are not
-represented as understood. No schema changes or persistent derived store are
-needed. See [the PDF dependency and runtime budgets](pdf/README.md).
+represented as understood. `pdf_render_pages` renders only 1–3 explicitly requested pages, bounded to
+1600 pixels on their longest side, for scans, charts and complex layouts. It
+returns the original handle/name and 1-based page numbers next to native image
+references. The real tool-result image blocks use the same native attachment
+store and official provider serialization as `read_image`; they never become
+fabricated user/assistant history. The exact calling model route must accept
+images before rendering starts. Derived images grant no extra filesystem paths
+and do not enter upload receipts or replace original downloads. Temporary
+renderer files are removed after every call; native image blocks persist with
+their owning session's real tool result, as with `read_image`.
+No schema changes or persistent derived index/cache are needed. See [the PDF dependency and runtime budgets](pdf/README.md).
 
 The native immutable attachment store owns bytes. The business `uploads` table owns only upload lifetime (numeric status: 0 uploading, 1 complete, 2 expired). A completed upload is scoped to its authenticated owner and target session. Native message source metadata preserves the admitted original file reference and optional normalized image reference. SessionHeader.owner remains the sole ownership authority; no message/admission table duplicates the log.
 

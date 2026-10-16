@@ -1,0 +1,20 @@
+✖ selected PDF pages become real images in official user tool results without replacing the original (23370.934497ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23702.946474
+
+✖ failing tests:
+
+test at tests/pdf.test.mjs:167:1
+✖ selected PDF pages become real images in official user tool results without replacing the original (23370.934497ms)
+  SyntaxError: Unexpected token 'E', "Error: unk"... is not valid JSON
+      at JSON.parse (<anonymous>)
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/18-pdf-vision/tests/pdf.test.mjs:170:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
