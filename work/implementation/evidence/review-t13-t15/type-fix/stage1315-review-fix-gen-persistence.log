@@ -1,0 +1,9 @@
+$ tsx scripts/gen-persistence-catalog.ts
+gen-persistence-catalog: wrote docs/persistence-catalog.md.
+gen-persistence-catalog: wrote docs/persistence-catalog.zh.md.
+gen-persistence-catalog: wrote docs/persistence-catalog.i18n.yaml.
+gen-persistence-catalog: wrote docs/experimental-persistence-catalog.md.
+gen-persistence-catalog: wrote docs/experimental-persistence-catalog.zh.md.
+gen-persistence-catalog: wrote docs/experimental-persistence-catalog.i18n.yaml.
+gen-persistence-catalog: wrote packages/core/session/src/known-event-types.ts.
+gen-persistence-catalog: wrote docs/persistence-schema.json.

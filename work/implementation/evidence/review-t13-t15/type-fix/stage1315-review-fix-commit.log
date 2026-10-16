@@ -1,0 +1,22 @@
+╭───────────────────────────────────────╮
+│ lefthook  v2.1.12   hook:  [1mpre-commit[m │
+╰───────────────────────────────────────╯
+┃  translation pairing (staged records) ❯ 
+verify-translation-pairing: 2 named staged pair(s) consistent; the corpus-wide check still runs in doc-sync.
+
+│  archived agent notes (skip) no matching staged files
+┃  lint (staged) ❯ 
+
+│  third-party notices (staged) (skip) no matching staged files
+┃  whitespace (staged) ❯ 
+
+┃  vendor manifest guard ❯ 
+
+[38;2;56;56;56m  ────────────────────────────────────[m
+summary: (done in 4.19 seconds)
+✓ translation pairing (staged records) (2.90 seconds)
+✓ lint (staged) (1.22 seconds)
+✓ whitespace (staged) (0.02 seconds)
+✓ vendor manifest guard (0.02 seconds)
+[fix/stage1315-review fe2bbc3b1c] Brand job registry generations and report message IDs
+ 11 files changed, 50 insertions(+), 27 deletions(-)

@@ -1,0 +1,3 @@
+$ tsx scripts/verify-translation-pairing.ts --write packages/jobs/jobs/README.md
+verify-translation-pairing: recorded packages/jobs/jobs/README.i18n.yaml
+verify-translation-pairing: 1 record(s) written; run the check to validate the pairs.

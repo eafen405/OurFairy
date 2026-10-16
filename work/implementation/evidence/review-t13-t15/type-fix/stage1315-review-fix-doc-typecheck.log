@@ -1,0 +1,2 @@
+$ tsx scripts/doc-typecheck.ts
+doc-typecheck: 81 block(s) compiled, 63 ignored (44% opt-out), 929 type-equiv/catalog (checked elsewhere), 1073 paired derivative(s).
