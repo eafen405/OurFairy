@@ -313,8 +313,15 @@ test('a crash-orphaned turn is resumed and writer-saved before its recovery clos
   const previousAck = checkpoint.body.durableThroughSeq
   const { pid } = JSON.parse(readFileSync(join(home, 'run/backend.json'), 'utf8'))
   process.kill(-pid, 'SIGKILL')
+  // SIGKILL delivery precedes exit; /proc/<pid>/fd can become unreadable meanwhile.
+  // Finish the crash fixture before asking the launcher to inspect its process.
+  await eventually(async () => {
+    try { process.kill(pid, 0); return false }
+    catch (error) { if (error.code === 'ESRCH') return true; throw error }
+  }, gone => gone)
   await eventually(async () => {
     const status = await runBackendAsync(['status', '--json'], { OURFAIRY_HOME: home })
+    assert.equal(status.code, 0, describeRun('status after crash', status))
     return JSON.parse(status.stdout)
   }, state => state.running === false)
   await start()

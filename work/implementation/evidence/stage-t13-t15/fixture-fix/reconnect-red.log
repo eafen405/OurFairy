@@ -1,0 +1,60 @@
+✔ bounded history pages keep the opening cut while new formal events arrive (3059.901656ms)
+✔ a reconnect restores the active cumulative attempt while bounded backfill and live tail proceed independently (1988.796479ms)
+✔ a lost page response can be retried at its unchanged frozen cut (30.145051ms)
+✔ a real writer permission failure cannot advance durable ACK, then retry and cold recovery use the same acceptance (757.47752ms)
+✔ new history and checkpoint routes keep the cold/live ownership fence and validate exact ranges (41.180881ms)
+✖ a crash-orphaned turn is resumed and writer-saved before its recovery closer is acknowledged (790.63552ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 5
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6771.066621
+
+✖ failing tests:
+
+test at tests/reconnect.test.mjs:301:1
+✖ a crash-orphaned turn is resumed and writer-saved before its recovery closer is acknowledged (790.63552ms)
+  AssertionError [ERR_ASSERTION]: status after crash exited 1
+  --- stdout ---
+  
+  --- stderr ---
+  node:fs:1570
+    const result = binding.readdir(
+                           ^
+  
+  Error: EACCES: permission denied, scandir '/proc/91133/fd'
+      at readdirSync (node:fs:1570:26)
+      at listeningPorts (file:///home/eafen405/projects/OurFairy/.worktrees/stage1315-fixture-fix/scripts/ourfairy-backend.mjs:489:22)
+      at commandStatus (file:///home/eafen405/projects/OurFairy/.worktrees/stage1315-fixture-fix/scripts/ourfairy-backend.mjs:683:29)
+      at file:///home/eafen405/projects/OurFairy/.worktrees/stage1315-fixture-fix/scripts/ourfairy-backend.mjs:793:27
+      at file:///home/eafen405/projects/OurFairy/.worktrees/stage1315-fixture-fix/scripts/ourfairy-backend.mjs:797:3
+      at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+      at async node:internal/modules/esm/loader:643:26
+      at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+    errno: -13,
+    code: 'EACCES',
+    syscall: 'scandir',
+    path: '/proc/91133/fd'
+  }
+  
+  Node.js v24.18.0
+  
+  
+  1 !== 0
+  
+      at file:///home/eafen405/projects/OurFairy/.worktrees/stage1315-fixture-fix/tests/reconnect.test.mjs:318:12
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async eventually (file:///home/eafen405/projects/OurFairy/.worktrees/stage1315-fixture-fix/tests/reconnect.test.mjs:56:13)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/stage1315-fixture-fix/tests/reconnect.test.mjs:316:3)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
