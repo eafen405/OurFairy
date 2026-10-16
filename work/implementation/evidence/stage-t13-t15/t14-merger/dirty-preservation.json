@@ -1,0 +1,102 @@
+{
+  "sameUncommittedOverlapHunkContent": true,
+  "note": "Only blob ids and shifted hunk offsets change after committed T13 additions.",
+  "files": [
+    {
+      "path": "docs/config-catalog.md",
+      "sha256": "2311631dc03ade5c24cbc178cb89ff07bc1abfb6456c9df4ae9b8786a7d45952",
+      "initialSha256": "4dbfb90ee46357b4f7b95366c3daaae2183ad2b23cb86529234583a8887f925a",
+      "committedT13Delta": true
+    },
+    {
+      "path": "docs/config-catalog.zh.md",
+      "sha256": "f487526255880f7a35728c2723508303bac2ca78c0191c5eb2216d6e393a6445",
+      "initialSha256": "6fdb171b138365274f2c92bfe535ae6ba7d24fd73e6854ea6f49d9117f5579ba",
+      "committedT13Delta": true
+    },
+    {
+      "path": "docs/event-producer-consumer.md",
+      "sha256": "bdc7046dac4655083137933677958689ee62beabfc18e5eada10a4d197b1d081",
+      "initialSha256": "bdc7046dac4655083137933677958689ee62beabfc18e5eada10a4d197b1d081",
+      "committedT13Delta": false
+    },
+    {
+      "path": "docs/event-producer-consumer.zh.md",
+      "sha256": "066763646a775acf26a004db38b7f1d36da53c9b47ae8879effcb820fa50f229",
+      "initialSha256": "066763646a775acf26a004db38b7f1d36da53c9b47ae8879effcb820fa50f229",
+      "committedT13Delta": false
+    },
+    {
+      "path": "docs/subsystems/llm-streaming.md",
+      "sha256": "af3467db91e47daaf019dce72f2b8afeea2a33f33525f4c0f3d76b0a952e20bb",
+      "initialSha256": "af3467db91e47daaf019dce72f2b8afeea2a33f33525f4c0f3d76b0a952e20bb",
+      "committedT13Delta": false
+    },
+    {
+      "path": "docs/subsystems/llm-streaming.zh.md",
+      "sha256": "2666cdf574f7f1a4b75e027acdab4d5b3c4c14e0853b32d82d0dbdd08a37ef25",
+      "initialSha256": "2666cdf574f7f1a4b75e027acdab4d5b3c4c14e0853b32d82d0dbdd08a37ef25",
+      "committedT13Delta": false
+    },
+    {
+      "path": "docs/subsystems/persistence.md",
+      "sha256": "778e52e079ea99ec21553676f90f56d3933ab57c464804de5e886b6a38e17da4",
+      "initialSha256": "778e52e079ea99ec21553676f90f56d3933ab57c464804de5e886b6a38e17da4",
+      "committedT13Delta": false
+    },
+    {
+      "path": "docs/subsystems/persistence.zh.md",
+      "sha256": "401d0df81540d5063bd23cc7318e6fa53d2b4bd4c87696f439d36a626b378047",
+      "initialSha256": "401d0df81540d5063bd23cc7318e6fa53d2b4bd4c87696f439d36a626b378047",
+      "committedT13Delta": false
+    },
+    {
+      "path": "docs/subsystems/session.md",
+      "sha256": "40d199237cfc2db35d90376d2198b67db6f24ea50d16be8cc0d01a7133beb0a7",
+      "initialSha256": "40d199237cfc2db35d90376d2198b67db6f24ea50d16be8cc0d01a7133beb0a7",
+      "committedT13Delta": false
+    },
+    {
+      "path": "docs/subsystems/session.zh.md",
+      "sha256": "3e48bce4099e39afc347c76bd85ae0043e5550312ac54485401490d630d4cf8f",
+      "initialSha256": "3e48bce4099e39afc347c76bd85ae0043e5550312ac54485401490d630d4cf8f",
+      "committedT13Delta": false
+    },
+    {
+      "path": "packages/client/connection/tests/principal-admission.host.spec.ts",
+      "sha256": "ca5f1d5668fd7a6361daa277e35357ba4a0255f2d9ea86c238d037f52be45559",
+      "initialSha256": "ca5f1d5668fd7a6361daa277e35357ba4a0255f2d9ea86c238d037f52be45559",
+      "committedT13Delta": false
+    },
+    {
+      "path": "packages/core/session/tests/delivery-message.spec.ts",
+      "sha256": "2df24d325ccf67ccd452f19a990f8e94dfc146f6452169dd6f7156e2eeb5523c",
+      "initialSha256": "2df24d325ccf67ccd452f19a990f8e94dfc146f6452169dd6f7156e2eeb5523c",
+      "committedT13Delta": false
+    },
+    {
+      "path": "packages/extensions/tool-cordis/src/api-catalog.ts",
+      "sha256": "f8ba7f8911854d45d69cbe1f3c029cd00df44661bcc6a4428f013214c1a180f8",
+      "initialSha256": "1827f359ff02eaf0c2643c3c9eb8d8b142839565a65a4ab49bc01c2ae75cb824",
+      "committedT13Delta": true
+    },
+    {
+      "path": "packages/session/session-format-v1-to-v2/tests/codec.spec.ts",
+      "sha256": "20b09ef8aff16a4cbfeec3f2420d560f9800c58933c4025006652f3f3fe0f558",
+      "initialSha256": "20b09ef8aff16a4cbfeec3f2420d560f9800c58933c4025006652f3f3fe0f558",
+      "committedT13Delta": false
+    },
+    {
+      "path": "packages/session/session-format-v3-to-v4/tests/codec.spec.ts",
+      "sha256": "8b3e2f4aef6523f8ab366e9b76bbcdacfe2cf6a293aa53340a89be16ce9383e7",
+      "initialSha256": "8b3e2f4aef6523f8ab366e9b76bbcdacfe2cf6a293aa53340a89be16ce9383e7",
+      "committedT13Delta": false
+    },
+    {
+      "path": "packages/session/session-persistence-jsonl/tests/jsonl.spec.ts",
+      "sha256": "3d22418cd41fbfefc830b20921c9de2654ac2f80cf498fc29861d22c8701dd5f",
+      "initialSha256": "3d22418cd41fbfefc830b20921c9de2654ac2f80cf498fc29861d22c8701dd5f",
+      "committedT13Delta": false
+    }
+  ]
+}
