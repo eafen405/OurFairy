@@ -1,0 +1,18 @@
+{
+  "ourfairyCommit": "7dae93a9591c2d911bd42b56779f06bd2439012c",
+  "allReviewedSourceMatches": true,
+  "checks": [
+    {
+      "path": "backend/chat/README.md",
+      "match": true
+    },
+    {
+      "path": "backend/chat/src/service.mjs",
+      "match": true
+    },
+    {
+      "path": "tests/remote-chat.test.mjs",
+      "match": true
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+Updating af9491ec..771bffd1
+Fast-forward
+ .../rerere/rikkahub/data/remote/RemoteChatApi.kt   |  5 ++
+ .../ui/identity/PresentationBenchmarkActivity.kt   |  2 +
+ .../rerere/rikkahub/ui/identity/RemoteChatPanel.kt |  1 +
+ .../rikkahub/ui/identity/RemotePresentation.kt     | 54 ++++++++++++++
+ .../rikkahub/ui/identity/RemoteTranscript.kt       | 82 ++++++++++++----------
+ .../ui/identity/RemoteReadingTransitionTest.kt     | 82 ++++++++++++++++++++++
+ 6 files changed, 189 insertions(+), 37 deletions(-)
+ create mode 100644 app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteReadingTransitionTest.kt

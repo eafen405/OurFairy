@@ -1,0 +1,11 @@
+# T16–T19 阶段两轴审查闭环
+
+固定审查范围：OurFairy 1807199ffd86b1d1c2bfa816344d4e69f867b5cc → c8203860aa1de3d3ca808c3adcc6981a35d43ec6；Android 3ee4bc26dc2f7627b97fc9bd2800643e29a6c7b6 → af9491ecc7437c454c372d924b5769a386e88d9b。dsh本批无源码增量。
+
+Spec P2 阅读连续性缺口由唯一修复代理在独立分支解决，OurFairy 7dae93a9591c2d911bd42b56779f06bd2439012c、Android 771bffd1424da0f8537507caec028e77d0b8b7bc。仅在正在阅读已观察live行且未追尾时延后布局切换；通过dsh原生attempt/seq关联正式消息，离视口或回尾释放，历史立即rich。两轴针对复查均通过；最终提交逐文件SHA256与受审源码一致，见原报告与核验JSON。
+
+Standards确认T19首批测试在实现后首次执行的历史流程偏离；真实记录保留，无法补造历史red。后续修复已有真实公开行为red/green，不更写原历史。未发现新增确认硬性违规，不新增抽象。
+
+Android全套515/515、release打包；后端公开接缝8/8；owner最终正常pre-commit109/109和combo通过。11-npm-final.log曾108/109且PDF worker-unavailable，失败原文保留在review-t16-t19-fix，不改PDF或掩盖。实际集成最终检查由本组合正常提交hook执行。
+
+真实硅基/官方云、真机帧耗时/内存/视觉连续性尚未验证；各票真实服务联调入口与设备边界保留。本阶段仅T16–T19，不推进T20。

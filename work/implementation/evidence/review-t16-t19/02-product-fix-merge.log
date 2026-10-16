@@ -1,0 +1,38 @@
+Updating c820386..7dae93a
+Fast-forward
+ backend/chat/README.md                             |   2 +
+ backend/chat/src/service.mjs                       |  10 +-
+ tests/remote-chat.test.mjs                         |   7 +
+ .../evidence/review-t16-t19-fix/01-red.log         | 889 +++++++++++++++++++++
+ .../evidence/review-t16-t19-fix/02-green.log       | 289 +++++++
+ .../evidence/review-t16-t19-fix/03-overlap-red.log | 291 +++++++
+ .../review-t16-t19-fix/04-overlap-green.log        | 279 +++++++
+ .../evidence/review-t16-t19-fix/05-final-check.log | 578 ++++++++++++++
+ .../review-t16-t19-fix/06-settlement-red.log       |  64 ++
+ .../review-t16-t19-fix/07-settlement-green.log     |  16 +
+ .../08-native-association-green.log                | 452 +++++++++++
+ .../review-t16-t19-fix/09-final-android.log        | 434 ++++++++++
+ .../10-final-all-android-release.log               | 844 +++++++++++++++++++
+ .../evidence/review-t16-t19-fix/11-npm-final.log   | 157 ++++
+ .../evidence/review-t16-t19-fix/12-combo-final.log |  10 +
+ .../evidence/review-t16-t19-fix/README.md          |  40 +
+ ...rikkahub.ui.identity.RemotePresentationTest.xml |  10 +
+ ...hub.ui.identity.RemoteReadingTransitionTest.xml |  11 +
+ .../review-t16-t19-fix/android-suite-summary.log   |   1 +
+ 19 files changed, 4382 insertions(+), 2 deletions(-)
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/01-red.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/02-green.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/03-overlap-red.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/04-overlap-green.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/05-final-check.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/06-settlement-red.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/07-settlement-green.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/08-native-association-green.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/09-final-android.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/10-final-all-android-release.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/11-npm-final.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/12-combo-final.log
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/README.md
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/TEST-me.rerere.rikkahub.ui.identity.RemotePresentationTest.xml
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/TEST-me.rerere.rikkahub.ui.identity.RemoteReadingTransitionTest.xml
+ create mode 100644 work/implementation/evidence/review-t16-t19-fix/android-suite-summary.log
