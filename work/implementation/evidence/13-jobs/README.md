@@ -5,7 +5,7 @@ Scope: #36 / `work/tickets/ourfairy-v1/13-jobs.md`, parent stories 16/17/45–48
 ## Implementation and repositories
 
 - Native dsh `ticket/13-jobs`: `fc5c7ac0220cf48c404cda34d1584901387eea06`. Adds one process-generation identity, required owning-Session `jobs/lifecycle` and actual native reporter `jobs/report` facts, plus optional source correlation. Existing native controller and completion policy remain the executor/reporter. Persistence type acknowledgement and upgrade guidance accompany the new discriminators. No jobs database, copied owner, output journal, timer facility or second reporter.
-- OurFairy `ticket/13-jobs`: mounts the existing jobs controls and scoped background bash path; extends current chat projection and adds only `/chat/jobs/output` and `/chat/jobs/stop`. Numeric task/report statuses and exact-session checks stay at the product HTTP interface. Existing inbox/turn facts settle actual reporting, including a busy notice preserved by a user-canceled reply.
+- OurFairy `ticket/13-jobs`, behavior commit `37a35bbf8d1e37ca3e70263ac08e17a54f4bb6fe`: mounts the existing jobs controls and scoped background bash path; extends current chat projection and adds only `/chat/jobs/output` and `/chat/jobs/stop`. Numeric task/report statuses and exact-session checks stay at the product HTTP interface. Existing inbox/turn facts settle actual reporting, including a busy notice preserved by a user-canceled reply.
 - Android owner commit `bb29c98b`: task DTO/API, byte-aware output reducer, activity card/detail and independent stop. Its raw logs, mcode handoff, actual backend JSON sample and production-serializer decode check are under `android/`.
 
 Raw CLI output is archived losslessly as `.log.gz` (read with `gzip -cd`), preserving terminal whitespace without introducing whitespace errors into the Git diff. Android owner evidence keeps its supplied format.
@@ -37,7 +37,15 @@ The first complete product run passed 98/98 (`product-first-98.log.gz`); combo v
 
 The final fixture additionally kills the test-owned Host process group after a real restricted child has produced bytes, waits for the Host to exit, then verifies unknown/unavailable job state and nonaliasing new task ids. `hard-crash-targeted.log.gz` passed. Its bounded orphan, if any, completes before fixture teardown; no product restart mechanism was added. Earlier attempts exposed fixture teardown races and are retained, rather than claimed as passing.
 
-Subsequent complete runs are retained in `product-final-attempt-*.log.gz.gz`: the final attempt passed T13's five cases and 97/98 overall; the remaining pre-existing reconnect test parsed empty launcher status output at `tests/reconnect.test.mjs:318`. A separate owner is correcting the observed fixture failure; root merger must run the final full entry after combining that fix and locking the new native/Android pins. Final checks must use the matching combination rather than the old locked commit. After merging root combo commit `a008e3f`, the first normal worktree hook attempt exposed inherited Git local environment: the launcher cross-repository lookup reported OurFairy HEAD as dsh HEAD. `product-first-hook-failure.log.gz` retains the diagnostic; no hook was bypassed. Root is coordinating the minimal hook-environment correction.
+Subsequent complete runs are retained in `product-final-attempt-*.log.gz`: a pre-existing reconnect fixture raced a killed Host's `/proc/<pid>/fd` and then parsed the failed status command's empty stdout. Independent correction `4a031b7` waits for the Host to exit before inspecting it and retains exit diagnostics; it is merged into this ticket. Worktree hook correction `af5dd74` clears Git local environment before the original cross-repository checks. Both fixes stay outside business behavior.
+
+Final normal commit command:
+
+```sh
+OURFAIRY_DSH_DIR=/home/eafen405/projects/deepseek-harness/.worktrees/13-jobs git commit -m 'Expose owned background tasks with native output and independent stops'
+```
+
+The unchanged hooks ran full `npm test`: **98/98 passed**, then `npm run combo:verify`: **passed**, against native `fc5c7ac0220cf48c404cda34d1584901387eea06` and Android `bb29c98b9a626e7c9781ac24b4fa185c092a6f4c` (`product-normal-hooks-final.log.gz`). No hook bypass or cloud/phone substitution. An earlier hook attempt omitted the native-worktree environment and selected stale root `lib/` despite updated source; its failure is retained in `product-stale-root-artifacts.log.gz`. Root merger is aligning the root production artifacts before its independent combined check. No root full-host-build claim is made.
 
 ## Limits
 
