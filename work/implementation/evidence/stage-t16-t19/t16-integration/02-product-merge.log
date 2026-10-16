@@ -1,0 +1,57 @@
+Updating 9bf2b4f..f352608
+Fast-forward
+ backend/speech/README.md                           |  26 ++
+ backend/speech/package.json                        |   1 +
+ backend/speech/src/index.mjs                       |  23 ++
+ backend/speech/src/service.mjs                     |  91 +++++
+ backend/v1-bundle/cordis.patch.yml                 |  11 +
+ scripts/ourfairy-backend.mjs                       |   5 +
+ tests/speech.test.mjs                              |  77 +++++
+ work/implementation/evidence/16-asr/README.md      |  68 ++++
+ .../evidence/16-asr/android-api-results.xml        |  64 ++++
+ .../evidence/16-asr/android-final.log              | 279 +++++++++++++++
+ .../16-asr/android-input-state-results.xml         |  10 +
+ .../evidence/16-asr/android-state-green.log        | 289 ++++++++++++++++
+ .../evidence/16-asr/android-state-red.log          | 380 +++++++++++++++++++++
+ .../evidence/16-asr/backend-final.log              |  10 +
+ .../evidence/16-asr/backend-keyless-green.log      |   9 +
+ .../evidence/16-asr/backend-provider.log           |  10 +
+ .../implementation/evidence/16-asr/backend-red.log |  15 +
+ .../evidence/16-asr/combo-after-t17-final.log      |  10 +
+ .../evidence/16-asr/combo-verify.log               |  10 +
+ .../mcode-api/delegate-mcode-lyx2tusa/notify.txt   |   1 +
+ .../mcode-api/delegate-mcode-lyx2tusa/run.json     |  31 ++
+ .../mcode-api/delegate-mcode-lyx2tusa/stderr.txt   |   0
+ .../mcode-api/delegate-mcode-lyx2tusa/stdout.txt   |  25 ++
+ .../mcode-api/delegate-mcode-lyx2tusa/task.md      |   9 +
+ .../evidence/16-asr/npm-test-after-t17-final.log   | 133 ++++++++
+ .../evidence/16-asr/npm-test-after-t17.log         | 205 +++++++++++
+ .../evidence/16-asr/npm-test-final.log             | 130 +++++++
+ .../evidence/16-asr/real-siliconflow-scene.md      |  26 ++
+ 28 files changed, 1948 insertions(+)
+ create mode 100644 backend/speech/README.md
+ create mode 100644 backend/speech/package.json
+ create mode 100644 backend/speech/src/index.mjs
+ create mode 100644 backend/speech/src/service.mjs
+ create mode 100644 tests/speech.test.mjs
+ create mode 100644 work/implementation/evidence/16-asr/README.md
+ create mode 100644 work/implementation/evidence/16-asr/android-api-results.xml
+ create mode 100644 work/implementation/evidence/16-asr/android-final.log
+ create mode 100644 work/implementation/evidence/16-asr/android-input-state-results.xml
+ create mode 100644 work/implementation/evidence/16-asr/android-state-green.log
+ create mode 100644 work/implementation/evidence/16-asr/android-state-red.log
+ create mode 100644 work/implementation/evidence/16-asr/backend-final.log
+ create mode 100644 work/implementation/evidence/16-asr/backend-keyless-green.log
+ create mode 100644 work/implementation/evidence/16-asr/backend-provider.log
+ create mode 100644 work/implementation/evidence/16-asr/backend-red.log
+ create mode 100644 work/implementation/evidence/16-asr/combo-after-t17-final.log
+ create mode 100644 work/implementation/evidence/16-asr/combo-verify.log
+ create mode 100644 work/implementation/evidence/16-asr/mcode-api/delegate-mcode-lyx2tusa/notify.txt
+ create mode 100644 work/implementation/evidence/16-asr/mcode-api/delegate-mcode-lyx2tusa/run.json
+ create mode 100644 work/implementation/evidence/16-asr/mcode-api/delegate-mcode-lyx2tusa/stderr.txt
+ create mode 100644 work/implementation/evidence/16-asr/mcode-api/delegate-mcode-lyx2tusa/stdout.txt
+ create mode 100644 work/implementation/evidence/16-asr/mcode-api/delegate-mcode-lyx2tusa/task.md
+ create mode 100644 work/implementation/evidence/16-asr/npm-test-after-t17-final.log
+ create mode 100644 work/implementation/evidence/16-asr/npm-test-after-t17.log
+ create mode 100644 work/implementation/evidence/16-asr/npm-test-final.log
+ create mode 100644 work/implementation/evidence/16-asr/real-siliconflow-scene.md
