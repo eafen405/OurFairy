@@ -1,0 +1,8 @@
+{
+  "sourceCommit": "771bffd1424da0f8537507caec028e77d0b8b7bc",
+  "artifact": "/tmp/ourfairy-t16-t19-release/app-arm64-v8a-release.apk",
+  "bytes": 42832939,
+  "sha256": "5c783ae92629554f78c2e53f2f5490517cf068044c63ea56524d907f7b156b67",
+  "signing": "local Android test keystore, not production signing",
+  "deviceRun": false
+}
