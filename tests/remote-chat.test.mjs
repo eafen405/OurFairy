@@ -181,11 +181,15 @@ test('SSE preserves every text prefix and disconnecting observation leaves the b
     const partials = stream.frames.map(frame => frame.attempt?.text).filter(Boolean)
     for (let index = 1; index < partials.length; index++) assert.ok(partials[index].startsWith(partials[index - 1]))
     assert.ok(answer.startsWith(partials.at(-1)))
+    const attemptId = stream.frames.find(frame => frame.attempt?.text.length > 3).attempt.attemptId
     stream.close()
     const final = await eventually(() => request('/chat/read', alice.token, { sessionId }), r => r.body.projection?.replyStatus === 0 && r.body.projection.messages.some(m => m.role === 2))
     assert.equal(final.body.projection.messages.at(-1).text, answer)
     assert.equal(final.body.projection.messages.at(-1).status, 2)
     assert.equal(final.body.projection.attempt, null)
+    assert.deepEqual(final.body.projection.settledAttempt, {
+      attemptId, seq: final.body.projection.messages.at(-1).seq,
+    }, 'native stream-end settlement identifies the formal reply without comparing text')
     assert.ok(final.body.projection.durableThroughSeq <= final.body.projection.cursor)
     const reconnected = observe(alice.token, sessionId)
     try {
@@ -205,6 +209,9 @@ test('a stop settles the visible prefix as interrupted and does not cancel the n
   const stopped = await eventually(() => request('/chat/read', alice.token, { sessionId }), r => r.body.projection?.replyStatus === 0)
   assert.equal(stopped.body.projection.attempt, null)
   assert.equal(stopped.body.projection.messages.at(-1).status, 3)
+  assert.deepEqual(stopped.body.projection.settledAttempt, {
+    attemptId: streaming.body.projection.attempt.attemptId, seq: stopped.body.projection.messages.at(-1).seq,
+  })
   assert.ok(stopped.body.projection.messages.at(-1).text.startsWith(prefix))
   assert.ok(answer.startsWith(stopped.body.projection.messages.at(-1).text))
   const next = await request('/chat/send', alice.token, { sessionId, requestId: 'stop-two', text: 'reply again please' })

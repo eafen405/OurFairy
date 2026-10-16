@@ -48,7 +48,7 @@ export class RemoteChat extends Service {
     }
   }
   async _resume(owner, sessionId) {
-    const state = { generation: randomUUID(), version: 0, durableThroughSeq: -1, attempt: null,
+    const state = { generation: randomUUID(), version: 0, durableThroughSeq: -1, attempt: null, settledAttempt: null,
       stopping: false, error: null, listeners: new Set(), scheduled: false }
     const handle = await this.ctx.agents.resume({ resumeSessionId: sessionId,
       agentOptions: this.ctx.agentDefaultModel.currentSelection(),
@@ -66,7 +66,12 @@ export class RemoteChat extends Service {
           } else if (frame.type === 'chunk' && state.attempt?.attemptId === frame.attemptId) {
             state.attempt.assembler.push(frame.chunk)
             state.attempt.revision = frame.revision
-          } else if (frame.type === 'end') state.attempt = null
+          } else if (frame.type === 'end') {
+            // Native settlement is the exact formal seq; no text/content identity inference.
+            state.settledAttempt = frame.outcome.kind === 'committed'
+              ? { attemptId: frame.attemptId, seq: frame.outcome.seq } : null
+            state.attempt = null
+          }
           changed()
         })
         agentCtx.on('agent/error', ({ error }) => { state.error = error?.message ?? String(error); changed() })
@@ -155,6 +160,7 @@ export class RemoteChat extends Service {
       messages: transcript(events, state.agent.session.id).filter(message => message.seq >= fromSeq),
       attempt: attempt === null ? null : { attemptId: attempt.attemptId, revision: attempt.revision,
         text: attempt.assembler.interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('') },
+      settledAttempt: state.settledAttempt,
       replyStatus: state.agent.status === 'idle' ? 0 : state.stopping ? 2 : 1, error: state.error }
   }
   async read(owner, { sessionId, maxEvents }) {

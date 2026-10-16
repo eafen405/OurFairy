@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.rerere.rikkahub.ui.identity.RemoteReadingTransitionTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-16T15:01:52.788Z" hostname="LAPTOP-45RC44AF" time="0.007">
+  <properties/>
+  <testcase name="return to tail releases pending formatting while history never waits for scrolling" classname="me.rerere.rikkahub.ui.identity.RemoteReadingTransitionTest" time="0.001"/>
+  <testcase name="stopped and failed terminal bodies retain final increment and release full formatting" classname="me.rerere.rikkahub.ui.identity.RemoteReadingTransitionTest" time="0.005"/>
+  <testcase name="formal reply before stream end and unrelated delivery retain exactly one settled reading row" classname="me.rerere.rikkahub.ui.identity.RemoteReadingTransitionTest" time="0.0"/>
+  <testcase name="same text delivery and new live attempt are never identified by content" classname="me.rerere.rikkahub.ui.identity.RemoteReadingTransitionTest" time="0.0"/>
+  <testcase name="reader keeps same raw layout through terminal and gets parsed complete body after leaving" classname="me.rerere.rikkahub.ui.identity.RemoteReadingTransitionTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

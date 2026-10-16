@@ -1,0 +1,64 @@
+✔ a stable send is durably accepted once across concurrent retries and backend restart (126401.73404ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (434.413385ms)
+✖ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (357.033659ms)
+✖ a stop settles the visible prefix as interrupted and does not cancel the next reply (55.620242ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (1482.328727ms)
+✔ the deployment owner identity is separate from a chat attempt to edit the persona (986.212514ms)
+✔ stopping the current reply preserves accepted queued input for the next wake (500.009519ms)
+✔ stopping before visible output records interruption rather than a failed reply (1482.187232ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 6
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 132008.512929
+
+✖ failing tests:
+
+test at tests/remote-chat.test.mjs:173:1
+✖ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (357.033659ms)
+  AssertionError [ERR_ASSERTION]: native stream-end settlement identifies the formal reply without comparing text
+  + actual - expected
+  
+  + undefined
+  - {
+  -   attemptId: 'ourfairy-user-2-6e0c1da2-d0c4-4e3a-b2fe-eb131d21b118:1',
+  -   seq: 11
+  - }
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/review-t16-t19/tests/remote-chat.test.mjs:190:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { attemptId: 'ourfairy-user-2-6e0c1da2-d0c4-4e3a-b2fe-eb131d21b118:1', seq: 11 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/remote-chat.test.mjs:202:1
+✖ a stop settles the visible prefix as interrupted and does not cancel the next reply (55.620242ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + undefined
+  - {
+  -   attemptId: 'ourfairy-user-2-357f8b7c-bbc9-4564-9eb2-b1a3a2bc3264:1',
+  -   seq: 11
+  - }
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/review-t16-t19/tests/remote-chat.test.mjs:212:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { attemptId: 'ourfairy-user-2-357f8b7c-bbc9-4564-9eb2-b1a3a2bc3264:1', seq: 11 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
