@@ -1,0 +1,22 @@
+✔ upload completes before sending and original downloads by qualified message identity across restart (7687.236525ms)
+✔ a malformed upload ID list is refused as a bad request before any session is opened (46.165236ms)
+✔ unfinished and foreign receipts never grant message or download access, including identical stored bytes (226.007117ms)
+✔ lost chunk ACK retries exact bytes, expired upload cannot be new input, and admitted retry survives expiry (1041.407667ms)
+✔ images keep original downloads while official Messages serialization uses normalized native image content (315.059879ms)
+✔ native model file handles permit real read and sandboxed scripts only in the admitted session and stay readonly (2735.498115ms)
+✔ a stable send is durably accepted once across concurrent retries and backend restart (8048.293128ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (455.212682ms)
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (351.983299ms)
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply (403.125019ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (1959.476021ms)
+✔ the deployment owner identity is separate from a chat attempt to edit the persona (1255.544551ms)
+✔ stopping the current reply preserves accepted queued input for the next wake (530.278429ms)
+✔ stopping before visible output records interruption rather than a failed reply (1737.186628ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15065.801513
