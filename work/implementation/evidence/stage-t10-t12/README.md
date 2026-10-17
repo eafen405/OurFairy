@@ -20,7 +20,6 @@ Commands: `git branch --show-current`, `git rev-parse HEAD`,
 `git status --short`, and a GitHub GraphQL `blockedBy(first:20)` query for
 issues 33, 34 and 35. The initial network-restricted query failed to
 connect; the same read-only query with network permission succeeded.
-Raw dependency response: [dependency-query.json](dependency-query.json).
 
 - #33 and #34 each depend only on #28, which is CLOSED; both may start.
 - #35 depends on CLOSED #32 and OPEN #34; implementation waits for #34.
@@ -29,8 +28,6 @@ Raw dependency response: [dependency-query.json](dependency-query.json).
 - All 16 pre-existing dsh dirty paths and their SHA-256 bytes equal the
   previous stage's committed snapshot. The exact `git diff --name-only`
   set also matches. No dsh dirty file was edited, reset, staged or cleaned.
-  Snapshot: [dsh-preexisting-dirty-sha256.json](dsh-preexisting-dirty-sha256.json).
-  Summary: [baseline-check.log](baseline-check.log).
 
 ## Integration protocol
 

@@ -140,4 +140,4 @@
 2. [#10 当前 body](https://github.com/eafen405/OurFairy/issues/10) — 看头部 comment 与 body 内链。
 4. [`docs/research/dsh-event-consumption.md`](../../docs/research/dsh-event-consumption.md) — 旧 dsh 研究，已有复核纠正。
 5. [`docs/research/domestic-android-notification-vivopush-revival.md`](../../docs/research/domestic-android-notification-vivopush-revival.md) — 旧 vivo 研究，已有复核纠正。
-6. [`docs/decisions/.tmp-q4-brief.md`](../../docs/decisions/.tmp-q4-brief.md) — 已更新的 Q4 记录；决策已完成，勿重新发问。
+6. `docs/decisions/.tmp-q4-brief.md`（未入库的临时文件） — 已更新的 Q4 记录；决策已完成，勿重新发问。
