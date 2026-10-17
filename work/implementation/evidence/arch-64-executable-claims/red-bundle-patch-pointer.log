@@ -1,0 +1,38 @@
+✔ the bundle row declares the pair combo.json locks (0.929411ms)
+✔ doctor runs the "bundle agent model" check the README and combo.json promise (3069.236579ms)
+✖ the bundle declares the patch file its README calls the row set (1.504093ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3141.408666
+
+✖ failing tests:
+
+test at tests/executable-claims.test.mjs:121:1
+✖ the bundle declares the patch file its README calls the row set (1.504093ms)
+  AssertionError [ERR_ASSERTION]: backend/v1-bundle/package.json must declare dsh.bundle.patch ./cordis.patch.yml: the README calls that file the row set because the profile loads it, so pointing the bundle elsewhere would leave both the claim and the row-table check reading the wrong file
+  + actual - expected
+  
+    [
+  +   './other.patch.yml'
+  -   './cordis.patch.yml'
+    ]
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-64-executable-claims/tests/executable-claims.test.mjs:130:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ './other.patch.yml' ],
+    expected: [ './cordis.patch.yml' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
