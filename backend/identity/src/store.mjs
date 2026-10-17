@@ -223,27 +223,19 @@ export class IdentityStore {
    */
   #migrate() {
     this.#transaction(() => {
-      const hasMeta = this.#db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get() !== undefined
-      if (!hasMeta) {
+      const version = this.#storedVersion()
+      if (version === undefined) {
         this.#db.exec(SCHEMA)
         this.#setVersion()
         return
       }
-      const row = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version')
-      if (row === undefined) {
-        this.#db.exec(SCHEMA)
-        this.#setVersion()
-        return
-      }
-      const version = Number(row.value)
       if (version > SCHEMA_VERSION) {
         throw new IdentityError(500, 'identity/schema-too-new',
-          `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${row.value}`)
+          `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${version}`)
       }
       if (version === SCHEMA_VERSION) return
-      if (!Number.isSafeInteger(version) || version < 1) {
-        throw new IdentityError(500, 'identity/schema-unsupported',
-          `unsupported identity schema version ${row.value}`)
+      if (version < 1) {
+        throw new IdentityError(500, 'identity/schema-unsupported', `unsupported identity schema version ${version}`)
       }
       // Every version this module itself shipped is reached by adding what the
       // current shape has and the older one lacked. All statements are idempotent.
@@ -253,6 +245,14 @@ export class IdentityStore {
       }
       this.#setVersion()
     })
+  }
+
+  /** The recorded schema version, or undefined for a file that records none. */
+  #storedVersion() {
+    const hasMeta = this.#db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get() !== undefined
+    if (!hasMeta) return undefined
+    const row = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version')
+    return row === undefined ? undefined : Number(row.value)
   }
 
   #setVersion() {
