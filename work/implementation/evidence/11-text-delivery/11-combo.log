@@ -1,6 +1,0 @@
-repo      branch                   expected          actual            result                                       
---------  -----------------------  ----------------  ----------------  ---------------------------------------------
-ourfairy  integration/ourfairy-v1  based on integra  9768d8b5fcccb850  ok (worktree is based on the integration tip)
-dsh       product/ourfairy-v1      d3fe98f969c3963c  d3fe98f969c3963c  ok                                           
-rikkahub  product/ourfairy-v1      d80dfcb9a3ded6e7  d80dfcb9a3ded6e7  ok                                           
-combo: combination verified

@@ -60,7 +60,7 @@ export function taskHistory(events, visit) {
   return snapshot()
 }
 
-/** Enrich native task history with current registry availability; no second task store. */
+/** Native task history enriched with current registry availability. */
 export function projectTasks(ctx, events, sessionId) {
   const live = new Map(ctx.jobs.list(sessionId).filter(job => job.owner === sessionId).map(job => [job.id, job]))
   return taskHistory(events).map(row => {
@@ -80,7 +80,7 @@ export function projectTasks(ctx, events, sessionId) {
   })
 }
 
-/** Owned HTTP controls reuse the same session authorization and registry as model tools. */
+/** Owned HTTP controls over the same session authorization and registry as the model tools. */
 export function installJobs(ctx, runtime) {
   ctx.jobs.events.subscribe({ owners: 'all' }, event => {
     if (event.type === 'output') return

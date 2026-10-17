@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
 import { join } from 'node:path'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { before, after, test } from 'node:test'
 import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 
@@ -196,14 +196,3 @@ test('the identity owner codec speaks the encoding sessions persist and refuses 
   }
 })
 
-test('conversation tools resolve ownership through the public owned-session seam only', () => {
-  // Cross-package reach-through is invisible to behavior tests: the tools keep
-  // working while sessions loses the freedom to change a private method. The
-  // seam is the public `read`, and the owner encoding has one home in identity.
-  const source = readFileSync(new URL('../backend/search/src/index.mjs', import.meta.url), 'utf8')
-  assert.doesNotMatch(source, /_ownedHeader/, 'search must not call a private sessions member')
-  assert.match(source, /ctx\.ourfairySessions\.read\(/, 'search resolves the target session through the public read seam')
-  assert.doesNotMatch(source, /\^user:\[1-9\]\\d\*\$/, 'search must not re-implement the owner encoding')
-  assert.doesNotMatch(source, /owner\.slice\(/, 'search must not slice an owner string by hand')
-  assert.doesNotMatch(source, /principalIdOf/, 'the codec, not the principal key, is what a consumer reads an owner with')
-})

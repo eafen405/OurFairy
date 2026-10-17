@@ -2,9 +2,8 @@
 
 A test-only liveness probe for the OurFairy v1 backend composition.
 
-It is **not** part of the product composition: `backend/v1-bundle/cordis.patch.yml`
-does not name it. Tests mount it through `overlay.patch.yml` with the real dsh
-launcher:
+It is test-only: `backend/v1-bundle/cordis.patch.yml` does not name it. Tests
+mount it through `overlay.patch.yml`:
 
 ```sh
 dsh --profile ourfairy --patch backend/probe/overlay.patch.yml
@@ -21,11 +20,8 @@ settle and then reports, as machine-readable JSON:
 | `sessions` | The durable session logs under the isolated `DSH_HOME` (`.jsonl`, or `.jsonl.zstd` when the writer compresses) |
 | `failures` | Every failure as a sentence naming the service, row, or missing configuration |
 
-The probe reports **facts, not product policy**: it deliberately keeps no list of
-forbidden rows. Which capabilities must be absent is the expectation of the test
-that owns it (`tests/baseline-boot.test.mjs`), asserted against `rows`. A copy of
-that list inside the probe would let the probe's check and the test's check agree
-with each other while both drifted away from the bundle.
+The probe reports facts. Which capabilities must be absent is the expectation of
+`tests/baseline-boot.test.mjs`, asserted against `rows`.
 
 Environment: `OURFAIRY_PROBE_REPORT` (report path), `OURFAIRY_PROBE_MODE`
 (`boot` | `turn` | `hold`), `OURFAIRY_PROBE_HOLD_MS` (bounded hold in `hold` mode;

@@ -30,8 +30,8 @@ class ScopedBash extends SandboxBashExecutor {
     const session = scope.session(spec.sandboxPolicy?.sessionId)
     scope.validatePolicy(spec.sandboxPolicy, session)
     if (!scope.writeRoots(session).some(root => pathInside(root, spec.workdir))) throw new Error('working directory outside authorized spaces')
-    // The native executor spawns with the host cwd; the bwrap command always starts
-    // in the caller's requested, already authorized directory inside the namespace.
+    // The native executor spawns with the host cwd; bwrap starts in the caller's
+    // requested, already authorized directory inside the namespace.
     const command = `cd -- ${shellQuote(spec.workdir)} && ${spec.command}`
     return scope.run(session, () => super.execute({ ...spec, command }))
   }
@@ -46,15 +46,15 @@ class ScopedDirectory extends WorkingDirectoryService {
     const scope = this.ctx.ourfairySpaces
     return scope.run(agent.session, async () => {
       const current = this.get(agent.session)
-      // A former group cwd can outlive membership; restore an authorized base
-      // before building the next prompt, rather than stranding that session.
+      // A former group cwd can outlive membership: restore an authorized base
+      // before building the next prompt.
       if (!scope.writeRoots(agent.session).some(root => pathInside(root, current))) {
         return super.set(agent, scope.privateRoot(agent.session), signal)
       }
       const target = await this.ctx.fs.resolve(current, { signal })
       const info = await this.ctx.fs.stat(target, signal)
-      // Native fallback is header.cwd/deployment cwd; old chat headers have no
-      // private cwd. Recovery must use the same owner-derived private root.
+      // Recovery uses the same owner-derived private root: old chat headers carry
+      // no private cwd, and the native fallback is the deployment cwd.
       return info?.type === 'directory'
         ? super.ensure(agent, signal)
         : super.set(agent, scope.privateRoot(agent.session), signal)

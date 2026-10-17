@@ -1,4 +1,4 @@
-/** One-shot PCM WAV proxy; cancellation belongs to this request, never to an Agent. */
+/** One-shot PCM WAV proxy; cancellation belongs to this request, not to an Agent. */
 export class SpeechError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = `speech/${code}` }
 }

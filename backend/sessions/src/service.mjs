@@ -2,13 +2,9 @@
  * Owned sessions: which authenticated identity a session belongs to, and which
  * of that identity's sessions is its fixed primary session.
  *
- * Ownership authority is `SessionHeader.owner` alone — no second index, table,
- * or database. A user's primary id is derived from their permanent short number,
- * so the binding needs no stored column and cannot drift.
- *
- * Every read path checks the owner before returning content or before any path
- * that could open, repair, or rewrite an artifact, using only the stored header
- * (`stat`/`list`).
+ * `SessionHeader.owner` is the only ownership authority. A user's primary id is
+ * derived from their permanent short number, so the binding needs no stored
+ * column.
  *
  * @module @ourfairy/dsh-sessions/src/service
  */
@@ -16,13 +12,8 @@ import { randomUUID } from 'node:crypto'
 import { Service } from '@deepseek-ai/cordis'
 import { ownerOf } from '@ourfairy/dsh-identity/owner'
 
-/** Error carrying the HTTP status one request path must answer with. */
+/** Error carrying the HTTP status one request path answers with. */
 export class SessionScopeError extends Error {
-  /**
-   * @param status - HTTP status the caller answers with.
-   * @param code - stable machine-readable reason.
-   * @param message - human-readable explanation.
-   */
   constructor(status, code, message) {
     super(message)
     this.name = 'SessionScopeError'
@@ -32,28 +23,17 @@ export class SessionScopeError extends Error {
 }
 
 /**
- * The one rule that names an identity's fixed primary session.
- *
- * The namespace is reserved for this product and disjoint from both the store's
- * `session-<n>` ids and the ordinary sessions minted below, so a primary id can
- * never collide with anything the store or a client chose.
- *
- * @param shortId - the identity's permanent short number.
- * @returns the deterministic primary session id.
+ * The deterministic primary session id of one identity. The `ourfairy-user-`
+ * namespace is this product's own, so a primary id cannot collide with a native
+ * `session-<n>` id.
  */
 export function primarySessionIdOf(shortId) {
   return `ourfairy-user-${Number(shortId)}-primary`
 }
 
 /**
- * The id of one ordinary (non-primary) session of an identity.
- *
- * A UUID, never the store's process-local `session-<n>` counter: that counter
- * restarts at 1, so after a restart it would hand out an id that already belongs
- * to a persisted session.
- *
- * @param shortId - the identity's permanent short number.
- * @returns a fresh session id in this product's own namespace.
+ * A fresh ordinary (non-primary) session id for one identity. A UUID, because
+ * the native `session-<n>` counter restarts at 1 after a process restart.
  */
 export function sessionIdOf(shortId) {
   return `ourfairy-user-${Number(shortId)}-${randomUUID()}`
@@ -63,10 +43,6 @@ export function sessionIdOf(shortId) {
 export class OwnedSessionService extends Service {
   _inFlight = new Map()
 
-  /**
-   * @param ctx - owning plugin context.
-   * @param options - the dsh session store, its persistence, and identity.
-   */
   constructor(ctx, { sessions, persistence, identity }) {
     super(ctx, 'ourfairySessions')
     this.sessions = sessions
@@ -74,26 +50,12 @@ export class OwnedSessionService extends Service {
     this.identity = identity
   }
 
-  /**
-   * The identity one request speaks for, or undefined.
-   *
-   * The caller is derived only from the presented credential. Nothing in a
-   * request body can name a different user.
-   *
-   * @param request - the node:http request.
-   * @returns the authenticated user, or undefined.
-   */
+  /** The user the presented credential speaks for, or undefined. */
   authenticate(request) {
     return this.identity.authenticateRequest(request)
   }
 
-  /**
-   * One session as the product exposes it.
-   *
-   * @param header - a stored or live session header.
-   * @param shortId - the requesting identity's short number.
-   * @returns the public fields, including whether this is the owner's primary.
-   */
+  /** One session as the product exposes it. */
   expose(header, shortId) {
     return {
       id: header.id,
@@ -103,29 +65,14 @@ export class OwnedSessionService extends Service {
     }
   }
 
-  /**
-   * Read one stored snapshot without opening a write, recovery, or repair path.
-   *
-   * `persistence.stat` answers with a snapshot `{header, revision, ...}`, not a
-   * bare header; every owner check below reads `snapshot.header.owner`.
-   *
-   * @param id - the session id.
-   * @returns the stored snapshot, or undefined when nothing is stored under it.
-   */
+  /** `persistence.stat` answers a snapshot `{header, revision, ...}`, never a bare header. */
   async _headerOf(id) {
     return await this.persistence.stat(id)
   }
 
   /**
-   * Resolve one session for a caller, refusing anything they do not own.
-   *
-   * An unknown id, an ownerless header, and a foreign owner's header are refused
-   * with the same answer, before any handle is opened: nothing is adopted,
-   * rebound, or repaired.
-   *
-   * @param owner - the authenticated identity.
-   * @param sessionId - the requested session id.
-   * @returns the stored header.
+   * Resolve one session for a caller. An unknown id, an ownerless header and a
+   * foreign owner's header are refused identically, before any handle is opened.
    */
   async _ownedHeader(owner, sessionId) {
     if (typeof sessionId !== 'string' || sessionId === '') {
@@ -144,14 +91,7 @@ export class OwnedSessionService extends Service {
     return snapshot.header
   }
 
-  /**
-   * Every stored session this identity owns, and its primary.
-   *
-   * Listing reads stored headers only and never creates a session.
-   *
-   * @param owner - the authenticated identity.
-   * @returns the owned headers plus the primary session id (or null).
-   */
+  /** Every stored session this identity owns, plus its primary id (or null). Reads headers only. */
   async list(owner) {
     const snapshots = await this.persistence.list()
     const owned = snapshots
@@ -165,16 +105,7 @@ export class OwnedSessionService extends Service {
     }
   }
 
-  /**
-   * Materialize one session durably, owned by the given identity.
-   *
-   * Only persist the header here; the agent factory owns live publication and
-   * write ownership when a later request resumes this empty session.
-   *
-   * @param owner - the authenticated identity.
-   * @param id - the id to mint for this session.
-   * @returns the persisted header.
-   */
+  /** Persist one owned header; a later request resumes the empty session through the agent factory. */
   async _materialize(owner, id) {
     const session = this.sessions.prepare(id, { meta: { owner: ownerOf(owner.shortId) } })
     const handle = await this.persistence.create(session.header)
@@ -187,20 +118,8 @@ export class OwnedSessionService extends Service {
   }
 
   /**
-   * Run `work` as the only operation in flight for one owner.
-   *
-   * "Does this identity already have a primary" and the answer that mints one are
-   * separated by an await, so two overlapping operations could both answer "no"
-   * and both mint. Serializing (not coalescing) keeps them honest: a `/primary`
-   * racing a `/create` runs after it, and still resolves the deterministic main,
-   * rather than inheriting whichever ordinary session the other call minted.
-   *
-   * The queue is per-request state cleared in `finally` — no lock framework, and
-   * a failed operation leaves nothing behind for the next one.
-   *
-   * @param owner - the identity the work belongs to.
-   * @param work - the operation to run at most once at a time.
-   * @returns whatever `work` resolves to.
+   * Run `work` as the only operation in flight for one owner, so a `/primary`
+   * racing a `/create` cannot both observe "no primary" across their awaits.
    */
   async _exclusively(owner, work) {
     const key = owner.shortId
@@ -215,24 +134,12 @@ export class OwnedSessionService extends Service {
     }
   }
 
-  /**
-   * Create one session for an identity.
-   *
-   * An identity that owns nothing gets its deterministic primary; anyone else
-   * gets a new ordinary session. Creating never moves an existing primary, and
-   * the client supplies neither an id nor an owner.
-   *
-   * @param owner - the authenticated identity.
-   * @returns the persisted header.
-   */
+  /** An identity that owns nothing gets its deterministic primary; anyone else gets an ordinary session. */
   async create(owner) {
     return await this._exclusively(owner, async () => {
       const primaryId = primarySessionIdOf(owner.shortId)
       const existing = await this._headerOf(primaryId)
-      if (existing === undefined) {
-        const header = await this._materialize(owner, primaryId)
-        return header
-      }
+      if (existing === undefined) return await this._materialize(owner, primaryId)
       if (existing.header.owner === undefined) {
         throw new SessionScopeError(409, 'sessions/unowned-primary', 'the reserved primary identifier exists without an owner and is never adopted')
       }
@@ -243,12 +150,7 @@ export class OwnedSessionService extends Service {
     })
   }
 
-  /**
-   * Return to the fixed primary session, creating it if it does not exist yet.
-   *
-   * @param owner - the authenticated identity.
-   * @returns the persisted header.
-   */
+  /** Return the fixed primary session, creating it when it does not exist yet. */
   async primary(owner) {
     return await this._exclusively(owner, async () => {
       const primaryId = primarySessionIdOf(owner.shortId)
@@ -264,31 +166,8 @@ export class OwnedSessionService extends Service {
     })
   }
 
-  /**
-   * Read one owned session.
-   *
-   * @param owner - the authenticated identity.
-   * @param sessionId - the session the client named.
-   * @returns the stored header.
-   */
+  /** Read one owned session. */
   async read(owner, sessionId) {
     return await this._ownedHeader(owner, sessionId)
-  }
-
-  /**
-   * Make one owned session the caller's current session.
-   *
-   * Switching is a client-side choice only: it delegates to {@link read} and
-   * moves no persistent binding, so the two answer identically. It stays a
-   * separate name because "which session is current" is a real product concept
-   * and the client contract has its own path for it; if switching ever gains a
-   * persisted effect, this is where it goes and only this method changes.
-   *
-   * @param owner - the authenticated identity.
-   * @param sessionId - the session the client named.
-   * @returns the stored header.
-   */
-  async select(owner, sessionId) {
-    return await this.read(owner, sessionId)
   }
 }

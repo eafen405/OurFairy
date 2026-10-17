@@ -1,12 +1,8 @@
 /**
  * The identity module's own request paths.
  *
- * These routes live outside dsh's shared `/api` prefix on purpose: `/api` is
- * admitted as a whole before any handler runs, so an unauthenticated sign-in
- * endpoint cannot exist under it. Mounted on the same `webServer` carrier and
- * behind the same Host/Origin fence, they are the product's public surface —
- * and every one of them derives the caller from the credential it presents,
- * never from a user field in the request body.
+ * They sit outside dsh's `/api` prefix, which is admitted as a whole before any
+ * handler runs. Every route derives the caller from the presented credential.
  *
  * @module @ourfairy/dsh-identity/src/http
  */
@@ -24,17 +20,12 @@ export const IDENTITY_PATHS = Object.freeze([
   '/identity/sign-out',
 ])
 
-/** Read one header from a node:http request. */
 function headerOf(request, name) {
   const value = request.headers?.[name]
   return typeof value === 'string' ? value : undefined
 }
 
-/**
- * Read the bearer credential of one request.
- * @param request - node:http request or anything with headers.
- * @returns the token, or undefined when no bearer credential is present.
- */
+/** The bearer credential of one request, or undefined. */
 export function bearerToken(request) {
   const value = headerOf(request, 'authorization')
   if (value === undefined) return undefined
@@ -43,13 +34,9 @@ export function bearerToken(request) {
 }
 
 /**
- * Whether this request carries a payload at all.
- *
- * Three of these paths (`/identity/invite`, `/identity/session`,
- * `/identity/sign-out`) act purely on the presented credential and have no
- * document to send. A bodyless POST carries no `content-type`, and demanding
- * one would answer `415 Unsupported Media Type` to a request that has no media
- * type to be unsupported — a real client posting an empty body must be served.
+ * Whether this request carries a payload at all. `/identity/invite`,
+ * `/identity/session` and `/identity/sign-out` act on the credential alone and
+ * are posted with no body and therefore no `content-type`.
  */
 function carriesBody(request) {
   const declared = headerOf(request, 'content-length')
@@ -58,17 +45,10 @@ function carriesBody(request) {
 }
 
 /**
- * Read a bounded JSON body; a wrong content type or oversized body is a 4xx, not a hang.
- *
- * Exported for the sibling product route modules (see `backend/sessions`), which
- * serve the same shape of JSON POST and must not keep a second copy of it.
- *
- * @param request - node:http request.
- * @param HttpError - the calling module's error class carrying status and code.
- * @param codePrefix - the calling module's error-code namespace, e.g. `identity`.
+ * Read a bounded JSON body; a wrong content type or an oversized body is a 4xx.
  * @returns the parsed JSON object, or `{}` for a bodyless POST.
  */
-export async function readJsonBody(request, HttpError = IdentityError, codePrefix = 'identity') {
+async function readJsonBody(request, HttpError = IdentityError, codePrefix = 'identity') {
   if (!carriesBody(request)) return {}
   const mediaType = headerOf(request, 'content-type')?.split(';', 1)[0]?.trim().toLowerCase()
   if (mediaType !== 'application/json') {
@@ -108,16 +88,9 @@ export function sendJson(response, status, payload) {
 }
 
 /**
- * Build the `post` wrapper every product-owned JSON route shares.
- *
- * The fence, the method check, body parsing, and the error envelope are the same
- * for `/identity/*` and `/sessions/*`; only the error class, the code namespace,
- * and the handler differ. Keeping this here is the reason the sibling route
- * module has no second copy of it.
- *
- * @param options - `handle(body, request)`, module errors, and an optional response
- * writer. Streaming siblings use that writer after the same admission checks.
- * @returns an async `(request, response)` handler.
+ * The `post` wrapper every product-owned JSON route shares: fence, method check,
+ * body parsing and the error envelope. `respond` lets a streaming sibling write
+ * its own response after the same admission checks.
  */
 export function postHandler({ fence, handle, HttpError = IdentityError, codePrefix = 'identity', internalMessage, respond = (response, result) => sendJson(response, 200, result) }) {
   return async (request, response) => {
@@ -143,17 +116,8 @@ export function postHandler({ fence, handle, HttpError = IdentityError, codePref
   }
 }
 
-/**
- * Build the identity request handlers.
- *
- * @param options - the identity service plus the fence every path applies first.
- * @param options.service - live identity service.
- * @param options.fence - Connection's Host/Origin fence; product-owned routes
- * authenticate themselves but must never skip this.
- * @returns one handler per path in {@link IDENTITY_PATHS}.
- */
+/** Build one handler per path in {@link IDENTITY_PATHS}. */
 export function identityHandlers({ service, fence }) {
-  /** Resolve the caller from the presented credential, refusing an anonymous one. */
   const callerOf = (request) => {
     const user = service.authenticateRequest(request)
     if (user === undefined) {

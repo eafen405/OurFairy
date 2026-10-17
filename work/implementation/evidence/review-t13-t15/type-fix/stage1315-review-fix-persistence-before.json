@@ -1,1 +1,0 @@
-{"schemaVersion":1,"ok":false,"operation":"check","message":"docs/persistence-schema.json is stale; regenerate the persistence catalog","code":"stale-artifacts","changes":[],"roots":[],"files":[]}

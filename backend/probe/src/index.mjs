@@ -1,17 +1,11 @@
 /**
- * OurFairy baseline liveness probe (test-only).
+ * OurFairy baseline liveness probe (test-only), mounted above the product bundle
+ * by `backend/probe/overlay.patch.yml`.
  *
- * Mounted above the product bundle layers by `backend/probe/overlay.patch.yml`.
- * Once the launcher commits readiness it:
- *
- *   1. waits for the Loader tree to settle,
- *   2. checks every service the v1 backend promises is live and its row ACTIVE,
- *   3. reports the exact composed row ids so the caller can assert which
- *      capabilities must be absent (the expectation itself is the test's),
- *   4. optionally drives one real model turn through the agent loop,
- *   5. writes a machine-readable report and requests a bounded process exit.
- *
- * It asserts observable composition facts, never "the Loader did not throw".
+ * Once the launcher commits readiness it waits for the Loader tree to settle,
+ * checks every service the v1 backend promises is live and its row active,
+ * reports the composed row ids, optionally drives one real model turn, and
+ * writes a machine-readable report before requesting a bounded process exit.
  *
  * Environment:
  *   OURFAIRY_PROBE_REPORT  absolute path of the JSON report to write
@@ -48,17 +42,6 @@ const SERVICE_ROWS = [
   ...['ourfairySpaces', 'fs', 'shell', 'sandbox', 'workingDirectory'].map(service => [service, 'spaces', '@ourfairy/dsh-spaces']),
   ['sandboxPolicy', 'sandbox-policy', '@ourfairy/dsh-spaces/policy'],
 ]
-
-/**
- * Rows the first version must not mount live in the keeping of the tests, not
- * here.
- *
- * The probe reports facts — which rows the profile actually composed
- * (`report.rows`). The expectation of which rows must be absent is product
- * policy and belongs to the test that owns it; a copy of that list inside the
- * probe would let the probe's check and the test's check agree with each other
- * while both drifted away from the bundle.
- */
 
 const FIBER_STATES = ['pending', 'loading', 'active', 'failed', 'disposed', 'unloading']
 

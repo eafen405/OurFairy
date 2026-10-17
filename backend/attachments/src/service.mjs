@@ -7,14 +7,14 @@ import { mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { createReadStream, realpathSync } from 'node:fs'
 import { join, basename, extname } from 'node:path'
 
-export const MAX_FILE_BYTES = 32 * 1024 * 1024
+const MAX_FILE_BYTES = 32 * 1024 * 1024
 export const MAX_MESSAGE_BYTES = 64 * 1024 * 1024
 export const MAX_ATTACHMENTS = 8
 export const MAX_CHUNK_BYTES = 256 * 1024
 export class AttachmentError extends SessionScopeError {}
 const fail = (status, code, message) => { throw new AttachmentError(status, `attachments/${code}`, message) }
-export const attachmentManifest = message => message.source?.attachments ?? []
-export function admittedMessages(events) {
+const attachmentManifest = message => message.source?.attachments ?? []
+function admittedMessages(events) {
   return events.flatMap(event => event.type === 'agent/inbox/spliced' ? event.data.inserted
     : event.type === 'user/message' ? [event.data] : event.type === 'delivery/message' ? [event.data.message] : [])
 }

@@ -1,15 +1,11 @@
 /**
- * The OurFairy identity module: users, short numbers, invites, and sessions as
+ * The OurFairy identity module: users, short numbers, invites and sessions as
  * one dsh plugin.
  *
- * It does two things for the rest of the composition:
- *
- *   1. mounts the product's own request paths (`/identity/*`, see `http.mjs`)
- *      on the real Web carrier, outside the admitted `/api` prefix; and
- *   2. registers a second-credential authenticator with Connection, so a
- *      session token this module issued is also what admits an Android request
- *      to dsh's `/api` — and the principal dsh then reports is the one derived
- *      here from the credential, never one the client chose.
+ * It mounts the product's `/identity/*` paths on the real Web carrier, outside
+ * the admitted `/api` prefix, and registers a second-credential authenticator
+ * with Connection so a session token it issued also admits a request to dsh's
+ * `/api`, as the principal derived from that credential.
  *
  * @module @ourfairy/dsh-identity
  */
@@ -18,10 +14,7 @@ import { IdentityError, IdentityStore, PHAETHON_SHORT_ID } from './store.mjs'
 import { bearerToken, identityHandlers, IDENTITY_PATHS } from './http.mjs'
 import { ownerOf } from './owner.mjs'
 
-/** Stable Cordis plugin name. */
 export const name = 'ourfairy-identity'
-
-/** The carrier this module serves its request paths through, and dsh's admission. */
 export const inject = ['webServer', 'connection']
 
 /** Principal key one short number speaks for; stable across that user's sessions. */
@@ -30,11 +23,7 @@ export function principalIdOf(shortId) {
 }
 
 /** The identity service the composition reads as `ctx.identity`. */
-export class IdentityService extends Service {
-  /**
-   * @param ctx - owning plugin context.
-   * @param options - the business store and the resolved Phaethon identity.
-   */
+class IdentityService extends Service {
   constructor(ctx, { store, phaethon }) {
     super(ctx, 'identity')
     this.store = store
@@ -53,13 +42,7 @@ export class IdentityService extends Service {
     return user === undefined ? undefined : { id: principalIdOf(user.shortId) }
   }
 
-  /**
-   * Mint an invite for the authenticated administrator.
-   *
-   * This is the one identity rule the service owns; registration and sign-in
-   * have no rule of their own, so the routes call the store directly rather
-   * than through a forwarder that adds nothing.
-   */
+  /** Mint an invite for the authenticated administrator. */
   createInvite(caller) {
     if (caller.isAdmin !== true) {
       throw new IdentityError(403, 'identity/forbidden', 'only Phaethon may create invites')
@@ -67,12 +50,7 @@ export class IdentityService extends Service {
     return this.store.createInvite(caller.shortId)
   }
 
-  /**
-   * End the caller's credential and drop the principal scope it was admitted
-   * as, so no open stream keeps speaking for that identity.
-   * @param request - the signing-out request.
-   * @returns the revoked principal key.
-   */
+  /** End the caller's credential and revoke the principal scope it was admitted as. */
   async signOutRequest(request) {
     const token = bearerToken(request)
     const user = this.authenticateRequest(request)
@@ -105,11 +83,6 @@ function resolveConfig(config) {
   }
 }
 
-/**
- * Mount the identity module.
- * @param ctx - plugin context.
- * @param config - resolved row config.
- */
 export function apply(ctx, config) {
   const resolved = resolveConfig(config)
   const store = new IdentityStore({ path: resolved.path, sessionTtlDays: resolved.sessionTtlDays })

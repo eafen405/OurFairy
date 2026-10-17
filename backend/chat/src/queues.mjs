@@ -1,15 +1,13 @@
 /**
  * The ordered writers behind a chat session.
  *
- * A session's own work (resume, send, receipt, delivery settle) shares one
- * queue per session. Preparing an outgoing delivery uses a second, unrelated
- * key space because a delivery takes its target session's queue from inside
- * its own. The named methods are the policy: callers cannot choose a raw key,
- * so the two spaces never alias even when the ids compare equal.
+ * A session's own work (resume, send, receipt, delivery settle) shares one queue
+ * per session; preparing an outgoing delivery uses a second key space because a
+ * delivery takes its target session's queue from inside its own. Callers name a
+ * space through the methods, so the two never alias even when ids compare equal.
  *
- * A queue is a promise tail, not a re-entrant lock. Entering a queue this async
- * call chain already holds would wait on itself forever; that nesting is a
- * defect and is reported immediately instead of being left as a silent hang.
+ * A queue is a promise tail, not a re-entrant lock: entering one this call chain
+ * already holds would wait on itself forever, so that nesting fails immediately.
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
 

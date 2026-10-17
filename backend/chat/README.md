@@ -1,91 +1,115 @@
-# Remote chat wire contract (T5 + T6, 2026-10-15)
+# 远程对话接口
 
-All routes are POST, JSON object body, Authorization: Bearer <identity credential>, same endpoint/fence as /sessions/*. Body never selects owner. Errors before streaming: HTTP 400/401/404/409/500 with {ok:false,error:{code,message}}. Foreign/missing session: same 404 sessions/unknown-session; unauthenticated:401 chat/unauthorized. Host/Origin fence applies. No local model execution.
+所有路由均为 POST，JSON 请求体，`Authorization: Bearer <身份凭据>`，与 `/sessions/*`
+同一端点、同一 Host/Origin 校验。归属只来自凭据。流式开始前的错误为
+400/401/404/409/500，响应体 `{ok:false,error:{code,message}}`；会话不存在或不属于调用方统一
+404 `sessions/unknown-session`，未认证为 401 `chat/unauthorized`。
 
-- /chat/send body {sessionId,requestId,text}. requestId: stable nonempty client-generated string (max128); text nonempty string. Return {ok:true,receipt:{sessionId,requestId,messageId,acceptedSeq}} only after writer flush. Exact same session/requestId/text returns same receipt (including after process restart), changed text returns409 chat/request-conflict. Network/500 means acceptance unknown: retain same requestId/text, retry identical or call receipt, never silently new request.
-- /chat/receipt body {sessionId,requestId}. Return {ok:true,receipt:<same shape>|null}. null means no durable acceptance currently observed; send can retry same request identity.
-- /chat/read body {sessionId,maxEvents?}. Return {ok:true,projection:<below>}, with a bounded opening event range (default64, max256).
-- /chat/stop body {sessionId}. Return {ok:true}. Calls native cancel current reply, keeps queued input for a later waking send (native semantics); eventual projection settles stopped/error. Closing observer never stops work.
-- /chat/observe body {sessionId,maxEvents?}. HTTP200 text/event-stream; each `event: projection\ndata: <JSON projection>\n\n` carries a complete cumulative snapshot of this connection’s opening bounded range plus its live tail. JSON has no ok wrapper. Initial snapshot then every changed state; `: keepalive\n\n` comments allowed. End/IO disconnect = disconnected, never finished. Replace the prior connection snapshot, merge separately backfilled history by identity, and never concatenate snapshot text. No Last-Event-ID replay guarantee; reconnect uses the fixed-cut pages below.
+## 路由
 
-Projection:
-{sessionId,generation,version,cursor,durableThroughSeq,throughSeq,fromSeq,beforeSeq,hasMore,events:[...],messages:[...],attempt:<object|null>,replyStatus,error:<string|null>}
-- generation:string server Agent lifetime UUID (not permanent identity); version:monotone integer within generation. Reject stale callbacks by credential/connection/session epoch on Android. cursor:last observed native event seq, -1 empty; durableThroughSeq:only writer-barrier-confirmed prefix, -1 if unknown. Does NOT mean the client applied that prefix.
-- messages:[{messageId:string,seq:number,requestId:string|null,role:number,status:number,text:string}]. role1=user,2=Fairy. status1=accepted/pending user,2=complete,3=interrupted,4=failed. All text exact original text, including whitespace/Markdown. Stable user messageId from native inbox; accepted pending input remains visible before user/message. Assistant settlement without a native message uses deterministic `attempt:<sessionId>:<seq>` identity and exact saved text; status3 for cancelled turns,4 for failed turns. No runtime-context/system/tool bubbles.
-- attempt:{attemptId:string,revision:number,text:string}|null. Native attemptId only unique within generation; text cumulative exact original visible text. Final durable message replaces attempt. revision monotone within generation. While active plain text; terminal messages use existing complete rich-text renderer including interrupted/failed.
-- replyStatus numeric:0 idle,1 running,2 stopping. error:string|null last execution failure; do not treat transient connection loss as model error.
+| 路由 | 请求体 | 响应 |
+| --- | --- | --- |
+| `/chat/send` | `{sessionId,requestId,text,uploadIds?}` | `{ok:true,receipt:{sessionId,requestId,messageId,acceptedSeq}}` |
+| `/chat/receipt` | `{sessionId,requestId}` | `{ok:true,receipt:<同上>\|null}` |
+| `/chat/read` | `{sessionId,maxEvents?}` | `{ok:true,projection:<投影>}` |
+| `/chat/page` | `{sessionId,throughSeq,beforeSeq,maxEvents?}` | `{ok:true,page:<页>}` |
+| `/chat/checkpoint` | `{sessionId}` | `{ok:true,sessionId,durableThroughSeq}` |
+| `/chat/stop` | `{sessionId}` | `{ok:true}` |
+| `/chat/observe` | `{sessionId,maxEvents?}` | `text/event-stream`，见下 |
+| `/chat/jobs/output` | `{sessionId,taskId,from}` | `{ok:true,output}` |
+| `/chat/jobs/stop` | `{sessionId,taskId}` | `{ok:true,outcome}` |
 
-## Fixed-cut reconnect (T6)
+`requestId` 是客户端生成的稳定非空字符串（≤128 字符），与 `text`、有序 `uploadIds` 一起构成
+请求身份：同一身份重发返回同一 receipt（进程重启后亦然），内容不同则 409
+`chat/request-conflict`。网络错误或 500 表示接受状态未知，应保留原身份重发或调用
+`/chat/receipt`。receipt 在 writer flush 之后返回。
 
-`maxEvents` is a raw-event count, integer1..256 (default64). It is not a message count: system/context/tool/inbox/boundary events may produce no bubbles. A message count cannot prove complete event consumption.
+`/chat/stop` 调用原生 cancel 停止当前回复并保留已排队的输入；关闭订阅不停止任何工作。
 
-An opening read/follow freezes inclusive cut `throughSeq=C=cursor`, includes exact native events `fromSeq=L=max(0,C-maxEvents+1)` through `cursor`, and sets `hasMore=L>0`, `beforeSeq=L` if more history exists (null otherwise). Every later SSE snapshot on **that connection** retains C/L and includes all formal events L..current cursor, including every event after C. The Agent-owned attempt accumulator always supplies the full active prefix, even when its start predates L or no phone was connected. Closing the observer releases only that observer.
+## 投影
 
-`events` are native immutable Session events, identity `(sessionId,seq)`. Their type/source vocabulary remains native; business role/status in messages remain numeric. An overlapping seq must have the same payload. A snapshot can replace an older snapshot only within its connection range; it must not erase independently backfilled older history. Messages are derived from the current formal transcript, restricted to rows whose authoritative seq is in the range. Merge same messageId using newer seq; do not let an old history page overwrite a newer live settlement. Current attempt/reply state belongs to the newest live snapshot.
+```text
+{sessionId,generation,version,cursor,durableThroughSeq,throughSeq,fromSeq,
+ beforeSeq,hasMore,events,messages,attempt,settledAttempt,tasks,activity,replyStatus,error}
+```
 
-- `/chat/page` body `{sessionId,throughSeq:C,beforeSeq:L,maxEvents?}` → `{ok:true,page:{sessionId,throughSeq:C,fromSeq:K,beforeSeq:K|null,hasMore,events,messages}}`. `throughSeq` is mandatory inclusive frozen opening cut; `beforeSeq` is mandatory exclusive backward offset0..C+1. C cannot exceed the current native cursor. `end=min(C+1,beforeSeq)`, K=max(0,end-maxEvents); returned events are exactly K..end-1. More history exists iff K>0, then next beforeSeq=K. At beforeSeq0 the terminal page is empty with K0/hasMorefalse/beforeSeqnull. Invalid windows/limits return400 `chat/invalid-page`. Same C/before produces the same page while newer tail grows; page response loss retries the same window. Pages contain no attempt or reply state.
-- `/chat/checkpoint` body `{sessionId}` → `{ok:true,sessionId,durableThroughSeq:P}` only after the owned live Agent writer flush succeeds. P is captured before awaiting the barrier; concurrent later tail is not acknowledged by that barrier. Failure returns500 and leaves the confirmed prefix unchanged. `/page` does not grant a new ACK.
+- `generation`：服务端 Agent 生命周期 UUID，不是永久身份。`version` 在其内单调递增，
+  用于丢弃过时回调。
+- `cursor`：最近观察到的原生事件 seq，空会话为 -1。`durableThroughSeq`：writer 屏障已确认
+  的前缀，未知为 -1；它不表示客户端已应用该前缀。
+- `messages`：`{messageId,seq,requestId,role,status,text,attachments}`。`role` 1 用户、
+  2 Fairy；`status` 1 待定、2 完成、3 中断、4 失败。文本是原始文本，含空白与 Markdown。
+  没有原生消息的 assistant 结算使用确定性身份 `attempt:<sessionId>:<seq>`。
+- `attempt`：`{attemptId,revision,text}`。`attemptId` 只在同一 generation 内唯一，`text` 是
+  累计原始可见文本。最终持久消息取代它，终止消息使用完整富文本渲染。
+- `settledAttempt`：`{attemptId,seq}|null`，本 generation 最近一次已提交的 assistant 流结束。
+  它复制自原生结算结果，不从消息文本推断；generation 重启后为 null。
+- `replyStatus`：0 空闲、1 运行中、2 停止中。`error` 是最近一次执行失败；连接中断不是模型错误。
 
-The client keeps three positions distinct: observed native cursor, writer-confirmed durableThrough, and its completely applied **and locally committed** consumption prefix W. Backfill fixed C while merging seq>C separately. Only after required coverage is contiguous and writer ACK covers it may an awaited preference commit advance W. A failed page/ACK/local commit leaves W unchanged and retains readable content. Attempt revisions, message receipt, and a rich-text row are not event coverage.
+## 分页与重连
 
-A restored cursor without cached body rows cannot skip missing history: this client must refill its projection after process restart. Missing/corrupt records establish a fresh initialization baseline; the record/batch is input for future notifications, not a notification policy. Backend does not keep another client receipt/consumption database. Cold access authorizes before native resume, and uses the resumed writer so query-only synthetic closers are never acknowledged without being saved.
+`maxEvents` 是原生事件数（1..256，默认 64），不是消息数：system/context/tool/inbox 事件
+可能不产生气泡。
 
-No new DB/table/authoritative receipt ledger: native Session events incl inbox inserted are sole acceptance/history authority. Transient generation/attempt accumulators and serialization queues are derived runtime state only.
+打开 read/observe 时冻结包含式截点 `throughSeq=C=cursor`，并给出
+`fromSeq=L=max(0,C-maxEvents+1)`。`hasMore=L>0`，此时 `beforeSeq=L`，否则为 null。该连接后续
+每个 SSE 快照保留 C/L，并包含 L 到当前 cursor 的全部正式事件。attempt 累计内容始终完整，
+即使其起点早于 L。
 
-## Cross-user text delivery (T11)
+`events` 是原生不可变 Session 事件，身份为 `(sessionId,seq)`，重叠的 seq 必须载荷相同。
+快照只能替换本连接范围内的旧快照，不能抹掉独立回填的更早历史；合并同一 `messageId` 时取
+较新的 seq。
 
-The session-scoped `deliver_message({recipientShortId,text})` tool saves only the
-specified text into the recipient's fixed primary session. It returns
-`{deliveryId,sessionId,messageId,acceptedSeq}` after the native writer's durability
-barrier. It returns no recipient history and starts no recipient inference.
+`/chat/page` 请求 `{sessionId,throughSeq:C,beforeSeq:L,maxEvents?}`，返回
+`{sessionId,throughSeq,fromSeq:K,beforeSeq:K|null,hasMore,events,messages}`；其中
+`end=min(C+1,L)`、`K=max(0,end-maxEvents)`，返回事件恰为 K..end-1。`L=0` 时是空的终止页。
+页不包含 attempt 或回复状态。
 
-The delivery identity is derived from the sender's permanent Session id and the
-native tool call id. The business SQLite `deliveries` table (schema v5) fixes the
-recipient and text before the append, with status 0 pending coordination and
-1 durably delivered. The native `delivery/message` event is the delivery fact:
-it carries the same delivery identity and the real sender Session/owner, and
-contains an assistant-role message with source `delivered-message`. It has no
-fabricated model turn, step, or stream. Pending rows are reconciled against that
-identity on startup; an exact retry finds the same message after a log-success /
-business-update failure. A changed recipient or text under the same identity is
-refused. Failed startup reconciliation leaves the row retryable.
+客户端需区分三个位置：已观察的 cursor、writer 已确认的 `durableThroughSeq`、以及已应用且
+本地已提交的消费前缀。只有所需覆盖连续且 writer ACK 覆盖之后才推进消费前缀；页丢失或
+ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，必须重新回填。
 
-Live delivery appends to the existing Agent's Session and flushes its writer.
-Cold delivery takes the native exclusive write handle, validates/restores a
-detached Session, appends and flushes, then closes the handle. Opening remote
-chat and delivery share the existing per-session queue. No Agent is created for
-a cold delivery, and a recipient's active attempt remains independent of the
-delivered bubble.
+## 跨用户投递
 
-Existing read/page/observe projections expose the event as `role:2,status:2`
-with the native message id and exact text. They add no transfer label or new wire
-fields. The durable business row is recoverable notification input; a failed
-`ourfairy/delivery` outlet cannot retract the message or turn a successful
-confirmation into failure. System notification policy belongs to its later ticket.
-This ticket adds no file delivery, outbox, or second history store.
+`deliver_message({recipientShortId,text,files?})` 把指定文本与可选文件写入收件人的固定主
+会话，返回 `{deliveryId,sessionId,messageId,acceptedSeq}`。它不读取收件人历史，也不启动收件人
+推理。
 
-## File delivery (T12)
+投递身份由发送方会话 id 与原生工具调用 id 派生。业务表 `deliveries` 在追加前固定收件人与
+内容：状态 0 待协调、1 已持久送达、2 正在准备文件。原生 `delivery/message` 事件是送达事实，
+携带同一投递身份与真实发送方会话，外观为普通 Fairy 消息。重试按该身份核对：同一身份找到
+同一条消息，内容或收件人不同则拒绝；启动时按该身份核对未完成的行。
 
-The existing `deliver_message` tool additionally accepts optional ordered `files`, up to the shared attachment limits: 8 files, 32 MiB per original, 64 MiB total. Each item is either `{path:string}` in the sender's current authorized file world, or `{messageId:string,index:integer}` for an admitted original in the current sender session. Text and recipient remain explicit. The same native call ID derives the same delivery identity; changed target/text/ordered selectors conflict rather than silently changing the delivery.
+文件项为发送方当前可写范围内的 `{path}`，或本会话已接纳原件的 `{messageId,index}`，
+最多 8 个、单个 32 MiB、合计 64 MiB。`attachments_json` 保存有序的 `{selector,prepared}`：
+每准备完一个文件就提交该快照，重试跳过已提交项，清单完整后状态才变为 0。收件消息只保留
+选中的文本与原始附件清单，不含发送方私有路径。
 
-The existing business row's one `attachments_json` column keeps ordered `{selector,prepared}` entries. Numeric delivery status 2 means files still being prepared. Each immutable snapshot is committed to the checklist before preparing the next; a same-ID retry skips committed entries and continues null entries. A CAS write whose checklist update failed has not committed that item and may be repeated. Only a complete checklist becomes status 0 (ready for the existing writer/flush coordination); status 1 means durably delivered. Startup reconciles ready rows and never sends preparing rows as plain text. This is the same delivery flow and table used for text, with no additional outbox.
+live 投递沿用现有 Agent 的 Session 并 flush writer；cold 投递取得原生独占写句柄，追加、
+flush 后关闭，不为投递创建 Agent。通知失败不回滚正文。
 
-The formal receiving `delivery/message` retains only the explicitly selected text and original attachment manifest. It contains no private source selector path and no copied conversation context. Ordinary Fairy role-2 rows use the existing public `{index,type,name,mime,bytes}` attachment metadata and `/attachments/download` session/message/index original route. Files become native readable text handles for later model requests, including delivered images; assistant image blocks and model provider/turn/replay facts are not fabricated. The recipient can use authorized `read`/`read_image` without gaining source workspace access. Delivery itself never starts recipient inference.
+## 后台任务
 
-## Background tasks
+`/chat/read` 与 `/chat/observe` 的 `tasks` 折叠原生 `jobs/lifecycle`、`jobs/report`、收件箱
+splice 与 turn 结束事件；注册表仍在时补充输出、进度与可用性。任务 id 由注册表 generation 与
+序号组成，服务器重启后旧任务不会解析到新注册表中的同名任务。
 
-`/chat/read` and `/chat/observe` include `tasks`, folded from native `jobs/lifecycle`, `jobs/report`, inbox splices and turn endings. Registry output, progress and availability enrich that projection while the original job exists. Task ids pair the registry generation with its ordinal id; a server restart cannot resolve an old task to a new same-named job. Past running work becomes unknown/unavailable; known terminal facts remain visible, without promising process continuation or complete output.
+`/chat/jobs/output` 接受绝对 UTF-8 字节偏移 `from`，chunks 保留原生
+`{at,text,channel?,gapBefore?}`；`next` 与 `earliest` 指向原生输出环，`gapBefore` 标记源侧
+丢失。终止状态不代表输出完整。`/chat/jobs/stop` 返回数字 `outcome`：0 不可用、1 已请求取消、
+2 已结束。
 
-All task controls first use the existing principal/session ownership check, then exact-session native job ownership. `POST /chat/jobs/output` takes `{sessionId,taskId,from}` with an absolute UTF-8 byte offset and returns `{ok,output:{taskId,availability,chunks,next,earliest,total,lossy,status}}`. Chunks retain native `{at,text,channel?,gapBefore?}`; an overlapping read may start before `from`. `next` and `earliest` name the native output ring, whose source-side loss remains explicitly marked by `gapBefore`. A terminal status never establishes complete output. Polling or closing task details only observes work. `POST /chat/jobs/stop` takes `{sessionId,taskId}` and returns numeric `outcome`: 0 unavailable, 1 cancellation requested, 2 already finished. `/chat/stop` remains independent.
+任务状态：0 未知、1 运行中、2 停止中、3 完成、4 被终止、5 失败；`availability`
+0 不可用、1 可用。`report.status`：0 无计划报告、1 待处理、2 执行中、3 完成、4 取消、
+5 失败、6 未知。
 
-Task status codes are 0 unknown, 1 running, 2 stopping, 3 completed, 4 killed, 5 failed; availability is 0 unavailable or 1 available. Each task's `report` has status 0 no scheduled report, 1 pending, 2 running, 3 completed, 4 canceled, 5 failed, 6 unknown, with optional native `messageId` and `turn`. Only actual wake/busy delivery is pending; quiet injected context does not claim scheduled inference. Existing inbox cancellation and turn endings settle reports, including a busy completion left unclaimed by a canceled turn. A later genuine claim accounts for its later execution. No task-specific notification policy is added.
+## 活动
 
-## Unified activity
+投影的 `activity` 是呈现与通知共用的唯一后端摘要。`status`：0 未知、1 静默、2 活跃。
+`reasons`：1 实际执行、2 运行或停止中的任务、3 真正待处理的报告、4 属于当前 episode 的
+投递输出（本身不保持执行活跃）。
 
-`activity` on the same chat projection is the single backend summary used by presentation and notifications. `status` is 0 unknown, 1 quiet or 2 active. `reasons` uses 1 actual execution, 2 live running/stopping tasks, 3 genuinely pending/running reports and 4 saved delivery output belonging to the current/latest episode. Reason 4 is an output fact and does not itself keep execution active. Terminal jobs do not keep the session active; preserved quiet context and canceled parked human input do not claim scheduled inference.
-
-Episodes fold existing Session events, inbox queues and the same report interpreter used by `tasks`. Their stable `episodeId` is `<sessionId>/<startedSeq>`. Task settlement stays joined to the native reporter decision; an actual pending notice or report execution extends the episode. Quiet saved delivery forms a closed single-event episode without recipient inference; delivery during work joins that episode. The existing restore marker separates unavailable pre-restart work from later real episodes without manufacturing a successful old completion. Current unresolved task/report availability remains unknown.
-
-`completed` summarizes the latest closed episode (`episodeId`, `startedSeq`, `finishedSeq`, optional `outputSeq`); `delivery` summarizes the latest saved delivery (`episodeId`, `seq`). Both are rebuilt from the entire native prefix through `activity.throughSeq`, independently of the cropped chat event page, and remain stable across reconnect and restart when that prefix is unchanged. The enclosing projection `generation` invalidates live transport snapshots; it does not change these persisted identifiers. A later prefix may replace either latest summary. Consumers use their persisted per-session sequence/episode consumption position to coalesce catch-up; these fields are summaries, not another event queue, notification policy, unread state or source of chat truth.
-
-`settledAttempt: {attemptId, seq} | null` is the most recent native committed assistant stream end in this projection generation. It is copied from the native end outcome, not inferred from message text. It starts null after a generation restart; abandoned attempts clear it. A new active attempt may coexist with the previous completed relation until its own end, so consumers must match the generation-scoped attempt identity and exact formal seq. It is a process-local presentation hint, not persisted history or activity authority. Old clients ignore this optional field; cold history is already rich and needs no live-row alias.
+episode 由现有 Session 事件、收件箱队列与 `tasks` 使用的同一份报告解释折叠而来，
+`episodeId` 为 `<sessionId>/<startedSeq>`。`completed` 与 `delivery` 分别总结最近的已关闭
+episode 与最近一次保存的投递；该前缀不变时，两者跨重连与重启保持稳定。消费者用自己持久化的
+每会话消费位置合并追补内容，这些字段只是摘要。
