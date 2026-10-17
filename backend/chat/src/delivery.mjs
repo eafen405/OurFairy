@@ -7,7 +7,7 @@ import { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES } from '@ourfairy/dsh-attachments'
 import { ownerOf, shortIdOf } from '@ourfairy/dsh-identity/owner'
 
 export function installDelivery(ctx, runtime) {
-  const store = ctx.identity.store
+  const { users, deliveries } = ctx.identity
   const receipt = row => ({ deliveryId: row.deliveryId, sessionId: row.sessionId,
     messageId: row.messageId, acceptedSeq: row.acceptedSeq })
   const find = (events, id) => events.find(event => event.type === 'delivery/message' && event.data.deliveryId === id)
@@ -42,7 +42,7 @@ export function installDelivery(ctx, runtime) {
         } finally { await handle.close() }
       }
       const result = { messageId: event.data.message.id, acceptedSeq: event.seq }
-      store.completeDelivery(row.deliveryId, result)
+      deliveries.complete(row.deliveryId, result)
       return { ...receipt(row), ...result }
     })
     // The writer queue ends before notifying; the durable row survives any outlet failure.
@@ -51,7 +51,7 @@ export function installDelivery(ctx, runtime) {
     return result
   }
   const recovery = (async () => {
-    for (const row of store.pendingDeliveries()) {
+    for (const row of deliveries.pending()) {
       try { await settle(row) }
       catch (error) { ctx.logger('ourfairy-delivery').warn('pending delivery %s: %s', row.deliveryId, error.message) }
     }
@@ -59,25 +59,25 @@ export function installDelivery(ctx, runtime) {
   const deliver = async (agent, callId, { recipientShortId, text, files = [] }, signal) => {
     await recovery
     const senderShortId = shortIdOf(agent.session.header.owner)
-    const sender = store.userByShortId(senderShortId)
+    const sender = users.byShortId(senderShortId)
     if (!sender) throw new SessionScopeError(403, 'delivery/unknown-sender', 'delivery requires an active session owner')
-    if (!Number.isSafeInteger(recipientShortId) || !store.userByShortId(recipientShortId)) {
+    if (!Number.isSafeInteger(recipientShortId) || !users.byShortId(recipientShortId)) {
       throw new SessionScopeError(404, 'delivery/unknown-recipient', 'name an existing user short number')
     }
     if (typeof text !== 'string' || !text.trim()) throw new SessionScopeError(400, 'delivery/invalid-text', 'provide the exact text to deliver')
     files = fileSelectors(files)
-    const target = store.userByShortId(recipientShortId)
+    const target = users.byShortId(recipientShortId)
     const primary = await ctx.ourfairySessions.primary(target)
     const deliveryId = createHash('sha256').update(JSON.stringify([agent.session.id, callId])).digest('hex')
     return runtime.runDelivery(deliveryId, async () => {
-      let row = store.prepareDelivery({ deliveryId, senderShortId, senderSessionId: agent.session.id,
+      let row = deliveries.prepare({ deliveryId, senderShortId, senderSessionId: agent.session.id,
         recipientShortId, sessionId: primary.id, text, files: files.map(selector => ({ selector, prepared: null })) })
       for (let index = 0; index < row.files.length; index++) {
         if (row.files[index].prepared !== null) continue
         const prepared = await ctx.ourfairyAttachments.prepareDeliveryFile(agent, row.files[index].selector, signal)
         const bytes = row.files.reduce((sum, file) => sum + (file.prepared?.original.bytes ?? 0), prepared.original.bytes)
         if (bytes > MAX_MESSAGE_BYTES) throw new SessionScopeError(413, 'delivery/too-large', 'delivery files exceed 64 MiB')
-        row = store.prepareDeliveryFile(deliveryId, index, prepared)
+        row = deliveries.prepareFile(deliveryId, index, prepared)
       }
       return settle(row)
     })

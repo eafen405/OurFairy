@@ -146,13 +146,19 @@ export function postHandler({ fence, handle, HttpError = IdentityError, codePref
 /**
  * Build the identity request handlers.
  *
+ * The store is passed alongside the service, not read back from it: the service
+ * keeps the store private, and registration and sign-in have no identity rule
+ * of their own, so these routes call the store directly rather than through a
+ * forwarder that adds nothing.
+ *
  * @param options - the identity service plus the fence every path applies first.
  * @param options.service - live identity service.
+ * @param options.store - the package's business store, for the two rule-free routes.
  * @param options.fence - Connection's Host/Origin fence; product-owned routes
  * authenticate themselves but must never skip this.
  * @returns one handler per path in {@link IDENTITY_PATHS}.
  */
-export function identityHandlers({ service, fence }) {
+export function identityHandlers({ service, store, fence }) {
   /** Resolve the caller from the presented credential, refusing an anonymous one. */
   const callerOf = (request) => {
     const user = service.authenticateRequest(request)
@@ -176,11 +182,11 @@ export function identityHandlers({ service, fence }) {
     })],
     ['/identity/register', post(async (body) => ({
       ok: true,
-      ...service.store.register(body),
+      ...store.register(body),
     }))],
     ['/identity/sign-in', post(async (body) => ({
       ok: true,
-      ...service.store.signIn(body),
+      ...store.signIn(body),
     }))],
     ['/identity/session', post(async (_body, request) => ({
       ok: true,
