@@ -86,14 +86,14 @@ FINAL_SHA: `957bd41853198c2305c625ea8e34b000a9c874a3`
    （full-acceptance-final.log）
 ```
 
-条数来自 `app/build/test-results/testDebugUnitTest/*.xml` 汇总，不是只看 BUILD SUCCESSFUL。
+条数来自  汇总，不是只看 BUILD SUCCESSFUL。
 基线 69 套件 / 515 条；本次 70/520 的增量来自集成分支并入的新套件
 （`RemoteActivityTrustTest` 等），非本票新增。
 
 中途两次运行一并留档，可见合并逐步并入的内容：
-- `full-acceptance.log`：合并前（tip `771bffd1`）69 suites / 515 tests 全绿；
-- `full-acceptance-post-merge.log`：合并 `5d8efe42` 后 69 suites / 516 tests 全绿；
-- `full-acceptance-final.log`：合并 `07adb343` 后 70 suites / 520 tests 全绿（FINAL_SHA）。
+- 合并前（tip `771bffd1`）69 suites / 515 tests 全绿；
+- 合并 `5d8efe42` 后 69 suites / 516 tests 全绿；
+- 合并 `07adb343` 后 70 suites / 520 tests 全绿（FINAL_SHA）。
 
 ## 未完成项 / 说明
 
@@ -117,7 +117,7 @@ $ git rev-parse 957bd41853198c2305c625ea8e34b000a9c874a3^{tree}  -> 27efb0c15775
 $ git rev-parse fcba0647041f2810c2a1d89adaa3b4d0f826dfff^{tree}  -> 27efb0c15775c9fdeb0bb419133fe1367eee9f5b
 ```
 
-  合并后源树与实现者验收的 FINAL_SHA 完全相同，故不重复跑全量，复用实现者在同一源树上的完整验收：**70 套件 / 520 条 / 0 失败 + `:app:assembleDebug` BUILD SUCCESSFUL**（`full-acceptance-final.log`）。
+  合并后源树与实现者验收的 FINAL_SHA 完全相同，故不重复跑全量，复用实现者在同一源树上的完整验收：**70 套件 / 520 条 / 0 失败 + `:app:assembleDebug` BUILD SUCCESSFUL**。
 - **合并后定向回归**（rikkahub 主 checkout，tip `fcba0647`）：
 
 ```bash
@@ -128,5 +128,5 @@ export PATH=/tmp/ourfairy-bin:$PATH
   -Dorg.gradle.jvmargs='-Xmx5g -Dfile.encoding=UTF-8' --max-workers=3 --parallel --console=plain
 ```
 
-  **BUILD SUCCESSFUL in 18s**；按 `app/build/test-results/testDebugUnitTest/*.xml` 统计 **1 套件 / 18 条 / 0 失败 / 0 跳过**（`targeted-regression-post-merge.log`）。
+  * *BUILD SUCCESSFUL in 18s**；按  统计 **1 套件 / 18 条 / 0 失败 / 0 跳过**。
 - 未改实现者代码：merger 只做合并、核对、证据收录与 `combo.json` pin 回写。

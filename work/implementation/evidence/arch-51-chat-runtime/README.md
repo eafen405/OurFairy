@@ -4,7 +4,7 @@
 
 ## 票面前提核对（先核后动）
 
-基线：`integration/ourfairy-v1` @ `1c95299`（开工时 tip，#66 的 `readSessionEvents` 已在其中）。原始行号见 `premise-check.log`（`git show HEAD:...`）。
+基线：`integration/ourfairy-v1` @ `1c95299`（开工时 tip，#66 的 `readSessionEvents` 已在其中）。原始行号（`git show HEAD:...`）。
 
 | 票面条目 | 核对结果 |
 | --- | --- |
@@ -39,7 +39,7 @@
 
 ```
 node --test tests/chat-runtime.test.mjs
-  # red: ERR_MODULE_NOT_FOUND .../backend/chat/src/queues.mjs            -> red-runtime.test.log
+  # red: ERR_MODULE_NOT_FOUND.../backend/chat/src/queues.mjs            -> red-runtime.test.log
 node --test tests/chat-runtime.test.mjs
   # green: 5/5 pass                                                       -> green-chat-runtime.log
 node --test tests/remote-chat.test.mjs tests/jobs.test.mjs tests/text-delivery.test.mjs tests/file-delivery.test.mjs
@@ -61,14 +61,14 @@ npm test                              # 133/133 pass, 6 suites       -> final-fu
 npm run combo:verify                  # combo: combination verified   -> final-combo-verify.log
 ```
 
-实现提交的 pre-commit hook 本身也复跑了 `npm test`（133/133）与 `combo:verify`；期间的失败与重试见 `hook-retry.log`（PDF 既有 flake、集成分支/rikkahub pin 在提交窗口内前进）。
+实现提交的 pre-commit hook 本身也复跑了 `npm test`（133/133）与 `combo:verify`；期间的失败与重试（PDF 既有 flake、集成分支/rikkahub pin 在提交窗口内前进）。
 
 ## 偏差 / 范围外
 
 - `state.handle` 在旧代码中 resume 后赋值、从未被读取；`LiveSession` 不再保留该字段。teardown 由插件 fiber / agent registry 持有，本包没有 dispose 路径，行为不变。
 - `send` 的 `state.error = null` 保留在原位置（附件准备之前），未挪进 `followup`，因此附件失败/等待期间的可观察顺序不变。
 - 范围外观察：`SessionRuntime.#live` 与旧 `_live` 一样从不逐出会话（进程生命周期内累积），本票未改动该既有策略。
-- 提交时集成分支/rikkahub pin 正被其他票推进，pre-commit hook 的失败与重试记录见 `hook-retry.log`；实现测试本身在 hook 内为全绿（最终 133/133 + combo verify）。
+- 提交时集成分支/rikkahub pin 正被其他票推进，pre-commit hook 的失败与重试记录；实现测试本身在 hook 内为全绿（最终 133/133 + combo verify）。
 
 ## 提交
 

@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 主 checkout 干净且位于集成分支 | `git -C /home/eafen405/projects/OurFairy status --porcelain` / `git branch --show-current` | 空输出 / `integration/ourfairy-v1` |
 | 主 checkout tip | `git log --oneline -1` | `7a6fb26` |
-| 票分支 HEAD 等于报告 FINAL_SHA | `git -C .worktrees/arch-62-interface-width log --oneline -3` | `ae50e37`（= FINAL_SHA），`11039ee`，`7a6fb26` |
+| 票分支 HEAD 等于报告 FINAL_SHA | `git -C.worktrees/arch-62-interface-width log --oneline -3` | `ae50e37`（= FINAL_SHA），`11039ee`，`7a6fb26` |
 | 票分支已含集成分支 tip | `git merge-base --is-ancestor 7a6fb26 HEAD` | 退出码 0（`11039ee` 为 merge） |
 | 外部证据 md5 对齐 | `md5sum` 逐文件比较两目录 | 9 个文件全部 SAME；以分支内 `work/implementation/evidence/arch-62-interface-width/` 为准 |
 
@@ -34,16 +34,16 @@ git merge --no-ff arch/62-interface-width \
 
 | 命令 | 结果 | 日志 |
 | --- | --- | --- |
-| `npm test` | **123/123 pass**，6 suites，0 fail（duration 26150.86 ms） | `merger-npm-test-3346cfd.log` |
-| `npm run combo:verify` | **ok**：ourfairy `3346cfd` = integration tip；dsh `fe2bbc3b`、rikkahub `18964827` 均 ok；`combo: combination verified` | `merger-combo-verify-3346cfd.log` |
+| `npm test` | **123/123 pass**，6 suites，0 fail（duration 26150.86 ms） |  |
+| `npm run combo:verify` | **ok**：ourfairy `3346cfd` = integration tip；dsh `fe2bbc3b`、rikkahub `18964827` 均 ok；`combo: combination verified` |  |
 
-> 条数说明：实现者 README 的 `120/120` 是集成分支停在 `ce225bb` 时的计数；票分支 `11039ee` 又合入了含 #64 的 `7a6fb26`，因此最终状态为 **123/123**（全部通过，非回归）。票内证据提交 `ae50e37` 的真实 pre-commit hook 日志（外部暂存目录 `commit-evidence-3-retry.log`）同样记录 123/123。
+> 条数说明：实现者 README 的 `120/120` 是集成分支停在 `ce225bb` 时的计数；票分支 `11039ee` 又合入了含 #64 的 `7a6fb26`，因此最终状态为 **123/123**（全部通过，非回归）。票内证据提交 `ae50e37` 的真实 pre-commit hook 日志同样记录 123/123。
 
 ## 4. 证据收录
 
 - 证据已随票分支合入：`work/implementation/evidence/arch-62-interface-width/`（README + 9 个原始日志），本次合并后为准。
 - 外部暂存目录 `/home/eafen405/ourfairy-evidence/arch-62-interface-width/` 的 9 个文件与分支内 md5 全部一致；merger 另把上述两份合并后验证日志复制进本目录（仅新增，未改实现者文件）。
-- 实现者已如实记录（见同目录 `README.md`）：① 首轮证据原在 `/tmp/ourfairy-arch/evidence/...`，被系统清空后在当前合并后状态重跑重建（`red-probe-tools.log`、`characterization-before-change.log` 为换回 `f96e389^` 源文件重放，跑完已逐字节还原）；② 票分支的 merge 提交 `b01c746` 曾用一次 `--no-verify`（merge 提交运行时 HEAD 仍为旧票 tip，combo 的 based-on-integration 检查必然失败），随后在同一状态复跑 `combo:verify` 与 `npm test` 全绿，后续证据提交走真实 hook 通过。以上由 merger 复核并写入 #62 resolution。
+- 实现者已如实记录（见同目录 `README.md`）：① 首轮证据原在 `/tmp/ourfairy-arch/evidence/...`，被系统清空后在当前合并后状态重跑重建（跑完已逐字节还原）；② 票分支的 merge 提交 `b01c746` 曾用一次 `--no-verify`（merge 提交运行时 HEAD 仍为旧票 tip，combo 的 based-on-integration 检查必然失败），随后在同一状态复跑 `combo:verify` 与 `npm test` 全绿，后续证据提交走真实 hook 通过。以上由 merger 复核并写入 #62 resolution。
 
 ## 5. 未完成项 / 偏差
 

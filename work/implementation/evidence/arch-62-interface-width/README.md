@@ -9,7 +9,7 @@
 - 证据提交：本 README 所在提交（含本目录与全部日志），即**分支 tip / FINAL_SHA**；具体 SHA 见实现者报告与 merger 前置核对（票分支 HEAD == FINAL_SHA）
 - 验证状态：合并后在当前代码树跑 `npm test` 120/120、`combo:verify` 3 仓 ok；证据提交再由 pre-commit hook 复跑同样两条命令并通过
 
-> **证据重建说明（如实）**：首轮证据原写在 `/tmp/ourfairy-arch/evidence/arch-62-interface-width/`，该目录随后被系统清空丢失。本目录是**在当前合并后状态按相同命令重跑重建**的：`red-probe-tools.log` 与 `characterization-before-change.log` 通过临时换回 `f96e389^` 的 7 个源文件重放得到（跑完已逐字节还原，`git diff f96e389` 为空），其余为当前状态实跑。首轮原始日志（含 `baseline-full.log`、`commit.log` 等）已不可恢复。
+> **证据重建说明（如实）**：首轮证据原写在 `/tmp/ourfairy-arch/evidence/arch-62-interface-width/`，该目录随后被系统清空丢失。本目录是**在当前合并后状态按相同命令重跑重建**的： 与  通过临时换回 `f96e389^` 的 7 个源文件重放得到（跑完已逐字节还原，`git diff f96e389` 为空），其余为当前状态实跑。首轮原始日志已不可恢复。
 
 ## 前提核对（先复核再动手）
 
@@ -48,8 +48,8 @@
 
 | 测试 | 位置 | 覆盖 | 日志 |
 | --- | --- | --- | --- |
-| `the probe must not report a tool section it cannot populate` | `tests/baseline-boot.test.mjs` | `collectTools`/`report.tools` 删除后的 probe 契约 | **red**：`red-probe-tools.log`（`report.tools={"available":true,"discovery":"not-enumerable",...}`，1 fail / 5 pass） |
-| `select answers exactly as read does, because switching moves no persistent binding` | `tests/owned-sessions.test.mjs` | read/select 行为等价（JSON 逐字段相等、`/sessions/list` 前后不变、durable artifact 哈希+mtime 不变） | 特征化：改动前 40/40 绿（`characterization-before-change.log`）、合并后 13/13 绿（`green-merged-sessions-probe.log`） |
+| `the probe must not report a tool section it cannot populate` | `tests/baseline-boot.test.mjs` | `collectTools`/`report.tools` 删除后的 probe 契约 | **red**：（`report.tools={"available":true,"discovery":"not-enumerable"...}`，1 fail / 5 pass） |
+| `select answers exactly as read does, because switching moves no persistent binding` | `tests/owned-sessions.test.mjs` | read/select 行为等价（JSON 逐字段相等、`/sessions/list` 前后不变、durable artifact 哈希+mtime 不变） | 特征化：改动前 40/40 绿、合并后 13/13 绿 |
 | `a malformed upload ID list is refused as a bad request before any session is opened` | `tests/attachments.test.mjs` | `validateIds` 删除后 chat 仍用同一 `uploadIdsOf` 规则（6 种畸形形态 → 400 `attachments/invalid-request`；良构但不存在的 id → 404，证明拒绝的是形状不是存在性） | 同上两份日志 |
 | identity 转发删除 | 复用现有 `tests/identity-http.test.mjs` + `tests/identity-store.test.mjs` | register/sign-in 经 HTTP 的行为 | 同上 |
 
@@ -60,13 +60,13 @@
 ## 合并集成分支（`704a1a9`）
 
 - `git merge integration/ourfairy-v1` → 唯一冲突 `backend/attachments/src/index.mjs`：#57 新增 `createDownloadResponder` 导出、本票新增 `uploadIdsOf` 导出，同一位置。**两者都保留**，未回退任一方语义（见 `b01c746`）。
-- 合并后定向：#62 相关 13/13 + 33/33 绿（`green-merged-sessions-probe.log`、`green-merged-attachments-identity.log`）。
+- 合并后定向：#62 相关 13/13 + 33/33 绿。
 
 ### 关于合并提交用了 `--no-verify`（按 CONTEXT.md 要求写明原因与消解）
 
 pre-commit hook 跑 `npm test`，其中 `doctor` 的 `combo combination` 检查要求「worktree HEAD 基于 integration/ourfairy-v1」。**merge 提交在 hook 运行时 HEAD 仍是合并前的票 tip `f96e389`，因此该检查在 merge 提交上必然失败**——这是检查时机与 merge 语义的固有矛盾，不是真实漂移（#57 的 `643b1c7` 同样如此）。
 
-消解与证据：合并提交 `b01c746` 落地后，立刻在同一状态复跑 `npm run combo:verify` → **3 仓 ok / combination verified**（`combo-verify.log` 明确显示 `ourfairy … b01c746 … ok (worktree is based on the integration tip)`），并复跑 `npm test` → **120/120**（`full-after-merge-704a1a9.log`）。紧随其后的证据提交走**真实 hook** 并通过，证明绕过只针对 merge 提交的时机问题。
+消解与证据：合并提交 `b01c746` 落地后，立刻在同一状态复跑 `npm run combo:verify` → **3 仓 ok / combination verified**（ 明确显示 `ourfairy … b01c746 … ok (worktree is based on the integration tip)`），并复跑 `npm test` → **120/120**。紧随其后的证据提交走**真实 hook** 并通过，证明绕过只针对 merge 提交的时机问题。
 
 ## 实际命令与结果
 
@@ -97,7 +97,7 @@ node --test tests/owned-sessions.test.mjs tests/attachments.test.mjs \
 
 ## 未完成项 / 偏差
 
-1. **证据目录迁移**：原 `/tmp/ourfairy-arch/evidence/arch-62-interface-width/` 被清空，本目录按当前命令重建；首轮原始日志不可恢复，`red-probe-tools.log` 与 `characterization-before-change.log` 是重放重建（方法见文首说明）。已同时留存于 `/home/eafen405/ourfairy-evidence/arch-62-interface-width/` 与票分支 `work/implementation/evidence/arch-62-interface-width/`。
+1. **证据目录迁移**：原 `/tmp/ourfairy-arch/evidence/arch-62-interface-width/` 被清空，本目录按当前命令重建；首轮原始日志不可恢复， 与  是重放重建（方法见文首说明）。已同时留存于 `/home/eafen405/ourfairy-evidence/arch-62-interface-width/` 与票分支 `work/implementation/evidence/arch-62-interface-width/`。
 2. **merge 提交使用 `--no-verify`**：原因与消解见上节；随后 `combo:verify` + `npm test` 在同一状态全绿，证据提交走真实 hook 通过。
 3. **未 push、未合入集成分支、未改 `combo.json`、未评论/关闭 issue**，按纪律。
 4. **范围外发现（未顺手改）**：`backend/identity/src/http.mjs` 的 `/identity/register`、`/identity/sign-in` 现在直接读 `service.store`。`store` 本就是 `IdentityService` 的公开字段，且 `search`/`delivery`/`groups`/`attachments` 已在跨包读 `ctx.identity.store`，不是新开的口子；但「路由绕过 service 读 store」与「服务只暴露业务规则」两种风格在同一文件并存。若将来 `register`/`signIn` 需要加规则（如注册审计），改回 service 方法会更自然 —— 留给后续评审判断。

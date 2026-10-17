@@ -27,19 +27,19 @@ All commands ran in the ticket worktree with `ANDROID_HOME=/home/eafen405/Androi
 
 Initial red:
 `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteChatStateTest' -Dorg.gradle.jvmargs='-Xmx8g -Dfile.encoding=UTF-8' --max-workers=4 --parallel`
-`state-red.log`: failed expected compilation before new API/state existed.
+failed expected compilation before new API/state existed.
 
 Transport regression red:
 `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteChatApiTest' -Dorg.gradle.jvmargs='-Xmx8g -Dfile.encoding=UTF-8' --max-workers=4 --parallel`
-`api-backpressure-red.log`: 2 failures, terminal snapshot dropped and refusal code lost.
+2 failures, terminal snapshot dropped and refusal code lost.
 
 State lifecycle red:
 `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteChatStateTest' -Dorg.gradle.jvmargs='-Xmx8g -Dfile.encoding=UTF-8' --max-workers=4 --parallel`
-`state-lifecycle-red.log`: 2 failures, observer reopen orphaned send result and unflushed message incorrectly settled unknown acceptance.
+2 failures, observer reopen orphaned send result and unflushed message incorrectly settled unknown acceptance.
 
 Final command:
 `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.*' --tests 'me.rerere.rikkahub.ui.identity.*' :app:assembleDebug -Dorg.gradle.jvmargs='-Xmx8g -Dfile.encoding=UTF-8' --max-workers=4 --parallel`
-`final-build-tests.log`: BUILD SUCCESSFUL, 26s. `test-summary.json`: 68/68 tests, zero failures/errors/skips; remote API12 + state8 plus related identity/session regression tests. Debug arm64, x86_64 and universal APKs built; paths/size/hash in `apk.json`.
+BUILD SUCCESSFUL, 26s. `test-summary.json`: 68/68 tests, zero failures/errors/skips; remote API12 + state8 plus related identity/session regression tests. Debug arm64, x86_64 and universal APKs built; paths/size/hash in `apk.json`.
 
 Transport tests use actual loopback HTTP/SSE with JDK HttpServer as network/backend substitute. State tests use controlled public backend Flow/operations. These do not substitute for APK runtime acceptance.
 

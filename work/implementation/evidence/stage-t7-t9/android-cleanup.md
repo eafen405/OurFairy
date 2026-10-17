@@ -29,22 +29,22 @@ The final product includes all intended API/DTO and picker/SAF behaviors from th
 
 | Worktree | Retained branch / SHA | Result |
 | --- | --- | --- |
-| 09-attachments | ticket/09-attachments / bf4db2d6ff29df9d1fa195fa81460ae12757e21d | Normal `git worktree remove .worktrees/09-attachments` refused: `fatal: working trees containing submodules cannot be moved or removed`. Left present and clean. |
-| 09-attachments-api | subtask/09-attachments-api / 20c5a0a3d20b9a1d2380d7e03eb58ad73468d6c8 | Original 6 source files committed locally with `archive: preserve original T9 mcode attachment API task`; normal `git worktree remove .worktrees/09-attachments-api` refused the same submodule limitation. Left present and clean. |
-| 09-attachments-ui | subtask/09-attachments-ui / e57e9108413f20e5ac7bd3bf24b0f13588a72f31 | Original 2 source files committed locally with `archive: preserve original T9 mcode picker UI task`; normal `git worktree remove .worktrees/09-attachments-ui` succeeded. |
+| 09-attachments | ticket/09-attachments / bf4db2d6ff29df9d1fa195fa81460ae12757e21d | Normal `git worktree remove.worktrees/09-attachments` refused: `fatal: working trees containing submodules cannot be moved or removed`. Left present and clean. |
+| 09-attachments-api | subtask/09-attachments-api / 20c5a0a3d20b9a1d2380d7e03eb58ad73468d6c8 | Original 6 source files committed locally with `archive: preserve original T9 mcode attachment API task`; normal `git worktree remove.worktrees/09-attachments-api` refused the same submodule limitation. Left present and clean. |
+| 09-attachments-ui | subtask/09-attachments-ui / e57e9108413f20e5ac7bd3bf24b0f13588a72f31 | Original 2 source files committed locally with `archive: preserve original T9 mcode picker UI task`; normal `git worktree remove.worktrees/09-attachments-ui` succeeded. |
 
 No archive branches were merged/pushed. Earlier 03-identity, 04-owned-sessions and review-24-26-identity worktrees and all existing branches retained unchanged.
 
 ## Task-generated ignored contents and submodules
 
-Before removal, inspected `git ls-files --others --ignored --exclude-standard --directory` for each worktree. Only task build/dependency products were present: .gradle/.kotlin/build outputs, module build dirs, generated web static/build files, workspace .cxx where used, ignored fake-key google-services.json and main local.properties. Main node_modules symlink had already been unlinked after validation. Both scratch node_modules were actual task-generated pnpm install directories (not symlinks); their top-level contained only .pnpm/metadata, .bin and the project's declared package dependencies. They were not a source archive and were left to normal worktree removal; UI copies removed by successful normal removal, API copies remain with its refused worktree.
+Before removal, inspected `git ls-files --others --ignored --exclude-standard --directory` for each worktree. Only task build/dependency products were present:.gradle/.kotlin/build outputs, module build dirs, generated web static/build files, workspace.cxx where used, ignored fake-key google-services.json and main local.properties. Main node_modules symlink had already been unlinked after validation. Both scratch node_modules were actual task-generated pnpm install directories (not symlinks); their top-level contained only.pnpm/metadata.bin and the project's declared package dependencies. They were not a source archive and were left to normal worktree removal; UI copies removed by successful normal removal, API copies remain with its refused worktree.
 
 Main/API material3/material-color-utilities were initialized at the pinned 5b3618b16fdc3825e21d5679bafd144662088ea1. Each submodule `git status --porcelain --untracked-files=all` was empty. Ran normal `git submodule deinit -- material3/material-color-utilities` (no force), which cleared the task checkout successfully. Git still refuses main/API worktree removal because submodule repository administration remains associated with them. Per instruction, stopped and reported; no manual metadata deletion, force removal or recursive deletion attempted.
 
 ## Final state / outstanding cleanup
 
 - UI worktree removed normally. Main and API worktrees remain clean due to Git's submodule worktree limitation; Lead informed immediately.
-- Root product tracked diff remains empty and product HEAD remains e58352f202ae1add0e9c4bd08b14807f4c84a9bb; root `?? .worktrees/` was pre-existing.
+- Root product tracked diff remains empty and product HEAD remains e58352f202ae1add0e9c4bd08b14807f4c84a9bb; root `??.worktrees/` was pre-existing.
 - All tasks launched by this agent have returned: two mcode runs status completed exit0; all Gradle/verification sessions returned; final UI remove session returned exit0. No agent-owned implementation/build work remains running (shared pre-existing Gradle daemons are not stopped).
 - No extra feature/test work started. Stage remains stopped after review.
 
@@ -62,8 +62,8 @@ Immediately before execution, rechecked for both exact paths:
 Commands in /home/eafen405/projects/rikkahub, all successful exit0:
 
 ```sh
-git worktree remove --force .worktrees/09-attachments-api
-git worktree remove --force .worktrees/09-attachments
+git worktree remove --force.worktrees/09-attachments-api
+git worktree remove --force.worktrees/09-attachments
 ```
 
-All three this-round Android worktrees are now removed. UI was removed by normal non-force command; API/main required the explicitly authorized submodule switch. Final `git worktree list --porcelain` retains only root product checkout and older 03-identity, 04-owned-sessions, review-24-26-identity unchanged. Final `git status --short` is the same pre-existing `?? .worktrees/`; no tracked root edit. All four product/ticket/archive refs remain exactly as listed above. Final command session returned exit0; no agent-owned task remains running.
+All three this-round Android worktrees are now removed. UI was removed by normal non-force command; API/main required the explicitly authorized submodule switch. Final `git worktree list --porcelain` retains only root product checkout and older 03-identity, 04-owned-sessions, review-24-26-identity unchanged. Final `git status --short` is the same pre-existing `??.worktrees/`; no tracked root edit. All four product/ticket/archive refs remain exactly as listed above. Final command session returned exit0; no agent-owned task remains running.

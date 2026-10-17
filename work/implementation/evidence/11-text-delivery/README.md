@@ -35,24 +35,24 @@ separate compatibility regressions and evidence.
 Commands ran from this ticket worktree, with real profile/Loader, native JSONL,
 business SQLite, local HTTP and a controlled external model HTTP server.
 
-1. `node --test tests/text-delivery.test.mjs` → `01-red.log`: failed because
-   `deliver_message` was absent. `02-green.log`: cold delivery passed, receiver
+1. `node --test tests/text-delivery.test.mjs`: failed because
+   `deliver_message` was absent. : cold delivery passed, receiver
    inference count zero.
-2. Same command → `03-live.log`: 2/2, independent live attempt and later model
-   input includes delivered text. `04-recovery.log`: 4/4, concurrent primary
+2. Same command: 2/2, independent live attempt and later model
+   input includes delivered text. : 4/4, concurrent primary
    creation and senders, stable retry and real SQLite update-failure window.
-3. Same command → `05-recovery-red.log`: a pending startup update failure
-   permanently rejected later calls. `06-recovery-green.log`: 4/4 after keeping
+3. Same command: a pending startup update failure
+   permanently rejected later calls. : 4/4 after keeping
    individual pending rows retryable.
-4. Same command → `07-flush.log`: 5/5. A test-only native `session/flush`
+4. Same command: 5/5. A test-only native `session/flush`
    listener rejects one durability barrier after the formal delivery append;
    sender gets no delivery receipt and the row stays pending. Exact retry
    confirms one message. This is an injected barrier failure, not a real disk EIO.
-5. Same command → `08-notification-red.log`: async notification rejection exited
+5. Same command: async notification rejection exited
    the backend (subsequent HTTP ECONNREFUSED). The bounded fix awaits/catches the
    outlet after durable write; no notification framework is added.
 6. `node --test tests/text-delivery.test.mjs tests/identity-store.test.mjs tests/remote-chat.test.mjs`
-   → `09-final-targeted.log`: 32/32. `10-sse-targeted.log`: 32/32 after adding
+32/32. : 32/32 after adding
    actual SSE receipt while the recipient attempt remains active and unchanged.
 7. `git diff --check` → no output, success.
 
@@ -76,7 +76,7 @@ its captured request count proves no recipient inference in the covered cases.
 Merged current `integration/ourfairy-v1` tip `ccaebef` into the ticket as
 `9768d8b`; no conflict. This brings the paired Android T11 compatibility commit
 `d80dfcb9a3ded6e7` through the integration combo. `node scripts/combo.mjs verify`
-passes (`11-combo.log`), and `git diff --check` passes. T10 source is intentionally
+passes, and `git diff --check` passes. T10 source is intentionally
 not imported from its unfinished branch; its owner already confirmed native
 query extraction includes `delivery/message`. The merger should run T10 product
 query checks against actual T11 deliveries once both sources are integrated.

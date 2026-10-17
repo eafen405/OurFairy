@@ -12,14 +12,14 @@ Authenticated propose → bounded binary chunk → complete routes, chat upload 
 
 Commands run in this ticket worktree, using the real launcher/profile/Loader, temporary product homes, real SQLite and compressed JSONL/CAS; only the external model HTTP service is a double:
 
-- `node --test tests/attachments.test.mjs` — initial `01-red.log` proves missing propose route (404); `02-green-original.log` **1/1**, upload → concurrent accepted send → original download → native restart → same receipt/bytes.
-- Next authorization slice: `03-red-authorization.log` showed owned-session errors incorrectly surfaced as 500; `04-green-authorization.log` **2/2** after using the shared SessionScopeError boundary. Includes unfinished inputs, same hash different owners, foreign owned session/admin denial and changed request attachments conflict.
-- `06-green-expiry-image.log` **4/4** adds lost chunk ACK repeat, conflicting bytes, explicit expiry fault setup in the real SQLite DB, admitted retry after expiry/restart, actual official provider image base64 request and original PNG download, plus malformed-image rejection. `05-expiry-image.log` is a fixture failure: the initially borrowed PNG was invalid; switching to the native store's known-valid PNG required no product code change. No cloud inference occurred.
-- `07-real-file-sandbox.log` **5/5**, including model-projected handle used by actual native read/write and bwrap `bash`, cross-user/same-owner-other-session guessed-path denials, actual readonly mutation refusal and cold-restart grant reconstruction.
-- `node --test 'tests/**/*.test.mjs'` — `08-product-suite.log` **71/71**, after normal merge of the formally published T8 tip.
-- Final bounded additions, `node --test tests/attachments.test.mjs tests/identity-store.test.mjs` — `10-final-related.log` **23/23**. Asserts shell readonly failure AND original download bytes unchanged, frozen v3 credentials/group membership survive v4, and upload-table timestamps/person/deletion/no-FK/no-unique-secondary-index rules. No production behavior changed after the full suite apart from comment wording.
-- `node scripts/combo.mjs verify` — `11-combo.log`, passed.
-- `node scripts/ourfairy-backend.mjs doctor --home /tmp/ourfairy-t9-doctor --json` — `12-doctor.log`, passed.
+- `node --test tests/attachments.test.mjs` — initial  proves missing propose route (404);  **1/1**, upload → concurrent accepted send → original download → native restart → same receipt/bytes.
+- Next authorization slice:  showed owned-session errors incorrectly surfaced as 500;  **2/2** after using the shared SessionScopeError boundary. Includes unfinished inputs, same hash different owners, foreign owned session/admin denial and changed request attachments conflict.
+-  **4/4** adds lost chunk ACK repeat, conflicting bytes, explicit expiry fault setup in the real SQLite DB, admitted retry after expiry/restart, actual official provider image base64 request and original PNG download, plus malformed-image rejection.  is a fixture failure: the initially borrowed PNG was invalid; switching to the native store's known-valid PNG required no product code change. No cloud inference occurred.
+-  **5/5**, including model-projected handle used by actual native read/write and bwrap `bash`, cross-user/same-owner-other-session guessed-path denials, actual readonly mutation refusal and cold-restart grant reconstruction.
+- `node --test 'tests/**/*.test.mjs'` —  **71/71**, after normal merge of the formally published T8 tip.
+- Final bounded additions, `node --test tests/attachments.test.mjs tests/identity-store.test.mjs` —  **23/23**. Asserts shell readonly failure AND original download bytes unchanged, frozen v3 credentials/group membership survive v4, and upload-table timestamps/person/deletion/no-FK/no-unique-secondary-index rules. No production behavior changed after the full suite apart from comment wording.
+- `node scripts/combo.mjs verify` —, passed.
+- `node scripts/ourfairy-backend.mjs doctor --home /tmp/ourfairy-t9-doctor --json` —, passed.
 - `git diff --check` passed.
 
 An additional host-level CAS tampering test was proposed, then excluded by Lead as outside this personal project's required scope. It was removed and caused no implementation change; it is not an unresolved acceptance defect. The permission tests retain real script/tool mutation refusal and unchanged original downloads.

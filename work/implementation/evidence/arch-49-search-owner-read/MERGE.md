@@ -27,8 +27,8 @@ tree sha 相同 → 合并后源树与实现者验收的 FINAL_SHA 源树逐字�
 
 | 命令 | 结果 | 日志 |
 | --- | --- | --- |
-| `npm test` | **111 tests / 111 pass / 0 fail**，exit 0（基线 109 + 本票 2 条） | `merge-npm-test.log` |
-| `npm run combo:verify` | `combo: combination verified`，exit 0；ourfairy/dsh/rikkahub 三项 ok | `merge-combo-verify.log` |
+| `npm test` | **111 tests / 111 pass / 0 fail**，exit 0（基线 109 + 本票 2 条） |  |
+| `npm run combo:verify` | `combo: combination verified`，exit 0；ourfairy/dsh/rikkahub 三项 ok |  |
 
 `combo:verify` 明细：ourfairy `43208729f4840bc6` ok (worktree is the integration tip)、
 dsh `fe2bbc3b1c14efd7` ok、rikkahub `5d8efe425d4abb45` ok。
@@ -43,12 +43,11 @@ dsh `fe2bbc3b1c14efd7` ok、rikkahub `5d8efe425d4abb45` ok。
 实现者第一次 `git commit` 走 pre-commit hook 失败，失败项与本票改动无关：
 
 - `tests/lifecycle.test.mjs` 的 doctor 检查：rikkahub 检出 `5d8efe4` 与当时 combo.json 锁定的 `771bffd` 不一致
-  —— #61 刚合入 rikkahub、combo.json 重新 pin 尚未落地的中间态；`integration-doctor-baseline.log`
+  —— #61 刚合入 rikkahub、combo.json 重新 pin 尚未落地的中间态；
   证明该失败在未改动的主 checkout 集成分支上同样出现。
-- `tests/pdf.test.mjs` 的 resource-budget 用例在负载下偶发 `worker-unavailable`；单独重跑通过（`rerun-pdf.log`）。
-- 完整失败输出：`pre-commit-blocked.log`。
+- `tests/pdf.test.mjs` 的 resource-budget 用例在负载下偶发 `worker-unavailable`；单独重跑通过。
 
-实现者遂以 `--no-verify` 提交 `8c15dca`（`commit.log`），随后集成分支前进到 `fd7da7f`（已 pin rikkahub `5d8efe4`），
+实现者遂以 `--no-verify` 提交 `8c15dca`，随后集成分支前进到 `fd7da7f`（已 pin rikkahub `5d8efe4`），
 按协议 merge 集成分支得到 `9939b02`，合并后 `combo:verify` 与 `npm test` 均通过。
 
 **merger 侧消解**：合并提交 `4320872` 之后，在主 checkout 重跑 `npm test`（111/111）与 `combo:verify`（ok），

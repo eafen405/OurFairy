@@ -45,21 +45,20 @@ $ node --test tests/executable-claims.test.mjs
 ✔ the bundle declares the patch file its README calls the row set
 ℹ tests 3 / pass 3 / fail 0
 ```
-`green-executable-claims.log`
 
 Red 用变异重建（每次只改一处、跑完立刻还原；还原后 `git status --short` 均为空）：
 
 | 变异 | 失败断言 | 日志 |
 | --- | --- | --- |
-| 从 `commandDoctor` 删掉 `check('bundle agent model', ...)` 整块 | 断言 2：`doctor must run a "bundle agent model" check ... doctor ran ["node version",...,"model double"]` | `red-doctor-check-unwired.log` |
-| `cordis.patch.yml` 的 model 改成 `deepseek-flash-drifted` | 断言 1：`the agent-default-model row declares model deepseek-flash-drifted, combo.json locks deepseek-flash` | `red-model-drift.log` |
-| `backend/v1-bundle/package.json` 的 `dsh.bundle.patch` 改成 `./other.patch.yml` | 断言 3：`must declare dsh.bundle.patch ./cordis.patch.yml ... actual './other.patch.yml'` | `red-bundle-patch-pointer.log` |
+| 从 `commandDoctor` 删掉 `check('bundle agent model'...)` 整块 | 断言 2：`doctor must run a "bundle agent model" check... doctor ran ["node version"...,"model double"]` |  |
+| `cordis.patch.yml` 的 model 改成 `deepseek-flash-drifted` | 断言 1：`the agent-default-model row declares model deepseek-flash-drifted, combo.json locks deepseek-flash` |  |
+| `backend/v1-bundle/package.json` 的 `dsh.bundle.patch` 改成 `./other.patch.yml` | 断言 3：`must declare dsh.bundle.patch./cordis.patch.yml... actual './other.patch.yml'` |  |
 
 说明：`/tmp/ourfairy-arch` 在会话中断期间被清空，原始 red 日志丢失；上表是按同一变异重新跑出来的，
 不是原始那一次的拷贝。变异方法与结论与首次一致（首次另有一处混合变异同时触发两条断言，未保留）。
 
 基线对比（临时移走新测试文件后跑全量，随后还原）：`tests 118 / pass 118 / fail 0`
-（`baseline-without-new-test.log`）；带新测试为 121 条。差值 3 = 本票新增断言数。
+带新测试为 121 条。差值 3 = 本票新增断言数。
 
 ## 验收命令与结果
 
@@ -67,7 +66,7 @@ Red 用变异重建（每次只改一处、跑完立刻还原；还原后 `git s
 $ npm test
 ℹ tests 121 / pass 121 / fail 0
 ```
-`final-full-npm-test.log`（合并 `704a1a9` 之后跑）
+（合并 `704a1a9` 之后跑）
 
 ```
 $ npm run combo:verify
@@ -76,12 +75,11 @@ dsh       product/ourfairy-v1      fe2bbc3b1c14  ok
 rikkahub  product/ourfairy-v1      189648274074  ok
 combo: combination verified
 ```
-`combo-verify.log`
 
 有一次全量在并发负载下报了已记录的 PDF flake（`tests/pdf.test.mjs:161` 期望 `resource-limit`、
 实际 `worker-unavailable`，见 `work/implementation/evidence/17-pdf-text/`、`arch-49`/`arch-54` 的同名记录）。
-`full-npm-test-flake-pdf.log` 是该次原文；随后隔离重跑 `node --test tests/pdf.test.mjs` 5/5 通过
-（`pdf-rerun.log`），再跑全量 121/121 通过（`final-full-npm-test.log`）。未改 PDF 代码，未用 `--no-verify` 掩盖。
+ 是该次原文；随后隔离重跑 `node --test tests/pdf.test.mjs` 5/5 通过
+再跑全量 121/121 通过。未改 PDF 代码，未用 `--no-verify` 掩盖。
 
 `tests/helpers/backend.mjs` 在本票合并的 `704a1a9`（#57）中没有改动（`git diff 4ee6b39..704a1a9 -- tests/ scripts/ backend/` 为空），
 新测试仍用既有的 `runBackend` / `makeHome` / `removeHome` / `describeRun`，合并后全绿。
@@ -98,7 +96,6 @@ $ node scripts/ourfairy-backend.mjs doctor --json --home <tmp>
 bundle agent model -> True | deepseek-official/deepseek-flash declared in both combo.json and the bundle
 doctor exit=0
 ```
-`finding-doctor-accepts-prefix-drift.log`
 
 这正是 #64 主题的第四次实例：`combo.json` 与 README 说「the two declarations cannot drift apart」，
 而执行侧的检查在真实漂移（值被加后缀）下不失败。#46 的修复把死函数接进了 doctor，但没有把

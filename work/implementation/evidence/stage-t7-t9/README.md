@@ -68,11 +68,10 @@ not the staged two-axis code review scheduled after T7–T9.
 
 Actual commands on merged OurFairy:
 
-- `node scripts/combo.mjs verify`: exit 0 (`t7-merged-combo.log`).
+- `node scripts/combo.mjs verify`: exit 0.
 - `node scripts/ourfairy-backend.mjs doctor`: exit 0, all checks passed
-  (`t7-merged-doctor.log`).
 - `node --test tests/spaces.test.mjs`: exit 0, 7/7, no skips
-  (`t7-merged-runtime.log`), with real Loader/HTTP, SQLite/JSONL, files and
+with real Loader/HTTP, SQLite/JSONL, files and
   bubblewrap subprocesses; external model and package source are local
   deterministic fixtures. Network and shared dependency use succeeded.
 - `git diff --check`: exit 0.
@@ -102,13 +101,12 @@ the source and original logs, then independently ran the following on the
 merged tree, without repeating the full suite or initiating stage review:
 
 - `node --test tests/groups.test.mjs tests/identity-store.test.mjs`: 21/21,
-  no skips (`t8-merged-runtime.log`). This covers real chat/SQLite/JSONL,
+  no skips. This covers real chat/SQLite/JSONL,
   restricted subprocess file access, current membership revocation,
   restart, duplicate member updates and v1/v2 migrations; model HTTP is a
   deterministic double.
-- `node scripts/combo.mjs verify`: exit 0 (`t8-merged-combo.log`).
+- `node scripts/combo.mjs verify`: exit 0.
 - `node scripts/ourfairy-backend.mjs doctor --json`: `ok: true`
-  (`t8-merged-doctor.log`).
 - `git diff --check`: exit 0.
 
 Only OurFairy changed, so the exact external commits in `combo.json` remain
@@ -141,22 +139,21 @@ to [`09-attachments-android/`](../09-attachments-android/README.md).
 Independent checks on the merged trees:
 
 - `node --test tests/attachments.test.mjs tests/identity-store.test.mjs`:
-  23/23 with no skips (`t9-merged-backend.log`), using real product
+  23/23 with no skips, using real product
   HTTP/SQLite/JSONL/CAS and bwrap processes with external HTTP model double.
 - Android `ANDROID_HOME=/home/eafen405/Android/Sdk
-  PATH=/tmp/ourfairy-stage-review/bin:$PATH ./gradlew
+  PATH=/tmp/ourfairy-stage-review/bin:$PATH./gradlew
   :app:testDebugUnitTest --tests
   'me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest' --tests
   'me.rerere.rikkahub.data.remote.RemoteAttachmentApiTest'
   '-Dorg.gradle.jvmargs=-Xmx8g -Dfile.encoding=UTF-8' --max-workers=4
   --parallel --console=plain`: successful; 10/10, zero failures/errors/skips
-  (`t9-merged-android.log`, `t9-merged-android-tests.json`).
+  （`t9-merged-android-tests.json`）.
 - All three existing owner-built debug APK sizes and SHA-256 hashes match
   the original manifest, and their final tracked source tree equals the
   merged source (`t9-apk-verification.json`). No second APK build was run.
 - `node scripts/combo.mjs verify`, `node scripts/ourfairy-backend.mjs doctor
-  --json` and `git diff --check`: passed (`t9-merged-combo.log`,
-  `t9-merged-doctor.log`).
+  --json` and `git diff --check`: passed.
 - dsh's complete pre-existing dirty path set and all 16 SHA-256 hashes
   remain identical to the stage-start manifest.
 

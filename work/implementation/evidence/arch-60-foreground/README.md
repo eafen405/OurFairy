@@ -29,31 +29,29 @@
 
 ## TDD 证据
 
-- **Red 1（编译级）**：`red-1-compile.log` — 测试先写，接缝尚不存在：`Unresolved reference 'RemoteReceivePlatform'` + 构造参数类型全错位。
-- **行为级 Red（关键）**：`red-3-cached-foreground.log` — 在 green 实现上**临时还原**「构造时缓存 + lifecycle 回调维护」的旧写法，定向测试立即失败：
+- **Red 1（编译级）**： — 测试先写，接缝尚不存在：`Unresolved reference 'RemoteReceivePlatform'` + 构造参数类型全错位。
+- **行为级 Red（关键）**： — 在 green 实现上**临时还原**「构造时缓存 + lifecycle 回调维护」的旧写法，定向测试立即失败
   ```
   RemoteReceiveControllerTest > a decision taken between lifecycle callbacks follows the platform, not a remembered copy FAILED
   4 tests completed, 1 failed
   ```
   即：平台已答「后台」而 lifecycle 尚未回调时，缓存版不会停止观察——正是票面描述的分歧。恢复 green 实现后通过。
-  （`red-2-cached-foreground.log` 是同一实验的早期版本，当时测试 2 依赖了未启动 registry 的 `ON_STOP` 不派发这一副作用，已改成显式 `screens.start()` 后重跑，见 `red-3`。）
-- **Green**：`run-8.log` — `RemoteReceiveControllerTest` 4/4 通过。
+  （该截图是同一实验的早期版本，当时测试 2 依赖了未启动 registry 的 `ON_STOP` 不派发这一副作用，已改成显式 `screens.start()` 后重跑，见 `red-3`。）
+- **Green**： — `RemoteReceiveControllerTest` 4/4 通过。
 
 ## 命令与结果（均在最终合并状态 `1bfc24d5` 上复跑）
 
 ```
-./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.service.RemoteReceiveControllerTest*' ...
+./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.service.RemoteReceiveControllerTest*'...
   → BUILD SUCCESSFUL；TEST-...RemoteReceiveControllerTest.xml tests=4 failures=0
 
-./gradlew :app:testDebugUnitTest :app:assembleDebug ...
+./gradlew :app:testDebugUnitTest :app:assembleDebug...
   → BUILD SUCCESSFUL
   → app/build/test-results/testDebugUnitTest/*.xml 合计 suites=71 tests=524 failures=0 errors=0 skipped=0
   → app/build/outputs/apk/debug/app-universal-debug.apk（99,398,749 B）
 ```
 
 基线 69 套件 / 515 条 → 71 套件 / 524 条（新增 1 套件 4 条；另 1 套件/5 条来自期间合入的集成分支 #59）。
-
-日志：`red-1-compile.log`、`red-2-cached-foreground.log`、`red-3-cached-foreground.log`、`run-2..8.log`、`acceptance-1.log`、`acceptance-2-merged.log`。
 
 ## 未完成项与边界（如实）
 
@@ -88,7 +86,5 @@ $ git rev-parse 189648274^{tree}  → fee6651e4d31601d68dd87d2cd1c5f0b71e6512f
 ```
 
 4 条用例名：`a decision taken between lifecycle callbacks follows the platform, not a remembered copy`、`a refused service start is reported and leaves reception stopped`、`reception starts with the account and stops when it is gone`、`observation runs while the app is in front or its service is`。
-
-日志：`merger-targeted-regression.log`。
 
 边界不变：未做真机/模拟器、Firebase 运行时、真实云服务验收；`RemoteReceiveService` 与 `AndroidRemoteNotifications` 自身仍无 JVM 测试（见上「未完成项与边界」）。

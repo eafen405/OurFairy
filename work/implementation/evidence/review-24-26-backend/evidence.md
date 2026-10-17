@@ -76,7 +76,7 @@ second time, discarding columns a newer writer added.
 
 - a file with no recorded version is new and already carries the v2 shape
 - `schema_version = 1` is migrated by rebuilding each table through a temporary
-  `<table>_v1` table (`ALTER TABLE ... RENAME` → create current DDL → copy columns
+  `<table>_v1` table (`ALTER TABLE... RENAME` → create current DDL → copy columns
   → drop), which is the only way SQLite drops a UNIQUE constraint or a REFERENCES
   clause. This is the temporary table use the task allows; no other new table exists
 - the copy carries every v1 value across, ids included: `updated_at` is seeded from
@@ -119,13 +119,13 @@ green exit: 0
 RED for this follow-up round was captured on the new tests with only
 `backend/identity/src/store.mjs` reverted (`git stash push -- backend/identity/src/store.mjs`),
 so it shows the four corrections rather than a broken fixture —
-`red-store-followup.log`, exit 1, 4 failing tests: the reserved deleted name, the
+exit 1, 4 failing tests: the reserved deleted name, the
 deleted Phaethon, the duplicate initial seed name, and sign-out of a deleted
-session. The earlier `red-store.log` (exit 1, 6 failures) covers the original
+session. The earlier  (exit 1, 6 failures) covers the original
 findings.
 
 Identity HTTP acceptance against the **real launcher** was rerun after the store
-change — see the suite output above in `identity-http.log`, 8 passing, exit 0.
+change — see the suite output above in, 8 passing, exit 0.
 
 Manual schema inspection (raw `node:sqlite` against a migrated file, not a
 compilation pass) confirmed for every business table:
@@ -176,4 +176,4 @@ half-succeed, because the `BEGIN IMMEDIATE` transaction is what prevents it.
 
 ## Lead final verification
 
-The complete existing product suite was rerun against this worktree on the host: `node --test 'tests/**/*.test.mjs'` → 34 passed / 0 failed. Raw output: `final-product-suite.log`. The final inspection also made the durable schema branch explicitly accept current v2 or migrate v1, and reject other unsupported versions rather than silently continuing. No real cloud service or device check is implied.
+The complete existing product suite was rerun against this worktree on the host: `node --test 'tests/**/*.test.mjs'` → 34 passed / 0 failed.. The final inspection also made the durable schema branch explicitly accept current v2 or migrate v1, and reject other unsupported versions rather than silently continuing. No real cloud service or device check is implied.

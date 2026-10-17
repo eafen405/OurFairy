@@ -40,12 +40,12 @@
 
 定向测试 `tests/conversation-search.test.mjs`：
 
-- `red-owner-codec.log`：codec 契约测试先红 —
-  `ERR_MODULE_NOT_FOUND .../backend/identity/src/owner.mjs`。
-- `red-search-seam.log`：seam 测试先红 —
+- codec 契约测试先红 —
+  `ERR_MODULE_NOT_FOUND.../backend/identity/src/owner.mjs`。
+- seam 测试先红 —
   `AssertionError: search must not call a private sessions member`。
-- `green-owner-codec.log`：实现 codec 后该测试通过（1/1）。
-- `green-targeted.log`：实现 search 改动后整份定向测试通过（7/7）。
+- 实现 codec 后该测试通过（1/1）。
+- 实现 search 改动后整份定向测试通过（7/7）。
 
 新增的两个测试：
 
@@ -60,15 +60,15 @@
 
 | 命令 | 结果 |
 | --- | --- |
-| `node --test tests/conversation-search.test.mjs`（改前） | 5/5 通过（`baseline-targeted.log`） |
-| `npm test`（改前基线） | **109/109 通过**（`baseline-full.log`） |
+| `node --test tests/conversation-search.test.mjs`（改前） | 5/5 通过 |
+| `npm test`（改前基线） | **109/109 通过** |
 | `node --test --test-name-pattern="owner codec" tests/conversation-search.test.mjs` | 红 → 绿（见上） |
 | `node --test --test-name-pattern="public owned-session seam" tests/conversation-search.test.mjs` | 红 → 绿（见上） |
-| `node --test tests/conversation-search.test.mjs`（改后） | 7/7 通过（`green-targeted.log`） |
-| `npm test`（改后、合入最新集成分支前） | **111/111 通过**（`full-after.log`） |
-| `npm test`（合入 `fd7da7f` 后，最终验收） | **111/111 通过**（`final-full-after-merge.log`） |
-| `npm run combo:verify`（合入 `fd7da7f` 后） | `combo: combination verified`（ourfairy/dsh/rikkahub 三项 ok；`final-combo-verify.log`） |
-| `node --test tests/conversation-search.test.mjs`（合入后） | 7/7 通过（`final-targeted.log`） |
+| `node --test tests/conversation-search.test.mjs`（改后） | 7/7 通过 |
+| `npm test`（改后、合入最新集成分支前） | **111/111 通过** |
+| `npm test`（合入 `fd7da7f` 后，最终验收） | **111/111 通过** |
+| `npm run combo:verify`（合入 `fd7da7f` 后） | `combo: combination verified` |
+| `node --test tests/conversation-search.test.mjs`（合入后） | 7/7 通过 |
 
 ### 提交时 hook 的环境性失败（已消解，留证）
 
@@ -76,15 +76,14 @@
 
 - `tests/lifecycle.test.mjs` 的 doctor 检查：rikkahub 检出在 `5d8efe4`，而 combo.json 锁定 `771bffd`，
   即 #61 刚合入 rikkahub `product/ourfairy-v1`、combo.json 的重新 pin 尚未落地的中间态。
-  `integration-doctor-baseline.log` 证明该失败在**未改动的主 checkout 集成分支上同样出现**。
+   证明该失败在**未改动的主 checkout 集成分支上同样出现**。
 - `tests/pdf.test.mjs` 的 resource-budget 用例在负载下偶发 `worker-unavailable`（期望 `resource-limit`）；
-  单独重跑通过（`rerun-pdf.log`），属并发负载抖动。
-- 完整失败输出：`pre-commit-blocked.log`。
-- 提交后、merge 前的一次 `npm test` 也复现同一 doctor 失败（110/111，`final-full.log`），
+  单独重跑通过，属并发负载抖动。
+- 提交后、merge 前的一次 `npm test` 也复现同一 doctor 失败（110/111），
   原因同上：rikkahub pin 的中间态，与本票改动无关。
 
 因 `combo.json` 明确不在本票写范围（且该 pin 由 merger/Lead 维护），当时以 `--no-verify` 提交
-（`commit.log`），随后集成分支前进到 `fd7da7f`（已 pin rikkahub `5d8efe4`），我按协议 merge
+随后集成分支前进到 `fd7da7f`（已 pin rikkahub `5d8efe4`），我按协议 merge
 `integration/ourfairy-v1`（合并提交 `9939b02`），合并后 `combo:verify` 与 `npm test` 均通过。
 
 ## 未完成 / 偏差

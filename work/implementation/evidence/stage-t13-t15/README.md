@@ -13,15 +13,15 @@
 
 实际命令及结果：
 
-- `npm test`：93/93 通过，退出码 0；原文 `baseline/npm-test.log`。
-- `npm run combo:verify`：三个仓库组合核验通过，退出码 0；原文 `baseline/combo-verify.log`。
+- `npm test`：93/93 通过，退出码 0；原文。
+- `npm run combo:verify`：三个仓库组合核验通过，退出码 0；原文。
 - 以上在允许本地网络/监听的沙箱外上下文运行；不是云服务、Android 平台或真机验收。
 
-`baseline/initial-repositories.json` 与 `baseline/final-repositories.json` 保存分支、提交、全部已有脏路径及文件 SHA-256；`*-status.z` 保存原始 porcelain 状态。快进与验证后 dsh 的 16 个已有脏文件字节不变，Android 原有 `?? .worktrees/` 保留，OurFairy 干净。`baseline/summary.json` 为核验摘要。此前 /tmp 原始日志也保留。
+`baseline/initial-repositories.json` 与 `baseline/final-repositories.json` 保存分支、提交、全部已有脏路径及文件 SHA-256； 保存原始 porcelain 状态。快进与验证后 dsh 的 16 个已有脏文件字节不变，Android 原有 `??.worktrees/` 保留，OurFairy 干净。`baseline/summary.json` 为核验摘要。此前 /tmp 原始日志也保留。
 
 本阶段计划见 `../../notes/stage-t13-t15-plan.md`。后续票面证据归各票目录，本目录用于阶段整合与审查。
 
-首次文档提交的正常 pre-commit 检查出现既有 reconnect 测试读取尚未完整 JSON 的失败（92/93）；失败摘录在 `baseline/initial-commit-hook-failure.log`。未修改产品或测试，随后正常重试提交并保留检查结果。
+首次文档提交的正常 pre-commit 检查出现既有 reconnect 测试读取尚未完整 JSON 的失败（92/93）；失败摘录在。未修改产品或测试，随后正常重试提交并保留检查结果。
 
 ## 阶段收尾
 

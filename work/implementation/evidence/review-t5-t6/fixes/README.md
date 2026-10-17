@@ -17,10 +17,10 @@ Review reports: `/tmp/ourfairy-stage-standards.md` and `/tmp/ourfairy-stage-spec
 
 Commands ran in the review worktree with `ANDROID_HOME=/home/eafen405/Android/Sdk` and `-Dorg.gradle.jvmargs='-Xmx8g -Dfile.encoding=UTF-8' --max-workers=4 --parallel`.
 
-- `nav-red.log`: `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.ui.identity.IdentityNavigationTest'` failed the new real serializer roundtrip with `SerializationException: Serializer for class 'Sessions' is not found` (5tests,1failure).
-- `generation-nav-red.log`: `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest' --tests 'me.rerere.rikkahub.ui.identity.IdentityNavigationTest'` failed the two new public recovery cases plus navigation (19tests,3failures). Cases: saved W0 and pending retained while observed unflushed seq1 is replaced by a recovered interrupted closer; and recovered cursor0 removes old orphan bubble3, refills saved body, preserves W0, then still rejects a conflicting same-generation seq0.
-- `generation-nav-green.log`: exact same targeted command passed all19 after the fixes.
-- `final-build-tests.log`: `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.*' --tests 'me.rerere.rikkahub.ui.identity.*' :app:assembleDebug` => BUILD SUCCESSFUL in30s.
+- `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.ui.identity.IdentityNavigationTest'` failed the new real serializer roundtrip with `SerializationException: Serializer for class 'Sessions' is not found` (5tests,1failure).
+- `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteChatRecoveryTest' --tests 'me.rerere.rikkahub.ui.identity.IdentityNavigationTest'` failed the two new public recovery cases plus navigation (19tests,3failures). Cases: saved W0 and pending retained while observed unflushed seq1 is replaced by a recovered interrupted closer; and recovered cursor0 removes old orphan bubble3, refills saved body, preserves W0, then still rejects a conflicting same-generation seq0.
+- exact same targeted command passed all19 after the fixes.
+- `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.*' --tests 'me.rerere.rikkahub.ui.identity.*' :app:assembleDebug` => BUILD SUCCESSFUL in30s.
 - `test-summary.json`:85/85 tests,0failures/errors/skips (previous82 plus navigation1 and recovery2).
 - `apk.json`: generated debug arm64/x86_64/universal APK paths,size,SHA256.
 - `git diff --check` passed.

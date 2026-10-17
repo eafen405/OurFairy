@@ -18,13 +18,13 @@ Native stop semantics are retained: cancel current execution with `keepInbox:tru
 
 Commands were run from this worktree, with the pinned dsh `d3fe98f` checkout and its existing built runtime. A temporary `.corepack` symlink reused the repository tool cache; it is not part of the change.
 
-- `node --test tests/remote-chat.test.mjs` before implementation: **failed with route 404**, `01-red.log`.
-- Same command after the first behavior slice: **1/1 passed**, `02-green.log`.
-- Progressive public/model-boundary acceptance coverage: **5/5** (`03-behavior.log`), **6/6** (`04-stream-terminal.log`).
-- `node --test tests/identity-http.test.mjs`: **8/8 passed**, `05-http-regression.log`, covering the shared POST carrier change.
-- Stop-before-output/queued-input check: `06-stop-before-output-red.log` captured a real incorrect failed-state projection, plus a test assumption that native retained input wakes automatically. The projection was corrected from formal turn-end facts; the queue test was aligned with the documented native later-wake semantics, then verified through receipts and subsequent execution.
-- `node --test tests/remote-chat.test.mjs`: **8/8 passed**, `07-stop-before-output-green.log`.
-- `node --test 'tests/**/*.test.mjs'`: **48/48 passed**, `08-product-suite.log`. This includes original identity/session/lifecycle tests and all remote chat tests.
+- `node --test tests/remote-chat.test.mjs` before implementation: **failed with route 404**.
+- Same command after the first behavior slice: **1/1 passed**.
+- Progressive public/model-boundary acceptance coverage: **5/5**, **6/6**.
+- `node --test tests/identity-http.test.mjs`: **8/8 passed**、 covering the shared POST carrier change.
+- Stop-before-output/queued-input check:  captured a real incorrect failed-state projection, plus a test assumption that native retained input wakes automatically. The projection was corrected from formal turn-end facts; the queue test was aligned with the documented native later-wake semantics, then verified through receipts and subsequent execution.
+- `node --test tests/remote-chat.test.mjs`: **8/8 passed**.
+- `node --test 'tests/**/*.test.mjs'`: **48/48 passed**. This includes original identity/session/lifecycle tests and all remote chat tests.
 - `git diff --check`: passed.
 
 The remote suite boots the shipped product profile through the real CLI/Loader and uses real HTTP, identity SQLite, native Agents, JSONL/compression, query observations and restarts. Only the external model is a loopback HTTP/SSE double selected through `DEEPSEEK_BASE_URL` and a fake key; the production route remains `deepseek-official/deepseek-flash`.

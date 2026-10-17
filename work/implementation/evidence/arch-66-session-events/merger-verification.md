@@ -12,8 +12,8 @@
 
 | 命令 | 结果 | 日志 |
 | --- | --- | --- |
-| `npm test` | 124 pass / 0 fail，EXIT 0（`tests 124`，`suites 6`，`pass 124`，`fail 0`，`duration_ms 43963`） | `merger-npm-test.log` |
-| `npm run combo:verify` | 3 仓全 ok，EXIT 0 | `merger-combo-verify.log` |
+| `npm test` | 124 pass / 0 fail，EXIT 0（`tests 124`，`suites 6`，`pass 124`，`fail 0`，`duration_ms 43963`） |  |
+| `npm run combo:verify` | 3 仓全 ok，EXIT 0 |  |
 
 `combo:verify` 输出：
 
@@ -40,7 +40,6 @@ dsh pin `fe2bbc3b1c14efd7`、rikkahub pin `189648274074846e` 均未变，本票�
   3 个调用方零改动，未扩大范围。
 - 实现者首次合并前全量 `npm test` 出现既有 PDF flake（`tests/pdf.test.mjs` 期望 `resource-limit`、实际
   `worker-unavailable`），隔离重跑 5/5 通过、全量重跑 124/124；merger 合并后全量 124/124，PDF 四条全部通过
-  （见 `merger-npm-test.log` 第 104–107 行）。
 
 ## 范围外发现（如实转交，未修）
 

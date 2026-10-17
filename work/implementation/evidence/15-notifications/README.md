@@ -16,12 +16,12 @@ Dedicated user-enabled specialUse FGS keeps live reception, with exact manifest 
 
 All commands and raw logs are under `runtime/`; app helper Account red/green and bounded mcode task/result are under `android-app/`.
 
-- First notification slice failed as expected before implementation (`red-delivery.log`), then passed (`green-delivery.log`).
-- Successive baseline, episode/catch-up, crash/foreground checks passed; combined receiver/activity/recovery **33/33** passed (`runtime-receiver.log`).
-- Actual merged Android all `data.remote.*` + `ui.identity.*` **135/135** and `:app:assembleDebug` passed (`final-checks.log`). Production unchanged after that APK.
-- Real product profile/native JSONL delivery + authenticated HTTP/SSE capture **1/1** passed (`actual-backend-capture.log`, `capture-backend.mjs`, lossless `actual-recipient-observe.sse.gz`). External model is deterministic local network double; session persistence, account ownership and delivery are actual product/native paths. Isolated backend was stopped and home cleaned.
-- Captured actual SSE was served over local HTTP through production `RemoteChatApi` decoder, coverage/checkpoint synchronization, awaited store and notification platform boundary: **1/1** passed (`wire-check.log`). This validates real wire content against shipped client; replay server/platform are doubles, not APK-to-live-backend device evidence.
-- Final complete affected JVM suite including that wire test **136/136**, **0 failures/errors**, 19 suites passed (`final-jvm.log`, `TEST-*.xml`).
+- First notification slice failed as expected before implementation, then passed.
+- Successive baseline, episode/catch-up, crash/foreground checks passed; combined receiver/activity/recovery **33/33** passed.
+- Actual merged Android all `data.remote.*` + `ui.identity.*` **135/135** and `:app:assembleDebug` passed. Production unchanged after that APK.
+- Real product profile/native JSONL delivery + authenticated HTTP/SSE capture **1/1** passed （`capture-backend.mjs`）. External model is deterministic local network double; session persistence, account ownership and delivery are actual product/native paths. Isolated backend was stopped and home cleaned.
+- Captured actual SSE was served over local HTTP through production `RemoteChatApi` decoder, coverage/checkpoint synchronization, awaited store and notification platform boundary: **1/1** passed. This validates real wire content against shipped client; replay server/platform are doubles, not APK-to-live-backend device evidence.
+- Final complete affected JVM suite including that wire test **136/136**, **0 failures/errors**, 19 suites passed.
 - `apk.json` records all three actual debug APK paths/sizes/SHA-256. Firebase config is a fake build-time stub, so Firebase/Crashlytics runtime is unavailable.
 - AOSP FGS source selection justification: `platform-source/README.md`; actual official webpage timed out, primary AOSP Java source was retrieved via GitHub API and archived.
 

@@ -6,7 +6,7 @@
 
 实际 UI 从 `RemoteChatPanel` 传入 generation/attemptId/seq；`RemoteTranscriptPresentation` 只保留已观察 live 行的局部 key 别名与格式延后，按精确 seq 接续，离开可见区或回到尾部即释放，冷历史不延后。未引入数据库、权限或持久化状态。
 
-**测试与证据：** `06-settlement-red.log` 为真实公开 HTTP 断言失败，`07-settlement-green.log` 8/8 通过；`03-overlap-red.log` 为运行时断言失败，`04-overlap-green.log` 通过。`01-red.log` 是新类型不存在导致编译失败，应明确该性质；`08-native-association-green.log` 名称虽含 green，实际编译失败，随后 `09-final-android.log` 与 `10-final-all-android-release.log` 成功。`11-npm-final.log:141` 仍有 PDF worker-unavailable 失败，最终完整检查门槛尚未满足，不能以 Android 成功替代。原 T19 首批实现后首绿的历史流程偏离保持原记录。
+* *测试与证据：**  为真实公开 HTTP 断言失败， 8/8 通过； 为运行时断言失败， 通过。 是新类型不存在导致编译失败，应明确该性质； 名称虽含 green，实际编译失败，随后  与  成功。`11-npm-final.log:141` 仍有 PDF worker-unavailable 失败，最终完整检查门槛尚未满足，不能以 Android 成功替代。原 T19 首批实现后首绿的历史流程偏离保持原记录。
 
 **Fowler 判断项：** 未发现值得增加抽象的异味。局部行类型与可见性状态服务已观察的阅读跳变，规模合适；不建议为可选 hint 再建事件、缓存或通用过渡框架。
 

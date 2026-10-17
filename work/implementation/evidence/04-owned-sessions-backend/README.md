@@ -16,7 +16,7 @@ observed losing `owner`. The real defect was a property lookup in our own
 `backend/sessions/src/service.mjs`:
 
 - `#headerOf(id)` returns `await this.persistence.stat(id)`, which is a
-  **snapshot** `{header, revision, ...}`, not a bare `SessionHeader`.
+  **snapshot** `{header, revision...}`, not a bare `SessionHeader`.
 - `#ownedHeader` read it correctly as `snapshot.header.owner`.
 - `create` and `primary` read `existing.owner` against that same snapshot. That
   property is **always `undefined`**, so every repeat create/primary took the
@@ -114,7 +114,7 @@ The HTTP regression places a regular file at JSONL's `_no-cwd` directory,
 causing a real filesystem materialization error. After removing it, another
 create in the **same backend process** must succeed. Before the fix, the retry
 returned 500 because the first call left a duplicate live session
-(`red-06-durable-retry.log`); after the fix it passes. No persistence mock or
+after the fix it passes. No persistence mock or
 product fixture endpoint was added.
 
 ## Empty-session handoff to the existing agent factory
@@ -127,12 +127,12 @@ disposes the agent. Session id and owner remain identical, including after
 disposal and an authorized product HTTP read. No prompt or model call is made;
 the test starts the real keyless product composition.
 
-`red-07-empty-resume.log` first exposed the Cordis private-member receiver
-failure; `red-08-empty-resume-writer.log` records an incorrect test option
+ first exposed the Cordis private-member receiver
+failure;  records an incorrect test option
 (`sessionId`, corrected from the declared `ResumeAgentOptions` contract to
-`resumeSessionId`). With the correct option, `red-09-empty-resume-writer.log`
+`resumeSessionId`). With the correct option,
 demonstrates the actual retained-writer conflict. The minimal persist/flush/close
-implementation passes in `green-07-empty-resume.log`: **14 pass, 0 fail**,
+implementation passes in : **14 pass, 0 fail**,
 including the original cold refusal and failed-write retry cases. No dsh API,
 attachment mechanism or extra owner state was added.
 
@@ -151,7 +151,7 @@ create/primary return 409 `sessions/unowned-primary`; foreign primary collision
 returns 409 `sessions/primary-taken`. The fixture's real owner can read/select
 their own header; anonymous read/select are 401. None of these operations
 changes any durable log: SHA-256 and nanosecond mtime for every artifact are
-compared before restart and after all requests. `green-05-cold-and-retry.log`
+compared before restart and after all requests.
 records the fixture ids, hashes and mtimes after that equality assertion.
 
 Authenticated requests naming the foreign id under `/api/sessions/read`,
@@ -167,33 +167,33 @@ hand-written historical JSONL or malformed artifact.
 All from `.worktrees/04-owned-sessions` (ticket/04-owned-sessions).
 
 1. `git merge integration/ourfairy-v1` — merged `de2ded1` at the time (fast).
-2. `node --test tests/owned-sessions.test.mjs` → `red-01-baseline.log`, **EXIT=1**.
+2. `node --test tests/owned-sessions.test.mjs`, **EXIT=1**.
    Both tests fail with `404 !== 200` / `404 !== 401`: the `/sessions/*` routes did
    not exist. This is the red evidence the pre-existing commit lacked.
-3. After implementation: → `green-01.log`, **EXIT=1**. Routes mounted;
+3. After implementation: **EXIT=1**. Routes mounted;
    authorization test passes; first create works (the response carries
    `owner: user:<n>` from the live header — the very evidence that disproved the
    persistence hypothesis). Repeat create fails `409 sessions/unowned-primary`.
-4. → `green-02.log`, **EXIT=1**, same failure, after removing `sessions.flush` to
+4., **EXIT=1**, same failure, after removing `sessions.flush` to
    test whether the store's flush path overwrote the header. It did not.
 5. After fixing the snapshot/header lookup and serializing per-owner
-   operations: → `green-03.log`, **EXIT=0**, 3/3 pass.
-6. `node --test tests/identity-http.test.mjs` → `regression-identity.log`, 8/8 pass,
+   operations: **EXIT=0**, 3/3 pass.
+6. `node --test tests/identity-http.test.mjs`, 8/8 pass,
    after the shared HTTP helper extraction.
 7. Initial sandbox attempt for the new retry test timed out before test output
-   (`red-05-durable-retry.log`). Retrying with authorized host loopback execution
-   exposed a fixture setup ENOENT (`red-05-durable-retry-host.log`); after creating
+Retrying with authorized host loopback execution
+   exposed a fixture setup ENOENT; after creating
    the parent directory, the real failed-retry red was captured in
-   `red-06-durable-retry.log` (**3 pass, 1 fail**).
+    (**3 pass, 1 fail**).
 8. After the formal handle lifecycle fix and cold fixture extension:
    `node --test tests/owned-sessions.test.mjs tests/identity-http.test.mjs`
-   → `green-05-cold-and-retry.log`, **13 pass, 0 fail**. Host execution was used
+**13 pass, 0 fail**. Host execution was used
    for the real loopback backend, without a model/cloud request.
 9. The same command after publishing `ctx.ourfairySessions`
-   → `green-06-published-service.log`, **13 pass, 0 fail**.
+**13 pass, 0 fail**.
 10. After merging integration `315b377`, the public consuming-profile test
     captured the failures above. The same focused command after releasing the
-    empty-session handle → `green-07-empty-resume.log`, **14 pass, 0 fail**.
+    empty-session handle, **14 pass, 0 fail**.
 
 ### Merge state
 
@@ -204,7 +204,7 @@ merge commit `296def5`):
 
 - `git merge-base --is-ancestor f8bb706 HEAD` → **true**
 - `node --test tests/lifecycle.test.mjs tests/owned-sessions.test.mjs tests/identity-http.test.mjs`
-  → **14/14 pass, 0 fail**, including `doctor` → `green-04-postmerge.log`
+  → **14/14 pass, 0 fail**, including `doctor`
 
 The earlier note that the branch merged only `de2ded1` described the merge at
 the time it was written, not the current ancestry.
@@ -227,25 +227,25 @@ the time it was written, not the current ancestry.
 
 ## Raw logs
 
-- `red-01-baseline.log` — 404 on every `/sessions/*` path (red, routes absent)
-- `green-01.log` — routes mounted; authorization passes; repeat create 409
-- `green-02.log` — same, without `sessions.flush` (wrong-hypothesis probe)
-- `green-03.log` — 3/3 pass after the snapshot/header and serialization fixes
-- `regression-identity.log` — identity suite 8/8 after shared HTTP helpers
-- `red-05-durable-retry.log` — restricted sandbox run timed out
-- `red-05-durable-retry-host.log` — initial failure-test setup ENOENT
-- `red-06-durable-retry.log` — actual failed-write retry exposes live duplicate
-- `green-05-cold-and-retry.log` — 13/13, with cold fixture durable hash/mtime evidence
-- `green-06-published-service.log` — 13/13 after the service publication
-- `red-07-empty-resume.log` — real Cordis consumer rejects `#` private receiver
-- `red-08-empty-resume-writer.log` — incorrect test resume option, preserved
-- `red-09-empty-resume-writer.log` — correct public resume hits retained writer
-- `green-07-empty-resume.log` — 14/14, includes empty saved session agent takeover
+-  — 404 on every `/sessions/*` path (red, routes absent)
+-  — routes mounted; authorization passes; repeat create 409
+-  — same, without `sessions.flush` (wrong-hypothesis probe)
+-  — 3/3 pass after the snapshot/header and serialization fixes
+-  — identity suite 8/8 after shared HTTP helpers
+-  — restricted sandbox run timed out
+-  — initial failure-test setup ENOENT
+-  — actual failed-write retry exposes live duplicate
+-  — 13/13, with cold fixture durable hash/mtime evidence
+-  — 13/13 after the service publication
+-  — real Cordis consumer rejects `#` private receiver
+-  — incorrect test resume option, preserved
+-  — correct public resume hits retained writer
+-  — 14/14, includes empty saved session agent takeover
 
 ## Lead final product verification
 
-At `01dd084` (before the handoff correction above), Lead independently ran the complete product suite on the host: `node --test 'tests/**/*.test.mjs'` → **39 passed, 0 failed**, 6 suites. Raw output: `final-product-suite.log`. The final handoff correction is covered by the later focused 14-test run; this earlier full run does not cover it. Neither run claims Android completion, real cloud service validation, or closure of #27.
+At `01dd084` (before the handoff correction above), Lead independently ran the complete product suite on the host: `node --test 'tests/**/*.test.mjs'` → **39 passed, 0 failed**, 6 suites.. The final handoff correction is covered by the later focused 14-test run; this earlier full run does not cover it. Neither run claims Android completion, real cloud service validation, or closure of #27.
 
 ## Lead final combined verification
 
-After the header-only creation/close handoff and proxy-safe Service correction were integrated, Lead ran `node --test 'tests/**/*.test.mjs'` against the final product combination: **40 passed / 0 failed**. `final-product-suite.log` is this final run, superseding the earlier39-test run that predated the empty-resume case. `combo.json` now pins rikkahub#27 integration `fd04aab78919a7816e6eb962949a6eaf13a41532`; Android targeted42 tests and debugAPK evidence live in `../04-owned-sessions-android/`. Real device/UI/cloud conditions remain unexecuted and are not implied by these checks.
+After the header-only creation/close handoff and proxy-safe Service correction were integrated, Lead ran `node --test 'tests/**/*.test.mjs'` against the final product combination: **40 passed / 0 failed**.  is this final run, superseding the earlier39-test run that predated the empty-resume case. `combo.json` now pins rikkahub#27 integration `fd04aab78919a7816e6eb962949a6eaf13a41532`; Android targeted42 tests and debugAPK evidence live in `../04-owned-sessions-android/`. Real device/UI/cloud conditions remain unexecuted and are not implied by these checks.

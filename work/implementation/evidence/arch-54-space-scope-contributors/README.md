@@ -35,10 +35,10 @@
 
 | 阶段 | 命令 | 结果 |
 | --- | --- | --- |
-| 基线 | `node --test tests/spaces.test.mjs` | 7/7 pass（`baseline-spaces.log`） |
-| red | 同上（新增用例 + fixture，尚未实现注册 API） | 8 条中 1 条 fail：`TypeError: ctx.ourfairySpaces.contributeExtraRoots is not a function`（`red-spaces.log`） |
-| green | 同上（实现注册机制后） | 8/8 pass（`green-spaces.log`） |
-| green（相关处） | `node --test tests/groups.test.mjs tests/attachments.test.mjs` | 9/9 pass（`green-groups-attachments.log`） |
+| 基线 | `node --test tests/spaces.test.mjs` | 7/7 pass |
+| red | 同上（新增用例 + fixture，尚未实现注册 API） | 8 条中 1 条 fail：`TypeError: ctx.ourfairySpaces.contributeExtraRoots is not a function` |
+| green | 同上（实现注册机制后） | 8/8 pass |
+| green（相关处） | `node --test tests/groups.test.mjs tests/attachments.test.mjs` | 9/9 pass |
 
 ## 变异检查（证明新用例真的钉住缺陷类）
 
@@ -46,8 +46,8 @@
 
 | 变异 | 模拟的原缺陷 | 结果 |
 | --- | --- | --- |
-| A：注册位仍是单槽、最后写入者胜出 | 票面「最后写入者胜出」 | 红：`both contributors must grant their extra root at the same time, not last writer wins`（`mutation-a-last-writer-wins.log`） |
-| B：注销时 `contributors.clear()` | 票面「`groups.mjs:26` 复位抹掉其他贡献者」 | 红：`the contributor still loaded must keep its own extra root and read-only file`（`mutation-b-teardown-clears-all.log`） |
+| A：注册位仍是单槽、最后写入者胜出 | 票面「最后写入者胜出」 | 红：`both contributors must grant their extra root at the same time, not last writer wins` |
+| B：注销时 `contributors.clear()` | 票面「`groups.mjs:26` 复位抹掉其他贡献者」 | 红：`the contributor still loaded must keep its own extra root and read-only file` |
 
 ## 验收（合并集成分支后的 tip 上）
 
@@ -57,16 +57,16 @@ npm test              # 112 tests / 112 pass / 0 fail
 npm run combo:verify  # combo: combination verified
 ```
 
-- 合并 `fd7da7f` 后：110 条（基线 109 + 本票新增 1）全绿（`merged-npm-test.log`、`merged-combo-verify.log`）；
+- 合并 `fd7da7f` 后：110 条（基线 109 + 本票新增 1）全绿；
   提交时 pre-commit hook 同样跑 `npm test` + `combo:verify`，全绿。
-- 合并 `4320872`（arch-49 又新增 2 条）后：112 条全绿 + combo 一致（`acceptance.log`，落于 `cb53c54`）。
+- 合并 `4320872`（arch-49 又新增 2 条）后：112 条全绿 + combo 一致（落于 `cb53c54`）。
 
 ## 一次失败与处置（如实记录）
 
 首次提交时 pre-commit 的 `npm test` 出现 1 条**与本票无关**的失败：
 `tests/pdf.test.mjs:161` 期望 `resource-limit`，实际 `worker-unavailable`（`worker-unavailable` 是 PDF worker 起不来的降级码）。
-当时主机 load average 9.26（32 核、多张票并行构建）。单独复跑 `node --test tests/pdf.test.mjs` 5/5 通过（`pdf-retry.log`），
-随后 `npm test` 110/110 通过（`merged-npm-test-retry.log`），再提交成功。判定为并发负载下的 flake，不是本票引入。
+当时主机 load average 9.26（32 核、多张票并行构建）。单独复跑 `node --test tests/pdf.test.mjs` 5/5 通过，
+随后 `npm test` 110/110 通过，再提交成功。判定为并发负载下的 flake，不是本票引入。
 
 ## 未完成 / 边界
 

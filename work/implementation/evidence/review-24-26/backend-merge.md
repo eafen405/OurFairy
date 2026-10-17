@@ -21,6 +21,6 @@ All pre-existing dirty/untracked file SHA-256 values unchanged:
 
 - `AGENTS.md`: `6108332c18fcb70cd38f04fa267120df4ae54b53de1a34b7c4edf831cf866dc1` — unchanged
 - `work/implementation/evidence/review-24-26/README.md`: `9333f2354db714603585e1a0a09bde502a0f44fa88fc6ad1cdae1c0617a45eae` — unchanged
-- `work/implementation/evidence/review-24-26/baseline-verification-host.log`: `9c7e4844ee43e001d8d2e236f66060e3b2cd6718ae7cb29023032978021ee601` — unchanged
+- `9c7e4844ee43e001d8d2e236f66060e3b2cd6718ae7cb29023032978021ee601` — unchanged
 
 No combo edits, push, tracker changes, or worktree cleanup performed.

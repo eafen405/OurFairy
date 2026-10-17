@@ -16,7 +16,7 @@ this pass only corrected what the previous run could not compile or observe.
    list has arrived yet, records `primarySessionId` the first time one is seen, and is stood in. Ordinary
    create/select never moves an already-known main.
 4. **`start` simplified.** `@Volatile`, `Mutex`, `work` cancellation, the scope argument and the
-   higher-order `apply` callback are all gone. One `request { token, current -> ... }` with one `epoch`
+   higher-order `apply` callback are all gone. One `request { token, current ->... }` with one `epoch`
    retired by `bind`. Late results are rejected on the epoch, which is the real guarantee — cancellation is
    not relied on. The stale `onStale` KDoc, the unused local `loading` and the long prose are removed.
    The page already disables actions while `loading`, so there is at most one request in flight.
@@ -28,12 +28,12 @@ this pass only corrected what the previous run could not compile or observe.
 
 | Check | Result |
 |---|---|
-| `./gradlew :app:testDebugUnitTest --tests …SessionApiTest --tests …OwnedSessionStateTest --tests …IdentityApiTest --tests …AccountSessionTest --tests '…ui.identity.*'` with `-Pourfairy.identityEndpoint=http://192.168.31.20:8080` | **BUILD SUCCESSFUL**, 41 tests, 0 failures — `test-run-4.log` |
-| `./gradlew :app:assembleDebug` with the same property | **BUILD SUCCESSFUL** — `apk-build.log`, `app/build/outputs/apk/debug/app-{arm64-v8a,x86_64,universal}-debug.apk` |
+| `./gradlew :app:testDebugUnitTest --tests …SessionApiTest --tests …OwnedSessionStateTest --tests …IdentityApiTest --tests …AccountSessionTest --tests '…ui.identity.*'` with `-Pourfairy.identityEndpoint=http://192.168.31.20:8080` | **BUILD SUCCESSFUL**, 41 tests, 0 failures —  |
+| `./gradlew :app:assembleDebug` with the same property | **BUILD SUCCESSFUL** —, `app/build/outputs/apk/debug/app-{arm64-v8a,x86_64,universal}-debug.apk` |
 
 Logs in this directory:
-`test-run-initial-compile-failure.log` (the original Kotlin compile failure, preserved),
-`test-run-2.log`, `test-run-3.log`, `test-run-4.log` (passing), `apk-build.log`.
+ (the original Kotlin compile failure, preserved),
+(passing).
 
 ### Test-side corrections worth knowing
 
@@ -120,7 +120,7 @@ diagnosed here.
 
 | Check | Result |
 |---|---|
-| `./gradlew :app:testDebugUnitTest --tests …SessionApiTest --tests …OwnedSessionStateTest --tests …IdentityApiTest --tests …AccountSessionTest --tests '…ui.identity.*' :app:assembleDebug -Pourfairy.identityEndpoint=http://192.168.31.20:8080` | **BUILD SUCCESSFUL in 33s**, **42 tests, 0 failures, 0 errors** — `test-and-apk-final.log` |
+| `./gradlew :app:testDebugUnitTest --tests …SessionApiTest --tests …OwnedSessionStateTest --tests …IdentityApiTest --tests …AccountSessionTest --tests '…ui.identity.*' :app:assembleDebug -Pourfairy.identityEndpoint=http://192.168.31.20:8080` | **BUILD SUCCESSFUL in 33s**, **42 tests, 0 failures, 0 errors** —  |
 | Per-class counts | SessionApiTest **9** (was 8; +1 HTTP-status regression), OwnedSessionStateTest 10, AccountSessionTest 7, IdentityApiTest 6, IdentityAccessPolicyTest 6, IdentityNavigationTest 4 |
 | Commit | `c4b00046` on `ticket/04-owned-sessions`, parent `4865b285` (and `c95f84fe` beneath it, both retained) |
 | `git diff --check` | clean |
@@ -131,7 +131,7 @@ A first attempt at this run failed to compile (`Unresolved reference 'SessionsSn
 `IdentitySessionsPage.kt` — the new import was missing); that log was overwritten by the rerun,
 which is the one recorded above. One import line, fixed before the passing run.
 
-Logs: `test-and-apk-final.log` is new for this pass; `test-run-4.log` and `apk-build.log` remain the
+Logs:  is new for this pass;  and  remain the
 previous pass's evidence and were not modified.
 
 ## Limits

@@ -16,12 +16,12 @@ No second log, receipt table, sync authority, controller stack, search engine or
 
 Commands were run from this ticket worktree using pinned dsh `d3fe98f` and the existing built runtime. A temporary untracked `.corepack` symlink reused the product tool cache and was removed before handoff.
 
-- `node --test tests/reconnect.test.mjs` before implementation: **failed** because the old projection had no native-event range, `01-bounded-red.log`.
-- Same command after the first slice: **1/1 passed**, `02-bounded-green.log`.
-- Bounded recovery with live concurrency and actual socket response loss: **3/3 passed**, `03-follow-network.log`.
-- Actual file-permission writer failure, retry/cold recovery and authorization: **5/5 passed**, `04-storage-failure.log`.
-- Abrupt process crash and saved recovery closer: **6/6 passed**, `05-cold-closer.log`.
-- `node --test 'tests/**/*.test.mjs'`: **54/54 passed**, `06-product-suite.log`; includes original identity/session/lifecycle tests, T5 remote tests and T6 reconnect tests.
+- `node --test tests/reconnect.test.mjs` before implementation: **failed** because the old projection had no native-event range.
+- Same command after the first slice: **1/1 passed**.
+- Bounded recovery with live concurrency and actual socket response loss: **3/3 passed**.
+- Actual file-permission writer failure, retry/cold recovery and authorization: **5/5 passed**.
+- Abrupt process crash and saved recovery closer: **6/6 passed**.
+- `node --test 'tests/**/*.test.mjs'`: **54/54 passed**; includes original identity/session/lifecycle tests, T5 remote tests and T6 reconnect tests.
 - `git diff --check`: passed.
 
 All tests boot the shipped profile through the real CLI/Loader and exercise public authenticated HTTP/SSE. SQLite identity, native Agents, formal events, JSONL compression/write barriers, query observations and restarts are real. Only the cloud model is replaced by a real loopback HTTP/SSE server via deployment `DEEPSEEK_BASE_URL`, with fake credentials; production remains `deepseek-official/deepseek-flash`.

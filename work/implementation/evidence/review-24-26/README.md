@@ -18,7 +18,7 @@ OurFairy 基点由用户明确确认。各仓使用 `git diff <base>...<tip>`；
 
 审查固定为 scope.md 中的三仓提交，仅审查已提交改动；未修改仓库，也未把已有未提交文件纳入结论。
 
-1. **P2 · 文档规则违反：数据库加入了明确禁止的约束。** OurFairy `de2ded1:backend/identity/src/store.mjs:39`（同文件 40、47、49、54、122）定义 `short_id/name ... UNIQUE`、三个 `REFERENCES users(id)`，并启用外键。违反 OurFairy `AGENTS.md`「禁止数据库外键与唯一键索引」。最小修复：移除这些约束，复用已有 `BEGIN IMMEDIATE` 事务完成用户名、短编号及关联存在性检查；不要为此新增通用仓储层。已有数据库需在本模块内做一次小迁移，不能只修改 `CREATE TABLE IF NOT EXISTS`。
+1. **P2 · 文档规则违反：数据库加入了明确禁止的约束。** OurFairy `de2ded1:backend/identity/src/store.mjs:39`（同文件 40、47、49、54、122）定义 `short_id/name... UNIQUE`、三个 `REFERENCES users(id)`，并启用外键。违反 OurFairy `AGENTS.md`「禁止数据库外键与唯一键索引」。最小修复：移除这些约束，复用已有 `BEGIN IMMEDIATE` 事务完成用户名、短编号及关联存在性检查；不要为此新增通用仓储层。已有数据库需在本模块内做一次小迁移，不能只修改 `CREATE TABLE IF NOT EXISTS`。
 
 2. **P2 · 文档规则违反：业务表缺少删除与更新元数据。** OurFairy `de2ded1:backend/identity/src/store.mjs:37`（三表定义到 58）中的 `users`、`invites`、`sessions` 都没有逻辑删除字段和更新时间。违反 OurFairy `AGENTS.md`「业务表必须包含逻辑删除字段，并记录必要的关联人员、创建及更新时间」。`revoked_at` 只表示凭据撤销，不能替代所有业务表的删除语义。最小修复：给三张现有表补充字段和对应读写处理，保留事务及现有人员关联；无需新增表或删除管理界面。
 
@@ -40,7 +40,7 @@ OurFairy 基点由用户明确确认。各仓使用 `git diff <base>...<tip>`；
 
 `node scripts/combo.mjs verify`：三个仓库的版本组合通过。
 
-`node --test 'tests/**/*.test.mjs'`：宿主环境 18 passed / 0 failed，原文见 `baseline-verification-host.log`。沙箱内因 `listen EPERM 127.0.0.1` 无法执行真实组合测试，未将其当成产品失败或通过；按相同测试命令在宿主重跑。模型场景使用外部 loopback 替身，不是真实云服务。
+`node --test 'tests/**/*.test.mjs'`：宿主环境 18 passed / 0 failed，原文。沙箱内因 `listen EPERM 127.0.0.1` 无法执行真实组合测试，未将其当成产品失败或通过；按相同测试命令在宿主重跑。模型场景使用外部 loopback 替身，不是真实云服务。
 
 Android 登录恢复缺陷为已核对导航库行为的静态控制流发现，未执行真机 UI；导出遗漏已通过公开导出函数复现。
 
@@ -58,7 +58,7 @@ Android 登录恢复缺陷为已核对导航库行为的静态控制流发现，
 | Spec：模拟器地址不可部署 | Gradle 属性注入 BuildConfig；debug 可用模拟器默认，实际 release 生成任务缺地址明确失败，含配置缓存复用 | 同上 |
 | Spec：导出缺 owner/投递附件 | 原导出器保留可选 owner；投递加入既有附件收集分支，保持去重 | dsh `d3fe98f969c3963c6d193e74c776692e33c1eb64` |
 
-OurFairy 修复后完整产品套件 34 passed / 0 failed（含16个持久库行为/迁移测试和原有18个产品组合测试），见相邻 `../review-24-26-backend/final-product-suite.log`。dsh 导出包80 passed，干净独立 worktree完整 `build:lib:host` 通过，包含根 host 测试类型程序；根目录的相关运行包来自同树的已验证产物，见 `export-compiler-fix/`。Android最终仅运行五个身份相关测试类29 passed，debug APK构建完成；显式地址进入debug/release BuildConfig，release缺配置实际失败及配置缓存存储/复用均已测，见 `android-fix-evidence/`。
+OurFairy 修复后完整产品套件 34 passed / 0 failed（含16个持久库行为/迁移测试和原有18个产品组合测试），见相邻。dsh 导出包80 passed，干净独立 worktree完整 `build:lib:host` 通过，包含根 host 测试类型程序；根目录的相关运行包来自同树的已验证产物，见 `export-compiler-fix/`。Android最终仅运行五个身份相关测试类29 passed，debug APK构建完成；显式地址进入debug/release BuildConfig，release缺配置实际失败及配置缓存存储/复用均已测，见 `android-fix-evidence/`。
 
 执行过程中的真实失败没有抹去：原mcode报告的局部dsh类型门槛未覆盖测试，完整构建发现fixture缺MessageId，已补齐并在干净树重跑通过；dsh根原有16个未提交文件未改动，其两处类型问题不冒充已修复或根脏树构建通过。Android外部harness沙箱构建受限后，由实现子代理用现有宿主工具链完成最终检查。
 

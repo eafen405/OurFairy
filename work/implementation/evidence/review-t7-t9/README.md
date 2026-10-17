@@ -39,9 +39,8 @@ tests/attachment-download-abort.test.mjs tests/attachments.test.mjs` on
 the merged tree: **6/6**, zero skipped, with both handler settlement and
 file-source closure verified. Normal full-profile attachment upload,
 download/restart, permissions, retries, image serialization and readonly
-tool/script behavior also passed (`fixes/04-merged-download-regression.log`).
-Combo and doctor passed (`fixes/05-merged-combo.log`,
-`fixes/06-merged-doctor.log`); `git diff --check` was clean. No full product
+tool/script behavior also passed.
+Combo and doctor passed; `git diff --check` was clean. No full product
 suite or redundant stage review was rerun for this bounded correction.
 Spec remains **0 findings**, and the original axis reports/ranges above
 remain unchanged.

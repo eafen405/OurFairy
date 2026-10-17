@@ -53,12 +53,12 @@ JSONL and the real native Agent tool registry. The model endpoint was a
 controlled local HTTP double, not an official-cloud inference call.
 
 - Red: `node --test tests/conversation-search.test.mjs` → tool unknown before
-  implementation (`product-red.log`). Initial native
+  implementation. Initial native
   `corepack pnpm@11.28.5 exec vitest run packages/session-query/session-query-sqlite/tests/sqlite.spec.ts -t 'literal Chinese'`
-  → no result for Chinese substrings (`native-red.log`). The owner source
-  conflict test also failed before its compatibility check (`owner-red.log`).
+  → no result for Chinese substrings. The owner source
+  conflict test also failed before its compatibility check.
 - Green: `OURFAIRY_DSH_DIR=/home/eafen405/projects/deepseek-harness/.worktrees/10-conversation-search node --test tests/conversation-search.test.mjs`
-  → **5/5** (`product-final.log`). The ticket test deliberately passes the
+  → **5/5**. The ticket test deliberately passes the
   launcher's documented `--allow-drift` while the merger still owns the final
   `combo.json` pin. Tests cover Chinese 1/2/3-character queries; actual 80-character
   excerpts and short-message boundaries; original seq readback; owner filtering
@@ -68,12 +68,12 @@ controlled local HTTP double, not an official-cloud inference call.
   by the recipient while the sender cannot read that recipient session.
 - Native:
   `corepack pnpm@11.28.5 exec vitest run packages/session-query/session-query-sqlite/tests/sqlite.spec.ts packages/session-query/session-query-sqlite/tests/query.spec.ts packages/session-query/session-query/tests/session-query.spec.ts packages/session-query/session-query/tests/delivery-extraction.spec.ts`
-  → **116/116** (`native-green.log`), including literal punctuation and
+  → **116/116**, including literal punctuation and
   case-insensitive substring behavior and existing default-token regressions.
 - dsh `corepack pnpm@11.28.5 run build:lib:host`, `build:lib:client`,
   `build:native-system` → passed, logs beside this file. Final
   `corepack pnpm@11.28.5 exec tsc -b tsconfig.host.json tsconfig.client.json`
-  produced no errors (`dsh-typecheck.log`). The fresh worktree
+  produced no errors. The fresh worktree
   dependencies used the existing lockfile/cache (`install --offline --frozen-lockfile`).
 - The paired native README and T10 generated config fields were updated;
   `verify-translation-pairing <package README>` and normal pre-commit hooks passed.
@@ -84,7 +84,7 @@ controlled local HTTP double, not an official-cloud inference call.
 - A broader product baseline attempt used the new dsh worktree while old
   `combo.json` still pinned its parent; existing baseline tests do not pass
   `--allow-drift`, so the launcher correctly refused the mismatch. This was
-  not a baseline behavior result (`baseline-old-combo-refusal.log`). Merger
+  not a baseline behavior result. Merger
   should run its bounded profile checks after locking the exact native commit.
 - Native `test:docs` finished **20 passed / 1 failed**, the pre-existing
   type-equivalence mismatch in persistence documentation (earlier owner fields
@@ -93,7 +93,7 @@ controlled local HTTP double, not an official-cloud inference call.
 - `gen-config-catalog` initially produced the desired query fields plus the
   pre-existing `client-connection` source line 92→97 drift. That unrelated hunk
   was deliberately removed from both languages. The final full catalog freshness
-  check therefore reports that known baseline line only (`config-final-baseline.log`).
+  check therefore reports that known baseline line only.
   Its T10 query section is current. These two catalog paths overlap the Lead's
   recorded dirty paths; the root checkout was never edited by this ticket.
 - Initial new test setup needed a fresh native addon build; the first broad

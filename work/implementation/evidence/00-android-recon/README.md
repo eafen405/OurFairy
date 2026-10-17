@@ -3,7 +3,6 @@
 目的：消除票 #26「邀请码注册、登录与单 APK 身份入口」最大的未知——**rikkahub fork 在本机能否真实构建出 APK**。这是侦察，不是完成 #26。
 
 固定基线：`0966502c4d65c1ee4b2a3e49a19703bb1978016c`（本地 `/home/eafen405/projects/rikkahub`，分支 `product/ourfairy-v1`）。
-原始日志：`build-01-assembleDebug.log`（早期失败/停滞的记录）、`build-02-assembleDebug.log`（成功）、`resource-samples.csv`（早期采样的内存曲线）、`run-build.sh`（可复现脚本）。
 
 ## 结论：构建成功
 
@@ -20,7 +19,7 @@ EXIT=0
 | `app-x86_64-debug.apk` | 82.9 MB |
 | `app-universal-debug.apk` | 93.0 MB |
 
-（`splits { abi { ... } }` 同时产出两个 ABI 包与一个 universal 包。）
+（`splits { abi {... } }` 同时产出两个 ABI 包与一个 universal 包。）
 
 ## 可复现的最小命令序列
 
@@ -39,7 +38,7 @@ printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
   --max-workers=8 --parallel --console=plain
 ```
 
-等价的仓库内脚本：`run-build.sh`（`setsid nohup` 脱离 agent turn 运行，日志追加到 `build-02-assembleDebug.log`）。
+等价的仓库内脚本：`run-build.sh`（`setsid nohup` 脱离 agent turn 运行）。
 
 ## 实测踩坑（每条都花过时间，已同步到 `work/implementation/CONVENTIONS.md` §3.1）
 
@@ -59,7 +58,7 @@ printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 2. **只构建了 debug 变体**。release 需要签名配置（`local.properties` 里的 storeFile/storePassword/keyAlias/keyPassword）与 `app/app.key`，本机没有，**未尝试也未验证**。
 3. **没有安装到设备**。未连接任何真机或模拟器，未运行任何 instrumentation 测试；`app:baselineprofile` 的 `useConnectedDevices = true` 因此未执行。
 4. 产物是 **rikkahub 基线提交**构建的，不含任何 OurFairy 产品改动（产品分支此时等于基线提交）。#26 的首次 APK 构建仍须在加入身份入口后重新验收。
-5. 内存采样 `resource-samples.csv` 来自早期那次未完成的构建，**不代表成功构建的峰值**；成功那次的 `/usr/bin/time -v` 只统计了 wrapper 客户端进程（`Maximum resident set size 119612 KB`），**不是** daemon 峰值。
+5. 内存采样  来自早期那次未完成的构建，**不代表成功构建的峰值**；成功那次的 `/usr/bin/time -v` 只统计了 wrapper 客户端进程（`Maximum resident set size 119612 KB`），**不是** daemon 峰值。
 
 ## 对票 #26 的建议
 
