@@ -4,8 +4,9 @@
  * These drive the real product launcher, which boots the pinned dsh CLI with
  * the OurFairy v1 profile, an isolated OURFAIRY_HOME, and the test-only
  * liveness probe. They assert observable facts about the running composition
- * (live services, composed rows, registered tools, durable session files) —
- * never that "the Loader did not throw".
+ * (live services, composed rows, durable session files) — never that "the
+ * Loader did not throw". The tool catalog is proven where it is observable:
+ * the model request captured by the external model double (tests/model-double).
  */
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, statSync } from 'node:fs'
@@ -106,6 +107,16 @@ describe('OurFairy v1 baseline composition', () => {
       notActive,
       [],
       `service fiber(s) not ACTIVE: ${notActive.join(', ')} — report.services=${JSON.stringify(report.services)}`,
+    )
+
+    // The report carries only facts the probe can observe. The pinned
+    // `ToolRuntime` exposes no enumeration API, so a `tools` section here could
+    // only restate a constant. The authoritative tool catalog evidence is the
+    // model request captured by the external model double (tests/model-double).
+    assert.equal(
+      Object.hasOwn(report, 'tools'),
+      false,
+      `the probe must not report a tool section it cannot populate; report.tools=${JSON.stringify(report.tools)}`,
     )
   })
 

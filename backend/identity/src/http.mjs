@@ -176,11 +176,11 @@ export function identityHandlers({ service, fence }) {
     })],
     ['/identity/register', post(async (body) => ({
       ok: true,
-      ...service.register(body),
+      ...service.store.register(body),
     }))],
     ['/identity/sign-in', post(async (body) => ({
       ok: true,
-      ...service.signIn(body),
+      ...service.store.signIn(body),
     }))],
     ['/identity/session', post(async (_body, request) => ({
       ok: true,

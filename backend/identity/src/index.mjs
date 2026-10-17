@@ -53,22 +53,18 @@ export class IdentityService extends Service {
     return user === undefined ? undefined : { id: principalIdOf(user.shortId) }
   }
 
-  /** Mint an invite for the authenticated administrator. */
+  /**
+   * Mint an invite for the authenticated administrator.
+   *
+   * This is the one identity rule the service owns; registration and sign-in
+   * have no rule of their own, so the routes call the store directly rather
+   * than through a forwarder that adds nothing.
+   */
   createInvite(caller) {
     if (caller.isAdmin !== true) {
       throw new IdentityError(403, 'identity/forbidden', 'only Phaethon may create invites')
     }
     return this.store.createInvite(caller.shortId)
-  }
-
-  /** Register an invited identity. */
-  register({ inviteCode, name, password }) {
-    return this.store.register({ inviteCode, name, password })
-  }
-
-  /** Sign one identity in. */
-  signIn({ name, password }) {
-    return this.store.signIn({ name, password })
   }
 
   /**

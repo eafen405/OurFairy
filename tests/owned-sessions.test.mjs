@@ -249,6 +249,33 @@ describe('OurFairy owned sessions over real HTTP', () => {
       'the administrator identity must not see sessions it does not own')
   })
 
+  test('select answers exactly as read does, because switching moves no persistent binding', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const agent = await register(await createInvite(phaethon.token), 'agent-read-select-equivalent')
+    assert.equal(agent.status, 200, `the agent must exist: ${agent.text}`)
+    const token = agent.json.token
+
+    const primary = await request('/sessions/create', { token })
+    const ordinary = await request('/sessions/create', { token })
+    const before = await request('/sessions/list', { token })
+    const artifactsBefore = durableArtifacts()
+
+    for (const sessionId of [primary.json.session.id, ordinary.json.session.id]) {
+      const read = await request('/sessions/read', { token, body: { sessionId } })
+      const select = await request('/sessions/select', { token, body: { sessionId } })
+      assert.equal(read.status, 200, `reading an owned session must succeed: ${read.text}`)
+      assert.equal(select.status, 200, `selecting an owned session must succeed: ${select.text}`)
+      assert.deepEqual(select.json, read.json,
+        'select must answer exactly what read answers: it only names the current session client-side')
+    }
+
+    const after = await request('/sessions/list', { token })
+    assert.deepEqual(after.json, before.json,
+      'selecting must leave the listings, the primary binding, and the session set untouched')
+    assert.deepEqual(durableArtifacts(), artifactsBefore,
+      'select must move no persistent binding: reading and selecting write no durable artifact')
+  })
+
   test('a primary request racing a create still resolves the fixed primary session', async () => {
     const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
     const agent = await register(await createInvite(phaethon.token), 'agent-owner-four')

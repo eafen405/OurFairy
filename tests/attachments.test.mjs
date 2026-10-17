@@ -60,6 +60,28 @@ test('upload completes before sending and original downloads by qualified messag
   assert.deepEqual((await request('/attachments/download', alice.token, { sessionId, messageId, index: 0 })).bytes, bytes)
 })
 
+test('a malformed upload ID list is refused as a bad request before any session is opened', async () => {
+  const sessionId = await session(alice)
+  const uploadId = 'a'.repeat(32)
+  for (const [label, uploadIds] of [
+    ['not a list', uploadId],
+    ['a non-string member', [1]],
+    ['a member of the wrong length', ['abc']],
+    ['a member with non-hex characters', ['z'.repeat(32)]],
+    ['a duplicated member', [uploadId, uploadId]],
+    ['more than eight members', Array.from({ length: 9 }, (_, index) => index.toString(16).padStart(32, '0'))],
+  ]) {
+    const refused = await request('/chat/send', alice.token, { sessionId, requestId: `malformed-${label}`, text: '', uploadIds })
+    assert.equal(refused.status, 400, `${label} must be refused as a bad request: ${JSON.stringify(refused)}`)
+    assert.equal(refused.body.error.code, 'attachments/invalid-request',
+      `${label} must name the attachment rule it broke: ${JSON.stringify(refused)}`)
+  }
+  // A well-formed list that names no real upload is a different answer: the
+  // rule above rejects the shape, not the absence.
+  const unknown = await request('/chat/send', alice.token, { sessionId, requestId: 'unknown-but-well-formed', text: '', uploadIds: [uploadId] })
+  assert.equal(unknown.status, 404, JSON.stringify(unknown))
+})
+
 test('unfinished and foreign receipts never grant message or download access, including identical stored bytes', async () => {
   const aliceId = await session(alice), aliceOther = await session(alice), bobId = await session(bob)
   const bytes = Buffer.from('same hash gives no authority')

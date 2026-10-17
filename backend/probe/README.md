@@ -17,7 +17,6 @@ settle and then reports, as machine-readable JSON:
 | --- | --- |
 | `services` | Every promised service is live, its row is present, enabled, and its fiber is `active` |
 | `rows` | The exact composed row ids/names and their fiber states — the fact callers assert exclusions against |
-| `tools` | What the tool registry exposes to introspection (marked `not-enumerable` rather than claiming an empty catalog) |
 | `model` | One real turn's outcome: session id, event count, assistant text, flush result |
 | `sessions` | The durable session logs under the isolated `DSH_HOME` (`.jsonl`, or `.jsonl.zstd` when the writer compresses) |
 | `failures` | Every failure as a sentence naming the service, row, or missing configuration |
