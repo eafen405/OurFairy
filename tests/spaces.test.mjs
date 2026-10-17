@@ -4,10 +4,14 @@ import { once } from 'node:events'
 import { join } from 'node:path'
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { before, after, test } from 'node:test'
 import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-spaces-')
+// Two independent contributors the scope-contributor fixture registers and
+// unloads one at a time; neither path is inside the product's own roots.
+const fixture = { root: name => join(home, 'scope-fixture', name), report: join(home, 'scope-contributors.json') }
 const password = 'space-test-password'
 let port, model, modelPort, admin, alice, bob
 const modelRequests = []
@@ -43,6 +47,16 @@ before(async () => {
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name: 'ourfairy-fixture-dep', version: '1.0.0', main: 'index.js' }))
   writeFileSync(join(packageDir, 'index.js'), "module.exports = 'shared-dependency-ok'\n")
   execFileSync('tar', ['-czf', join(home, 'fixture.tgz'), '-C', join(home, 'fixture'), 'package'])
+  // The product entry itself mounts the fixture row, so the contributor registry
+  // is exercised through the real composition rather than an assembled service.
+  mkdirSync(join(home, 'dsh-home', 'profiles', 'ourfairy'), { recursive: true })
+  writeFileSync(join(home, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml'), JSON.stringify([{ insert: [{
+    id: 'ourfairy-scope-contributor-fixtures',
+    name: fileURLToPath(new URL('../backend/spaces/test-support/scope-contributors.mjs', import.meta.url)),
+    config: { shortId: 1, reportPath: fixture.report,
+      firstRoot: fixture.root('first-root'), firstFile: fixture.root('first-file'),
+      secondRoot: fixture.root('second-root'), secondFile: fixture.root('second-file') },
+  }] }]))
   model = http.createServer(async (req, res) => {
     if (req.url === '/fixture.tgz') { res.setHeader('content-type', 'application/gzip'); res.end(readFileSync(join(home, 'fixture.tgz'))); return }
     if (req.url === '/network-probe') { res.end('network-ok'); return }
@@ -160,4 +174,36 @@ test('ensure restores the owner private root when a persisted working directory 
   await tool(alice, 'working_directory', { cd: temporary }, sessionId)
   await tool(alice, 'bash', { description: 'Remove own temporary directory from another session', command: `rmdir '${temporary}'` })
   assert.match(await tool(alice, 'read', { file_path: 'hello.txt' }, sessionId), /private-alice/)
+})
+
+test('independent scope contributors compose and each teardown removes only its own roots', async () => {
+  const until = Date.now() + 15000
+  while (!existsSync(fixture.report) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 25))
+  assert.ok(existsSync(fixture.report), 'the fixture must run in the real product composition')
+  const report = JSON.parse(readFileSync(fixture.report, 'utf8'))
+  assert.equal(report.error, undefined, report.error)
+  const step = label => {
+    const found = report.steps.find(entry => entry.label === label)
+    assert.ok(found, `missing "${label}" step; recorded: ${JSON.stringify(report.steps.map(entry => entry.label))}`)
+    return found
+  }
+  const roots = { first: fixture.root('first-root'), second: fixture.root('second-root') }
+  const files = { first: fixture.root('first-file'), second: fixture.root('second-file') }
+  assert.notEqual(roots.first, roots.second)
+  const both = step('both')
+  assert.ok([roots.first, roots.second].every(root => both.writeRoots.includes(root)),
+    'both contributors must grant their extra root at the same time, not last writer wins')
+  assert.ok([files.first, files.second].every(file => both.readRoots.includes(file)),
+    'both contributors must grant their read-only file at the same time')
+  assert.ok([files.first, files.second].every(file => !both.writeRoots.includes(file)),
+    'read-only files must stay outside the writable roots')
+  const afterFirst = step('after-first-disposed')
+  assert.ok(!afterFirst.writeRoots.includes(roots.first) && !afterFirst.readRoots.includes(files.first),
+    'disposing one contributor must drop only its own extra root and read-only file')
+  assert.ok(afterFirst.writeRoots.includes(roots.second) && afterFirst.readRoots.includes(files.second),
+    'the contributor still loaded must keep its own extra root and read-only file')
+  const afterSecond = step('after-second-disposed')
+  assert.ok([roots.first, roots.second].every(root => !afterSecond.writeRoots.includes(root))
+    && [files.first, files.second].every(file => !afterSecond.readRoots.includes(file)),
+  'a released contribution must not stay effective')
 })
