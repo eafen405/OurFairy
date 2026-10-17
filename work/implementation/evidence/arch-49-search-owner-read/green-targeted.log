@@ -1,0 +1,15 @@
+✔ chat searches Chinese message excerpts then reads original event positions (4038.077758ms)
+✔ known foreign IDs and administrator status cannot widen conversation tools (326.357161ms)
+✔ read intervals have inclusive original positions, omit tool results, and bound message text (631.486571ms)
+✔ native index rebuild preserves Chinese search scope and independently authorized range reads (1101.850567ms)
+✔ recipient searches a formal delivered body and reads its original event without sender access (348.875341ms)
+✔ the identity owner codec speaks the encoding sessions persist and refuses everything else (9.590279ms)
+✔ conversation tools resolve ownership through the public owned-session seam only (0.290063ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6773.942267
