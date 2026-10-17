@@ -1,0 +1,12 @@
+✔ chat creates group for designated owner and updates live owner tools (3589.409447ms)
+✔ only the target group owner changes membership; members share real files and confined scripts (1149.684656ms)
+✔ removing a member invalidates the same live session cwd and later file/script access (702.017702ms)
+✔ concurrent duplicate membership updates stay singular and restart preserves group access (1176.042417ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6926.457967

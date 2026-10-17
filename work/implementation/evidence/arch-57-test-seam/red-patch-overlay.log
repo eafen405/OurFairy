@@ -1,0 +1,35 @@
+✖ configured quiet completion leaves context for later without inventing pending inference (4055.662095ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4165.0319
+
+✖ failing tests:
+
+test at tests/jobs.test.mjs:276:1
+✖ configured quiet completion leaves context for later without inventing pending inference (4055.662095ms)
+  AssertionError [ERR_ASSERTION]: start exited 1
+  --- stdout ---
+  
+  --- stderr ---
+  ourfairy-backend: unknown flag --patch
+  
+  
+  1 !== 0
+  
+      at start (file:///home/eafen405/projects/OurFairy/.worktrees/arch-57-test-seam/tests/jobs.test.mjs:41:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-57-test-seam/tests/jobs.test.mjs:279:3)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
