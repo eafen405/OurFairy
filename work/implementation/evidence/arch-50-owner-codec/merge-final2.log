@@ -1,0 +1,8 @@
+Merge made by the 'ort' strategy.
+ .../arch-66-session-events/merger-combo-verify.log |  10 ++
+ .../arch-66-session-events/merger-npm-test.log     | 150 +++++++++++++++++++++
+ .../arch-66-session-events/merger-verification.md  |  54 ++++++++
+ 3 files changed, 214 insertions(+)
+ create mode 100644 work/implementation/evidence/arch-66-session-events/merger-combo-verify.log
+ create mode 100644 work/implementation/evidence/arch-66-session-events/merger-npm-test.log
+ create mode 100644 work/implementation/evidence/arch-66-session-events/merger-verification.md

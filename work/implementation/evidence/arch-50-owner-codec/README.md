@@ -2,7 +2,8 @@
 
 票：<https://github.com/eafen405/OurFairy/issues/50>（地图 #69 / `/implement-spec`）
 分支：`arch/50-owner-codec`，worktree `/home/eafen405/projects/OurFairy/.worktrees/arch-50-owner-codec`
-集成分支基线：`42bbf89`（开工时，先 `git merge integration/ourfairy-v1` 到该 tip）→ 汇报前再次合入集成分支（见「合并」）
+集成分支基线：`42bbf89`（开工时先 `git merge` 到该 tip）→ 汇报前集成分支前进（#66 合入并 pin 至 `1c95299`），两次合入后最终合并提交 `3f76997`；分支 tip（本证据提交）即 **FINAL_SHA**，见汇报
+提交：`4cd3744`（代码 + 新测试 + 证据）；证据补记见本文件所在提交
 
 ## 前提核对（动手前）
 
@@ -49,8 +50,11 @@
 | `npm test`（开工基线，未含新测试） | 122/123；唯一失败为既有 PDF 资源预算用例在并发负载下报 `worker-unavailable`（期望 `resource-limit`），与 #49/#64 记录的是同一 flake（`baseline-full.log`） |
 | `npm test`（改后） | 125/126；同样只有该 PDF flake（`full-after.log`） |
 | `node --test tests/pdf.test.mjs`（单独重跑） | 5/5 通过（`pdf-rerun.log`），确认失败属负载抖动 |
-| 提交时 pre-commit hook（`npm test` + `npm run combo:verify`） | 见 `commit.log` / `pre-commit-*.log` |
-| 合并集成分支后 `npm test` / `npm run combo:verify` | 见 `final-*.log` / `merge-combo-verify.log` |
+| 提交时 pre-commit hook（`npm test` + `npm run combo:verify`，基线 `42bbf89`） | **126/126 通过**，`combo: combination verified`（`commit.log`） |
+| 合入前 `npm test`（`4cd3744`） | **126/126 通过**（`final-full.log`） |
+| 合入前 `npm run combo:verify` | `combo: combination verified`（`final-combo-verify.log`） |
+| 合入最新集成分支后 `npm test`（`1c95299`） | **127/127 通过**（`final-full-merged2.log`；#66 带来 1 条新测试） |
+| 合入最新集成分支后 `npm run combo:verify` | `combo: combination verified`（`final-combo-verify-merged2.log`） |
 
 ## 行为与语义说明
 
@@ -67,8 +71,12 @@
 
 1. `backend/probe/src/index.mjs:192` `meta: { owner: 'user:1' }`：测试专用 liveness probe（其 package.json 自述 “Mounted through a --patch overlay and never part of the product bundle”），固定法厄同编号 1 的 fixture，不是产品授权路径；新测试的源码扫描显式排除 `probe/`，理由写在测试注释里。若强行让它依赖 identity，会把产品模块耦合进 baseline probe，收益不成比例。
 2. `backend/spaces/test-support/scope-contributors.mjs:25` `` `user:${config.shortId}` ``：测试 fixture，且 `scope.owner()` 的 codec 校验会让任何漂移立即以 `FS_PERMISSION_DENIED` 失败，不会静默通过。
-3. 本票未改 Android 客户端；客户端把 `owner` 当不透明字符串消费，归属判定在服务端。
+3. 本票未改 Android 客户端（不在票面范围），归属判定全部在服务端。
 
 ## 合并
 
-（汇报前合入 `integration/ourfairy-v1` 最新 tip 后补：合并提交 SHA = FINAL_SHA、合并后全量结果。）
+汇报前执行 `git merge integration/ourfairy-v1`。集成分支在本票提交后前进了两次：`42bbf89 → f360385`（#66 代码合入）→ `1c95299`（#66 pin 与证据）。第一次证据提交时 combo verify 因集成分支前进而失败（`commit-evidence.log`），按协议先合入再重试；最终合并提交 `3f76997`，其后的证据提交即分支 tip（FINAL_SHA 见汇报，SHA 无法自我引用）。
+
+合并状态下复跑验收：`npm test` **127/127 通过**（`final-full-merged2.log`），`npm run combo:verify` **三项 ok**（`final-combo-verify-merged2.log`）。
+
+`#66` 改的是 sessions 的事件读取（`d79253d`），与本票的 owner 码表改动无冲突；合并后全量复跑通过。
