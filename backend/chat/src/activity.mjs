@@ -1,19 +1,24 @@
 /** Activity episodes are summaries of native Session prefixes, never a separate log. */
-import { taskHistory } from './jobs.mjs'
 
-/** Derive persistent episode identifiers and current activity from the same session facts. */
-export function projectActivity(events, sessionId, tasks, running) {
+/**
+ * Activity over the shared task fold: `visit` records the state after each
+ * event, and `finish` resolves the episodes against the task roster derived
+ * from the same pass plus the live agent's `running` status.
+ */
+export function observeActivity(sessionId) {
   let episode
   let completed
   let delivery
   let executing = false
   let parked = false
   let latestOutput
+  let lastSeq = -1
   const decisions = new Set()
   const unavailable = new Set()
   const begin = seq => { episode ??= { episodeId: `${sessionId}/${seq}`, startedSeq: seq } }
-  taskHistory(events, (event, rows, pending) => {
+  const visit = (event, rows, pending) => {
     const data = event.data
+    lastSeq = event.seq
     if (event.type === 'session/end-seed') {
       // Restored process-local work has no continuation guarantee; later real turns need their own episode.
       const lost = rows.filter(row => ['running', 'stopping'].includes(row.status) || [1, 2].includes(row.report.status))
@@ -43,21 +48,24 @@ export function projectActivity(events, sessionId, tasks, running) {
       completed = { ...episode, finishedSeq: event.seq }
       episode = undefined
     }
-  })
-  const reasons = [
-    ...(running ? [1] : []),
-    ...(tasks.some(task => [1, 2].includes(task.status)) ? [2] : []),
-    ...(tasks.some(task => [1, 2].includes(task.report.status)) ? [3] : []),
-  ]
-  const unknown = tasks.some(task => task.status === 0 || task.report.status === 6)
-  if (running && episode === undefined) {
-    if (completed !== undefined) episode = { episodeId: completed.episodeId, startedSeq: completed.startedSeq }
-    else begin(events.at(-1)?.seq ?? 0)
   }
-  const current = episode ?? completed
-  if (delivery !== undefined && delivery.episodeId === current?.episodeId) reasons.push(4)
-  return { status: reasons.some(reason => reason !== 4) ? 2 : unknown ? 0 : 1,
-    reasons, episodeId: current?.episodeId ?? null, startedSeq: current?.startedSeq ?? null,
-    throughSeq: events.at(-1)?.seq ?? -1,
-    ...(completed === undefined ? {} : { completed }), ...(delivery === undefined ? {} : { delivery }) }
+  const finish = (tasks, running) => {
+    const reasons = [
+      ...(running ? [1] : []),
+      ...(tasks.some(task => [1, 2].includes(task.status)) ? [2] : []),
+      ...(tasks.some(task => [1, 2].includes(task.report.status)) ? [3] : []),
+    ]
+    const unknown = tasks.some(task => task.status === 0 || task.report.status === 6)
+    if (running && episode === undefined) {
+      if (completed !== undefined) episode = { episodeId: completed.episodeId, startedSeq: completed.startedSeq }
+      else begin(lastSeq === -1 ? 0 : lastSeq)
+    }
+    const current = episode ?? completed
+    if (delivery !== undefined && delivery.episodeId === current?.episodeId) reasons.push(4)
+    return { status: reasons.some(reason => reason !== 4) ? 2 : unknown ? 0 : 1,
+      reasons, episodeId: current?.episodeId ?? null, startedSeq: current?.startedSeq ?? null,
+      throughSeq: lastSeq,
+      ...(completed === undefined ? {} : { completed }), ...(delivery === undefined ? {} : { delivery }) }
+  }
+  return { visit, finish }
 }
