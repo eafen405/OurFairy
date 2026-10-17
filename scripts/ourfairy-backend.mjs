@@ -9,12 +9,18 @@
  * host's real home.
  *
  * Commands:
- *   probe [--turn] [--report <path>]   boot, run the test-only liveness probe, exit with its result
+ *   probe [--turn] [--report <path>] [--patch <path>]   boot, run the test-only liveness probe, exit with its result
  *   boot-product [--report <path>]     boot the product profile with NO overlay and report the outcome
- *   start [--hold-ms <n>]              boot detached, wait until the probe reports ready
+ *   start [--hold-ms <n>] [--patch <path>]   boot detached, wait until the probe reports ready
  *   stop                               signal the whole process group and verify nothing leaked
  *   status                             pid/readiness/port facts of the last start
  *   doctor                             dependency, pin, build, and isolation diagnostics
+ *
+ * `--patch <path>` (repeatable) mounts one extra overlay above the profile, in
+ * argv order — the supported way for a test to add a row without writing the
+ * profile's own `cordis.patch.yml`, which is the launcher's private layout. It
+ * is accepted by `probe` and `start`; `boot-product` exists to boot the product
+ * with no overlay at all, so it refuses one.
  *
  * `--allow-drift` (also on `combo.mjs verify`) is an explicit, opt-in escape
  * hatch for investigating a checkout that has moved past its pinned commit. It
@@ -94,7 +100,7 @@ function fail(message, code = 1) {
 }
 
 function parseArgv(argv) {
-  const options = { command: undefined, report: undefined, json: false, turn: false, reinstall: false, allowDrift: false, holdMs: 0, home: undefined, stopTimeoutMs: 15000, readyTimeoutMs: 120000 }
+  const options = { command: undefined, report: undefined, json: false, turn: false, reinstall: false, allowDrift: false, holdMs: 0, home: undefined, stopTimeoutMs: 15000, readyTimeoutMs: 120000, patches: [] }
   const args = argv.slice(2)
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -107,6 +113,7 @@ function parseArgv(argv) {
     switch (arg) {
       case '--report': options.report = resolve(value()); break
       case '--home': options.home = resolve(value()); break
+      case '--patch': options.patches.push(resolve(value())); break
       case '--turn': options.turn = true; break
       case '--json': options.json = true; break
       case '--reinstall': options.reinstall = true; break
@@ -334,6 +341,23 @@ function overlayPath() {
   return path
 }
 
+/**
+ * The overlays one boot applies: the probe overlay under test, then every
+ * caller-supplied `--patch` file in argv order. dsh applies later overlays
+ * last, so a test row sits above the product profile it extends without the
+ * test having to know where that profile lives.
+ * @param {{patches: string[]}} options
+ * @returns {string[]}
+ */
+function bootPatches(options) {
+  return [overlayPath(), ...options.patches]
+}
+
+/** {@link bootPatches} in the dsh CLI's repeatable `--patch <path>` form. */
+function patchArgs(options) {
+  return bootPatches(options).flatMap(path => ['--patch', path])
+}
+
 function readJson(path) {
   try {
     return JSON.parse(readFileSync(path, 'utf8'))
@@ -362,7 +386,7 @@ function commandProbe(layout, options) {
   const reportPath = options.report ?? join(layout.runDir, 'probe-report.json')
   rmSync(reportPath, { force: true })
   const mode = options.turn ? 'turn' : 'boot'
-  const result = spawnSync(process.execPath, [dsh.bin, '--profile', PROFILE_NAME, '--patch', overlayPath()], {
+  const result = spawnSync(process.execPath, [dsh.bin, '--profile', PROFILE_NAME, ...patchArgs(options)], {
     cwd: repoRoot,
     env: childEnv(layout, { reportPath, mode }),
     encoding: 'utf8',
@@ -379,6 +403,7 @@ function commandProbe(layout, options) {
     dshDrifted: dsh.drifted,
     profileDir: layout.profileDir,
     installMode,
+    overlaysApplied: bootPatches(options),
     isolatedHome: layout.home,
     reportPath,
   })
@@ -580,7 +605,7 @@ async function commandStart(layout, options) {
   rmSync(reportPath, { force: true })
   const logFile = join(layout.logDir, `backend-${new Date().toISOString().replaceAll(':', '-')}.log`)
   const fd = openSync(logFile, 'a')
-  const child = spawn(process.execPath, [dsh.bin, '--profile', PROFILE_NAME, '--patch', overlayPath()], {
+  const child = spawn(process.execPath, [dsh.bin, '--profile', PROFILE_NAME, ...patchArgs(options)], {
     cwd: repoRoot,
     env: childEnv(layout, { reportPath, mode: 'hold', holdMs: options.holdMs }),
     detached: true,
@@ -597,6 +622,7 @@ async function commandStart(layout, options) {
     dshHead: dsh.head,
     dshLocked: dsh.locked,
     installMode,
+    overlaysApplied: bootPatches(options),
     ports: [],
     ready: false,
   })
@@ -620,6 +646,7 @@ async function commandStart(layout, options) {
     dshHome: layout.dshHome,
     dshHead: dsh.head,
     installMode,
+    overlaysApplied: bootPatches(options),
     listeningPorts: ports,
     logFile,
   }
@@ -795,8 +822,14 @@ function commandDoctor(layout, options) {
 const options = parseArgv(process.argv)
 const layout = layoutOf(options)
 if (process.argv[2] === '--help' || options.command === 'help' || options.command === undefined) {
-  process.stdout.write('usage: ourfairy-backend <probe|boot-product|start|stop|status|doctor> [--turn] [--report <path>] [--home <dir>] [--json] [--reinstall] [--allow-drift]\n')
+  process.stdout.write('usage: ourfairy-backend <probe|boot-product|start|stop|status|doctor> [--turn] [--report <path>] [--home <dir>] [--json] [--reinstall] [--allow-drift] [--patch <path>]...\n')
   process.exit(options.command === undefined ? 2 : 0)
+}
+// Only the overlay boots apply `--patch`. Accepting it silently elsewhere would
+// report a fixture that never mounted, which is the failure this flag exists to
+// make impossible: boot-product's contract is the product profile with no overlay.
+if (options.patches.length > 0 && options.command !== 'start' && options.command !== 'probe') {
+  fail(`--patch applies to probe and start only; '${options.command}' does not mount profile overlays`)
 }
 
 const exitCode = await (async () => {

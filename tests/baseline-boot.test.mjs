@@ -153,6 +153,16 @@ describe('OurFairy v1 baseline composition', () => {
     )
   })
 
+  test('boot-product refuses an overlay instead of silently ignoring it', () => {
+    // Its contract is the product profile with no test overlay, so a caller that
+    // passes one has misunderstood where its fixture goes; failing names that
+    // instead of reporting a boot that never mounted what the caller asked for.
+    const run = runBackend(['boot-product', '--patch', join(sharedHome, 'unused.patch.yml')], keylessEnv)
+    assert.notEqual(run.code, 0, describeRun('boot-product with --patch', run))
+    assert.match(run.stderr, /--patch applies to probe and start only/u,
+      `the refusal must name the flag's commands:\n${run.stderr}`)
+  })
+
   test('a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration', () => {
     const run = runBackend(
       ['probe', '--turn', '--report', join(sharedHome, 'turn-missing-key.json')],

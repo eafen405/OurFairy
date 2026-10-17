@@ -2,19 +2,15 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { once } from 'node:events'
 import { createServer, request } from 'node:http'
-import { createReadStream, readFileSync } from 'node:fs'
+import { createReadStream } from 'node:fs'
 import { mkdtemp, open, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createDownloadResponder } from '../backend/attachments/src/download.mjs'
 
-// Exercise the registered responder itself against real HTTP. The source is
-// instrumented at its byte-stream boundary to expose actual descriptor closure.
-// This follows the review reproduction without introducing a product test API.
-const source = readFileSync(new URL('../backend/attachments/src/index.mjs', import.meta.url), 'utf8')
-const start = source.indexOf('async (res, input) => {', source.indexOf("register('/attachments/download'"))
-const end = source.indexOf('\n  }))', start)
-assert.ok(start >= 0 && end > start, 'locate the actual registered download responder')
-const responder = ctx => new Function('ctx', 'once', `return (${source.slice(start, end)}\n})`)(ctx, once)
+// Exercise the shipped download responder factory itself against real HTTP: the
+// abort path is observable at its byte-stream boundary through the exported
+// factory, so the test never reads the product's source text.
 
 test('disconnecting an original download during backpressure settles its handler and closes its file source', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ourfairy-download-abort-')), path = join(dir, 'original.bin')
@@ -23,7 +19,7 @@ test('disconnecting an original download during backpressure settles its handler
   let sourceDone, handlerDone
   const sourceFinished = new Promise(resolve => { sourceDone = resolve })
   const handlerFinished = new Promise(resolve => { handlerDone = resolve })
-  const respond = responder({ attachments: { async *readFileStream(_ref, signal) {
+  const respond = createDownloadResponder({ attachments: { async *readFileStream(_ref, signal) {
     stream = createReadStream(path, { highWaterMark: 65536, signal })
     stream.once('close', () => { sourceClosed = true; sourceDone() })
     try { for await (const chunk of stream) yield chunk }

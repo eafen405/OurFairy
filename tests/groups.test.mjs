@@ -4,7 +4,7 @@ import { once } from 'node:events'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { before, after, test } from 'node:test'
-import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-groups-')
 const password = 'group-test-password'
@@ -19,10 +19,7 @@ async function request(path, token, body = {}) {
   assert.equal(response.status, 200, JSON.stringify(value))
   return value
 }
-async function user(name) {
-  const invite = await request('/identity/invite', admin.token)
-  return request('/identity/register', undefined, { name, password, inviteCode: invite.invite.code })
-}
+function user(name) { return registerUser(port, admin.token, name, password) }
 let requestNo = 0
 async function tool(user, name, args, sessionId) {
   sessionId ??= (await request('/sessions/create', user.token)).session.id
@@ -64,9 +61,9 @@ before(async () => {
     res.end()
   })
   model.listen(0, '127.0.0.1'); await once(model, 'listening'); modelPort = model.address().port
-  const run = await runBackendAsync(['start', '--json'], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+  const run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     DEEPSEEK_API_KEY: 'mock-group-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
-  assert.equal(run.code, 0, describeRun('start', run)); port = JSON.parse(run.stdout).listeningPorts[0]
+  port = startedPort(run)
   admin = await request('/identity/sign-in', undefined, { name: 'phaethon', password })
   alice = await user('group-alice'); bob = await user('group-bob')
 })
@@ -143,9 +140,9 @@ test('concurrent duplicate membership updates stay singular and restart preserve
   assert.deepEqual(groups.find(g => g.id === group.id).memberShortIds, [alice.user.shortId, bob.user.shortId])
   const stopped = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home })
   assert.equal(stopped.code, 0, describeRun('restart stop', stopped))
-  const started = await runBackendAsync(['start', '--json'], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+  const started = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     DEEPSEEK_API_KEY: 'mock-group-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
-  assert.equal(started.code, 0, describeRun('restart start', started)); port = JSON.parse(started.stdout).listeningPorts[0]
+  port = startedPort(started)
   assert.match(await tool(bob, 'read', { file_path: join(group.root, 'collaboration.txt') }), /group-shared-value/)
   assert.match(await tool(alice, 'groups', {}, aliceSession), /Shared lab/)
   assert.match(await tool(admin, 'read', { file_path: join(group.root, 'collaboration.txt') }), /outside|denied/i)

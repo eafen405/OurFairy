@@ -1,0 +1,16 @@
+▶ OurFairy v1 baseline composition
+  ✔ real profile boot reports every required service live (keyless) (3013.912314ms)
+  ✔ v1 profile mounts scoped file/shell adapters and excludes unused capabilities (392.416276ms)
+  ✔ the product profile alone boots with no test overlay at all (654.977662ms)
+  ✔ boot-product refuses an overlay instead of silently ignoring it (32.161507ms)
+  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (418.59308ms)
+  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (403.450329ms)
+✔ OurFairy v1 baseline composition (4916.416442ms)
+ℹ tests 6
+ℹ suites 1
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4980.91441

@@ -5,37 +5,31 @@
  * These drive the shipped launcher (`scripts/ourfairy-backend.mjs start`), which
  * boots the real dsh CLI with the OurFairy profile, and then speak HTTP to the
  * listener it bound — no plugin is assembled by hand and no request is faked.
- * Requests go through `node:http`, not `fetch`, so they cannot be routed
- * through an ambient proxy the way `NODE_USE_ENV_PROXY` does for global fetch.
+ * Requests go through the shared helper's `node:http` client, not `fetch`, so
+ * they cannot be routed through an ambient proxy the way `NODE_USE_ENV_PROXY`
+ * does for global fetch.
  *
- * An explicit `OURFAIRY_DSH_DIR` override (a ticket worktree of the harness) is
- * passed through with `--allow-drift`; without it the launcher checks out the
- * pinned combination, which is what a normal run must do.
+ * The helper's `startArgs` derives `--allow-drift` for an explicit
+ * `OURFAIRY_DSH_DIR` override (a ticket worktree of the harness); without it the
+ * launcher checks out the pinned combination, which is what a normal run must do.
  */
 import assert from 'node:assert/strict'
-import http from 'node:http'
 import { after, before, describe, test } from 'node:test'
-import { describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
+import { describeRun, httpJson, makeHome, removeHome, runBackend, startArgs, startedPort } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'test-phaethon-password'
 const home = makeHome('ourfairy-identity-')
 const started = { port: undefined, stop: () => {} }
 
 before(() => {
-  const args = ['start', '--json']
-  if (process.env.OURFAIRY_DSH_DIR !== undefined && process.env.OURFAIRY_DSH_DIR !== '') args.push('--allow-drift')
-  const run = runBackend(args, {
+  const run = runBackend(startArgs(), {
     OURFAIRY_HOME: home,
     OURFAIRY_PORT: '0',
     OURFAIRY_PHAETHON_PASSWORD: PHAETHON_PASSWORD,
     DEEPSEEK_API_KEY: undefined,
     DEEPSEEK_BASE_URL: undefined,
   })
-  assert.equal(run.code, 0, describeRun('start', run))
-  const summary = JSON.parse(run.stdout)
-  assert.ok(Array.isArray(summary.listeningPorts) && summary.listeningPorts.length > 0,
-    `started backend reported no listening port: ${run.stdout}`)
-  started.port = summary.listeningPorts[0]
+  started.port = startedPort(run)
   started.stop = () => { started.stopped = runBackend(['stop'], { OURFAIRY_HOME: home }) }
 })
 
@@ -47,30 +41,9 @@ after(() => {
   removeHome(home)
 })
 
-/** One HTTP request against the running backend. */
-function request(path, { method = 'POST', token, body } = {}) {
-  return new Promise((resolve, reject) => {
-    const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body))
-    const headers = { host: `127.0.0.1:${started.port}` }
-    if (token !== undefined) headers.authorization = `Bearer ${token}`
-    if (payload !== undefined) {
-      headers['content-type'] = 'application/json'
-      headers['content-length'] = String(payload.byteLength)
-    }
-    const call = http.request({ host: '127.0.0.1', port: started.port, path, method, headers }, response => {
-      const chunks = []
-      response.on('data', chunk => chunks.push(chunk))
-      response.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf8')
-        let json
-        try { json = JSON.parse(text) } catch { json = undefined }
-        resolve({ status: response.statusCode, headers: response.headers, text, json })
-      })
-    })
-    call.on('error', reject)
-    if (payload !== undefined) call.write(payload)
-    call.end()
-  })
+/** One HTTP request against the running backend, with the raw response kept. */
+function request(path, options = {}) {
+  return httpJson(started.port, path, { ...options, expect: false })
 }
 
 /** Sign one identity in and return its session credential. */

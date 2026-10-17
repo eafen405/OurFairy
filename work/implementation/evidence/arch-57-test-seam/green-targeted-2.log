@@ -1,0 +1,33 @@
+✔ chat searches Chinese message excerpts then reads original event positions (3305.943617ms)
+✔ known foreign IDs and administrator status cannot widen conversation tools (350.943398ms)
+✔ read intervals have inclusive original positions, omit tool results, and bound message text (644.558275ms)
+✔ native index rebuild preserves Chinese search scope and independently authorized range reads (1115.223216ms)
+✔ recipient searches a formal delivered body and reads its original event without sender access (365.732756ms)
+✔ the identity owner codec speaks the encoding sessions persist and refuses everything else (13.959573ms)
+✔ conversation tools resolve ownership through the public owned-session seam only (0.498059ms)
+▶ OurFairy identity over real HTTP
+  ✔ the provisioned Phaethon signs in as short number 1 (48.105278ms)
+  ✔ invited agents take the next short numbers in registration order (86.184523ms)
+  ✔ refused registrations leave no identity and consume no short number (106.675658ms)
+  ✔ an ordinary agent is refused the administrator invite operation (60.056226ms)
+  ✔ the credential names its own holder with no user field in the request (59.369287ms)
+  ✔ signing out ends the credential it was presented with (88.791326ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (64.182418ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (227.281297ms)
+✔ OurFairy identity over real HTTP (741.671187ms)
+✔ chat tools write own private files, share public files, and deny another user including administrator (3896.230908ms)
+✔ real child processes share public files, keep private boundaries after cd, and retain networking (646.285215ms)
+✔ directory changes, edits, image reads and symlinks retain the same owner boundary (1003.053063ms)
+✔ agentless filesystem and script Interface calls refuse instead of inheriting a default user (0.815183ms)
+✔ shell background children and admitted detached jobs retain the same file scope (426.813154ms)
+✔ a network-installed dependency is available to both users in the one shared environment (719.045132ms)
+✔ ensure restores the owner private root when a persisted working directory disappears (449.478371ms)
+✔ independent scope contributors compose and each teardown removes only its own roots (0.550979ms)
+ℹ tests 23
+ℹ suites 1
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7484.944144

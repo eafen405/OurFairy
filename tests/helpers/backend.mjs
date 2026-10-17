@@ -6,10 +6,12 @@
  * assembled by hand here.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import assert from 'node:assert/strict'
+import http from 'node:http'
 
 /** Absolute path of this ticket worktree (the repository under test). */
 export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
@@ -104,6 +106,58 @@ export function readReport(path) {
 }
 
 /**
+ * The launcher arguments for one test `start`.
+ *
+ * Two pieces of launcher knowledge live here so no test re-derives them: an
+ * explicit `OURFAIRY_DSH_DIR` override (a ticket worktree of the harness) is a
+ * deliberate experiment, so the launcher is told `--allow-drift`; and each
+ * extra overlay is passed as `--patch <path>`, the composition's supported way
+ * to mount a test-only row above the product profile.
+ * @param {string[]} [overlays] - overlay paths to mount, in order, as written
+ *   by {@link writeOverlay}.
+ * @returns {string[]}
+ */
+export function startArgs(overlays = []) {
+  const args = ['start', '--json']
+  if (process.env.OURFAIRY_DSH_DIR !== undefined && process.env.OURFAIRY_DSH_DIR !== '') args.push('--allow-drift')
+  for (const overlay of overlays) args.push('--patch', overlay)
+  return args
+}
+
+/**
+ * The port a `start --json` run bound, refusing a run that failed or reported
+ * none. Port discovery lives here so no suite parses `listeningPorts` itself.
+ * @param {{code: number, stdout: string, stderr: string}} run - a `start --json` result.
+ * @returns {number}
+ */
+export function startedPort(run) {
+  assert.equal(run.code, 0, describeRun('start', run))
+  const summary = JSON.parse(run.stdout)
+  assert.ok(
+    Array.isArray(summary.listeningPorts) && summary.listeningPorts.length > 0,
+    `started backend reported no listening port: ${run.stdout}`,
+  )
+  return summary.listeningPorts[0]
+}
+
+/**
+ * Write one test-only overlay under `home` and return its path.
+ *
+ * The overlay is handed to the launcher through `--patch`, so a test never
+ * writes the profile's own `cordis.patch.yml` — a path that belongs to the
+ * launcher's isolated layout, not to the test suite.
+ * @param {string} home - isolated home created by {@link makeHome}.
+ * @param {Array<object>} rows - patch rows to mount, e.g. `[{ insert: [...] }]`.
+ * @param {string} [name] - file name, unique per test within the same home.
+ * @returns {string} the overlay path to pass in {@link startArgs}.
+ */
+export function writeOverlay(home, rows, name = 'overlay.patch.yml') {
+  const path = join(home, name)
+  writeFileSync(path, `${JSON.stringify(rows, undefined, 2)}\n`)
+  return path
+}
+
+/**
  * Run one launcher command without blocking the event loop.
  *
  * `runBackend` uses `spawnSync`, which parks the whole process: anything the
@@ -151,4 +205,64 @@ export function runBackendAsync(args, env = {}, options = {}) {
 export function describeRun(label, run) {
   return `${label} exited ${run.code}${run.error === undefined ? '' : ` (${run.error.message})`}\n`
     + `--- stdout ---\n${run.stdout}\n--- stderr ---\n${run.stderr}`
+}
+
+/**
+ * One JSON request against a running backend, over `node:http`.
+ *
+ * Global `fetch` can be routed through an ambient proxy (`NODE_USE_ENV_PROXY`),
+ * so a test request must not depend on it: this helper always speaks to the
+ * listener the test started. The expected status is asserted and the parsed
+ * body returned; pass `expect: false` to inspect the raw response when a test
+ * asserts a refusal status itself.
+ * @param {number} port - the port `start --json` reported.
+ * @param {string} path - request path on that backend.
+ * @param {{method?: string, token?: string, body?: unknown, expect?: number|false}} [options]
+ * @returns {Promise<any>} the parsed body, or the raw response for `expect: false`.
+ */
+export function httpJson(port, path, { method = 'POST', token, body, expect = 200 } = {}) {
+  const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body))
+  const headers = { host: `127.0.0.1:${port}` }
+  if (token !== undefined) headers.authorization = `Bearer ${token}`
+  if (payload !== undefined) {
+    headers['content-type'] = 'application/json'
+    headers['content-length'] = String(payload.byteLength)
+  }
+  return new Promise((resolve, reject) => {
+    // A fresh socket per request: no pooled connection outlives the backend a
+    // test stops between requests.
+    const call = http.request({ host: '127.0.0.1', port, path, method, headers, agent: false }, response => {
+      const chunks = []
+      response.on('data', chunk => chunks.push(chunk))
+      response.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8')
+        let json
+        try { json = JSON.parse(text) } catch { json = undefined }
+        const received = { status: response.statusCode, headers: response.headers, text, json }
+        if (expect === false) return resolve(received)
+        try {
+          assert.equal(received.status, expect, `${method} ${path}: ${text}`)
+        } catch (error) {
+          return reject(error)
+        }
+        return resolve(json)
+      })
+    })
+    call.on('error', reject)
+    if (payload !== undefined) call.write(payload)
+    call.end()
+  })
+}
+
+/**
+ * Invite and register one member through the running backend's identity routes.
+ * @param {number} port - the port `start --json` reported.
+ * @param {string} adminToken - an administrator's session credential.
+ * @param {string} name - the member's name.
+ * @param {string} [password] - the member's password.
+ * @returns {Promise<{token: string, user: {shortId: number}}>} the registered identity.
+ */
+export async function registerUser(port, adminToken, name, password = `${name}-password`) {
+  const invite = await httpJson(port, '/identity/invite', { token: adminToken })
+  return httpJson(port, '/identity/register', { body: { inviteCode: invite.invite.code, name, password } })
 }
