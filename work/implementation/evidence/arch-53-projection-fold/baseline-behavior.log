@@ -1,0 +1,24 @@
+✔ actual confined job survives phone observation, permits dialogue, and reports into its original session (7738.366189ms)
+✔ stopping a reply and stopping its real background process are independent, with owned controls (247.004327ms)
+✔ producer-side loss exposes missing output rather than treating a terminal status as complete output (487.014934ms)
+✔ registry retention preserves absolute byte offsets and explicitly marks an evicted prefix (2193.690685ms)
+✔ confined detached scripts cannot read another user and old task identities stay unavailable after restart (3696.56676ms)
+✔ two sessions stay independent and real job settlement never publishes an intermediate quiet episode (1008.60957ms)
+✔ an awaited result and a failed report both settle without holding terminal tasks active (1361.196676ms)
+✔ configured quiet completion leaves context for later without inventing pending inference (1283.700522ms)
+✔ accepted consecutive turns form one execution episode and canceled parked input does not stay active (85.473098ms)
+✔ Fairy delivers only selected text to a cold primary without recipient inference (7718.04604ms)
+✔ live delivery remains independent of the recipient active attempt and later model history includes it (165.087259ms)
+✔ native log success with failed business update recovers after restart and exact retry stays single (1048.317591ms)
+✔ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (190.592795ms)
+✔ failed native durability checkpoint never confirms and stable retry recovers the same message (911.138399ms)
+✔ notification outlet failure preserves durable delivery and successful sender confirmation (886.684135ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18417.218766
+EXIT:0
