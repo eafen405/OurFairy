@@ -1,5 +1,6 @@
 /** Owned conversation tools over the native, disposable query read model. */
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 
 export const name = 'ourfairy-search'
 export const inject = ['agents', 'tools', 'identity', 'ourfairySessions', 'sessionQuery']
@@ -9,9 +10,9 @@ const output = { schema: { type: 'object', additionalProperties: true },
 
 export function apply(ctx) {
   const caller = exec => {
-    const owner = exec.agent?.session?.header?.owner
-    if (typeof owner !== 'string' || !/^user:[1-9]\d*$/.test(owner)) throw new Error('search/missing-owner: conversation tools require an owned execution session')
-    const user = ctx.identity.store.userByShortId(Number(owner.slice(5)))
+    const shortId = shortIdOf(exec.agent?.session?.header?.owner)
+    if (shortId === undefined) throw new Error('search/missing-owner: conversation tools require an owned execution session')
+    const user = ctx.identity.store.userByShortId(shortId)
     if (!user) throw new Error('search/unknown-user: conversation tools require an active owner')
     return user
   }
@@ -35,7 +36,7 @@ export function apply(ctx) {
       parameters: { sessionId: { type: 'string', required: true }, fromSeq: { type: 'integer', required: true }, toSeq: { type: 'integer', required: true } },
       execute: async ({ sessionId, fromSeq, toSeq }, exec) => {
         const user = caller(exec)
-        await ctx.ourfairySessions._ownedHeader(user, sessionId)
+        await ctx.ourfairySessions.read(user, sessionId)
         if (!Number.isSafeInteger(fromSeq) || !Number.isSafeInteger(toSeq) || fromSeq < 0 || toSeq < fromSeq || toSeq - fromSeq >= 100) throw new Error('search/invalid-range: use inclusive ascending endpoints covering at most 100 event positions')
         const documents = await ctx.sessionQuery.filterEvents(sessionId, [
           { kind: 'seq', from: fromSeq, to: toSeq }, { kind: 'type', values: messageTypes },

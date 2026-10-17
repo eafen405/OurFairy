@@ -91,6 +91,7 @@ const PRODUCT_SOURCES = [
   'backend/identity/src/store.mjs',
   'backend/identity/src/http.mjs',
   'backend/identity/src/index.mjs',
+  'backend/identity/src/owner.mjs',
   'backend/sessions/package.json',
   'backend/sessions/src/service.mjs',
   'backend/sessions/src/http.mjs',

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
 import { join } from 'node:path'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { before, after, test } from 'node:test'
 import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
 
@@ -184,4 +184,31 @@ test('recipient searches a formal delivered body and reads its original event wi
   const systemText = JSON.stringify(source.system ?? source.messages.filter(m => m.role === 'system'))
   assert.ok(systemText.length > 2, 'actual model request must carry the deployment prompt')
   assert.doesNotMatch(systemText, /星河书店/)
+})
+
+test('the identity owner codec speaks the encoding sessions persist and refuses everything else', async () => {
+  // The expected encoding's only authority is what sessions actually stores; the
+  // codec must reproduce it in both directions, or owner checks read a different
+  // string than the one SessionHeader.owner carries.
+  const { ownerOf, shortIdOf } = await import('../backend/identity/src/owner.mjs')
+  const session = (await request('/sessions/create', alice.token)).session
+  assert.equal(session.owner, ownerOf(alice.user.shortId))
+  assert.equal(shortIdOf(session.owner), alice.user.shortId)
+  assert.equal(ownerOf(2), 'user:2')
+  assert.equal(shortIdOf('user:2'), 2)
+  for (const foreign of [undefined, null, 2, '', 'user:', 'user:02', 'user:0', 'user:x', 'group:2', 'session-1']) {
+    assert.equal(shortIdOf(foreign), undefined, `refuse ${String(foreign)}`)
+  }
+})
+
+test('conversation tools resolve ownership through the public owned-session seam only', () => {
+  // Cross-package reach-through is invisible to behavior tests: the tools keep
+  // working while sessions loses the freedom to change a private method. The
+  // seam is the public `read`, and the owner encoding has one home in identity.
+  const source = readFileSync(new URL('../backend/search/src/index.mjs', import.meta.url), 'utf8')
+  assert.doesNotMatch(source, /_ownedHeader/, 'search must not call a private sessions member')
+  assert.match(source, /ctx\.ourfairySessions\.read\(/, 'search resolves the target session through the public read seam')
+  assert.doesNotMatch(source, /\^user:\[1-9\]\\d\*\$/, 'search must not re-implement the owner encoding')
+  assert.doesNotMatch(source, /owner\.slice\(/, 'search must not slice an owner string by hand')
+  assert.doesNotMatch(source, /principalIdOf/, 'the codec, not the principal key, is what a consumer reads an owner with')
 })
