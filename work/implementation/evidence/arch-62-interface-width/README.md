@@ -5,8 +5,9 @@
 - 分支：`arch/62-interface-width`
 - worktree：`/home/eafen405/projects/OurFairy/.worktrees/arch-62-interface-width`
 - 实现提交：`f96e389`（`refactor(backend): stop publishing interface a caller cannot observe`）
-- 合并提交：`b01c746`（`Merge branch 'integration/ourfairy-v1' into arch/62-interface-width`，第二父 `704a1a9`）
-- FINAL_SHA：`b01c746`（合并 `integration/ourfairy-v1` @ `704a1a9` 之后的 tip）
+- 合并提交：`b01c746`（第二父 `704a1a9`）、`11039ee`（第二父 `ce225bb`，收尾时集成分支再次前进）
+- 证据提交：本 README 所在提交（含本目录与全部日志），即**分支 tip / FINAL_SHA**；具体 SHA 见实现者报告与 merger 前置核对（票分支 HEAD == FINAL_SHA）
+- 验证状态：合并后在当前代码树跑 `npm test` 120/120、`combo:verify` 3 仓 ok；证据提交再由 pre-commit hook 复跑同样两条命令并通过
 
 > **证据重建说明（如实）**：首轮证据原写在 `/tmp/ourfairy-arch/evidence/arch-62-interface-width/`，该目录随后被系统清空丢失。本目录是**在当前合并后状态按相同命令重跑重建**的：`red-probe-tools.log` 与 `characterization-before-change.log` 通过临时换回 `f96e389^` 的 7 个源文件重放得到（跑完已逐字节还原，`git diff f96e389` 为空），其余为当前状态实跑。首轮原始日志（含 `baseline-full.log`、`commit.log` 等）已不可恢复。
 
@@ -82,6 +83,8 @@ node --test tests/attachments.test.mjs tests/identity-http.test.mjs tests/identi
 # 验收（合并后状态）
 npm test                                  # → 120/120 pass, 6 suites, 0 fail  (full-after-merge-704a1a9.log)
 npm run combo:verify                      # → combination verified (3 repos ok) (combo-verify.log)
+# 集成分支第二次前进到 ce225bb 后，在合并状态再跑：npm test → 120/120、combo:verify → ok
+#（full-after-merge-ce225bb.log、combo-verify-ce225bb.log）
 
 # 证据重建（换回 f96e389^ 的 7 个源文件后跑，跑完逐字节还原）
 node --test tests/baseline-boot.test.mjs  # → 1 fail / 5 pass, red    (red-probe-tools.log)
