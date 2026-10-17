@@ -1,6 +1,5 @@
-VOICE_API_KEY为硅基流动的语音识别服务。
-本仓库fork rikkahub,deepseek-harness,在wsl的本地projects目录下存在，
-github地址：https://github.com/rikkahub/rikkahub; https://github.com/deepseek-ai/deepseek-harness
+本仓库是 OurFairy 产品仓库，与 dsh fork、rikkahub fork 共同构成同一个产品；三者的本地路径、
+集成分支与锁定提交只以 `combo.json` 为准。
 
 ## 研发与审查
 
@@ -18,12 +17,11 @@ github地址：https://github.com/rikkahub/rikkahub; https://github.com/deepseek
 
 - 业务状态、分类、象限、来源等有限枚举，数据库与接口统一使用数字编码；中文含义通过注释、枚举类或前端常量维护。
 - 业务表必须包含逻辑删除字段，并记录必要的关联人员、创建及更新时间。
-- 禁止数据库外键与唯一键索引。
 - 若改动涉及数据结构，需在设计阶段明确告知用户变动内容。
 
 ### 编码标准
 
-编写或审查代码时读 `CODING_STANDARDS.md`；实施首版票时从 `work/implementation/CONVENTIONS.md` 进入，按指针读取当前任务所需内容。
+编写或审查代码时读 `CODING_STANDARDS.md`；实施或交付证据时从 `work/implementation/CONVENTIONS.md` 进入（协作、证据与版本组合协议），按指针读取当前任务所需内容。
 
 ## Agent skills
 
@@ -37,4 +35,4 @@ The five canonical roles map to `needs-triage`, `needs-info`, `ready-for-agent`,
 
 ### Domain docs
 
-Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` and `docs/adr/`（若存在）at the repo root. See `docs/agents/domain.md`.

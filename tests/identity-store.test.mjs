@@ -1,7 +1,7 @@
 /**
- * Store acceptance for identity, invites, sessions and the schema rules in
- * AGENTS.md: logical deletion and timestamps on business tables, no foreign key
- * and no unique index beyond the primary key.
+ * Store acceptance for identity, invites, sessions and the schema rules the
+ * store keeps: logical deletion and timestamps on business tables (AGENTS.md),
+ * no foreign key and no unique index beyond the primary key.
  *
  * Assertions drive the public store API. A raw `node:sqlite` connection only
  * writes older-format fixtures, plants logical deletions and inspects the
