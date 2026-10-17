@@ -1,0 +1,15 @@
+# pre-commit hook retries（arch/51 实现提交）
+
+摘要（真实运行片段见同目录 `hook-fail-pdf-flake.log`、`hook-empty-message.log`、`hook-pass-implementation.log`）：
+
+| 尝试 | 失败原文（摘要） | 处理 |
+| --- | --- | --- |
+| 1 | `tests/pdf.test.mjs:170`：`worker-unavailable` ≠ `resource-limit` | 既有 PDF flake（主机负载高，Gradle daemon 占约 2 核；#49/#54/#64/#66 均有记录）。隔离 `node --test tests/pdf.test.mjs` → 5/5 pass（`pdf-rerun.log`），重试。 |
+| 2 | `doctor` → `worktree HEAD ... is not based on integration/ourfairy-v1 (9756c01)` | 集成分支在期间前进；`git merge integration/ourfairy-v1` 后再提交。 |
+| 3 | `combo: ourfairy: worktree HEAD ... is not based on ... (39da060)` | 同上；再次合并最新 tip。 |
+| 4 | `combo: rikkahub: product/ourfairy-v1 is a0c03bc4... but combo.json locks 18964827...` | 其他票（#56）刚合入 Android 侧、集成分支尚未回写 pin 的中间态；本票不改 `combo.json`，等待集成分支把 pin 带到 `a0c03bc4` 后合并。 |
+| 5 | PDF flake 再次出现（`tests 133 / pass 132 / fail 1`） | 同一 flake；保留原文 `hook-fail-pdf-flake.log`。 |
+| 6 | `Aborting commit due to empty commit message.`（`git commit --no-edit` 无待用消息） | hook 本身已全绿（`tests 133 / pass 133 / fail 0`、`combo: combination verified`，见 `hook-empty-message.log`）；用 `git commit -F` 重试。 |
+| 7 | 通过 | `tests 133/133 pass` + `combo: combination verified`（`hook-pass-implementation.log`），实现提交 `ec309ec`。 |
+
+说明：hook 内的 `npm test` 覆盖本票新增的 `tests/chat-runtime.test.mjs`；PDF flake 与本票改动无关（本票未改 PDF 代码），在隔离与最终全量（`final-full-npm-test.log`，133/133）中均通过。
