@@ -8,7 +8,8 @@
   "main": "./src/index.mjs",
   "exports": {
     ".": "./src/index.mjs",
-    "./http": "./src/http.mjs"
+    "./http": "./src/http.mjs",
+    "./owner": "./src/owner.mjs"
   },
   "files": [
     "src",

@@ -16,6 +16,7 @@
 import { Service } from '@deepseek-ai/cordis'
 import { IdentityError, IdentityStore, PHAETHON_SHORT_ID } from './store.mjs'
 import { bearerToken, identityHandlers, IDENTITY_PATHS } from './http.mjs'
+import { ownerOf } from './owner.mjs'
 
 /** Stable Cordis plugin name. */
 export const name = 'ourfairy-identity'
@@ -25,7 +26,7 @@ export const inject = ['webServer', 'connection']
 
 /** Principal key one short number speaks for; stable across that user's sessions. */
 export function principalIdOf(shortId) {
-  return `user:${shortId}`
+  return ownerOf(shortId)
 }
 
 /** The identity service the composition reads as `ctx.identity`. */
