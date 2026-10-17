@@ -211,10 +211,12 @@ export function describeRun(label, run) {
  * One JSON request against a running backend, over `node:http`.
  *
  * Global `fetch` can be routed through an ambient proxy (`NODE_USE_ENV_PROXY`),
- * so a test request must not depend on it: this helper always speaks to the
- * listener the test started. The expected status is asserted and the parsed
- * body returned; pass `expect: false` to inspect the raw response when a test
- * asserts a refusal status itself.
+ * so this helper is the shared way for a test request: it always speaks to the
+ * listener the test started. The attachments, PDF, and speech suites keep their
+ * own clients because they need binary request bodies, raw response headers, or
+ * an abort signal; those are the exceptions, not a second convention. The
+ * expected status is asserted and the parsed body returned; pass `expect: false`
+ * to inspect the raw response when a test asserts a refusal status itself.
  * @param {number} port - the port `start --json` reported.
  * @param {string} path - request path on that backend.
  * @param {{method?: string, token?: string, body?: unknown, expect?: number|false}} [options]
