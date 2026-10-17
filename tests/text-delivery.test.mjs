@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
 import { join } from 'node:path'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { before, after, test } from 'node:test'
-import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-delivery-')
 const password = 'group-test-password'
@@ -21,10 +21,7 @@ async function request(path, token, body = {}) {
   assert.equal(response.status, 200, JSON.stringify(value))
   return value
 }
-async function user(name) {
-  const invite = await request('/identity/invite', admin.token)
-  return request('/identity/register', undefined, { name, password, inviteCode: invite.invite.code })
-}
+function user(name) { return registerUser(port, admin.token, name, password) }
 let requestNo = 0
 async function tool(user, name, args, sessionId, callId = `delivery-call-${requestNo + 1}`) {
   sessionId ??= (await request('/sessions/create', user.token)).session.id
@@ -41,10 +38,10 @@ async function tool(user, name, args, sessionId, callId = `delivery-call-${reque
   }
   assert.fail(`tool ${name} reply was not returned to original chat ${sessionId}`)
 }
-async function startBackend() {
-  const run = await runBackendAsync(['start', '--json'], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+async function startBackend(overlays = []) {
+  const run = await runBackendAsync(startArgs(overlays), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     DEEPSEEK_API_KEY: 'mock-group-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
-  assert.equal(run.code, 0, describeRun('start', run)); port = JSON.parse(run.stdout).listeningPorts[0]
+  port = startedPort(run)
 }
 async function stopBackend() {
   const run = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home })
@@ -217,10 +214,9 @@ test('simultaneous senders and recipient primary creation preserve both deliveri
 test('failed native durability checkpoint never confirms and stable retry recovers the same message', async () => {
   const target = (await request('/sessions/primary', bob.token)).session.id
   await stopBackend()
-  const layer = join(home,'dsh-home','profiles','ourfairy','cordis.patch.yml')
   const fixture = new URL('../backend/chat/test-support/fail-outlets.mjs',import.meta.url).pathname
-  writeFileSync(layer,JSON.stringify([{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failFlush:true}}]}]))
-  await startBackend()
+  const layer = writeOverlay(home,[{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failFlush:true}}]}],'flush-failure.patch.yml')
+  await startBackend([layer])
   await request('/chat/read',bob.token,{sessionId:target}) // ensure the recipient is live
   const args = {recipientShortId:bob.user.shortId,text:'Checkpoint retry is still one delivery'}
   const failed = await tool(alice,'deliver_message',args,senderSession,'flush-failure-call')
@@ -232,23 +228,20 @@ test('failed native durability checkpoint never confirms and stable retry recove
   assert.equal(db.prepare('SELECT status FROM deliveries WHERE delivery_id = ?').get(pending.delivery_id).status,1)
   const after = (await request('/chat/read',bob.token,{sessionId:target})).projection
   assert.equal(after.messages.filter(m=>m.text===args.text).length,1)
-  db.close(); writeFileSync(layer,'[]\n')
+  db.close()
 })
 
 test('notification outlet failure preserves durable delivery and successful sender confirmation', async () => {
   const target = (await request('/sessions/primary', bob.token)).session.id
   await stopBackend()
-  const layer = join(home,'dsh-home','profiles','ourfairy','cordis.patch.yml')
   const fixture = new URL('../backend/chat/test-support/fail-outlets.mjs',import.meta.url).pathname
-  writeFileSync(layer,JSON.stringify([{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failNotification:true}}]}]))
-  await startBackend()
-  try {
-    const args = {recipientShortId:bob.user.shortId,text:'Notification trouble does not retract this'}
-    assert.match(await tool(alice,'deliver_message',args,senderSession,'notification-failure-call'),/deliveryId/)
-    const after = (await request('/chat/read',bob.token,{sessionId:target})).projection
-    assert.equal(after.messages.filter(m=>m.text===args.text).length,1)
-    const db = new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
-    assert.equal(db.prepare('SELECT status FROM deliveries WHERE text = ?').get(args.text).status,1)
-    db.close()
-  } finally { writeFileSync(layer,'[]\n') }
+  const layer = writeOverlay(home,[{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failNotification:true}}]}],'notification-failure.patch.yml')
+  await startBackend([layer])
+  const args = {recipientShortId:bob.user.shortId,text:'Notification trouble does not retract this'}
+  assert.match(await tool(alice,'deliver_message',args,senderSession,'notification-failure-call'),/deliveryId/)
+  const after = (await request('/chat/read',bob.token,{sessionId:target})).projection
+  assert.equal(after.messages.filter(m=>m.text===args.text).length,1)
+  const db = new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
+  assert.equal(db.prepare('SELECT status FROM deliveries WHERE text = ?').get(args.text).status,1)
+  db.close()
 })
