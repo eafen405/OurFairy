@@ -6,12 +6,24 @@ The OurFairy v1 backend composition: one dsh profile bundle whose
 ## Why this bundle is explicit
 
 `@deepseek-ai/dsh-base` is **not** inherited. Base also mounts capabilities the
-v1 product decision excludes (skill, goal, subagent, telemetry, web tools) and
-file/shell/sandbox defaults whose permission adaptation has not landed. A
-product that mounted base would silently gain those rows, so the v1 row set is
-listed here and tests assert the absent rows stay absent.
+v1 product decision excludes (skill, goal, subagent, telemetry, web tools), and
+its file, shell, and sandbox rows assume host-wide access; the v1 profile mounts
+the scoped `@ourfairy/dsh-spaces` adapters in their place (T7, #30) and leaves
+the unscoped rows out. A product that mounted base would silently gain those
+rows, so the v1 row set is listed here and tests assert the absent rows stay
+absent.
 
 ## Row set
+
+`cordis.patch.yml` **is** the row set: it is the file the profile loads, so it is
+the only list that cannot disagree with the running composition. Its section
+comments group the rows — session/model/prompt core, durable session base,
+process-local support services, the product's HTTP carrier and identity paths,
+owned sessions and chat, the scoped file/shell adapters, and attachments/speech.
+
+The table below is an overview, not the inventory: it names the rows whose
+purpose a reader would otherwise have to guess at. Every mounted row is in
+`cordis.patch.yml`.
 
 | Row id | Package | Why it is here |
 | --- | --- | --- |
@@ -33,15 +45,19 @@ listed here and tests assert the absent rows stay absent.
 
 ## Deliberately absent rows
 
-`tool-fs`, `tool-fs-search`, `fs-sandbox`, `fs-observation-policy`,
-`working-directory`, `tool-working-directory`, `tool-bash`, `bash-sandbox`,
-`pwsh-sandbox`, `tool-pwsh`, `sandbox`, `sandbox-policy`, `approval`,
-`permission`, `shell-env`, `subprocess`, `skill*`, `goal*`, `subagent*`,
-`otel`/`session-telemetry-otel`, `web*`, `mcp-resources`, `plan-mode`,
-`workflow-ptc`/`tool-workflow`/`ptc-runtime`.
+Which row ids must not be mounted is `FORBIDDEN_ROW_IDS` in
+[`tests/baseline-boot.test.mjs`](../../tests/baseline-boot.test.mjs). That list is
+the only expectation, and the boot test checks the live composition against it.
+This README deliberately does not repeat it: a second copy would let the document
+and the check agree with each other while both drifted from the bundle — the same
+reason `backend/probe` keeps no copy of its own, recorded in its comment in
+[`backend/probe/src/index.mjs`](../probe/src/index.mjs).
 
-Each absent group is waiting on its own adaptation ticket; a test asserts none of
-these ids is mounted so a later accidental widening is caught.
+What the excluded rows have in common: the product decision keeps skills, goals,
+subagents, telemetry, web and workflow tooling, plan mode, and MCP resources out
+of v1; the remainder are the unscoped file, shell, and sandbox defaults that the
+scoped adapters replace, or capabilities still waiting on their own adaptation
+ticket. A capability is mounted only once that ticket lands.
 
 ## Consuming it
 
