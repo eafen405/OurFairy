@@ -1,0 +1,17 @@
+✔ upload completes before sending and original downloads by qualified message identity across restart (3559.35366ms)
+✔ unfinished and foreign receipts never grant message or download access, including identical stored bytes (178.866411ms)
+✔ lost chunk ACK retries exact bytes, expired upload cannot be new input, and admitted retry survives expiry (793.420493ms)
+✔ images keep original downloads while official Messages serialization uses normalized native image content (257.089197ms)
+✔ native model file handles permit real read and sandboxed scripts only in the admitted session and stay readonly (2347.614036ms)
+✔ chat creates group for designated owner and updates live owner tools (3791.103335ms)
+✔ only the target group owner changes membership; members share real files and confined scripts (1132.801704ms)
+✔ removing a member invalidates the same live session cwd and later file/script access (743.072459ms)
+✔ concurrent duplicate membership updates stay singular and restart preserves group access (1179.656453ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7443.962103

@@ -1,0 +1,34 @@
+✔ chat tools write own private files, share public files, and deny another user including administrator (3144.717478ms)
+✔ real child processes share public files, keep private boundaries after cd, and retain networking (593.701025ms)
+✔ directory changes, edits, image reads and symlinks retain the same owner boundary (963.834425ms)
+✔ agentless filesystem and script Interface calls refuse instead of inheriting a default user (0.812227ms)
+✔ shell background children and admitted detached jobs retain the same file scope (302.831568ms)
+✔ a network-installed dependency is available to both users in the one shared environment (669.769589ms)
+✔ ensure restores the owner private root when a persisted working directory disappears (448.862253ms)
+✖ independent scope contributors compose and each teardown removes only its own roots (0.803421ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 7
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6451.959766
+
+✖ failing tests:
+
+test at tests/spaces.test.mjs:179:1
+✖ independent scope contributors compose and each teardown removes only its own roots (0.803421ms)
+  AssertionError [ERR_ASSERTION]: the contributor still loaded must keep its own extra root and read-only file
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-54-space-scope-contributors/tests/spaces.test.mjs:203:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
