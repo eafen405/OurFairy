@@ -1,0 +1,39 @@
+✔ actual confined job survives phone observation, permits dialogue, and reports into its original session (5005.451148ms)
+✔ stopping a reply and stopping its real background process are independent, with owned controls (379.074724ms)
+✔ producer-side loss exposes missing output rather than treating a terminal status as complete output (579.660167ms)
+✔ registry retention preserves absolute byte offsets and explicitly marks an evicted prefix (2255.865341ms)
+✔ confined detached scripts cannot read another user and old task identities stay unavailable after restart (3782.119763ms)
+✔ two sessions stay independent and real job settlement never publishes an intermediate quiet episode (1031.975445ms)
+✔ an awaited result and a failed report both settle without holding terminal tasks active (1500.013622ms)
+✔ configured quiet completion leaves context for later without inventing pending inference (1541.469628ms)
+✔ accepted consecutive turns form one execution episode and canceled parked input does not stay active (103.147443ms)
+✔ tasks and activity share one fold of the event log (1.681033ms)
+✔ an empty log with a running agent still opens an episode at seq 0 (0.187687ms)
+✔ bounded history pages keep the opening cut while new formal events arrive (4242.228751ms)
+✔ a reconnect restores the active cumulative attempt while bounded backfill and live tail proceed independently (2552.913501ms)
+✔ a lost page response can be retried at its unchanged frozen cut (52.815325ms)
+✔ a real writer permission failure cannot advance durable ACK, then retry and cold recovery use the same acceptance (1016.052353ms)
+✔ new history and checkpoint routes keep the cold/live ownership fence and validate exact ranges (65.620316ms)
+✔ a crash-orphaned turn is resumed and writer-saved before its recovery closer is acknowledged (2728.114222ms)
+✔ a stable send is durably accepted once across concurrent retries and backend restart (5282.706177ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (501.620562ms)
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (369.118788ms)
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply (428.468538ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (2018.77111ms)
+✔ the deployment owner identity is separate from a chat attempt to edit the persona (1282.506032ms)
+✔ stopping the current reply preserves accepted queued input for the next wake (563.232382ms)
+✔ stopping before visible output records interruption rather than a failed reply (2139.454241ms)
+✔ Fairy delivers only selected text to a cold primary without recipient inference (3877.72412ms)
+✔ live delivery remains independent of the recipient active attempt and later model history includes it (269.782622ms)
+✔ native log success with failed business update recovers after restart and exact retry stays single (1676.189085ms)
+✔ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (203.970217ms)
+✔ failed native durability checkpoint never confirms and stable retry recovers the same message (1169.927765ms)
+✔ notification outlet failure preserves durable delivery and successful sender confirmation (1095.503239ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16527.78819

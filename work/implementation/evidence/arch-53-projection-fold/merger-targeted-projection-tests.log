@@ -1,0 +1,15 @@
+✔ a session queue and a delivery queue with the same id never wait on each other (0.846383ms)
+✔ work on one queue runs one at a time in call order (3.517962ms)
+✔ a delivery writes its target session, but nesting one queue fails instead of hanging (0.726614ms)
+✔ delivery and jobs reach live sessions through the runtime, not RemoteChat privates (0.702037ms)
+✔ the runtime is the only writer of a live session version (0.475235ms)
+✔ projection publishes exactly its receipt and transcript seam (1.152585ms)
+✔ a session read observes without a projection, releases the observation, and returns its snapshot (1.145422ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 65.73232
