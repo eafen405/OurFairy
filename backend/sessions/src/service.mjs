@@ -14,6 +14,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { Service } from '@deepseek-ai/cordis'
+import { ownerOf } from '@ourfairy/dsh-identity/owner'
 
 /** Error carrying the HTTP status one request path must answer with. */
 export class SessionScopeError extends Error {
@@ -137,7 +138,7 @@ export class OwnedSessionService extends Service {
     if (snapshot.header.owner === undefined) {
       throw new SessionScopeError(403, 'sessions/unowned-session', 'that session carries no ownership record and is never adopted')
     }
-    if (snapshot.header.owner !== `user:${owner.shortId}`) {
+    if (snapshot.header.owner !== ownerOf(owner.shortId)) {
       throw new SessionScopeError(404, 'sessions/unknown-session', 'no session with that identifier is visible to you')
     }
     return snapshot.header
@@ -155,7 +156,7 @@ export class OwnedSessionService extends Service {
     const snapshots = await this.persistence.list()
     const owned = snapshots
       .map(snapshot => snapshot.header)
-      .filter(header => header.owner === `user:${owner.shortId}`)
+      .filter(header => header.owner === ownerOf(owner.shortId))
       .sort((left, right) => (left.createdAt ?? 0) - (right.createdAt ?? 0) || left.id.localeCompare(right.id))
     const primaryId = primarySessionIdOf(owner.shortId)
     return {
@@ -175,7 +176,7 @@ export class OwnedSessionService extends Service {
    * @returns the persisted header.
    */
   async _materialize(owner, id) {
-    const session = this.sessions.prepare(id, { meta: { owner: `user:${owner.shortId}` } })
+    const session = this.sessions.prepare(id, { meta: { owner: ownerOf(owner.shortId) } })
     const handle = await this.persistence.create(session.header)
     try {
       await handle.flush()
@@ -235,7 +236,7 @@ export class OwnedSessionService extends Service {
       if (existing.header.owner === undefined) {
         throw new SessionScopeError(409, 'sessions/unowned-primary', 'the reserved primary identifier exists without an owner and is never adopted')
       }
-      if (existing.header.owner !== `user:${owner.shortId}`) {
+      if (existing.header.owner !== ownerOf(owner.shortId)) {
         throw new SessionScopeError(409, 'sessions/primary-taken', 'the reserved primary identifier belongs to another identity and is never rebound')
       }
       return await this._materialize(owner, sessionIdOf(owner.shortId))
@@ -256,7 +257,7 @@ export class OwnedSessionService extends Service {
       if (existing.header.owner === undefined) {
         throw new SessionScopeError(409, 'sessions/unowned-primary', 'the reserved primary identifier exists without an owner and is never adopted')
       }
-      if (existing.header.owner !== `user:${owner.shortId}`) {
+      if (existing.header.owner !== ownerOf(owner.shortId)) {
         throw new SessionScopeError(409, 'sessions/primary-taken', 'the reserved primary identifier belongs to another identity and is never rebound')
       }
       return existing.header

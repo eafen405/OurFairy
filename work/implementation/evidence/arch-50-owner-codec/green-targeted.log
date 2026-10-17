@@ -1,0 +1,68 @@
+✔ upload completes before sending and original downloads by qualified message identity across restart (8688.781952ms)
+✔ a malformed upload ID list is refused as a bad request before any session is opened (110.524718ms)
+✔ unfinished and foreign receipts never grant message or download access, including identical stored bytes (493.140007ms)
+✔ lost chunk ACK retries exact bytes, expired upload cannot be new input, and admitted retry survives expiry (1990.729302ms)
+✔ images keep original downloads while official Messages serialization uses normalized native image content (626.59624ms)
+✔ native model file handles permit real read and sandboxed scripts only in the admitted session and stay readonly (4136.695417ms)
+▶ OurFairy v1 baseline composition
+  ✔ real profile boot reports every required service live (keyless) (6066.824521ms)
+  ✔ v1 profile mounts scoped file/shell adapters and excludes unused capabilities (1693.026955ms)
+  ✔ the product profile alone boots with no test overlay at all (1796.031788ms)
+  ✔ boot-product refuses an overlay instead of silently ignoring it (151.044443ms)
+  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (1313.937014ms)
+  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (1079.076794ms)
+✔ OurFairy v1 baseline composition (12103.859742ms)
+✔ selected private file reaches recipient primary as an independent original reference (6877.529467ms)
+✔ same identity resumes unfinished preparation after restart without rereading its already prepared file (3936.854507ms)
+✔ source scope and recipient exact-file references stay separate from private spaces and unrelated users (893.421382ms)
+✔ admitted original and image selections can be forwarded without assistant images or sender history rights (753.598021ms)
+✔ a CAS-prepared item whose checklist write fails is retried under the same delivery identity (723.406851ms)
+✔ file delivery recovers durable log success before business completion without recopying changed sources (2166.168005ms)
+✔ a file delivery flush failure leaves a ready retry and never confirms incomplete durability (1465.992636ms)
+✔ authorized shared files appear together in live and persisted recipient attachment projection (648.062634ms)
+✔ chat creates group for designated owner and updates live owner tools (7078.887127ms)
+✔ only the target group owner changes membership; members share real files and confined scripts (3434.789651ms)
+✔ removing a member invalidates the same live session cwd and later file/script access (1518.2313ms)
+✔ concurrent duplicate membership updates stay singular and restart preserves group access (2295.785126ms)
+✔ actual confined job survives phone observation, permits dialogue, and reports into its original session (8718.085403ms)
+✔ stopping a reply and stopping its real background process are independent, with owned controls (706.622041ms)
+✔ producer-side loss exposes missing output rather than treating a terminal status as complete output (844.871179ms)
+✔ registry retention preserves absolute byte offsets and explicitly marks an evicted prefix (2502.690815ms)
+✔ confined detached scripts cannot read another user and old task identities stay unavailable after restart (4546.610127ms)
+✔ two sessions stay independent and real job settlement never publishes an intermediate quiet episode (1066.672002ms)
+✔ an awaited result and a failed report both settle without holding terminal tasks active (1439.845731ms)
+✔ configured quiet completion leaves context for later without inventing pending inference (1576.965416ms)
+✔ accepted consecutive turns form one execution episode and canceled parked input does not stay active (101.533116ms)
+▶ OurFairy owned sessions over real HTTP
+  ✔ a failed durable create can be retried in the same backend process (445.451099ms)
+  ✔ a session created by a signed-in identity keeps its owner and its primary binding across a restart (2417.326526ms)
+  ✔ a missing or foreign session is refused, and no request is ever served as an implicit user (473.208682ms)
+  ✔ select answers exactly as read does, because switching moves no persistent binding (317.128345ms)
+  ✔ a primary request racing a create still resolves the fixed primary session (274.763462ms)
+  ✔ cold ownerless and foreign sessions are refused without changing durable artifacts (3378.652277ms)
+  ℹ {"coldFixtures":[{"id":"ourfairy-user-8-primary"},{"id":"cold-foreign-session","owner":"user:9"},{"id":"ourfairy-user-10-primary","owner":"user:9"}],"durableArtifacts":{"_no-cwd/cold-foreign-session/session.v4.jsonl.zstd":{"sha256":"1909afe3e5345d3cafd734e00b5ea7d30c3effcbf102fcbb24fc657df2edba0a","mtimeNs":"1792230325273796700"},"_no-cwd/ourfairy-user-10-primary/session.v4.jsonl.zstd":{"sha256":"85f8ba107b2a9d0d265c5570c8843dea69b84ad39dec750a578b1fc14dd5f2c1","mtimeNs":"1792230325285796698"},"_no-cwd/ourfairy-user-2-primary/session.v4.jsonl.zstd":{"sha256":"5020b36a0e397129a6e999900e98a22900df6d931b031745fc6753bec4e6ac05","mtimeNs":"1792230319981797299"},"_no-cwd/ourfairy-user-3-9d173ea5-5efa-49e9-bb77-f055a09781b7/session.v4.jsonl.zstd":{"sha256":"bda0039c6a5ab8efb8b2d9a2ee7d495d38f29c15e55195822e76c992348e773b","mtimeNs":"1792230320245797269"},"_no-cwd/ourfairy-user-3-primary/session.v4.jsonl.zstd":{"sha256":"0c1b42898e86e0a81cc8fc958195259c3055226ce010852469d30840f5ceff57","mtimeNs":"1792230320217797272"},"_no-cwd/ourfairy-user-4-primary/session.v4.jsonl.zstd":{"sha256":"4419de99b618361783ffaec0a68d4ffd90128d194490885d24a2e9519637678d","mtimeNs":"1792230322821796977"},"_no-cwd/ourfairy-user-6-a14458a8-db5f-46c0-8b97-5656606f5755/session.v4.jsonl.zstd":{"sha256":"5101a1ca3a9322f1efb565d43419ffd5fe214fead5636657187dfecd109efdce","mtimeNs":"1792230323117796944"},"_no-cwd/ourfairy-user-6-primary/session.v4.jsonl.zstd":{"sha256":"b62b5d1e7ba3d4de6e84ccaf5301bd67ff0dffe058bd12576a50c2e49f22dda4","mtimeNs":"1792230323093796947"},"_no-cwd/ourfairy-user-7-a6c7822f-9ae3-4dae-bbdd-4f10c5c9f8d7/session.v4.jsonl.zstd":{"sha256":"981ea1af469a719e9baab8994baba0cb9ac9d2879271cbebed2a4a3a0aa601ba","mtimeNs":"1792230323445796907"},"_no-cwd/ourfairy-user-7-e2011373-2532-4389-8f0e-1543dcabcf59/session.v4.jsonl.zstd":{"sha256":"135187b6c3eceda2f9e5b8ecc5971ab7a19be12464d5f1aa261e59b0540af570","mtimeNs":"1792230323461796905"},"_no-cwd/ourfairy-user-7-primary/session.v4.jsonl.zstd":{"sha256":"f3fc703076a074493c75b37437cf56ccf80bc18911c38b35caefe7749a9a76a0","mtimeNs":"1792230323393796913"},"_no-cwd/ourfairy-user-8-primary/session.v4.jsonl.zstd":{"sha256":"29dc67e55eed706730cef614a05ffde06efa669579bbf296d5b3a39b6281897c","mtimeNs":"1792230325261796701"}}}
+  ✔ an empty owned session can be resumed by the existing agent factory (1622.58515ms)
+  ℹ {"emptyResume":{"created":{"id":"ourfairy-user-11-primary","owner":"user:11"},"persistedEventCount":0,"resumed":{"id":"ourfairy-user-11-primary","owner":"user:11"},"ownerAfterDispose":"user:11"}}
+✔ OurFairy owned sessions over real HTTP (8933.077702ms)
+✔ chat tools write own private files, share public files, and deny another user including administrator (7726.308308ms)
+✔ real child processes share public files, keep private boundaries after cd, and retain networking (1620.719129ms)
+✔ directory changes, edits, image reads and symlinks retain the same owner boundary (2367.825645ms)
+✔ agentless filesystem and script Interface calls refuse instead of inheriting a default user (1.615687ms)
+✔ shell background children and admitted detached jobs retain the same file scope (529.246285ms)
+✔ a network-installed dependency is available to both users in the one shared environment (1452.435896ms)
+✔ ensure restores the owner private root when a persisted working directory disappears (906.75354ms)
+✔ independent scope contributors compose and each teardown removes only its own roots (1.355747ms)
+✔ Fairy delivers only selected text to a cold primary without recipient inference (6610.214317ms)
+✔ live delivery remains independent of the recipient active attempt and later model history includes it (537.511838ms)
+✔ native log success with failed business update recovers after restart and exact retry stays single (2879.974525ms)
+✔ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (475.14743ms)
+✔ failed native durability checkpoint never confirms and stable retry recovers the same message (1904.480606ms)
+✔ notification outlet failure preserves durable delivery and successful sender confirmation (1706.447203ms)
+ℹ tests 54
+ℹ suites 2
+ℹ pass 54
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22023.583762
