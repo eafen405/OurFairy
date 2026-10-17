@@ -1,0 +1,21 @@
+$ grep -rn "identity\.store" backend --include=*.mjs
+(no matches: no consumer reads the bare store)
+
+$ grep -rn "ctx\.identity\.\(users\|groups\|uploads\|deliveries\)\|= ctx\.identity" backend --include=*.mjs | grep -v backend/identity/
+backend/search/src/index.mjs:15:    const user = ctx.identity.users.byShortId(shortId)
+backend/speech/src/index.mjs:7:    const caller = ctx.identity.authenticateRequest(request)
+backend/chat/src/delivery.mjs:10:  const { users, deliveries } = ctx.identity
+backend/attachments/src/service.mjs:41:  get uploads() { return this.ctx.identity.uploads }
+backend/attachments/src/service.mjs:143:    const owner = this.ctx.identity.users.byShortId(this.ctx.ourfairySpaces.owner(agent.session))
+backend/spaces/src/groups.mjs:8:  const { users, groups } = ctx.identity
+
+$ grep -n "STORE\|this\.users\|this\.groups\|this\.uploads\|this\.deliveries" backend/identity/src/index.mjs
+41:const STORE = Symbol('ourfairy-identity-store')
+57:    this[STORE] = store
+60:    this.users = users
+61:    this.groups = groups
+62:    this.uploads = uploads
+63:    this.deliveries = deliveries
+69:    return token === undefined ? undefined : this[STORE].authenticate(token)
+89:    return this[STORE].createInvite(caller.shortId)
+104:    this[STORE].signOut(token)

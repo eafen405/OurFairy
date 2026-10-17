@@ -1,0 +1,15 @@
+$ git log --oneline -1
+fefed2b chore: pin integrated arch-53-projection-fold and record evidence
+
+$ grep -rn "identity.store" backend --include=*.mjs
+backend/search/src/index.mjs:15:    const user = ctx.identity.store.userByShortId(shortId)
+backend/chat/src/delivery.mjs:10:  const store = ctx.identity.store
+backend/attachments/src/service.mjs:41:  get store() { return this.ctx.identity.store }
+backend/attachments/src/service.mjs:143:    const owner = this.ctx.identity.store.userByShortId(this.ctx.ourfairySpaces.owner(agent.session))
+backend/spaces/src/groups.mjs:8:  const store = ctx.identity.store
+
+$ grep -n "this.store = store" backend/identity/src/index.mjs
+40:    this.store = store
+
+$ grep -c "this\." backend/identity/src/store.mjs  # public members incl. now
+30

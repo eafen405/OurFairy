@@ -4,8 +4,7 @@ import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import { transcript } from './projection.mjs'
 import { FAIRY_PERSONA } from './persona.mjs'
-import { projectTasks } from './jobs.mjs'
-import { projectActivity } from './activity.mjs'
+import { projectSession } from './history.mjs'
 import { SessionQueues } from './queues.mjs'
 
 /**
@@ -150,11 +149,11 @@ export class SessionRuntime {
     range.throughSeq = throughSeq
     range.fromSeq = fromSeq
     const included = events.slice(fromSeq)
-    const tasks = projectTasks(this.ctx, events, state.sessionId)
+    const { tasks, activity } = projectSession(this.ctx, events, state.sessionId, state.status !== 'idle')
     return { sessionId: state.sessionId, generation: state.generation, version: state.version, cursor,
       durableThroughSeq: Math.min(cursor, state.durableThroughSeq),
       throughSeq, fromSeq, events: included, hasMore: fromSeq > 0, beforeSeq: fromSeq > 0 ? fromSeq : null,
-      tasks, activity: projectActivity(events, state.sessionId, tasks, state.status !== 'idle'),
+      tasks, activity,
       messages: transcript(events, state.sessionId).filter(message => message.seq >= fromSeq),
       attempt: attempt === null ? null : { attemptId: attempt.attemptId, revision: attempt.revision,
         text: attempt.assembler.interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('') },

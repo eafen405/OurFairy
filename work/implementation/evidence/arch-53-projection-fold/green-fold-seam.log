@@ -1,0 +1,11 @@
+✔ tasks and activity share one fold of the event log (1.995702ms)
+✔ an empty log with a running agent still opens an episode at seq 0 (0.148644ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 47.885969
+EXIT:0

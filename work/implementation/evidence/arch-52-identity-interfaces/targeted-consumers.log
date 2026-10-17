@@ -1,0 +1,623 @@
+✖ upload completes before sending and original downloads by qualified message identity across restart (3450.262182ms)
+✖ a malformed upload ID list is refused as a bad request before any session is opened (4.549347ms)
+✖ unfinished and foreign receipts never grant message or download access, including identical stored bytes (5.313272ms)
+✖ lost chunk ACK retries exact bytes, expired upload cannot be new input, and admitted retry survives expiry (3.847269ms)
+✖ images keep original downloads while official Messages serialization uses normalized native image content (4.236751ms)
+✖ native model file handles permit real read and sandboxed scripts only in the admitted session and stay readonly (716.972985ms)
+✖ chat searches Chinese message excerpts then reads original event positions (3175.120288ms)
+✖ known foreign IDs and administrator status cannot widen conversation tools (4.565377ms)
+✖ read intervals have inclusive original positions, omit tool results, and bound message text (3.379328ms)
+✖ native index rebuild preserves Chinese search scope and independently authorized range reads (7.996925ms)
+✖ recipient searches a formal delivered body and reads its original event without sender access (4.517832ms)
+✖ the identity owner codec speaks the encoding sessions persist and refuses everything else (4.572185ms)
+✔ conversation tools resolve ownership through the public owned-session seam only (0.899593ms)
+✖ selected private file reaches recipient primary as an independent original reference (3439.934291ms)
+✖ same identity resumes unfinished preparation after restart without rereading its already prepared file (39.650576ms)
+✖ source scope and recipient exact-file references stay separate from private spaces and unrelated users (4.155535ms)
+✖ admitted original and image selections can be forwarded without assistant images or sender history rights (5.075569ms)
+✖ a CAS-prepared item whose checklist write fails is retried under the same delivery identity (43.312531ms)
+✖ file delivery recovers durable log success before business completion without recopying changed sources (35.006258ms)
+✖ a file delivery flush failure leaves a ready retry and never confirms incomplete durability (4.150775ms)
+✖ authorized shared files appear together in live and persisted recipient attachment projection (33.422684ms)
+✖ chat creates group for designated owner and updates live owner tools (3442.86212ms)
+✖ only the target group owner changes membership; members share real files and confined scripts (1.071761ms)
+✖ removing a member invalidates the same live session cwd and later file/script access (4.857985ms)
+✖ concurrent duplicate membership updates stay singular and restart preserves group access (0.577129ms)
+▶ OurFairy identity over real HTTP
+  ✔ the provisioned Phaethon signs in as short number 1 (50.266419ms)
+  ✔ invited agents take the next short numbers in registration order (99.154561ms)
+  ✔ refused registrations leave no identity and consume no short number (93.509458ms)
+  ✔ an ordinary agent is refused the administrator invite operation (58.012465ms)
+  ✔ the credential names its own holder with no user field in the request (68.69719ms)
+  ✔ signing out ends the credential it was presented with (85.661577ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (62.349342ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (223.207116ms)
+✔ OurFairy identity over real HTTP (742.038515ms)
+✔ the store stays inside the package: four domain faces and nothing else (1.052816ms)
+✔ users and groups answer under their own domain (2.048162ms)
+✔ uploads and deliveries answer under their own domain (1.138429ms)
+✔ the service and its consumers reach identity through the domain faces, never the store (0.596827ms)
+▶ migrating a genuine v1 database
+  ✔ keeps the ids and passwords the v1 file already held (70.810566ms)
+  ✔ keeps the v1 session digests usable (0.393059ms)
+  ✔ keeps a v1 unredeemed invite redeemable and refuses the redeemed one (28.946633ms)
+  ✔ refuses a duplicate name without a unique index backing it (0.748636ms)
+  ✔ never reuses a short number once an identity is gone (29.996734ms)
+  ✔ a removed user no longer signs in, authenticates, or appears in a listing (27.510357ms)
+  ✔ a removed name stays reserved, deleted rows included (0.417495ms)
+✔ migrating a genuine v1 database (159.767961ms)
+▶ seeding against a deleted Phaethon
+  ✔ refuses to recreate short number 1 beside a tombstoned row (32.127103ms)
+  ✔ refuses an initial seed whose name belongs to another row (37.215726ms)
+✔ seeding against a deleted Phaethon (69.729176ms)
+▶ the stored schema obeys AGENTS.md
+  ✔ carries logical deletion and update timestamps on the business tables (1.64472ms)
+  ✔ keeps the associated person column on every business table (1.011447ms)
+  ✔ carries no foreign key and no unique constraint beyond the primary key (1.11834ms)
+  ✔ keeps the ordinary lookup index the queries actually need (0.988363ms)
+  ✔ a fresh database lands directly on the migrated schema (29.274957ms)
+  ✔ refuses a database newer than this module understands, leaving it untouched (1.953552ms)
+  ✔ signing out a logically deleted session reports nothing to revoke (81.303419ms)
+✔ the stored schema obeys AGENTS.md (117.745948ms)
+✔ v2 credentials and invites survive the additive group migration (79.335295ms)
+✔ v3 group membership and credentials survive the additive upload migration (57.148358ms)
+✔ v5 text deliveries survive the additive file preparation checklist migration (68.362567ms)
+✖ authenticated speech availability stays unavailable without the separate voice key (3271.236354ms)
+✖ speech proxy uses configured provider, returns editable text, and reports actual failures (3609.324882ms)
+✖ Fairy delivers only selected text to a cold primary without recipient inference (4259.503765ms)
+✖ live delivery remains independent of the recipient active attempt and later model history includes it (4.376166ms)
+✖ native log success with failed business update recovers after restart and exact retry stays single (35.863781ms)
+✖ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (32.923841ms)
+✖ failed native durability checkpoint never confirms and stable retry recovers the same message (3.748751ms)
+✖ notification outlet failure preserves durable delivery and successful sender confirmation (3.667216ms)
+ℹ tests 64
+ℹ suites 4
+ℹ pass 32
+ℹ fail 32
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6982.484585
+
+✖ failing tests:
+
+test at tests/attachments.test.mjs:43:1
+✖ upload completes before sending and original downloads by qualified message identity across restart (3450.262182ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at session (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:25:100)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:44:21)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+
+test at tests/attachments.test.mjs:63:1
+✖ a malformed upload ID list is refused as a bad request before any session is opened (4.549347ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at session (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:25:100)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:64:21)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at tests/attachments.test.mjs:85:1
+✖ unfinished and foreign receipts never grant message or download access, including identical stored bytes (5.313272ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at session (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:25:100)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:86:19)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at tests/attachments.test.mjs:107:1
+✖ lost chunk ACK retries exact bytes, expired upload cannot be new input, and admitted retry survives expiry (3.847269ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at session (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:25:100)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:108:21)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at tests/attachments.test.mjs:132:1
+✖ images keep original downloads while official Messages serialization uses normalized native image content (4.236751ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at session (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:25:100)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:133:21)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at tests/attachments.test.mjs:205:1
+✖ native model file handles permit real read and sandboxed scripts only in the admitted session and stay readonly (716.972985ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at session (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:25:100)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/attachments.test.mjs:207:19)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at tests/conversation-search.test.mjs:86:1
+✖ chat searches Chinese message excerpts then reads original event positions (3175.120288ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:19:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:87:19)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/conversation-search.test.mjs:108:1
+✖ known foreign IDs and administrator status cannot widen conversation tools (4.565377ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:19:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async tool (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:25:18)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:110:20)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/conversation-search.test.mjs:123:1
+✖ read intervals have inclusive original positions, omit tool results, and bound message text (3.379328ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:19:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async tool (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:25:18)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:124:3)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/conversation-search.test.mjs:147:1
+✖ native index rebuild preserves Chinese search scope and independently authorized range reads (7.996925ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(existsSync(index))
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:149:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/conversation-search.test.mjs:166:1
+✖ recipient searches a formal delivered body and reads its original event without sender access (4.517832ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:19:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async tool (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:25:18)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:168:29)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/conversation-search.test.mjs:184:1
+✖ the identity owner codec speaks the encoding sessions persist and refuses everything else (4.572185ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:19:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/conversation-search.test.mjs:189:20)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/file-delivery.test.mjs:84:1
+✖ selected private file reaches recipient primary as an independent original reference (3439.934291ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:85:20)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/file-delivery.test.mjs:110:1
+✖ same identity resumes unfinished preparation after restart without rereading its already prepared file (39.650576ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async primary (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:104:39)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:111:59)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/file-delivery.test.mjs:140:1
+✖ source scope and recipient exact-file references stay separate from private spaces and unrelated users (4.155535ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async primary (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:104:39)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:141:18)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/file-delivery.test.mjs:177:1
+✖ admitted original and image selections can be forwarded without assistant images or sender history rights (5.075569ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"attachments/internal","message":"attachment request failed"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async upload (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:168:20)
+      at async Promise.all (index 0)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:179:17)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/file-delivery.test.mjs:200:1
+✖ a CAS-prepared item whose checklist write fails is retried under the same delivery identity (43.312531ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async primary (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:104:39)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:201:61)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/file-delivery.test.mjs:222:1
+✖ file delivery recovers durable log success before business completion without recopying changed sources (35.006258ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async primary (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:104:39)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:223:60)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/file-delivery.test.mjs:248:1
+✖ a file delivery flush failure leaves a ready retry and never confirms incomplete durability (4.150775ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async primary (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:104:39)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:249:16)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/file-delivery.test.mjs:287:1
+✖ authorized shared files appear together in live and persisted recipient attachment projection (33.422684ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async primary (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:104:39)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/file-delivery.test.mjs:288:58)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/groups.test.mjs:74:1
+✖ chat creates group for designated owner and updates live owner tools (3442.86212ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/groups.test.mjs:19:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/groups.test.mjs:75:19)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/groups.test.mjs:93:1
+✖ only the target group owner changes membership; members share real files and confined scripts (1.071761ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/groups.test.mjs:94:68)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at tests/groups.test.mjs:117:1
+✖ removing a member invalidates the same live session cwd and later file/script access (4.857985ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/groups.test.mjs:19:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/groups.test.mjs:118:22)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/groups.test.mjs:135:1
+✖ concurrent duplicate membership updates stay singular and restart preserves group access (0.577129ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/groups.test.mjs:136:68)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at tests/speech.test.mjs:6:1
+✖ authenticated speech availability stays unavailable without the separate voice key (3271.236354ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  500 !== 200
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/speech.test.mjs:15:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/speech.test.mjs:34:1
+✖ speech proxy uses configured provider, returns editable text, and reports actual failures (3609.324882ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - true
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/speech.test.mjs:52:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/text-delivery.test.mjs:92:1
+✖ Fairy delivers only selected text to a cold primary without recipient inference (4259.503765ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:21:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:93:20)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/text-delivery.test.mjs:143:1
+✖ live delivery remains independent of the recipient active attempt and later model history includes it (4.376166ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:21:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:144:19)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/text-delivery.test.mjs:171:1
+✖ native log success with failed business update recovers after restart and exact retry stays single (35.863781ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:21:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async tool (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:27:18)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:177:16)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/text-delivery.test.mjs:197:1
+✖ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (32.923841ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:21:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:199:25)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/text-delivery.test.mjs:214:1
+✖ failed native durability checkpoint never confirms and stable retry recovers the same message (3.748751ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:21:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:215:19)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/text-delivery.test.mjs:234:1
+✖ notification outlet failure preserves durable delivery and successful sender confirmation (3.667216ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":{"code":"sessions/internal","message":"the owned-session module failed to handle this request"}}
+  
+  500 !== 200
+  
+      at request (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:21:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/.worktrees/arch-52-identity-interfaces/tests/text-delivery.test.mjs:235:19)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+EXIT:1

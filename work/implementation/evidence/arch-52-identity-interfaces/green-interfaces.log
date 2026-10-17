@@ -1,0 +1,13 @@
+✔ the store stays inside the package: four domain faces and nothing else (0.936063ms)
+✔ users and groups answer under their own domain (1.974341ms)
+✔ uploads and deliveries answer under their own domain (0.96585ms)
+✔ the service and its consumers reach identity through the domain faces, never the store (0.506545ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 101.50689
+EXIT:0

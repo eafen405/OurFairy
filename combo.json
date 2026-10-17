@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "product": "OurFairy v1",
-  "description": "The version combination the OurFairy v1 backend is built and tested against: the OurFairy integration branch plus exact commits of the dsh and rikkahub forks. A worktree obtains the same combination by branching from each repo's integrationBranch tip and running scripts/combo.mjs verify.",
+  "description": "The version combination the OurFairy v1 backend is built and tested against: the OurFairy integration branch plus exact commits of the dsh and rikkahub forks. A worktree obtains the same combination by branching from each repo integrationBranch tip and running scripts/combo.mjs verify.",
   "repos": {
     "ourfairy": {
       "role": "product",
@@ -29,7 +29,7 @@
         "corepack pnpm@11.28.5 run build:lib:client",
         "corepack pnpm@11.28.5 run build:native-system"
       ],
-      "note": "productCommit is the fork's integration branch tip. It carries durable session ownership, first-class delivery of a peer Session's message, and the admission generalization for a registered second credential. The four requiredBuild commands must all run: build:lib:host builds the CLI and host libraries, build:lib:client emits the client-face Node loader entries that the connection row imports, and build:native-system builds the flock addon the durable JSONL writer requires."
+      "note": "productCommit is the fork integration branch tip. It carries durable session ownership, first-class delivery of a peer Session message, and the admission generalization for a registered second credential. All four requiredBuild commands must run: build:lib:host builds the CLI and host libraries, build:lib:client emits the client-face Node loader entries that the connection row imports, and build:native-system builds the flock addon the durable JSONL writer requires."
     },
     "rikkahub": {
       "role": "android-client",
@@ -38,10 +38,10 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/rikkahub.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "a0c03bc413e9e8f1451fba7ced924b958c342849",
+      "productCommit": "c3eea8a09738def2749c00117584b00d97885800",
       "researchUpstreamSha": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
       "researchUpstreamRef": "origin/master",
-      "note": "productCommit is the Android fork's integration tip."
+      "note": "productCommit is the Android fork integration branch tip."
     }
   },
   "backend": {
@@ -55,7 +55,7 @@
       "provider": "deepseek-official",
       "model": "deepseek-flash"
     },
-    "agentModelNote": "The model selection this combination runs. The bundle's agent-default-model row and combo.json declare the same pair; the launcher passes this pair to the probe, which uses it as explicit agentOptions because the v1 baseline mounts no entry layer. doctor's 'bundle agent model' check compares the two.",
+    "agentModelNote": "The model selection this combination runs. The bundle agent-default-model row and combo.json declare the same pair; the launcher passes this pair to the probe as explicit agentOptions because the v1 baseline mounts no entry layer. The doctor bundle-agent-model check compares the two.",
     "nodeRange": "^22.19.0 || >=24",
     "pnpmPin": "11.28.5",
     "pnpmInvocation": "corepack pnpm@11.28.5",

@@ -12,6 +12,7 @@
 import { Service } from '@deepseek-ai/cordis'
 import { IdentityError, IdentityStore, PHAETHON_SHORT_ID } from './store.mjs'
 import { bearerToken, identityHandlers, IDENTITY_PATHS } from './http.mjs'
+import { identityInterfaces } from './interfaces.mjs'
 import { ownerOf } from './owner.mjs'
 
 export const name = 'ourfairy-identity'
@@ -22,18 +23,34 @@ export function principalIdOf(shortId) {
   return ownerOf(shortId)
 }
 
-/** The identity service the composition reads as `ctx.identity`. */
-class IdentityService extends Service {
+/**
+ * Where one service instance keeps its business store: a module-private symbol
+ * rather than a `#` field, because Cordis calls a service method with a
+ * traceable proxy as `this` and a class-private field is unreadable through it.
+ */
+const STORE = Symbol('ourfairy-identity-store')
+
+/**
+ * The identity service the composition reads as `ctx.identity`. `users`,
+ * `groups`, `uploads` and `deliveries` are the product-facing interface
+ * (`interfaces.mjs`); the store behind them stays inside this package.
+ */
+export class IdentityService extends Service {
   constructor(ctx, { store, phaethon }) {
     super(ctx, 'identity')
-    this.store = store
+    this[STORE] = store
     this.phaethon = phaethon
+    const { users, groups, uploads, deliveries } = identityInterfaces(store)
+    this.users = users
+    this.groups = groups
+    this.uploads = uploads
+    this.deliveries = deliveries
   }
 
   /** The user a presented request speaks for, or undefined. */
   authenticateRequest(request) {
     const token = bearerToken(request)
-    return token === undefined ? undefined : this.store.authenticate(token)
+    return token === undefined ? undefined : this[STORE].authenticate(token)
   }
 
   /** Connection's second-credential seam: the principal one request speaks for. */
@@ -47,7 +64,7 @@ class IdentityService extends Service {
     if (caller.isAdmin !== true) {
       throw new IdentityError(403, 'identity/forbidden', 'only Phaethon may create invites')
     }
-    return this.store.createInvite(caller.shortId)
+    return this[STORE].createInvite(caller.shortId)
   }
 
   /** End the caller's credential and revoke the principal scope it was admitted as. */
@@ -57,7 +74,7 @@ class IdentityService extends Service {
     if (token === undefined || user === undefined) {
       throw new IdentityError(401, 'identity/unauthorized', 'present a live session credential')
     }
-    this.store.signOut(token)
+    this[STORE].signOut(token)
     await this.ctx.get('connection')?.revokePrincipal(principalIdOf(user.shortId))
     return { revoked: true, principal: principalIdOf(user.shortId) }
   }
@@ -90,7 +107,7 @@ export function apply(ctx, config) {
   ctx.effect(() => () => store.close(), 'ourfairy-identity: business store')
 
   const service = new IdentityService(ctx, { store, phaethon: seeded.user })
-  const handlers = identityHandlers({ service, fence: (request) => ctx.connection.fence(request) })
+  const handlers = identityHandlers({ service, store, fence: (request) => ctx.connection.fence(request) })
 
   // The session token this module issues is also a first-class credential for
   // dsh's own `/api`: Connection admits it as the principal derived above.

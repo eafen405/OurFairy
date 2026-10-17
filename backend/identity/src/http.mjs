@@ -116,8 +116,13 @@ export function postHandler({ fence, handle, HttpError = IdentityError, codePref
   }
 }
 
-/** Build one handler per path in {@link IDENTITY_PATHS}. */
-export function identityHandlers({ service, fence }) {
+/**
+ * Build one handler per path in {@link IDENTITY_PATHS}. The store is passed
+ * alongside the service rather than read back from it: the service keeps the
+ * store private, and the registration and sign-in routes have no identity rule
+ * of their own.
+ */
+export function identityHandlers({ service, store, fence }) {
   const callerOf = (request) => {
     const user = service.authenticateRequest(request)
     if (user === undefined) {
@@ -140,11 +145,11 @@ export function identityHandlers({ service, fence }) {
     })],
     ['/identity/register', post(async (body) => ({
       ok: true,
-      ...service.store.register(body),
+      ...store.register(body),
     }))],
     ['/identity/sign-in', post(async (body) => ({
       ok: true,
-      ...service.store.signIn(body),
+      ...store.signIn(body),
     }))],
     ['/identity/session', post(async (_body, request) => ({
       ok: true,

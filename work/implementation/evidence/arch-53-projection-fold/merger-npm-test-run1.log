@@ -1,0 +1,183 @@
+
+> ourfairy@0.1.0 test
+> node --test "tests/**/*.test.mjs"
+
+✔ disconnecting an original download during backpressure settles its handler and closes its file source (24.397447ms)
+✔ upload completes before sending and original downloads by qualified message identity across restart (6335.694408ms)
+✔ a malformed upload ID list is refused as a bad request before any session is opened (98.171111ms)
+✔ unfinished and foreign receipts never grant message or download access, including identical stored bytes (498.492416ms)
+✔ lost chunk ACK retries exact bytes, expired upload cannot be new input, and admitted retry survives expiry (3089.875296ms)
+✔ images keep original downloads while official Messages serialization uses normalized native image content (681.440728ms)
+✔ native model file handles permit real read and sandboxed scripts only in the admitted session and stay readonly (5772.691942ms)
+▶ OurFairy v1 baseline composition
+  ✔ real profile boot reports every required service live (keyless) (3925.996242ms)
+  ✔ v1 profile mounts scoped file/shell adapters and excludes unused capabilities (1148.163226ms)
+  ✔ the product profile alone boots with no test overlay at all (1612.759865ms)
+  ✔ boot-product refuses an overlay instead of silently ignoring it (109.889054ms)
+  ✔ a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration (1325.081322ms)
+  ✔ keyless startup without a turn succeeds and writes nothing outside the isolated home (2422.517501ms)
+✔ OurFairy v1 baseline composition (10546.104664ms)
+✔ the bundle README defers the absent-row list to the test that owns it (1.981374ms)
+✔ the bundle README row table names only rows the bundle mounts, with their package (1.015204ms)
+✔ a session queue and a delivery queue with the same id never wait on each other (0.846583ms)
+✔ work on one queue runs one at a time in call order (4.731814ms)
+✔ a delivery writes its target session, but nesting one queue fails instead of hanging (0.759096ms)
+✔ delivery and jobs reach live sessions through the runtime, not RemoteChat privates (1.228274ms)
+✔ the runtime is the only writer of a live session version (0.657573ms)
+✔ chat searches Chinese message excerpts then reads original event positions (6066.735807ms)
+✔ known foreign IDs and administrator status cannot widen conversation tools (753.982205ms)
+✔ read intervals have inclusive original positions, omit tool results, and bound message text (1623.907777ms)
+✔ native index rebuild preserves Chinese search scope and independently authorized range reads (3763.842526ms)
+✔ recipient searches a formal delivered body and reads its original event without sender access (516.484801ms)
+✔ the identity owner codec speaks the encoding sessions persist and refuses everything else (14.712242ms)
+✔ conversation tools resolve ownership through the public owned-session seam only (0.547052ms)
+✔ the bundle row declares the pair combo.json locks (1.571779ms)
+✔ doctor runs the "bundle agent model" check the README and combo.json promise (4224.996934ms)
+✔ the bundle declares the patch file its README calls the row set (1.525095ms)
+✔ selected private file reaches recipient primary as an independent original reference (4316.136008ms)
+✔ same identity resumes unfinished preparation after restart without rereading its already prepared file (3621.482448ms)
+✔ source scope and recipient exact-file references stay separate from private spaces and unrelated users (951.127798ms)
+✔ admitted original and image selections can be forwarded without assistant images or sender history rights (883.956341ms)
+✔ a CAS-prepared item whose checklist write fails is retried under the same delivery identity (871.310655ms)
+✔ file delivery recovers durable log success before business completion without recopying changed sources (2688.370077ms)
+✔ a file delivery flush failure leaves a ready retry and never confirms incomplete durability (2082.440673ms)
+✔ authorized shared files appear together in live and persisted recipient attachment projection (998.892169ms)
+✔ chat creates group for designated owner and updates live owner tools (5866.22191ms)
+✔ only the target group owner changes membership; members share real files and confined scripts (3132.016702ms)
+✔ removing a member invalidates the same live session cwd and later file/script access (1620.970922ms)
+✔ concurrent duplicate membership updates stay singular and restart preserves group access (2673.448841ms)
+▶ OurFairy identity over real HTTP
+  ✔ the provisioned Phaethon signs in as short number 1 (80.371513ms)
+  ✔ invited agents take the next short numbers in registration order (158.37992ms)
+  ✔ refused registrations leave no identity and consume no short number (165.994661ms)
+  ✔ an ordinary agent is refused the administrator invite operation (132.647134ms)
+  ✔ the credential names its own holder with no user field in the request (141.63186ms)
+  ✔ signing out ends the credential it was presented with (224.757429ms)
+  ✔ a session credential admits dsh /api while an anonymous request is refused at the door (212.973931ms)
+  ✔ concurrent registrations never share a short number and never half-succeed (710.160208ms)
+✔ OurFairy identity over real HTTP (1829.230774ms)
+▶ migrating a genuine v1 database
+  ✔ keeps the ids and passwords the v1 file already held (92.450454ms)
+  ✔ keeps the v1 session digests usable (0.81385ms)
+  ✔ keeps a v1 unredeemed invite redeemable and refuses the redeemed one (39.088228ms)
+  ✔ refuses a duplicate name without a unique index backing it (0.837665ms)
+  ✔ never reuses a short number once an identity is gone (40.947725ms)
+  ✔ a removed user no longer signs in, authenticates, or appears in a listing (44.47221ms)
+  ✔ a removed name stays reserved, deleted rows included (0.799353ms)
+✔ migrating a genuine v1 database (220.80239ms)
+▶ seeding against a deleted Phaethon
+  ✔ refuses to recreate short number 1 beside a tombstoned row (67.313503ms)
+  ✔ refuses an initial seed whose name belongs to another row (59.598095ms)
+✔ seeding against a deleted Phaethon (127.482505ms)
+▶ the stored schema obeys AGENTS.md
+  ✔ carries logical deletion and update timestamps on the business tables (1.840957ms)
+  ✔ keeps the associated person column on every business table (1.450759ms)
+  ✔ carries no foreign key and no unique constraint beyond the primary key (2.359856ms)
+  ✔ keeps the ordinary lookup index the queries actually need (1.641707ms)
+  ✔ a fresh database lands directly on the migrated schema (52.394798ms)
+  ✔ refuses a database newer than this module understands, leaving it untouched (4.305001ms)
+  ✔ signing out a logically deleted session reports nothing to revoke (133.344662ms)
+✔ the stored schema obeys AGENTS.md (198.033094ms)
+✔ v2 credentials and invites survive the additive group migration (146.590575ms)
+✔ v3 group membership and credentials survive the additive upload migration (98.797781ms)
+✔ v5 text deliveries survive the additive file preparation checklist migration (99.441336ms)
+✔ actual confined job survives phone observation, permits dialogue, and reports into its original session (6168.64148ms)
+✔ stopping a reply and stopping its real background process are independent, with owned controls (616.433518ms)
+✔ producer-side loss exposes missing output rather than treating a terminal status as complete output (751.572866ms)
+✔ registry retention preserves absolute byte offsets and explicitly marks an evicted prefix (2462.901849ms)
+✔ confined detached scripts cannot read another user and old task identities stay unavailable after restart (5256.474804ms)
+✔ two sessions stay independent and real job settlement never publishes an intermediate quiet episode (1129.936357ms)
+✔ an awaited result and a failed report both settle without holding terminal tasks active (1678.173597ms)
+✔ configured quiet completion leaves context for later without inventing pending inference (2005.025002ms)
+✔ accepted consecutive turns form one execution episode and canceled parked input does not stay active (159.954885ms)
+✔ duplicate start is refused, stop is clean, and nothing leaks across cycles (6455.001267ms)
+✔ doctor passes on a clean isolated home and names its checks (2693.699882ms)
+✔ a missing dsh checkout fails loudly instead of booting something else (64.551812ms)
+✔ one real turn reaches the external model double, registers tools, and persists the session (3929.117647ms)
+✔ a turn without credentials fails with a diagnostic naming the missing variable (5037.137663ms)
+▶ OurFairy owned sessions over real HTTP
+  ✔ a failed durable create can be retried in the same backend process (171.939315ms)
+  ✔ a session created by a signed-in identity keeps its owner and its primary binding across a restart (2245.503656ms)
+  ✔ a missing or foreign session is refused, and no request is ever served as an implicit user (372.067771ms)
+  ✔ select answers exactly as read does, because switching moves no persistent binding (235.522923ms)
+  ✔ a primary request racing a create still resolves the fixed primary session (273.053697ms)
+  ✔ cold ownerless and foreign sessions are refused without changing durable artifacts (6104.002768ms)
+  ℹ {"coldFixtures":[{"id":"ourfairy-user-8-primary"},{"id":"cold-foreign-session","owner":"user:9"},{"id":"ourfairy-user-10-primary","owner":"user:9"}],"durableArtifacts":{"_no-cwd/cold-foreign-session/session.v4.jsonl.zstd":{"sha256":"20560b6418809b807b6f09648904d52af6886610f953dcc23a52e42b3e47c2f0","mtimeNs":"1792233074293545182"},"_no-cwd/ourfairy-user-10-primary/session.v4.jsonl.zstd":{"sha256":"f60dfeaf1e20f1e2f780fb3e7028ba4d33a196838d875ae346f76d9511691d1e","mtimeNs":"1792233074309545181"},"_no-cwd/ourfairy-user-2-primary/session.v4.jsonl.zstd":{"sha256":"7b1879e5048c6c1411f5f00a359c34e6232fec35a58bd994c45d038d2391f81f","mtimeNs":"1792233068141545769"},"_no-cwd/ourfairy-user-3-76004c76-8b4e-4424-ad7f-893ed644ce6a/session.v4.jsonl.zstd":{"sha256":"d15a2547ae7a9af0657c50eb566912114d04b8dc3013eb7cb192f78e634b2e07","mtimeNs":"1792233068313545752"},"_no-cwd/ourfairy-user-3-primary/session.v4.jsonl.zstd":{"sha256":"86cdf80d05d06375888cee3b4ecf1911c3a383601dbab80abf5aa15417afb69a","mtimeNs":"1792233068297545754"},"_no-cwd/ourfairy-user-4-primary/session.v4.jsonl.zstd":{"sha256":"ae49bc03d4590d3f2b8354b9e9d465805bb9963eda508bfe966cfb30e70e6057","mtimeNs":"1792233070721545523"},"_no-cwd/ourfairy-user-6-193a7f4c-33f7-4ec4-a882-aaa8f16faf30/session.v4.jsonl.zstd":{"sha256":"dcf8f5bfc84928523f2a306af39b822f9ec9d8f508c0066c0bb2d9bfd8643833","mtimeNs":"1792233070917545505"},"_no-cwd/ourfairy-user-6-primary/session.v4.jsonl.zstd":{"sha256":"b05ffcfb59dc7a18d984232f4f7ac01d0de3a3b4e9e732b87911dfec8f46e0cc","mtimeNs":"1792233070897545507"},"_no-cwd/ourfairy-user-7-143d903f-8c8d-4b13-818c-30e4edab489d/session.v4.jsonl.zstd":{"sha256":"69dfe07e3088397637a6afa5358b8aad0f8945fd7d6e5128abe5cd21763934c7","mtimeNs":"1792233071205545477"},"_no-cwd/ourfairy-user-7-da85c89d-3f2d-4f50-b3ea-75d0602c3285/session.v4.jsonl.zstd":{"sha256":"266088c86efe6b9fa7c1cc3869dea390aefc3a7ad376de549b6ebf6a91848c98","mtimeNs":"1792233071237545474"},"_no-cwd/ourfairy-user-7-primary/session.v4.jsonl.zstd":{"sha256":"9009eb5ed6c1dfef8b5cbd700e4e13c0f633cbbb92a199f70e7433df53d751f0","mtimeNs":"1792233071129545485"},"_no-cwd/ourfairy-user-8-primary/session.v4.jsonl.zstd":{"sha256":"a7108f0e99a58edd5921cd2e20f6a1582795aeca945553f41576a44dcf18a4c2","mtimeNs":"1792233074277545184"}}}
+  ✔ an empty owned session can be resumed by the existing agent factory (1468.689435ms)
+  ℹ {"emptyResume":{"created":{"id":"ourfairy-user-11-primary","owner":"user:11"},"persistedEventCount":0,"resumed":{"id":"ourfairy-user-11-primary","owner":"user:11"},"ownerAfterDispose":"user:11"}}
+✔ OurFairy owned sessions over real HTTP (10872.908761ms)
+✔ the owner encoding is written only in identity's codec (10.817287ms)
+✔ ownership consumers take the encoding from the codec (0.357341ms)
+✔ callers use the short number the spaces scope returns, not a re-converted copy (0.181626ms)
+✔ PDF upload, selected page text with citation, and immutable original use actual authorized tools (9031.797597ms)
+✔ PDF tools report encrypted, damaged, empty, partial and over-limit documents without reading other pages (12331.577959ms)
+✖ PDF text is explicitly truncated and a compressed costly page hits an actual process resource budget (6643.073879ms)
+✔ selected PDF pages become real images in official user tool results without replacing the original (1931.408418ms)
+✔ scan, mixed and chart pages retain visible chart colors through real rendering and the official image request (9908.056898ms)
+✔ an unchanged worktree reuses the installed profile instead of reinstalling it (5791.239308ms)
+✔ the hashed set follows what the packages publish, not their test fixtures (1095.655088ms)
+✔ a new product source file invalidates the installed profile (3708.654945ms)
+✔ tasks and activity share one fold of the event log (2.369644ms)
+✔ an empty log with a running agent still opens an episode at seq 0 (0.335148ms)
+✔ projection publishes exactly its receipt and transcript seam (2.019816ms)
+✔ bounded history pages keep the opening cut while new formal events arrive (5951.231424ms)
+✔ a reconnect restores the active cumulative attempt while bounded backfill and live tail proceed independently (3207.541802ms)
+✔ a lost page response can be retried at its unchanged frozen cut (88.70808ms)
+✔ a real writer permission failure cannot advance durable ACK, then retry and cold recovery use the same acceptance (3272.042725ms)
+✔ new history and checkpoint routes keep the cold/live ownership fence and validate exact ranges (78.620784ms)
+✔ a crash-orphaned turn is resumed and writer-saved before its recovery closer is acknowledged (4827.292512ms)
+✔ a stable send is durably accepted once across concurrent retries and backend restart (6800.689165ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (654.457435ms)
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (413.800301ms)
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply (566.71257ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (5401.047438ms)
+✔ the deployment owner identity is separate from a chat attempt to edit the persona (1892.617294ms)
+✔ stopping the current reply preserves accepted queued input for the next wake (709.556508ms)
+✔ stopping before visible output records interruption rather than a failed reply (2668.201045ms)
+✔ a session read observes without a projection, releases the observation, and returns its snapshot (2.131802ms)
+✔ chat tools write own private files, share public files, and deny another user including administrator (5546.422967ms)
+✔ real child processes share public files, keep private boundaries after cd, and retain networking (1521.631335ms)
+✔ directory changes, edits, image reads and symlinks retain the same owner boundary (2392.473124ms)
+✔ agentless filesystem and script Interface calls refuse instead of inheriting a default user (1.305938ms)
+✔ shell background children and admitted detached jobs retain the same file scope (709.561237ms)
+✔ a network-installed dependency is available to both users in the one shared environment (1944.534436ms)
+✔ ensure restores the owner private root when a persisted working directory disappears (776.076099ms)
+✔ independent scope contributors compose and each teardown removes only its own roots (0.692339ms)
+✔ authenticated speech availability stays unavailable without the separate voice key (4240.779304ms)
+✔ speech proxy uses configured provider, returns editable text, and reports actual failures (5788.631061ms)
+✔ Fairy delivers only selected text to a cold primary without recipient inference (4844.072831ms)
+✔ live delivery remains independent of the recipient active attempt and later model history includes it (564.508381ms)
+✔ native log success with failed business update recovers after restart and exact retry stays single (2570.744922ms)
+✔ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (499.262839ms)
+✔ failed native durability checkpoint never confirms and stable retry recovers the same message (3485.177667ms)
+✔ notification outlet failure preserves durable delivery and successful sender confirmation (2306.203547ms)
+ℹ tests 135
+ℹ suites 6
+ℹ pass 134
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 40638.573458
+
+✖ failing tests:
+
+test at tests/pdf.test.mjs:161:1
+✖ PDF text is explicitly truncated and a compressed costly page hits an actual process resource budget (6643.073879ms)
+  AssertionError [ERR_ASSERTION]: {"status":3,"error":"worker-unavailable"}
+  + actual - expected
+  
+  + 'worker-unavailable'
+  - 'resource-limit'
+  
+      at TestContext.<anonymous> (file:///home/eafen405/projects/OurFairy/tests/pdf.test.mjs:170:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'worker-unavailable',
+    expected: 'resource-limit',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

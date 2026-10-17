@@ -38,7 +38,7 @@ export class AttachmentService extends Service {
     if (!owner) fail(401, 'unauthorized', 'present a live session credential')
     return owner
   }
-  get store() { return this.ctx.identity.store }
+  get uploads() { return this.ctx.identity.uploads }
   _path(id) { return join(this.root, id) }
   async _locked(id, action) {
     const before = this._queues.get(id) ?? Promise.resolve(), started = before.then(action, action)
@@ -51,11 +51,11 @@ export class AttachmentService extends Service {
   }
   async _owned(owner, id) {
     if (typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id)) fail(404, 'unknown-upload', 'upload is unavailable')
-    const row = this.store.readUpload(id)
+    const row = this.uploads.read(id)
     if (!row || row.owner !== owner.shortId) fail(404, 'unknown-upload', 'upload is unavailable')
     await this.ctx.ourfairySessions.read(owner, row.sessionId)
     if (row.status === 2 || row.expiresAt <= Date.now()) {
-      this.store.updateUpload(id, { status: 2 })
+      this.uploads.update(id, { status: 2 })
       await unlink(this._path(id)).catch(error => { if (error.code !== 'ENOENT') throw error })
       fail(410, 'expired', 'upload expired; select and upload again')
     }
@@ -74,7 +74,7 @@ export class AttachmentService extends Service {
     await handle.close()
     const row = { uploadId, owner: owner.shortId, sessionId, name, mime, size, sha256, status: 0, offset: 0,
       expiresAt: now + 24 * 60 * 60 * 1000, createdAt: now, updatedAt: now, original: null, image: null }
-    try { this.store.insertUpload(row) } catch (error) { await unlink(this._path(uploadId)); throw error }
+    try { this.uploads.insert(row) } catch (error) { await unlink(this._path(uploadId)); throw error }
     return this.expose(row)
   }
   async chunk(owner, uploadId, offset, data) {
@@ -100,7 +100,7 @@ export class AttachmentService extends Service {
           written += bytesWritten
         }
         await handle.sync()
-        this.store.updateUpload(uploadId, { offset: offset + data.length })
+        this.uploads.update(uploadId, { offset: offset + data.length })
         return this.expose({ ...row, offset: offset + data.length })
       } finally { await handle.close() }
     })
@@ -118,7 +118,7 @@ export class AttachmentService extends Service {
         catch { fail(400, 'image-invalid', 'image decoding or normalization failed') }
       }
       const original = await this.ctx.attachments.saveFileStream({ data: createReadStream(this._path(uploadId)), name: row.name })
-      this.store.updateUpload(uploadId, { status: 1, original, image })
+      this.uploads.update(uploadId, { status: 1, original, image })
       await unlink(this._path(uploadId))
       return this.expose({ ...row, status: 1, original, image })
     })
@@ -140,7 +140,7 @@ export class AttachmentService extends Service {
   }
   /** Snapshot only an explicitly selected source through the sender's existing scope. */
   async prepareDeliveryFile(agent, selector, signal) {
-    const owner = this.ctx.identity.store.userByShortId(this.ctx.ourfairySpaces.owner(agent.session))
+    const owner = this.ctx.identity.users.byShortId(this.ctx.ourfairySpaces.owner(agent.session))
     if (!selector.path) {
       const input = await this.download(owner, { sessionId: agent.session.id, messageId: selector.messageId, index: selector.index })
       // A saved reference must still have readable original bytes before it is shared.

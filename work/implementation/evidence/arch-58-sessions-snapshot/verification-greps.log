@@ -1,0 +1,17 @@
+$ grep -rn "mutableSessions\|isBoundTo" app/src
+(none)
+
+$ grep -rn "receiver.bind\|\.bind(identity" app/src/main
+(none)
+
+$ grep -rn "onAccountChanged" app/src/main
+app/src/main/java/me/rerere/rikkahub/di/IdentityModule.kt:104:            onAccountChanged = receiver::bindIdentity,
+app/src/main/java/me/rerere/rikkahub/data/remote/AccountSession.kt:42:    private val onAccountChanged: (SignedIn?) -> Unit = {},
+app/src/main/java/me/rerere/rikkahub/data/remote/AccountSession.kt:135:        onAccountChanged(signedIn)
+
+$ grep -n "sessions" app/src/main/java/me/rerere/rikkahub/data/remote/RemoteReceiveState.kt
+16: * The list is not copied here: [sessions] is the very flow [OwnedSessionState] publishes, so
+36:    val sessions: StateFlow<SessionsSnapshot> = owned.snapshot
+52:                val allowed = listed.sessions.map { it.id }.toSet()
+56:                    listed.sessions.forEach { session ->
+120:     * sessions answered first. The backlog is read back from the records, so a session that never
