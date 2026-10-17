@@ -5,7 +5,8 @@
 - worktree：`/home/eafen405/projects/OurFairy/.worktrees/arch-53-projection-fold`
 - 分支：`arch/53-projection-fold`；集成分支 `integration/ourfairy-v1`
 - 实现提交：`f1acf76`（`refactor(chat): fold the session log once for tasks and activity`）
-- 证据提交：本文件所在提交，即分支 tip / FINAL_SHA（具体 SHA 见实现者报告与 merger 前置核对）
+- 合并提交：`199abb7`（`Merge branch 'integration/ourfairy-v1' into arch/53-projection-fold`，第二父 `514026d`）
+- 证据提交：`b25ba2d` 建立本目录；本文件所在提交（在其后更新最终合并状态）即分支 tip / FINAL_SHA，具体 SHA 见实现者报告与 merger 前置核对
 - 结论：前提成立；同一日志每次 projection 的折叠次数 **2 → 1**，输出语义不变
 
 ## 前提核对（行号已因 #51 漂移）
@@ -53,12 +54,26 @@
 | 定向行为（改动后） | `node --test tests/jobs.test.mjs tests/text-delivery.test.mjs tests/remote-chat.test.mjs tests/reconnect.test.mjs` | 29 pass / 0 fail（`green-behavior.log`） |
 | 全量（合并前 `167d1ef`） | `npm test` | 134 pass / 1 fail（`full-npm-test.log`）：唯一失败是 `lifecycle` 的 doctor 报 worktree HEAD 未基于集成分支 tip `459ca98` + rikkahub pin 中间态，非本票改动；按 CONTEXT 先 merge 再复跑 |
 | merge `459ca98`（arch-63 证据/pin，无代码冲突，fast-forward）后全量 | `npm test` | **135 pass / 0 fail，EXIT 0**（`full-npm-test-merged.log`；本票新增 2 条，基线 133 条） |
-| 组合一致 | `npm run combo:verify` | 3 仓 ok，exit 0（`combo-verify.log`） |
+| 该状态组合一致 | `npm run combo:verify` | 3 仓 ok，exit 0（`combo-verify.log`） |
+| merge `514026d`（arch-58 证据/pin，无代码冲突，合并提交 `199abb7`）后全量 | `npm test` | **135 pass / 0 fail，EXIT 0**（`full-npm-test-final.log`） |
+| 最终状态组合一致 | `npm run combo:verify` | ourfairy `199abb7` 基于集成分支、dsh `fe2bbc3b`、rikkahub `81f1b06b`，3 仓 ok，exit 0（`combo-verify-final.log`） |
 | pre-commit hook（实现提交 `f1acf76`） | 自动 `npm test` + `combo:verify` | 通过后提交成功 |
+| pre-commit hook（证据提交首试） | 自动 `npm test` | 1 fail：pdf resource-limit 用例偶发 `worker-unavailable`（并发负载 flake，非本票路径），见下 |
+| 单独复跑该用例 | `node --test --test-name-pattern="compressed costly page" tests/pdf.test.mjs` | 1 pass（`recheck-pdf-resource-limit.log`） |
+| 重试证据提交 | `git commit`（同一 hook） | 通过后提交成功（`commit-evidence.log`） |
+
+## flake 记录（如实）
+
+- 证据提交首试被 pre-commit hook 拦下：`tests/pdf.test.mjs` 的「compressed costly page hits an actual process resource budget」得到 `worker-unavailable` 而非 `resource-limit`。该用例与本票无调用关系（PDF worker 资源预算），对同一工作树单独复跑通过；重试提交的 hook 全量通过。未使用 `--no-verify`。
 
 ## 合并集成分支
 
-开工基线 `167d1ef`（= 开工时集成分支 tip，已先 `git merge integration/ourfairy-v1` 快进到它）。执行中集成分支前进到 `459ca98`（arch-63 的 `combo.json` pin 与证据，不触碰 `backend/chat`），已 `git merge integration/ourfairy-v1`（fast-forward）并在**合并后状态**复跑上表全量与 combo。
+开工基线 `167d1ef`（= 开工时集成分支 tip，已先 `git merge integration/ourfairy-v1` 快进到它）。执行中集成分支前进两次，均不触碰 `backend/chat`：
+
+1. `459ca98`（arch-63：`combo.json` pin + 证据）→ fast-forward 后复跑全量（135/135）与 combo；
+2. `514026d`（arch-58：rikkahub pin `6f6cf7f` → `81f1b06b` + 证据）→ 合并提交 `199abb7`，在**最终合并状态**复跑全量（135/135）与 combo（3 仓 ok）。
+
+其间一次证据提交尝试被 hook 的 `combo:verify` 拦下：rikkahub `product/ourfairy-v1` 已到 `81f1b06b` 而集成分支尚未更新 pin（跨仓中间态，非本票改动）。按 CONTEXT 先 merge 集成分支 `514026d` 解决，未使用 `--no-verify`。
 
 ## 未做 / 范围外
 
