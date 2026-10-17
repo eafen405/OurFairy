@@ -81,32 +81,33 @@ export function projectTasks(ctx, events, sessionId) {
 }
 
 /** Owned HTTP controls reuse the same session authorization and registry as model tools. */
-export function installJobs(ctx, chat) {
+export function installJobs(ctx, runtime) {
   ctx.jobs.events.subscribe({ owners: 'all' }, event => {
     if (event.type === 'output') return
-    const state = chat._live.get(event.job.owner)
-    if (state !== undefined) { state.version++; chat._publish(state) }
+    const state = runtime.live(event.job.owner)
+    if (state !== undefined) runtime.changed(state)
   })
-  chat.jobOutput = async (owner, { sessionId, taskId, from }) => {
-    const state = await chat._agent(owner, sessionId)
+  const jobOutput = async (owner, { sessionId, taskId, from }) => {
+    const state = await runtime.open(owner, sessionId)
     if (!Number.isSafeInteger(from) || from < 0) throw new ChatError(400, 'chat/invalid-offset', 'from must be a nonnegative byte offset')
-    const task = (await chat._projection(state, { maxEvents: 1 })).tasks.find(task => task.taskId === taskId)
+    const task = (await runtime.projection(state, { maxEvents: 1 })).tasks.find(task => task.taskId === taskId)
     if (task === undefined) throw new ChatError(404, 'chat/job-not-found', 'task does not belong to this session')
     if (task.availability === 0) return { taskId, availability: 0, chunks: [], next: task.output.total,
       ...task.output, lossy: true, status: task.status }
     const id = JobId(taskId.slice(ctx.jobs.generation.length + 1))
-    const output = ctx.jobs.readAt(id, from, state.agent.id)
-    const job = ctx.jobs.get(id, state.agent.id)
+    const output = ctx.jobs.readAt(id, from, state.sessionId)
+    const job = ctx.jobs.get(id, state.sessionId)
     return { taskId, availability: 1, chunks: output.chunks, next: output.next, lossy: output.lossy,
       earliest: job.output.earliest, total: job.output.total, status: STATUS[job.status] }
   }
-  chat.jobStop = async (owner, { sessionId, taskId }) => {
-    const state = await chat._agent(owner, sessionId)
-    const task = (await chat._projection(state, { maxEvents: 1 })).tasks.find(task => task.taskId === taskId)
+  const jobStop = async (owner, { sessionId, taskId }) => {
+    const state = await runtime.open(owner, sessionId)
+    const task = (await runtime.projection(state, { maxEvents: 1 })).tasks.find(task => task.taskId === taskId)
     if (task === undefined) throw new ChatError(404, 'chat/job-not-found', 'task does not belong to this session')
     if (task.availability === 0) return 0
-    const result = ctx.jobs.kill(JobId(taskId.slice(ctx.jobs.generation.length + 1)), state.agent.id, 'cancelled by the user')
-    await chat._barrier(state)
+    const result = ctx.jobs.kill(JobId(taskId.slice(ctx.jobs.generation.length + 1)), state.sessionId, 'cancelled by the user')
+    await runtime.barrier(state)
     return result === 'requested' ? 1 : 2
   }
+  return { jobOutput, jobStop }
 }

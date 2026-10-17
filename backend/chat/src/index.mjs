@@ -1,6 +1,7 @@
 /** Narrow product routes over native Agent/SessionQuery, without the upstream controller. */
 import { postHandler } from '@ourfairy/dsh-identity/http'
 import { RemoteChat } from './service.mjs'
+import { SessionRuntime } from './runtime.mjs'
 import { installDelivery } from './delivery.mjs'
 import { installJobs } from './jobs.mjs'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
@@ -8,9 +9,10 @@ import { SessionScopeError } from '@ourfairy/dsh-sessions'
 export const name = 'ourfairy-chat'
 export const inject = ['webServer', 'connection', 'ourfairySessions', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'identity', 'tools', 'sessionPersistence', 'jobs']
 export function apply(ctx) {
-  const chat = new RemoteChat(ctx)
-  installDelivery(ctx, chat)
-  installJobs(ctx, chat)
+  const runtime = new SessionRuntime(ctx)
+  const chat = new RemoteChat(ctx, runtime)
+  installDelivery(ctx, runtime)
+  const { jobOutput, jobStop } = installJobs(ctx, runtime)
   const register = (path, handle, respond) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,
     handler: postHandler({ fence: request => ctx.connection.fence(request), HttpError: SessionScopeError,
       codePrefix: 'chat', internalMessage: 'remote chat request failed',
@@ -22,8 +24,8 @@ export function apply(ctx) {
   register('/chat/page', async (owner, body) => ({ ok: true, page: await chat.page(owner, body) }))
   register('/chat/checkpoint', async (owner, body) => ({ ok: true, ...await chat.checkpoint(owner, body) }))
   register('/chat/stop', async (owner, body) => { await chat.stop(owner, body); return { ok: true } })
-  register('/chat/jobs/output', async (owner, body) => ({ ok: true, output: await chat.jobOutput(owner, body) }))
-  register('/chat/jobs/stop', async (owner, body) => ({ ok: true, outcome: await chat.jobStop(owner, body) }))
+  register('/chat/jobs/output', async (owner, body) => ({ ok: true, output: await jobOutput(owner, body) }))
+  register('/chat/jobs/stop', async (owner, body) => ({ ok: true, outcome: await jobStop(owner, body) }))
   register('/chat/observe', (owner, body) => chat.observe(owner, body), (response, subscribe) => {
     response.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-accel-buffering': 'no' })
     response.flushHeaders()
