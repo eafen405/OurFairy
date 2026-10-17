@@ -1,0 +1,4 @@
+FORBIDDEN_ROW_IDS count: 34
+rows mounted by cordis.patch.yml: 33
+forbidden ids restated in README: tool-fs-search, fs-sandbox, working-directory, bash-sandbox, pwsh-sandbox, tool-pwsh, sandbox, approval, permission, otel, session-telemetry-otel, mcp-resources, plan-mode, workflow-ptc, tool-workflow, ptc-runtime
+restated ids that are actually mounted: 

@@ -1,0 +1,10 @@
+✔ the bundle README defers the absent-row list to the test that owns it (2.215631ms)
+✔ the bundle README row table names only rows the bundle mounts, with their package (0.800045ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 61.904382
