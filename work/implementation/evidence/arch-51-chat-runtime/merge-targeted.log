@@ -1,0 +1,39 @@
+✔ selected private file reaches recipient primary as an independent original reference (3348.496055ms)
+✔ same identity resumes unfinished preparation after restart without rereading its already prepared file (1466.696532ms)
+✔ source scope and recipient exact-file references stay separate from private spaces and unrelated users (370.500431ms)
+✔ admitted original and image selections can be forwarded without assistant images or sender history rights (394.177854ms)
+✔ a CAS-prepared item whose checklist write fails is retried under the same delivery identity (361.308887ms)
+✔ file delivery recovers durable log success before business completion without recopying changed sources (1275.48837ms)
+✔ a file delivery flush failure leaves a ready retry and never confirms incomplete durability (1148.060028ms)
+✔ authorized shared files appear together in live and persisted recipient attachment projection (512.940829ms)
+✔ actual confined job survives phone observation, permits dialogue, and reports into its original session (4398.111359ms)
+✔ stopping a reply and stopping its real background process are independent, with owned controls (261.318599ms)
+✔ producer-side loss exposes missing output rather than treating a terminal status as complete output (522.288737ms)
+✔ registry retention preserves absolute byte offsets and explicitly marks an evicted prefix (2204.57682ms)
+✔ confined detached scripts cannot read another user and old task identities stay unavailable after restart (3371.752312ms)
+✔ two sessions stay independent and real job settlement never publishes an intermediate quiet episode (1000.517992ms)
+✔ an awaited result and a failed report both settle without holding terminal tasks active (1727.526759ms)
+✔ configured quiet completion leaves context for later without inventing pending inference (1587.377197ms)
+✔ accepted consecutive turns form one execution episode and canceled parked input does not stay active (125.59517ms)
+✔ a stable send is durably accepted once across concurrent retries and backend restart (4378.143415ms)
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume (461.086445ms)
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running (347.018764ms)
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply (395.247251ms)
+✔ a failed model attempt retains its exact partial text after a cold restart (1528.72046ms)
+✔ the deployment owner identity is separate from a chat attempt to edit the persona (1034.448747ms)
+✔ stopping the current reply preserves accepted queued input for the next wake (525.122805ms)
+✔ stopping before visible output records interruption rather than a failed reply (1538.192993ms)
+✔ Fairy delivers only selected text to a cold primary without recipient inference (3269.259869ms)
+✔ live delivery remains independent of the recipient active attempt and later model history includes it (171.669179ms)
+✔ native log success with failed business update recovers after restart and exact retry stays single (1019.602427ms)
+✔ simultaneous senders and recipient primary creation preserve both deliveries without recipient inference (163.327001ms)
+✔ failed native durability checkpoint never confirms and stable retry recovers the same message (912.919109ms)
+✔ notification outlet failure preserves durable delivery and successful sender confirmation (835.650606ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15562.181982

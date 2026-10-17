@@ -1,0 +1,13 @@
+✔ a session queue and a delivery queue with the same id never wait on each other (1.193644ms)
+✔ work on one queue runs one at a time in call order (5.457968ms)
+✔ a delivery writes its target session, but nesting one queue fails instead of hanging (1.154499ms)
+✔ delivery and jobs reach live sessions through the runtime, not RemoteChat privates (1.133259ms)
+✔ the runtime is the only writer of a live session version (0.624499ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 79.597177
