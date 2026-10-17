@@ -25,7 +25,7 @@
  * and the command that fixes it.
  */
 import { createHash } from 'node:crypto'
-import { openSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { openSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -63,59 +63,30 @@ const COMBINATION = readCombination()
 const PROFILE_NAME = COMBINATION.profileName
 const BUNDLE_PACKAGE = COMBINATION.bundlePackage
 const PROBE_PACKAGE = COMBINATION.probePackage
-// The identity module is a product package the bundle mounts by name. combo.json
-// records no identity field (and this ticket must not edit that file), so the
-// name stays a launcher constant while its sources join the staleness hash below.
-const IDENTITY_PACKAGE = '@ourfairy/dsh-identity'
-// The owned-session module, mounted by the bundle for the same reason: a linked
-// product package must also be a profile dependency for its dsh peers to resolve.
-const SESSIONS_PACKAGE = '@ourfairy/dsh-sessions'
-const CHAT_PACKAGE = '@ourfairy/dsh-chat'
-const SPACES_PACKAGE = '@ourfairy/dsh-spaces'
-const ATTACHMENTS_PACKAGE = '@ourfairy/dsh-attachments'
-const SPEECH_PACKAGE = '@ourfairy/dsh-speech'
-const SEARCH_PACKAGE = '@ourfairy/dsh-search'
-const BUNDLE_DIR = join(repoRoot, COMBINATION.bundlePathInRepo)
+/**
+ * The packages the profile links out of this worktree, as package name plus
+ * repo-relative directory.
+ *
+ * combo.json records the bundle and the probe; the product modules the bundle
+ * mounts by name are launcher constants. Both the profile manifest and the
+ * staleness hash below read this single list, so a package cannot be installed
+ * without its sources also being hashed.
+ */
+const LINKED_PACKAGES = [
+  { name: BUNDLE_PACKAGE, dir: COMBINATION.bundlePathInRepo },
+  { name: PROBE_PACKAGE, dir: COMBINATION.probePathInRepo },
+  // A linked package only resolves its dsh peers when it is a profile
+  // dependency too.
+  { name: '@ourfairy/dsh-identity', dir: 'backend/identity' },
+  { name: '@ourfairy/dsh-sessions', dir: 'backend/sessions' },
+  { name: '@ourfairy/dsh-chat', dir: 'backend/chat' },
+  { name: '@ourfairy/dsh-speech', dir: 'backend/speech' },
+  { name: '@ourfairy/dsh-search', dir: 'backend/search' },
+  { name: '@ourfairy/dsh-attachments', dir: 'backend/attachments' },
+  { name: '@ourfairy/dsh-spaces', dir: 'backend/spaces' },
+]
 const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
 const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
-
-/** Files whose content decides whether the linked profile is stale. */
-const PRODUCT_SOURCES = [
-  join(COMBINATION.bundlePathInRepo, 'package.json'),
-  join(COMBINATION.bundlePathInRepo, 'cordis.patch.yml'),
-  join(COMBINATION.probePathInRepo, 'package.json'),
-  join(COMBINATION.probePathInRepo, 'src', 'index.mjs'),
-  join(COMBINATION.probePathInRepo, 'overlay.patch.yml'),
-  'backend/identity/package.json',
-  'backend/identity/src/codes.mjs',
-  'backend/identity/src/store.mjs',
-  'backend/identity/src/http.mjs',
-  'backend/identity/src/index.mjs',
-  'backend/identity/src/owner.mjs',
-  'backend/sessions/package.json',
-  'backend/sessions/src/service.mjs',
-  'backend/sessions/src/http.mjs',
-  'backend/sessions/src/index.mjs',
-  'backend/chat/package.json',
-  'backend/chat/src/index.mjs',
-  'backend/chat/src/service.mjs',
-  'backend/chat/src/projection.mjs',
-  'backend/chat/src/persona.mjs',
-  'backend/chat/src/delivery.mjs',
-  'backend/chat/src/jobs.mjs',
-  'backend/chat/src/activity.mjs',
-  'backend/speech/package.json',
-  'backend/speech/src/index.mjs',
-  'backend/speech/src/service.mjs',
-  'backend/search/package.json',
-  'backend/search/src/index.mjs',
-  'backend/attachments/package.json',
-  ...['index', 'service', 'pdf'].map(name => `backend/attachments/src/${name}.mjs`),
-  'backend/attachments/src/pdf-worker.py',
-  'backend/attachments/pdf/pypdf-6.21.0-py3-none-any.whl',
-  'backend/spaces/package.json',
-  ...['index', 'scope', 'bwrap', 'fs', 'policy', 'groups'].map(name => `backend/spaces/src/${name}.mjs`),
-]
 
 function fail(message, code = 1) {
   process.stderr.write(`ourfairy-backend: ${message}\n`)
@@ -200,13 +171,62 @@ function resolveDsh(options) {
   return { dir, bin, head, locked, drifted: head !== locked, combo }
 }
 
-/** Content hash of the product packages, so a stale linked profile is reinstalled. */
+/**
+ * Every file a profile install copies out of the worktree, repo-relative.
+ *
+ * pnpm copies a `file:` package into the profile by its `files` declaration,
+ * so that declaration — not a list kept here — is what decides the install's
+ * contents. Deriving the set from it is what makes adding a source file safe:
+ * a new file under `src/` is published, so it reaches the hash by itself. A
+ * hand-maintained list of the same files is what let a new file change the
+ * worktree while the profile kept booting the previous copy.
+ */
+function productSources() {
+  const sources = new Set()
+  for (const { dir } of LINKED_PACKAGES) {
+    const manifestPath = join(repoRoot, dir, 'package.json')
+    // npm always ships package.json, whether `files` names it or not.
+    sources.add(join(dir, 'package.json'))
+    for (const entry of readPackageManifest(dir, manifestPath).files) {
+      const path = join(repoRoot, dir, entry)
+      // A `files` entry that names nothing publishes nothing, so it contributes
+      // nothing to the corpus either; npm silently skips it the same way.
+      if (!existsSync(path)) continue
+      if (statSync(path).isDirectory()) {
+        // Recursive listing yields directory names too; only files carry content.
+        for (const file of readdirSync(path, { recursive: true })) {
+          const published = join(repoRoot, dir, entry, file)
+          if (statSync(published).isFile()) sources.add(join(dir, entry, file))
+        }
+      } else {
+        sources.add(join(dir, entry))
+      }
+    }
+  }
+  return [...sources].sort()
+}
+
+/** Read a linked package's manifest, refusing one that names no published files. */
+function readPackageManifest(dir, path) {
+  let manifest
+  try {
+    manifest = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    fail(`cannot read ${dir}/package.json, which declares what the profile install copies: ${error.message}`)
+  }
+  if (!Array.isArray(manifest.files) || manifest.files.length === 0) {
+    fail(`${dir}/package.json declares no "files" list; the staleness hash derives the installed product sources from it,`
+      + ' and an unlisted package would hash nothing')
+  }
+  return manifest
+}
+
+/** Content hash of the product sources, so a stale linked profile is reinstalled. */
 function productSourceHash() {
   const hash = createHash('sha256')
-  for (const relativePath of PRODUCT_SOURCES) {
-    const path = join(repoRoot, relativePath)
+  for (const relativePath of productSources()) {
     hash.update(relativePath)
-    hash.update(existsSync(path) ? readFileSync(path) : Buffer.from('<missing>'))
+    hash.update(readFileSync(join(repoRoot, relativePath)))
   }
   return hash.digest('hex')
 }
@@ -214,19 +234,7 @@ function productSourceHash() {
 const profileManifest = () => ({
   name: `dsh-profile-${PROFILE_NAME}`,
   private: true,
-  dependencies: {
-    [BUNDLE_PACKAGE]: `file:${BUNDLE_DIR}`,
-    [PROBE_PACKAGE]: `file:${PROBE_DIR}`,
-    // Product modules the bundle mounts by package name. A linked package only
-    // resolves its dsh peers when it is a profile dependency too.
-    [IDENTITY_PACKAGE]: `file:${join(repoRoot, 'backend', 'identity')}`,
-    [SESSIONS_PACKAGE]: `file:${join(repoRoot, 'backend', 'sessions')}`,
-    [CHAT_PACKAGE]: `file:${join(repoRoot, 'backend', 'chat')}`,
-    [SPEECH_PACKAGE]: `file:${join(repoRoot, 'backend', 'speech')}`,
-    [SEARCH_PACKAGE]: `file:${join(repoRoot, 'backend', 'search')}`,
-    [ATTACHMENTS_PACKAGE]: `file:${join(repoRoot, 'backend', 'attachments')}`,
-    [SPACES_PACKAGE]: `file:${join(repoRoot, 'backend', 'spaces')}`,
-  },
+  dependencies: Object.fromEntries(LINKED_PACKAGES.map(({ name, dir }) => [name, `file:${join(repoRoot, dir)}`])),
   dsh: { profile: { bundles: [BUNDLE_PACKAGE] } },
 })
 
@@ -750,10 +758,10 @@ function commandDoctor(layout, options) {
     return `${dsh.bin} (${dsh.head.slice(0, 12)})`
   })
   check('product packages', () => {
-    for (const relativePath of PRODUCT_SOURCES) {
-      must(existsSync(join(repoRoot, relativePath)), `missing ${relativePath}`)
-    }
-    return PRODUCT_SOURCES.join(', ')
+    // Nothing is verified by hand here: the set comes from the same `files`
+    // declarations the profile install copies, so a package added to the
+    // install without a published-file list fails while deriving it.
+    return productSources().join(', ')
   })
   check('isolated home', () => {
     must(layout.home !== '/' && layout.home !== homedir(), 'OURFAIRY_HOME points at the host home')
