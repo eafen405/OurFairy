@@ -1,0 +1,38 @@
+# premise check @ 81f1b06b
+
+## mutableSessions / second snapshot (ticket item 2)
+36:    val sessions: StateFlow<SessionsSnapshot> = owned.snapshot
+51:            owned.snapshot.collect { listed ->
+100:        owned.snapshot.first { !it.loading }
+103:        val settled = owned.snapshot.first { !it.loading }
+140:                val primary = owned.snapshot.value.primarySessionId
+
+## five forwarding methods (ticket item 1)
+75:    fun bindIdentity(identity: SignedIn?) = bind(identity?.token, identity?.user?.shortId)
+77:    fun bind(token: String?, userShortId: Int?) {
+90:    fun refresh() = owned.refresh()
+91:    fun create() = owned.create()
+92:    fun select(sessionId: String) = owned.select(sessionId)
+93:    fun read(sessionId: String) = owned.read(sessionId)
+94:    fun returnToPrimary() = owned.returnToPrimary()
+
+## callers using forwarding methods
+app/src/main/java/me/rerere/rikkahub/ui/identity/IdentitySessionsPage.kt:52:    val snapshot by state.sessions.collectAsStateWithLifecycle()
+app/src/main/java/me/rerere/rikkahub/ui/identity/IdentitySessionsPage.kt:95:                    onClick = { state.refresh() },
+app/src/main/java/me/rerere/rikkahub/ui/identity/IdentitySessionsPage.kt:101:                    onClick = { state.create() },
+app/src/main/java/me/rerere/rikkahub/ui/identity/IdentitySessionsPage.kt:170:                            onClick = { state.select(owned.id) },
+app/src/main/java/me/rerere/rikkahub/ui/identity/IdentitySessionsPage.kt:181:                onClick = { state.returnToPrimary() },
+
+## remove-and-see consumers of sessions alias
+app/src/main/java/me/rerere/rikkahub/ui/identity/IdentitySessionsPage.kt:52:    val snapshot by state.sessions.collectAsStateWithLifecycle()
+app/src/test/java/me/rerere/rikkahub/service/RemoteReceiveControllerTest.kt:241:        assertEquals(listOf("token-alice-main"), harness.receiver.sessions.value.sessions.map { it.id })
+app/src/test/java/me/rerere/rikkahub/service/RemoteReceiveControllerTest.kt:248:            harness.receiver.sessions.value.sessions.isEmpty(),
+app/src/test/java/me/rerere/rikkahub/service/RemoteReceiveControllerTest.kt:253:        assertEquals(listOf("token-bob-main"), harness.receiver.sessions.value.sessions.map { it.id })
+app/src/test/java/me/rerere/rikkahub/service/RemoteReceiveControllerTest.kt:263:        assertEquals(listOf("token-alice-main"), harness.receiver.sessions.value.sessions.map { it.id })
+app/src/test/java/me/rerere/rikkahub/service/RemoteReceiveControllerTest.kt:269:            harness.receiver.sessions.value.sessions.isEmpty(),
+app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:76:        assertEquals(listOf("bob-main", "bob-other"), state.sessions.value.sessions.map { it.id })
+app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:81:        assertTrue(state.sessions.value.sessions.isEmpty())
+app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:90:        assertTrue(state.sessions.value.loading)
+app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:92:        assertEquals(listOf("alice-main", "alice-other"), state.sessions.value.sessions.map { it.id })
+app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:104:        assertEquals("alice-other", state.sessions.value.selectedId)
+app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:107:        assertEquals("alice-other", state.sessions.value.selectedId)

@@ -1,0 +1,15 @@
+# after implementation @ working tree
+
+## RemoteReceiveState public surface re forwarding methods / sessions alias
+40:    val owned: OwnedSessionState = OwnedSessionState(backend, scope)
+
+## page call sites now on state.owned
+52:    val owned = state.owned
+53:    val snapshot by owned.snapshot.collectAsStateWithLifecycle()
+96:                    onClick = { owned.refresh() },
+102:                    onClick = { owned.create() },
+171:                            onClick = { owned.select(session.id) },
+182:                onClick = { owned.returnToPrimary() },
+
+## RemoteReceiveSetup does not reference RemoteReceiveState
+(no reference)
