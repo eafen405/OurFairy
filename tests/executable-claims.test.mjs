@@ -14,12 +14,18 @@
  * `CODING_STANDARDS.md` states the rule this file applies: a claim that "A and B
  * cannot disagree" must come with a check that fails when they do, or the claim
  * is deleted.
+ *
+ * The drift assertion runs the real launcher against a throwaway copy of the
+ * product sources and changes the bundle's model there: the old substring
+ * comparison (`model: deepseek-flash` matched `deepseek-flash-drifted`) stayed
+ * green on exactly this fixture, so a regression to it fails here rather than
+ * only in review.
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { describeRun, makeHome, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
+import { copyProductRepo, describeRun, makeHome, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-executable-claims-')
 after(() => removeHome(home))
@@ -59,13 +65,15 @@ function declaredAgentModel() {
  * The exit code deliberately is not asserted: an unrelated check (another
  * checkout in the version combination drifting) must not decide what these
  * claim assertions observe.
+ * @param {{root?: string, home?: string}} [options] - `root` selects a copied
+ *   repository (see {@link copyProductRepo}); `home` its isolated installation.
  */
-function doctorChecks() {
+function doctorChecks({ root = repoRoot, home: isolatedHome = home } = {}) {
   const run = runBackend(['doctor', '--json'], {
-    OURFAIRY_HOME: home,
+    OURFAIRY_HOME: isolatedHome,
     DEEPSEEK_API_KEY: undefined,
     DEEPSEEK_BASE_URL: undefined,
-  })
+  }, { root })
   const start = run.stdout.indexOf('{')
   assert.ok(start >= 0, `doctor printed no JSON report:\n${describeRun('doctor', run)}`)
   return new Map(JSON.parse(run.stdout.slice(start)).checks.map(check => [check.name, check]))
@@ -116,6 +124,41 @@ test('doctor runs the "bundle agent model" check the README and combo.json promi
     `the check must compare against the pair combo.json locks (${pair.provider}/${pair.model});`
     + ` it reported ${JSON.stringify(check.detail)}`,
   )
+})
+
+test('a drifted bundle model makes the doctor check fail, as the README promises', () => {
+  const pair = lockedAgentModel()
+  const root = copyProductRepo('ourfairy-claims-drift-')
+  const driftHome = makeHome('ourfairy-claims-drift-home-')
+  try {
+    const bundlePath = join(root, 'backend', 'v1-bundle', 'cordis.patch.yml')
+    const source = readFileSync(bundlePath, 'utf8')
+    // The exact drift the old substring comparison accepted: the row still
+    // contains `model: deepseek-flash` as a prefix of the changed value.
+    const drifted = source.replace(`model: ${pair.model}`, `model: ${pair.model}-drifted`)
+    assert.notEqual(drifted, source, `the bundle must declare model: ${pair.model} so this test can drift it`)
+    writeFileSync(bundlePath, drifted)
+
+    const check = doctorChecks({ root, home: driftHome }).get('bundle agent model')
+    assert.ok(
+      check !== undefined,
+      'doctor must still run "bundle agent model" in a copied repository, or this drift cannot fail anything',
+    )
+    assert.equal(
+      check.ok,
+      false,
+      `a bundle row declaring model: ${pair.model}-drifted must fail the check that promises the two`
+      + ` declarations cannot drift; doctor reported ${JSON.stringify(check)}`,
+    )
+    assert.ok(
+      check.detail.includes(`${pair.model}-drifted`) && check.detail.includes(pair.model),
+      `the failure must name the drifted declaration (${pair.model}-drifted) and the locked pair`
+      + ` (${pair.model}); it reported ${JSON.stringify(check.detail)}`,
+    )
+  } finally {
+    removeHome(driftHome)
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('the bundle declares the patch file its README calls the row set', () => {

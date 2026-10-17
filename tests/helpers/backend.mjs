@@ -6,7 +6,7 @@
  * assembled by hand here.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -76,17 +76,36 @@ export function removeHome(path) {
 }
 
 /**
+ * Copy the directories and files the launcher reads into a throwaway repository.
+ *
+ * A test that must change a product input (the bundle patch, a product source
+ * file) can then run the real launcher against its copy instead of mutating the
+ * worktree that every other test file's launcher is reading concurrently.
+ * @param {string} [prefix] - temporary directory prefix.
+ * @returns {string} the copied repository root; the caller removes it.
+ */
+export function copyProductRepo(prefix = 'ourfairy-repo-') {
+  const root = mkdtempSync(join(tmpdir(), prefix))
+  for (const entry of ['backend', 'scripts', 'combo.json', 'package.json']) {
+    cpSync(join(repoRoot, entry), join(root, entry), { recursive: true })
+  }
+  return root
+}
+
+/**
  * Run one launcher command.
  * @param {string[]} args - launcher arguments (`probe`, `start`, `stop`, ...).
  * @param {Record<string, string|undefined>} env - environment entries layered
  *   over the test process environment; an explicit `undefined` removes a name
  *   (used to prove keyless startup).
- * @param {{timeoutMs?: number, cwd?: string}} [options]
+ * @param {{timeoutMs?: number, cwd?: string, root?: string}} [options] - `root`
+ *   selects a repository copied by {@link copyProductRepo}.
  * @returns {{code: number, stdout: string, stderr: string, error?: Error}}
  */
 export function runBackend(args, env = {}, options = {}) {
-  const result = spawnSync(process.execPath, [backendScript, ...args], {
-    cwd: options.cwd ?? repoRoot,
+  const root = options.root ?? repoRoot
+  const result = spawnSync(process.execPath, [join(root, 'scripts', 'ourfairy-backend.mjs'), ...args], {
+    cwd: options.cwd ?? root,
     env: launchEnv(env),
     encoding: 'utf8',
     timeout: options.timeoutMs ?? 300_000,
