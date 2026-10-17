@@ -1,0 +1,17 @@
+✔ actual confined job survives phone observation, permits dialogue, and reports into its original session (4388.456223ms)
+✔ stopping a reply and stopping its real background process are independent, with owned controls (240.236669ms)
+✔ producer-side loss exposes missing output rather than treating a terminal status as complete output (514.024714ms)
+✔ registry retention preserves absolute byte offsets and explicitly marks an evicted prefix (2208.072488ms)
+✔ confined detached scripts cannot read another user and old task identities stay unavailable after restart (3319.417161ms)
+✔ two sessions stay independent and real job settlement never publishes an intermediate quiet episode (1003.755665ms)
+✔ an awaited result and a failed report both settle without holding terminal tasks active (1394.671514ms)
+✔ configured quiet completion leaves context for later without inventing pending inference (1298.396645ms)
+✔ accepted consecutive turns form one execution episode and canceled parked input does not stay active (89.997229ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14781.052378

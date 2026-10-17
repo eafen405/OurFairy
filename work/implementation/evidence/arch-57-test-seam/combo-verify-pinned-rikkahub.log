@@ -1,0 +1,11 @@
+
+> ourfairy@0.1.0 combo:verify
+> node scripts/combo.mjs verify
+
+repo      branch                   expected          actual            result                                       
+--------  -----------------------  ----------------  ----------------  ---------------------------------------------
+ourfairy  integration/ourfairy-v1  based on integra  aa2822906c4ae26d  ok (worktree is based on the integration tip)
+dsh       product/ourfairy-v1      fe2bbc3b1c14efd7  fe2bbc3b1c14efd7  ok                                           
+rikkahub  product/ourfairy-v1      fcba0647041f2810  189648274074846e  MISMATCH                                     
+combo: rikkahub: product/ourfairy-v1 is 189648274074846e31a3c131b96e17687578ceb9 but combo.json locks fcba0647041f2810c2a1d89adaa3b4d0f826dfff; run 'git -C /home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog checkout fcba0647041f2810c2a1d89adaa3b4d0f826dfff' (or update combo.json when the combination intentionally moves)
+combo: 1 drift/missing entry
