@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Service } from '@deepseek-ai/cordis'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
+import { uploadIdsOf } from '@ourfairy/dsh-attachments'
 import { createUserMessage, BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { receiptIn, transcript } from './projection.mjs'
 import { FAIRY_PERSONA } from './persona.mjs'
@@ -112,7 +113,7 @@ export class RemoteChat extends Service {
   }
   async send(owner, { sessionId, requestId, text, uploadIds = [] }) {
     requestIdOf(requestId)
-    uploadIds = this.ctx.ourfairyAttachments.validateIds(uploadIds)
+    uploadIds = uploadIdsOf(uploadIds)
     if (typeof text !== 'string' || (!text.trim() && uploadIds.length === 0)) throw new ChatError(400, 'chat/invalid-request', 'provide text or an attachment')
     const state = await this._agent(owner, sessionId)
     return this._exclusively(sessionId, async () => {

@@ -50,6 +50,19 @@ export function sessionHandlers({ service, fence }) {
     codePrefix: 'sessions',
     internalMessage: 'the owned-session module failed to handle this request',
   })
+  /**
+   * One owned session, answered as `{ ok, session }`.
+   *
+   * `/sessions/read` and `/sessions/select` take the same body and answer the
+   * same document: selecting is a client-side choice that persists nothing, so
+   * both routes run this one handler. The paths stay separate because they are
+   * the client contract; a select that later persists a binding gets its own
+   * handler here, not a second copy of this one.
+   */
+  const oneSession = (resolve) => post(async (body, request) => {
+    const caller = callerOf(request)
+    return { ok: true, session: service.expose(await resolve(caller, body.sessionId), caller.shortId) }
+  })
 
   return new Map([
     ['/sessions/create', post(async (_body, request) => {
@@ -65,17 +78,11 @@ export function sessionHandlers({ service, fence }) {
         primarySessionId: listed.primarySessionId,
       }
     })],
-    ['/sessions/select', post(async (body, request) => {
-      const caller = callerOf(request)
-      return { ok: true, session: service.expose(await service.select(caller, body.sessionId), caller.shortId) }
-    })],
+    ['/sessions/select', oneSession((caller, sessionId) => service.select(caller, sessionId))],
     ['/sessions/primary', post(async (_body, request) => {
       const caller = callerOf(request)
       return { ok: true, session: service.expose(await service.primary(caller), caller.shortId) }
     })],
-    ['/sessions/read', post(async (body, request) => {
-      const caller = callerOf(request)
-      return { ok: true, session: service.expose(await service.read(caller, body.sessionId), caller.shortId) }
-    })],
+    ['/sessions/read', oneSession((caller, sessionId) => service.read(caller, sessionId))],
   ])
 }

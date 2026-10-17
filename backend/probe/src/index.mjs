@@ -126,23 +126,6 @@ function collectServices(ctx, rows) {
 }
 
 /**
- * Tool registry discovery.
- *
- * The pinned dsh `ToolRuntime` (packages/core/tools/src/index.ts at 2f084be06e)
- * exposes no enumeration API, and this probe does not invent one: guessing at
- * accessor names would only ever report `not-enumerable` while maintaining a
- * compatibility branch with no consumer. The authoritative tool catalog evidence
- * is the model request captured by the external model double; this section only
- * reports that the registry cannot be enumerated and never claims an empty
- * catalog.
- */
-function collectTools(ctx) {
-  const tools = ctx.get('tools')
-  if (tools === undefined) return { available: false, discovery: 'service-absent', names: null, count: null }
-  return { available: true, discovery: 'not-enumerable', names: null, count: null }
-}
-
-/**
  * All durable session-log files under a root, relative and sorted.
  *
  * The JSONL persistence writes compressed logs by default, so the artifact on
@@ -282,7 +265,6 @@ async function runProbe(ctx) {
     mode: process.env.OURFAIRY_PROBE_MODE ?? 'boot',
     rows: [],
     services: {},
-    tools: {},
     model: null,
     sessions: { root: null, files: [] },
     configurationFailure: false,
@@ -299,7 +281,6 @@ async function runProbe(ctx) {
     const services = collectServices(ctx, report.rows)
     report.services = services.services
     report.failures.push(...services.failures)
-    report.tools = collectTools(ctx)
     // Direct provider calls have no authenticated session; cwd must never supply one.
     report.agentless = {}
     for (const [name, operation] of [

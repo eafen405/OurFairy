@@ -37,7 +37,6 @@ export class AttachmentService extends Service {
     if (!owner) fail(401, 'unauthorized', 'present a live session credential')
     return owner
   }
-  validateIds(value) { return uploadIdsOf(value) }
   get store() { return this.ctx.identity.store }
   _path(id) { return join(this.root, id) }
   async _locked(id, action) {

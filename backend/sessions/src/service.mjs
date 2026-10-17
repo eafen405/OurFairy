@@ -277,14 +277,17 @@ export class OwnedSessionService extends Service {
   /**
    * Make one owned session the caller's current session.
    *
-   * Switching is a client-side choice only: it checks the owner exactly as
-   * `read` does and moves no persistent binding.
+   * Switching is a client-side choice only: it delegates to {@link read} and
+   * moves no persistent binding, so the two answer identically. It stays a
+   * separate name because "which session is current" is a real product concept
+   * and the client contract has its own path for it; if switching ever gains a
+   * persisted effect, this is where it goes and only this method changes.
    *
    * @param owner - the authenticated identity.
    * @param sessionId - the session the client named.
    * @returns the stored header.
    */
   async select(owner, sessionId) {
-    return await this._ownedHeader(owner, sessionId)
+    return await this.read(owner, sessionId)
   }
 }
