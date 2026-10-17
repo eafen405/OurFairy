@@ -4,6 +4,7 @@ import { mkdirSync, realpathSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
 import { FsError } from '@deepseek-ai/dsh-fs'
+import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 
 export const pathInside = (root, path) => path === root || path.startsWith(root + sep)
 const register = (contributors, contribute) => {
@@ -34,10 +35,11 @@ export class SpaceScope extends Service {
     this.owner(session)
     return session
   }
+  /** The short number this session's stored owner names; the codec, not this scope, owns the encoding. */
   owner(session) {
-    const owner = session?.header?.owner
-    if (typeof owner !== 'string' || !/^user:[1-9]\d*$/.test(owner)) throw new FsError('file operation requires an owned session', 'FS_PERMISSION_DENIED')
-    return owner.slice(5)
+    const shortId = shortIdOf(session?.header?.owner)
+    if (shortId === undefined) throw new FsError('file operation requires an owned session', 'FS_PERMISSION_DENIED')
+    return shortId
   }
   requireCurrent() {
     const session = this.current()
@@ -46,7 +48,7 @@ export class SpaceScope extends Service {
   }
   run(session, action) { this.owner(session); return this.calls.run(session, action) }
   privateRoot(session) {
-    const dir = join(this.root, 'private', this.owner(session))
+    const dir = join(this.root, 'private', `${this.owner(session)}`)
     mkdirSync(dir, { recursive: true })
     return realpathSync(dir)
   }

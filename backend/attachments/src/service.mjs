@@ -139,7 +139,7 @@ export class AttachmentService extends Service {
   }
   /** Snapshot only an explicitly selected source through the sender's existing scope. */
   async prepareDeliveryFile(agent, selector, signal) {
-    const owner = this.ctx.identity.store.userByShortId(Number(this.ctx.ourfairySpaces.owner(agent.session)))
+    const owner = this.ctx.identity.store.userByShortId(this.ctx.ourfairySpaces.owner(agent.session))
     if (!selector.path) {
       const input = await this.download(owner, { sessionId: agent.session.id, messageId: selector.messageId, index: selector.index })
       // A saved reference must still have readable original bytes before it is shared.
