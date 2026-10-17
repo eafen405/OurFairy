@@ -14,7 +14,9 @@
 | `npm test` | **127/127 通过**，`fail 0`，耗时 26.5s，exit 0 | `merger-full.log` |
 | `npm run combo:verify` | **三项 ok**：ourfairy based on integration tip `5dd301c9`、dsh `fe2bbc3b`、rikkahub `189648274`；`combo: combination verified`，exit 0 | `merger-combo-verify.log` |
 
-本次合并后全量运行未复现实现者记录过的 PDF 资源预算 flake（`worker-unavailable` vs `resource-limit`）；实现者开工基线与改后全量各命中一次该既有 flake，单独重跑 `node --test tests/pdf.test.mjs` 为 5/5（见 `README.md`、`pdf-rerun.log`）。merger 以本次 127/127 为准。
+本次合并后独立全量运行未复现实现者记录过的 PDF 资源预算 flake（`worker-unavailable` vs `resource-limit`）；实现者开工基线与改后全量各命中一次该既有 flake，单独重跑 `node --test tests/pdf.test.mjs` 为 5/5（见 `README.md`、`pdf-rerun.log`）。merger 以本次 127/127 为准。
+
+补记：本证据提交的 pre-commit hook 第一次运行（又一次合并后全量）命中了同一 PDF flake（`tests/pdf.test.mjs:170`，actual `worker-unavailable` / expected `resource-limit`，其余用例全绿），按仓库纪律原样重试提交，第二次 hook 全量通过并完成提交。该 flake 与 #49/#64 记录一致，属并发负载抖动，不是本票引入；merger 未用 `--no-verify` 绕过任何一次 hook。
 
 ## 行为边界（实现者同步调用方的类型变化）
 
