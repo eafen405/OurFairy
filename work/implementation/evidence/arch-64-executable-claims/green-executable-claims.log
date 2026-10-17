@@ -1,0 +1,11 @@
+✔ the bundle row declares the pair combo.json locks (1.273987ms)
+✔ doctor runs the "bundle agent model" check the README and combo.json promise (4474.645655ms)
+✔ the bundle declares the patch file its README calls the row set (1.01277ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4556.25699
