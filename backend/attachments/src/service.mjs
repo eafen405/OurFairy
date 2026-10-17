@@ -1,6 +1,7 @@
 /** Upload lifecycle is business state; admitted native messages alone grant content access. */
 import { Service } from '@deepseek-ai/cordis'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
+import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import { createHash, randomBytes } from 'node:crypto'
 import { mkdir, open, readFile, unlink } from 'node:fs/promises'
 import { createReadStream, realpathSync } from 'node:fs'
@@ -159,8 +160,7 @@ export class AttachmentService extends Service {
     })
   }
   async _events(sessionId) {
-    const observation = await this.ctx.sessionQuery.observeSession(sessionId, { projectionMode: 'none' })
-    try { return observation.events } finally { observation[Symbol.dispose]() }
+    return (await readSessionEvents(this.ctx, sessionId)).events
   }
   async download(owner, { sessionId, messageId, index }) {
     await this.ctx.ourfairySessions.read(owner, sessionId)

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Service } from '@deepseek-ai/cordis'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
+import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import { uploadIdsOf } from '@ourfairy/dsh-attachments'
 import { createUserMessage, BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { receiptIn, transcript } from './projection.mjs'
@@ -106,10 +107,8 @@ export class RemoteChat extends Service {
       this._publish(state)
     }
   }
-  async _events(sessionId) {
-    const observation = await this.ctx.sessionQuery.observeSession(sessionId, { projectionMode: 'none' })
-    try { return { events: observation.events, cursor: observation.cursor } }
-    finally { observation[Symbol.dispose]() }
+  _events(sessionId) {
+    return readSessionEvents(this.ctx, sessionId)
   }
   async send(owner, { sessionId, requestId, text, uploadIds = [] }) {
     requestIdOf(requestId)
