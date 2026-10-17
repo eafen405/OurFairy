@@ -6,7 +6,7 @@ import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES } from '@ourfairy/dsh-attachments'
 import { ownerOf, shortIdOf } from '@ourfairy/dsh-identity/owner'
 
-export function installDelivery(ctx, chat) {
+export function installDelivery(ctx, runtime) {
   const store = ctx.identity.store
   const receipt = row => ({ deliveryId: row.deliveryId, sessionId: row.sessionId,
     messageId: row.messageId, acceptedSeq: row.acceptedSeq })
@@ -20,12 +20,12 @@ export function installDelivery(ctx, chat) {
   }, { surfaceOp: 'append' })
 
   async function settle(row) {
-    const result = await chat._exclusively(row.sessionId, async () => {
+    const result = await runtime.runSession(row.sessionId, async () => {
       let event
-      const state = chat._live.get(row.sessionId)
+      const state = runtime.live(row.sessionId)
       if (state) {
-        event = find((await chat._events(row.sessionId)).events, row.deliveryId) ?? append(state.agent.session, row)
-        await chat._barrier(state)
+        event = find((await runtime.events(row.sessionId)).events, row.deliveryId) ?? append(state.session, row)
+        await runtime.barrier(state)
       } else {
         const handle = await ctx.sessionPersistence.open(row.sessionId, 'write')
         try {
@@ -56,7 +56,7 @@ export function installDelivery(ctx, chat) {
       catch (error) { ctx.logger('ourfairy-delivery').warn('pending delivery %s: %s', row.deliveryId, error.message) }
     }
   })()
-  chat.deliver = async (agent, callId, { recipientShortId, text, files = [] }, signal) => {
+  const deliver = async (agent, callId, { recipientShortId, text, files = [] }, signal) => {
     await recovery
     const senderShortId = shortIdOf(agent.session.header.owner)
     const sender = store.userByShortId(senderShortId)
@@ -69,7 +69,7 @@ export function installDelivery(ctx, chat) {
     const target = store.userByShortId(recipientShortId)
     const primary = await ctx.ourfairySessions.primary(target)
     const deliveryId = createHash('sha256').update(JSON.stringify([agent.session.id, callId])).digest('hex')
-    return chat._exclusively('delivery:' + deliveryId, async () => {
+    return runtime.runDelivery(deliveryId, async () => {
       let row = store.prepareDelivery({ deliveryId, senderShortId, senderSessionId: agent.session.id,
         recipientShortId, sessionId: primary.id, text, files: files.map(selector => ({ selector, prepared: null })) })
       for (let index = 0; index < row.files.length; index++) {
@@ -87,7 +87,7 @@ export function installDelivery(ctx, chat) {
     parameters: { recipientShortId: { type: 'integer', required: true }, text: { type: 'string', required: true },
       files: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, messageId: { type: 'string' }, index: { type: 'integer' } } } } },
     output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
-    execute: (args, exec) => chat.deliver(exec.agent, exec.callId, args, exec.signal),
+    execute: (args, exec) => deliver(exec.agent, exec.callId, args, exec.signal),
   }))
   ctx.on('agent/created', ({ agent }) => register(agent), { global: true })
   for (const agent of ctx.agents.list()) register(agent)
