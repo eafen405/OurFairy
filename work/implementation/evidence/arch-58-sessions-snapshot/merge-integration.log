@@ -1,0 +1,13 @@
+$ git log --oneline -1 product/ourfairy-v1
+6f6cf7ff Merge branch 'arch/63-chat-store-tests' into product/ourfairy-v1
+
+$ git merge product/ourfairy-v1
+Already up to date.
+
+$ git log --oneline -3
+6af8c3c8 Merge branch 'product/ourfairy-v1' into arch/58-sessions-snapshot
+5616d7f4 fix(remote): bind the sessions snapshot in the account's publication turn
+6f6cf7ff Merge branch 'arch/63-chat-store-tests' into product/ourfairy-v1
+
+$ git status --short
+(clean)
