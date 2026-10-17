@@ -1,0 +1,332 @@
+Calculating task graph as no cached configuration is available for tasks: :app:testDebugUnitTest --tests me.rerere.rikkahub.data.remote.RemoteNotificationBacklogTest
+> Task :build-logic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :build-logic:compileKotlin UP-TO-DATE
+> Task :build-logic:compileJava NO-SOURCE
+> Task :build-logic:pluginDescriptors UP-TO-DATE
+> Task :build-logic:processResources UP-TO-DATE
+> Task :build-logic:classes UP-TO-DATE
+> Task :build-logic:jar UP-TO-DATE
+> Task :ai:preBuild UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :common:preBuild UP-TO-DATE
+> Task :ai:preDebugBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :common:preDebugBuild UP-TO-DATE
+> Task :ai:generateDebugResources UP-TO-DATE
+> Task :common:generateDebugResources UP-TO-DATE
+> Task :ai:processDebugNavigationResources UP-TO-DATE
+> Task :common:processDebugNavigationResources UP-TO-DATE
+> Task :ai:packageDebugResources UP-TO-DATE
+> Task :ai:parseDebugLocalResources UP-TO-DATE
+> Task :common:javaPreCompileDebug UP-TO-DATE
+> Task :ai:javaPreCompileDebug UP-TO-DATE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :common:packageDebugResources UP-TO-DATE
+> Task :ai:generateDebugRFile UP-TO-DATE
+> Task :ai:extractDebugSupportedLocales UP-TO-DATE
+> Task :common:parseDebugLocalResources UP-TO-DATE
+> Task :app:injectCrashlyticsMappingFileIdDebug UP-TO-DATE
+> Task :app:processDebugGoogleServices UP-TO-DATE
+> Task :common:generateDebugRFile UP-TO-DATE
+> Task :app:injectCrashlyticsVersionControlInfoDebug UP-TO-DATE
+> Task :app:extractDebugSupportedLocales UP-TO-DATE
+> Task :common:extractDebugSupportedLocales UP-TO-DATE
+> Task :document:preBuild UP-TO-DATE
+> Task :document:preDebugBuild UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :highlight:preBuild UP-TO-DATE
+> Task :document:extractDebugSupportedLocales UP-TO-DATE
+> Task :highlight:preDebugBuild UP-TO-DATE
+> Task :material3:preBuild UP-TO-DATE
+> Task :material3:preDebugBuild UP-TO-DATE
+> Task :highlight:extractDebugSupportedLocales UP-TO-DATE
+> Task :mediagen:preBuild UP-TO-DATE
+> Task :mediagen:preDebugBuild UP-TO-DATE
+> Task :material3:extractDebugSupportedLocales UP-TO-DATE
+> Task :oauth:preBuild UP-TO-DATE
+> Task :mediagen:extractDebugSupportedLocales UP-TO-DATE
+> Task :oauth:preDebugBuild UP-TO-DATE
+> Task :search:preBuild UP-TO-DATE
+> Task :search:preDebugBuild UP-TO-DATE
+> Task :oauth:extractDebugSupportedLocales UP-TO-DATE
+> Task :speech:preBuild UP-TO-DATE
+> Task :speech:preDebugBuild UP-TO-DATE
+> Task :search:extractDebugSupportedLocales UP-TO-DATE
+> Task :ui:preBuild UP-TO-DATE
+> Task :speech:extractDebugSupportedLocales UP-TO-DATE
+> Task :ui:preDebugBuild UP-TO-DATE
+> Task :ui:extractDebugSupportedLocales UP-TO-DATE
+> Task :workspace:preBuild UP-TO-DATE
+> Task :workspace:preDebugBuild UP-TO-DATE
+> Task :web:buildWebUi UP-TO-DATE
+> Task :web:preBuild UP-TO-DATE
+> Task :workspace:extractDebugSupportedLocales UP-TO-DATE
+> Task :web:preDebugBuild UP-TO-DATE
+> Task :web:extractDebugSupportedLocales UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :document:processDebugNavigationResources UP-TO-DATE
+> Task :highlight:processDebugNavigationResources UP-TO-DATE
+> Task :common:compileDebugKotlin UP-TO-DATE
+> Task :common:compileDebugJavaWithJavac NO-SOURCE
+> Task :common:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :material3:processDebugNavigationResources UP-TO-DATE
+> Task :mediagen:processDebugNavigationResources UP-TO-DATE
+> Task :oauth:processDebugNavigationResources UP-TO-DATE
+> Task :search:processDebugNavigationResources UP-TO-DATE
+> Task :speech:processDebugNavigationResources UP-TO-DATE
+> Task :app:generateDebugLocaleConfig UP-TO-DATE
+> Task :ui:processDebugNavigationResources UP-TO-DATE
+> Task :web:processDebugNavigationResources UP-TO-DATE
+> Task :workspace:processDebugNavigationResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :document:generateDebugResources UP-TO-DATE
+> Task :ai:compileDebugKotlin UP-TO-DATE
+> Task :document:packageDebugResources UP-TO-DATE
+> Task :ai:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :ai:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugRFile UP-TO-DATE
+> Task :document:parseDebugLocalResources UP-TO-DATE
+> Task :document:generateDebugRFile UP-TO-DATE
+> Task :ai:processDebugJavaRes
+> Task :document:javaPreCompileDebug UP-TO-DATE
+> Task :document:compileDebugKotlin UP-TO-DATE
+> Task :highlight:generateDebugResources UP-TO-DATE
+> Task :highlight:packageDebugResources UP-TO-DATE
+> Task :highlight:parseDebugLocalResources UP-TO-DATE
+> Task :document:compileDebugJavaWithJavac UP-TO-DATE
+> Task :document:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :highlight:generateDebugRFile UP-TO-DATE
+> Task :highlight:javaPreCompileDebug UP-TO-DATE
+> Task :material3:generateDebugResources UP-TO-DATE
+> Task :material3:packageDebugResources UP-TO-DATE
+> Task :ai:bundleLibRuntimeToJarDebug
+> Task :material3:parseDebugLocalResources UP-TO-DATE
+> Task :material3:javaPreCompileDebug UP-TO-DATE
+> Task :material3:generateDebugRFile UP-TO-DATE
+> Task :mediagen:generateDebugResources UP-TO-DATE
+> Task :mediagen:packageDebugResources UP-TO-DATE
+> Task :mediagen:parseDebugLocalResources UP-TO-DATE
+> Task :mediagen:generateDebugRFile UP-TO-DATE
+> Task :highlight:compileDebugKotlin UP-TO-DATE
+> Task :highlight:compileDebugJavaWithJavac NO-SOURCE
+> Task :highlight:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :mediagen:javaPreCompileDebug UP-TO-DATE
+> Task :oauth:generateDebugResources UP-TO-DATE
+> Task :material3:compileDebugKotlin UP-TO-DATE
+> Task :oauth:packageDebugResources UP-TO-DATE
+> Task :oauth:parseDebugLocalResources UP-TO-DATE
+> Task :material3:compileDebugJavaWithJavac NO-SOURCE
+> Task :material3:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :oauth:generateDebugRFile UP-TO-DATE
+> Task :oauth:javaPreCompileDebug UP-TO-DATE
+> Task :mediagen:compileDebugKotlin UP-TO-DATE
+> Task :search:generateDebugResources UP-TO-DATE
+> Task :mediagen:compileDebugJavaWithJavac NO-SOURCE
+> Task :search:packageDebugResources UP-TO-DATE
+> Task :mediagen:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :search:parseDebugLocalResources UP-TO-DATE
+> Task :oauth:compileDebugKotlin UP-TO-DATE
+> Task :search:javaPreCompileDebug UP-TO-DATE
+> Task :speech:generateDebugResources UP-TO-DATE
+> Task :oauth:compileDebugJavaWithJavac NO-SOURCE
+> Task :search:generateDebugRFile UP-TO-DATE
+> Task :speech:packageDebugResources UP-TO-DATE
+> Task :oauth:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :speech:javaPreCompileDebug UP-TO-DATE
+> Task :speech:parseDebugLocalResources UP-TO-DATE
+> Task :ui:generateDebugResources UP-TO-DATE
+> Task :speech:generateDebugRFile UP-TO-DATE
+> Task :ui:packageDebugResources UP-TO-DATE
+> Task :search:compileDebugKotlin UP-TO-DATE
+> Task :ui:parseDebugLocalResources UP-TO-DATE
+> Task :search:compileDebugJavaWithJavac NO-SOURCE
+> Task :search:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :ui:generateDebugRFile UP-TO-DATE
+> Task :ui:javaPreCompileDebug UP-TO-DATE
+> Task :web:generateDebugResources UP-TO-DATE
+> Task :speech:compileDebugKotlin UP-TO-DATE
+> Task :web:packageDebugResources UP-TO-DATE
+> Task :speech:compileDebugJavaWithJavac NO-SOURCE
+> Task :speech:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :web:parseDebugLocalResources UP-TO-DATE
+> Task :web:javaPreCompileDebug UP-TO-DATE
+> Task :workspace:generateDebugResources UP-TO-DATE
+> Task :web:generateDebugRFile UP-TO-DATE
+> Task :ui:compileDebugKotlin UP-TO-DATE
+> Task :workspace:packageDebugResources UP-TO-DATE
+> Task :ui:compileDebugJavaWithJavac NO-SOURCE
+> Task :workspace:parseDebugLocalResources UP-TO-DATE
+> Task :workspace:generateDebugRFile UP-TO-DATE
+> Task :ui:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :workspace:javaPreCompileDebug UP-TO-DATE
+> Task :web:compileDebugKotlin UP-TO-DATE
+> Task :workspace:compileDebugKotlin UP-TO-DATE
+> Task :workspace:compileDebugJavaWithJavac NO-SOURCE
+> Task :web:compileDebugJavaWithJavac NO-SOURCE
+> Task :web:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :workspace:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :ai:mapDebugSourceSetPaths
+> Task :app:javaPreCompileDebug
+> Task :ai:compileDebugLibraryResources
+> Task :common:writeDebugAarMetadata
+> Task :ai:writeDebugAarMetadata
+> Task :highlight:writeDebugAarMetadata
+> Task :document:writeDebugAarMetadata
+> Task :material3:writeDebugAarMetadata
+> Task :mediagen:writeDebugAarMetadata
+> Task :oauth:writeDebugAarMetadata
+> Task :search:writeDebugAarMetadata
+> Task :ui:writeDebugAarMetadata
+> Task :speech:writeDebugAarMetadata
+> Task :web:writeDebugAarMetadata
+> Task :workspace:writeDebugAarMetadata
+> Task :app:compileDebugNavigationResources
+> Task :app:checkDebugAarMetadata
+> Task :app:createDebugCompatibleScreenManifests
+> Task :ai:extractDeepLinksDebug
+> Task :ai:processDebugManifest
+> Task :app:extractDeepLinksDebug
+> Task :common:extractDeepLinksDebug
+> Task :common:processDebugManifest
+> Task :document:extractDeepLinksDebug
+> Task :document:processDebugManifest
+> Task :highlight:extractDeepLinksDebug
+> Task :highlight:processDebugManifest
+> Task :material3:extractDeepLinksDebug
+> Task :material3:processDebugManifest
+> Task :mediagen:extractDeepLinksDebug
+> Task :mediagen:processDebugManifest
+> Task :oauth:extractDeepLinksDebug
+> Task :oauth:processDebugManifest
+> Task :search:extractDeepLinksDebug
+> Task :search:processDebugManifest
+> Task :speech:extractDeepLinksDebug
+> Task :speech:processDebugManifest
+> Task :ui:extractDeepLinksDebug
+> Task :ui:processDebugManifest
+> Task :web:extractDeepLinksDebug
+> Task :web:processDebugManifest
+> Task :workspace:extractDeepLinksDebug
+> Task :workspace:processDebugManifest
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :common:mapDebugSourceSetPaths
+> Task :common:compileDebugLibraryResources
+> Task :document:mapDebugSourceSetPaths
+> Task :document:compileDebugLibraryResources
+> Task :highlight:mapDebugSourceSetPaths
+> Task :highlight:compileDebugLibraryResources
+> Task :material3:mapDebugSourceSetPaths
+> Task :material3:compileDebugLibraryResources
+> Task :mediagen:mapDebugSourceSetPaths
+> Task :mediagen:compileDebugLibraryResources
+> Task :oauth:mapDebugSourceSetPaths
+> Task :oauth:compileDebugLibraryResources
+> Task :search:mapDebugSourceSetPaths
+> Task :search:compileDebugLibraryResources
+> Task :speech:mapDebugSourceSetPaths
+> Task :speech:compileDebugLibraryResources
+> Task :ui:mapDebugSourceSetPaths
+> Task :ui:compileDebugLibraryResources
+> Task :web:mapDebugSourceSetPaths
+> Task :web:compileDebugLibraryResources
+> Task :workspace:mapDebugSourceSetPaths
+> Task :workspace:compileDebugLibraryResources
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest
+> Task :common:bundleLibRuntimeToJarDebug
+> Task :common:processDebugJavaRes
+> Task :document:bundleLibRuntimeToJarDebug
+> Task :document:processDebugJavaRes
+> Task :highlight:bundleLibRuntimeToJarDebug
+> Task :highlight:processDebugJavaRes
+> Task :material3:bundleLibRuntimeToJarDebug
+> Task :material3:processDebugJavaRes
+> Task :mediagen:bundleLibRuntimeToJarDebug
+> Task :mediagen:processDebugJavaRes
+> Task :oauth:bundleLibRuntimeToJarDebug
+> Task :oauth:processDebugJavaRes
+> Task :search:bundleLibRuntimeToJarDebug
+> Task :search:processDebugJavaRes
+> Task :speech:bundleLibRuntimeToJarDebug
+> Task :speech:processDebugJavaRes
+> Task :ui:bundleLibRuntimeToJarDebug
+> Task :ui:processDebugJavaRes
+> Task :web:bundleLibRuntimeToJarDebug
+> Task :web:processDebugJavaRes
+> Task :workspace:bundleLibRuntimeToJarDebug
+> Task :workspace:processDebugJavaRes
+> Task :app:mergeDebugResources
+> Task :app:kspDebugKotlin
+> Task :app:processDebugResources
+
+> Task :app:compileDebugKotlin
+w: Opt-in requirement marker 'androidx.navigation3.runtime.ExperimentalNavigation3Api' is unresolved. Make sure it's present in the module dependencies.
+
+> Task :app:processDebugJavaRes
+> Task :app:compileDebugJavaWithJavac
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:kspDebugUnitTestKotlin SKIPPED
+
+> Task :app:compileDebugUnitTestKotlin
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteActivityTrustTest.kt:66:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteActivityTrustTest.kt:80:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteActivityTrustTest.kt:99:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteActivityTrustTest.kt:111:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationBacklogTest.kt:73:69 Unresolved reference 'backgroundScope'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationBacklogTest.kt:74:32 Unresolved reference 'backgroundScope'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:69:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:85:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:94:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:106:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:124:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:146:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:166:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:166:113 No parameter with name 'notificationsEnabled' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:180:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:187:91 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:198:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:205:91 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:217:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:222:91 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationStateTest.kt:233:87 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteNotificationWireTest.kt:60:112 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:54:21 No value passed for parameter 'chatFactory'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:54:71 Return type mismatch: expected 'Boolean', actual 'RemoteChatState'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:72:21 No value passed for parameter 'chatFactory'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:72:69 Return type mismatch: expected 'Boolean', actual 'RemoteChatState'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:86:21 No value passed for parameter 'chatFactory'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:86:69 Return type mismatch: expected 'Boolean', actual 'RemoteChatState'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:105:24 No value passed for parameter 'chatFactory'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:106:13 Return type mismatch: expected 'Boolean', actual 'RemoteChatState'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteReceiveStateTest.kt:106:79 No parameter with name 'notifications' found.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/service/RemoteReceiveControllerTest.kt:135:32 No value passed for parameter 'chatFactory'.
+e: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/service/RemoteReceiveControllerTest.kt:136:13 Return type mismatch: expected 'Boolean', actual 'RemoteChatState'.
+
+> Task :app:compileDebugUnitTestKotlin FAILED
+
+[Incubating] Problems report is available at: file:///home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugUnitTestKotlin' (registered by plugin 'com.android.internal.application').
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.btapi.BuildToolsApiCompilationWork
+   > Kotlin compiler: NAMED_PARAMETER_NOT_FOUND
+       Kotlin compiler error
+         No parameter with name 'notifications' found.
+         Location: /home/eafen405/projects/rikkahub/.worktrees/arch-56-notification-backlog/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteActivityTrustTest.kt line 66
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 44s
+228 actionable tasks: 102 executed, 126 up-to-date
+Configuration cache entry stored.
