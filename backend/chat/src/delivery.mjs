@@ -4,6 +4,7 @@ import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES } from '@ourfairy/dsh-attachments'
+import { ownerOf, shortIdOf } from '@ourfairy/dsh-identity/owner'
 
 export function installDelivery(ctx, chat) {
   const store = ctx.identity.store
@@ -13,7 +14,7 @@ export function installDelivery(ctx, chat) {
   const manifest = row => row.files.map(file => file.prepared)
   const append = (session, row) => session.append('delivery/message', {
     deliveryId: row.deliveryId,
-    origin: { sessionId: row.senderSessionId, owner: `user:${row.senderShortId}` },
+    origin: { sessionId: row.senderSessionId, owner: ownerOf(row.senderShortId) },
     message: createAssistantMessage({ content: [{ type: 'text', text: row.text }, ...manifest(row).map(input => ({ type: 'file', attachment: input.original }))],
       source: { deliveryId: row.deliveryId, senderSessionId: row.senderSessionId, ...(row.files.length ? { attachments: manifest(row) } : {}) } }),
   }, { surfaceOp: 'append' })
@@ -57,7 +58,7 @@ export function installDelivery(ctx, chat) {
   })()
   chat.deliver = async (agent, callId, { recipientShortId, text, files = [] }, signal) => {
     await recovery
-    const senderShortId = Number(agent.session.header.owner?.replace(/^user:/, ''))
+    const senderShortId = shortIdOf(agent.session.header.owner)
     const sender = store.userByShortId(senderShortId)
     if (!sender) throw new SessionScopeError(403, 'delivery/unknown-sender', 'delivery requires an active session owner')
     if (!Number.isSafeInteger(recipientShortId) || !store.userByShortId(recipientShortId)) {

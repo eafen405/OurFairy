@@ -7,7 +7,7 @@ export function installGroups(ctx) {
   const scope = ctx.ourfairySpaces
   const store = ctx.identity.store
   const userOf = agent => {
-    const shortId = Number(scope.owner(agent?.session))
+    const shortId = scope.owner(agent?.session)
     const user = store.userByShortId(shortId)
     if (!user) throw new Error('groups/unknown-user: group operation requires an active session owner')
     return user
@@ -19,7 +19,7 @@ export function installGroups(ctx) {
   }
   const expose = group => ({ ...group, root: rootFor(group.id) })
   ctx.effect(() => scope.contributeExtraRoots(session => {
-    const shortId = Number(scope.owner(session))
+    const shortId = scope.owner(session)
     if (!store.userByShortId(shortId)) throw new Error('groups/unknown-user: file operation requires an active session owner')
     return store.groupsForMember(shortId).map(group => rootFor(group.id))
   }), 'ourfairy-spaces: group roots')
