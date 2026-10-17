@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
 import { before, after, test } from 'node:test'
-import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-jobs-')
 const password = 'jobs-test-password'
@@ -35,10 +35,10 @@ async function startJob(user, sessionId, command) {
   await send(user, sessionId, JSON.stringify({ name: 'bash', args: { description: 'Run bounded background fixture', command, run_in_background: true } }))
   return (await until(() => projection(user, sessionId), p => p.tasks?.length > before, 'background task appeared')).tasks.at(-1)
 }
-async function start() {
-  const run = await runBackendAsync(['start', '--json'], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+async function start(overlays = []) {
+  const run = await runBackendAsync(startArgs(overlays), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     DEEPSEEK_API_KEY: 'mock-jobs-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
-  assert.equal(run.code, 0, describeRun('start', run)); port = JSON.parse(run.stdout).listeningPorts[0]
+  port = startedPort(run)
 }
 async function stop() {
   const run = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home })
@@ -73,8 +73,7 @@ before(async () => {
   await start()
   admin = await request('/identity/sign-in', undefined, { name: 'phaethon', password })
   for (const name of ['jobs-alice', 'jobs-bob']) {
-    const invite = await request('/identity/invite', admin.token)
-    const user = await request('/identity/register', undefined, { name, password, inviteCode: invite.invite.code })
+    const user = await registerUser(port, admin.token, name, password)
     if (!alice) alice = user; else bob = user
   }
 })
@@ -276,9 +275,8 @@ test('an awaited result and a failed report both settle without holding terminal
 
 test('configured quiet completion leaves context for later without inventing pending inference', async () => {
   await stop()
-  const { writeFileSync } = await import('node:fs')
-  writeFileSync(`${home}/dsh-home/profiles/ourfairy/cordis.patch.yml`, '- id: tool-jobs\n  config:\n    completionDelivery: quiet\n')
-  await start()
+  const overlay = writeOverlay(home, [{ id: 'tool-jobs', config: { completionDelivery: 'quiet' } }], 'quiet.patch.yml')
+  await start([overlay])
   const sessionId = (await request('/sessions/create', alice.token)).session.id
   await startJob(alice, sessionId, 'sleep .3; printf quiet-result')
   const quiet = await until(() => projection(alice, sessionId), p => p.tasks[0].status === 3 && p.replyStatus === 0, 'quiet result retained')

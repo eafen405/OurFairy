@@ -4,9 +4,8 @@ import { once } from 'node:events'
 import { join } from 'node:path'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { before, after, test } from 'node:test'
-import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 
-const devFlags = process.env.OURFAIRY_DSH_DIR ? ['--allow-drift'] : []
 const home = makeHome('ourfairy-search-')
 const password = 'group-test-password'
 let port, model, modelPort, admin, alice, bob
@@ -20,10 +19,7 @@ async function request(path, token, body = {}) {
   assert.equal(response.status, 200, JSON.stringify(value))
   return value
 }
-async function user(name) {
-  const invite = await request('/identity/invite', admin.token)
-  return request('/identity/register', undefined, { name, password, inviteCode: invite.invite.code })
-}
+function user(name) { return registerUser(port, admin.token, name, password) }
 let requestNo = 0
 async function tool(user, name, args, sessionId) {
   sessionId ??= (await request('/sessions/create', user.token)).session.id
@@ -77,14 +73,14 @@ before(async () => {
     res.end()
   })
   model.listen(0, '127.0.0.1'); await once(model, 'listening'); modelPort = model.address().port
-  const run = await runBackendAsync(['start', '--json', ...devFlags], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+  const run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     DEEPSEEK_API_KEY: 'mock-search-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
-  assert.equal(run.code, 0, describeRun('start', run)); port = JSON.parse(run.stdout).listeningPorts[0]
+  port = startedPort(run)
   admin = await request('/identity/sign-in', undefined, { name: 'phaethon', password })
   alice = await user('group-alice'); bob = await user('group-bob')
 })
 after(async () => {
-  const run = await runBackendAsync(['stop', '--json', ...devFlags], { OURFAIRY_HOME: home })
+  const run = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home })
   assert.equal(run.code, 0, describeRun('stop', run)); await new Promise(resolve => model.close(resolve)); removeHome(home)
 })
 test('chat searches Chinese message excerpts then reads original event positions', async () => {
@@ -151,13 +147,12 @@ test('read intervals have inclusive original positions, omit tool results, and b
 test('native index rebuild preserves Chinese search scope and independently authorized range reads', async () => {
   const index = join(home, 'dsh-home', 'query', 'sessions.sqlite')
   assert.ok(existsSync(index))
-  let run = await runBackendAsync(['stop', '--json', ...devFlags], { OURFAIRY_HOME: home })
+  let run = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home })
   assert.equal(run.code, 0, describeRun('stop for index rebuild', run))
   for (const suffix of ['', '-wal', '-shm']) rmSync(index + suffix, { force: true })
-  run = await runBackendAsync(['start', '--json', ...devFlags], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+  run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     DEEPSEEK_API_KEY: 'mock-search-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
-  assert.equal(run.code, 0, describeRun('restart after index deletion', run))
-  port = JSON.parse(run.stdout).listeningPorts[0]
+  port = startedPort(run)
   const result = valueOf(await tool(alice, 'conversation_search', { query: '咖啡馆', limit: 1 }))
   assert.equal(result.matches[0].sessionId, aliceSession)
   assert.match(result.matches[0].snippet, /北京咖啡馆/)

@@ -2,10 +2,9 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
 import { join } from 'node:path'
-import { readFileSync, writeFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { before, after, test } from 'node:test'
-import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-file-delivery-')
 const password = 'group-test-password'
@@ -21,10 +20,7 @@ async function request(path, token, body = {}) {
   assert.equal(response.status, 200, JSON.stringify(value))
   return value
 }
-async function user(name) {
-  const invite = await request('/identity/invite', admin.token)
-  return request('/identity/register', undefined, { name, password, inviteCode: invite.invite.code })
-}
+function user(name) { return registerUser(port, admin.token, name, password) }
 let requestNo = 0
 async function tool(user, name, args, sessionId, callId = `delivery-call-${requestNo + 1}`) {
   sessionId ??= (await request('/sessions/create', user.token)).session.id
@@ -41,10 +37,10 @@ async function tool(user, name, args, sessionId, callId = `delivery-call-${reque
   }
   assert.fail(`tool ${name} reply was not returned to original chat ${sessionId}`)
 }
-async function startBackend() {
-  const run = await runBackendAsync(['start', '--json'], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+async function startBackend(overlays = []) {
+  const run = await runBackendAsync(startArgs(overlays), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     DEEPSEEK_API_KEY: 'mock-group-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
-  assert.equal(run.code, 0, describeRun('start', run)); port = JSON.parse(run.stdout).listeningPorts[0]
+  port = startedPort(run)
 }
 async function stopBackend() {
   const run = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home })
@@ -253,22 +249,19 @@ test('a file delivery flush failure leaves a ready retry and never confirms inco
   const target=await primary(bob),path=join(home,'dsh-home','spaces','private',String(alice.user.shortId),'flush-file.txt')
   await tool(alice,'write',{file_path:path,content:'FLUSH RETRY ORIGINAL'},senderSession)
   await stopBackend()
-  const layer=join(home,'dsh-home','profiles','ourfairy','cordis.patch.yml')
   const fixture=new URL('../backend/chat/test-support/fail-outlets.mjs',import.meta.url).pathname
-  writeFileSync(layer,JSON.stringify([{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failFlush:true}}]}]))
-  await startBackend();await projection(bob,target)
-  try{
-    const args={recipientShortId:bob.user.shortId,text:'File checkpoint retry',files:[{path}]}
-    const failed=await tool(alice,'deliver_message',args,senderSession,'file-flush-stable')
-    assert.doesNotMatch(failed,/deliveryId/)
-    const db=new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
-    assert.equal(db.prepare('SELECT status FROM deliveries WHERE text=?').get(args.text).status,0)
-    assert.match(await tool(alice,'deliver_message',args,senderSession,'file-flush-stable'),/deliveryId/)
-    const after=await projection(bob,target),message=after.messages.find(m=>m.text===args.text)
-    assert.equal(after.messages.filter(m=>m.text===args.text).length,1)
-    assert.equal((await download(bob,target,message.messageId,0)).bytes.toString(),'FLUSH RETRY ORIGINAL')
-    db.close()
-  }finally{writeFileSync(layer,'[]\n')}
+  const layer=writeOverlay(home,[{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failFlush:true}}]}],'file-flush-failure.patch.yml')
+  await startBackend([layer]);await projection(bob,target)
+  const args={recipientShortId:bob.user.shortId,text:'File checkpoint retry',files:[{path}]}
+  const failed=await tool(alice,'deliver_message',args,senderSession,'file-flush-stable')
+  assert.doesNotMatch(failed,/deliveryId/)
+  const db=new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
+  assert.equal(db.prepare('SELECT status FROM deliveries WHERE text=?').get(args.text).status,0)
+  assert.match(await tool(alice,'deliver_message',args,senderSession,'file-flush-stable'),/deliveryId/)
+  const after=await projection(bob,target),message=after.messages.find(m=>m.text===args.text)
+  assert.equal(after.messages.filter(m=>m.text===args.text).length,1)
+  assert.equal((await download(bob,target,message.messageId,0)).bytes.toString(),'FLUSH RETRY ORIGINAL')
+  db.close()
 })
 
 async function observe(who,id) {

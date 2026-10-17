@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { before, after, test } from 'node:test'
-import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-spaces-')
 // Two independent contributors the scope-contributor fixture registers and
@@ -23,10 +23,7 @@ async function request(path, token, body = {}) {
   assert.equal(response.status, 200, JSON.stringify(value))
   return value
 }
-async function user(name) {
-  const invite = await request('/identity/invite', admin.token)
-  return request('/identity/register', undefined, { name, password, inviteCode: invite.invite.code })
-}
+function user(name) { return registerUser(port, admin.token, name, password) }
 let requestNo = 0
 async function tool(user, name, args, sessionId) {
   sessionId ??= (await request('/sessions/create', user.token)).session.id
@@ -47,16 +44,16 @@ before(async () => {
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name: 'ourfairy-fixture-dep', version: '1.0.0', main: 'index.js' }))
   writeFileSync(join(packageDir, 'index.js'), "module.exports = 'shared-dependency-ok'\n")
   execFileSync('tar', ['-czf', join(home, 'fixture.tgz'), '-C', join(home, 'fixture'), 'package'])
-  // The product entry itself mounts the fixture row, so the contributor registry
-  // is exercised through the real composition rather than an assembled service.
-  mkdirSync(join(home, 'dsh-home', 'profiles', 'ourfairy'), { recursive: true })
-  writeFileSync(join(home, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml'), JSON.stringify([{ insert: [{
+  // The product entry itself mounts the fixture row through a launcher overlay,
+  // so the contributor registry is exercised through the real composition rather
+  // than an assembled service.
+  const overlay = writeOverlay(home, [{ insert: [{
     id: 'ourfairy-scope-contributor-fixtures',
     name: fileURLToPath(new URL('../backend/spaces/test-support/scope-contributors.mjs', import.meta.url)),
     config: { shortId: 1, reportPath: fixture.report,
       firstRoot: fixture.root('first-root'), firstFile: fixture.root('first-file'),
       secondRoot: fixture.root('second-root'), secondFile: fixture.root('second-file') },
-  }] }]))
+  }] }], 'scope-contributors.patch.yml')
   model = http.createServer(async (req, res) => {
     if (req.url === '/fixture.tgz') { res.setHeader('content-type', 'application/gzip'); res.end(readFileSync(join(home, 'fixture.tgz'))); return }
     if (req.url === '/network-probe') { res.end('network-ok'); return }
@@ -83,9 +80,9 @@ before(async () => {
     res.end()
   })
   model.listen(0, '127.0.0.1'); await once(model, 'listening'); modelPort = model.address().port
-  const run = await runBackendAsync(['start', '--json'], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+  const run = await runBackendAsync(startArgs([overlay]), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     DEEPSEEK_API_KEY: 'mock-space-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
-  assert.equal(run.code, 0, describeRun('start', run)); port = JSON.parse(run.stdout).listeningPorts[0]
+  port = startedPort(run)
   admin = await request('/identity/sign-in', undefined, { name: 'phaethon', password })
   alice = await user('space-alice'); bob = await user('space-bob')
 })

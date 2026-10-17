@@ -3,15 +3,15 @@ import { before, after, test } from 'node:test'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
-import { makeHome, removeHome, runBackendAsync, describeRun, repoRoot } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, repoRoot, startArgs, startedPort } from './helpers/backend.mjs'
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json')))
 const { startMockLlmServer } = await import(join(combo.repos.dsh.localPath, 'packages/test-support/llm-mock-server/lib/index.js'))
 const home = makeHome('ourfairy-attachments-'), password = 'attachment-password'
 let model, port, admin, alice, bob
 async function start() {
-  const run = await runBackendAsync(['start', '--json'], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+  const run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     DEEPSEEK_API_KEY: 'mock-key', DEEPSEEK_BASE_URL: `${model.baseURL}/v1` })
-  assert.equal(run.code, 0, describeRun('start', run)); port = JSON.parse(run.stdout).listeningPorts[0]
+  port = startedPort(run)
 }
 async function stop() { const run = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home }); assert.equal(run.code, 0, describeRun('stop', run)) }
 async function request(path, token, body = {}, headers = {}) {
@@ -21,7 +21,7 @@ async function request(path, token, body = {}, headers = {}) {
   const bytes = Buffer.from(await response.arrayBuffer())
   return { status: response.status, headers: response.headers, bytes, body: response.headers.get('content-type')?.includes('application/json') ? JSON.parse(bytes) : null }
 }
-async function user(name) { const invite = await request('/identity/invite', admin.token); return (await request('/identity/register', null, { name, password, inviteCode: invite.body.invite.code })).body }
+function user(name) { return registerUser(port, admin.token, name, password) }
 async function session(user) { return (await request('/sessions/create', user.token)).body.session.id }
 async function propose(user, sessionId, bytes, name = 'notes.txt', mime = 'text/plain') {
   const result = await request('/attachments/propose', user.token, { sessionId, name, mime, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') })

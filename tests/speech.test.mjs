@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createServer } from 'node:http'
-import { makeHome, removeHome, runBackendAsync, describeRun } from './helpers/backend.mjs'
+import { describeRun, makeHome, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 
 test('authenticated speech availability stays unavailable without the separate voice key', async () => {
   const home = makeHome('ourfairy-speech-keyless-')
   try {
-    const started = await runBackendAsync(['start', '--json'], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: 'speech-password', VOICE_API_KEY: undefined })
-    assert.equal(started.code, 0, describeRun('start', started))
-    const port = JSON.parse(started.stdout).listeningPorts[0]
-    const base = `http://127.0.0.1:${port}`
+    const started = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: 'speech-password', VOICE_API_KEY: undefined })
+    const base = `http://127.0.0.1:${startedPort(started)}`
     const anonymous = await fetch(base + '/speech')
     assert.equal(anonymous.status, 401)
     const signed = await fetch(base + '/identity/sign-in', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'phaethon', password: 'speech-password' }) }).then(r => r.json())
@@ -45,9 +43,8 @@ test('speech proxy uses configured provider, returns editable text, and reports 
   await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve))
   const home = makeHome('ourfairy-speech-provider-')
   try {
-    const started = await runBackendAsync(['start', '--json'], { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: 'speech-password', VOICE_API_KEY: 'voice-only-test', OURFAIRY_ASR_MODEL: 'configured-test-model', OURFAIRY_ASR_ENDPOINT: `http://127.0.0.1:${provider.address().port}/transcribe`, OURFAIRY_ASR_TIMEOUT_MS: '150', OURFAIRY_ASR_MAX_AUDIO_BYTES: '500' })
-    assert.equal(started.code, 0, describeRun('start', started))
-    const base = `http://127.0.0.1:${JSON.parse(started.stdout).listeningPorts[0]}`
+    const started = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: 'speech-password', VOICE_API_KEY: 'voice-only-test', OURFAIRY_ASR_MODEL: 'configured-test-model', OURFAIRY_ASR_ENDPOINT: `http://127.0.0.1:${provider.address().port}/transcribe`, OURFAIRY_ASR_TIMEOUT_MS: '150', OURFAIRY_ASR_MAX_AUDIO_BYTES: '500' })
+    const base = `http://127.0.0.1:${startedPort(started)}`
     const signed = await fetch(base + '/identity/sign-in', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'phaethon', password: 'speech-password' }) }).then(r => r.json())
     const headers = { authorization: `Bearer ${signed.token}`, 'content-type': 'audio/wav' }
     assert.equal((await fetch(base + '/speech/transcriptions', { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: wav() })).status, 401)

@@ -14,44 +14,33 @@
  * with no ownership record is therefore refused rather than adopted, and an
  * anonymous request is refused rather than served as some implicit user.
  *
- * An explicit `OURFAIRY_DSH_DIR` override (a ticket worktree of the harness) is
- * passed through with `--allow-drift`; without it the launcher checks out the
- * pinned combination, which is what a normal run must do.
+ * The shared helper derives `--allow-drift` for an explicit `OURFAIRY_DSH_DIR`
+ * override (a ticket worktree of the harness) and mounts each test fixture with
+ * `--patch`; without the override the launcher checks out the pinned
+ * combination, which is what a normal run must do.
  */
 import assert from 'node:assert/strict'
-import http from 'node:http'
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { after, before, describe, test } from 'node:test'
-import { describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
+import { describeRun, httpJson, makeHome, removeHome, runBackend, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'test-phaethon-password'
 const home = makeHome('ourfairy-owned-sessions-')
 const backend = { port: undefined }
 
-/** Launcher arguments for one start, mirroring the identity suite. */
-function startArgs() {
-  const args = ['start', '--json']
-  if (process.env.OURFAIRY_DSH_DIR !== undefined && process.env.OURFAIRY_DSH_DIR !== '') args.push('--allow-drift')
-  return args
-}
-
 /** Boot the real backend on an ephemeral port and remember the one it bound. */
-function startBackend() {
-  const run = runBackend(startArgs(), {
+function startBackend(overlays = []) {
+  const run = runBackend(startArgs(overlays), {
     OURFAIRY_HOME: home,
     OURFAIRY_PORT: '0',
     OURFAIRY_PHAETHON_PASSWORD: PHAETHON_PASSWORD,
     DEEPSEEK_API_KEY: undefined,
     DEEPSEEK_BASE_URL: undefined,
   })
-  assert.equal(run.code, 0, describeRun('start', run))
-  const summary = JSON.parse(run.stdout)
-  assert.ok(Array.isArray(summary.listeningPorts) && summary.listeningPorts.length > 0,
-    `started backend reported no listening port: ${run.stdout}`)
-  backend.port = summary.listeningPorts[0]
+  backend.port = startedPort(run)
 }
 
 /** Stop the running backend, asserting it left nothing behind. */
@@ -69,30 +58,9 @@ after(() => {
   removeHome(home)
 })
 
-/** One HTTP request against the running backend. */
-function request(path, { method = 'POST', token, body } = {}) {
-  return new Promise((resolve, reject) => {
-    const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body))
-    const headers = { host: `127.0.0.1:${backend.port}` }
-    if (token !== undefined) headers.authorization = `Bearer ${token}`
-    if (payload !== undefined) {
-      headers['content-type'] = 'application/json'
-      headers['content-length'] = String(payload.byteLength)
-    }
-    const call = http.request({ host: '127.0.0.1', port: backend.port, path, method, headers }, response => {
-      const chunks = []
-      response.on('data', chunk => chunks.push(chunk))
-      response.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf8')
-        let json
-        try { json = JSON.parse(text) } catch { json = undefined }
-        resolve({ status: response.statusCode, headers: response.headers, text, json })
-      })
-    })
-    call.on('error', reject)
-    if (payload !== undefined) call.write(payload)
-    call.end()
-  })
+/** One HTTP request against the running backend, with the raw response kept. */
+function request(path, options = {}) {
+  return httpJson(backend.port, path, { ...options, expect: false })
 }
 
 /** Sign one identity in and return its session credential. */
@@ -348,18 +316,13 @@ describe('OurFairy owned sessions over real HTTP', () => {
       { id: foreignId, owner: `user:${owner.json.user.shortId}` },
       { id: takenId, owner: `user:${owner.json.user.shortId}` },
     ]
-    const profileLayer = join(home, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml')
     const fixturePlugin = fileURLToPath(new URL('../backend/sessions/test-support/persist-fixtures.mjs', import.meta.url))
     stopBackend()
-    writeFileSync(profileLayer, JSON.stringify([{ insert: [{
+    const overlay = writeOverlay(home, [{ insert: [{
       id: 'cold-session-fixtures', name: fixturePlugin, config: { fixtures },
-    }] }]))
-    try {
-      startBackend()
-      stopBackend()
-    } finally {
-      writeFileSync(profileLayer, '[]\n')
-    }
+    }] }], 'cold-session-fixtures.patch.yml')
+    startBackend([overlay])
+    stopBackend()
     const before = durableArtifacts()
     for (const { id } of fixtures) {
       assert.equal(Object.keys(before).filter(path => path.split('/').includes(id)).length, 1,
@@ -416,18 +379,13 @@ describe('OurFairy owned sessions over real HTTP', () => {
     const owner = await register(await createInvite(admin.token), 'agent-resume-empty')
     assert.equal(owner.status, 200, owner.text)
     const reportPath = join(home, 'empty-resume-report.json')
-    const profileLayer = join(home, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml')
     const plugin = fileURLToPath(new URL('../backend/sessions/test-support/resume-empty.mjs', import.meta.url))
     stopBackend()
-    writeFileSync(profileLayer, JSON.stringify([{ insert: [{
+    const overlay = writeOverlay(home, [{ insert: [{
       id: 'resume-empty-owned-session', name: plugin,
       config: { shortId: owner.json.user.shortId, reportPath },
-    }] }]))
-    try {
-      startBackend()
-    } finally {
-      writeFileSync(profileLayer, '[]\n')
-    }
+    }] }], 'resume-empty.patch.yml')
+    startBackend([overlay])
     const report = JSON.parse(readFileSync(reportPath, 'utf8'))
     assert.equal(report.error, undefined, report.error)
     assert.equal(report.persistedEventCount, 0, 'the product-created session must be durably empty before resume')
