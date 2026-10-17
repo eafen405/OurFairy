@@ -50,6 +50,12 @@ function readCombination() {
       fail(`${path} backend.${field} must be a non-empty string; the launcher reads its pins from combo.json`)
     }
   }
+  const agentModel = backend.agentModel
+  if (agentModel === undefined || typeof agentModel.provider !== 'string' || typeof agentModel.model !== 'string'
+    || agentModel.provider === '' || agentModel.model === '') {
+    fail(`${path} backend.agentModel must declare non-empty provider and model strings;`
+      + ' the probe refuses to run a turn without an explicit selection')
+  }
   return backend
 }
 
@@ -295,30 +301,14 @@ function isolatedEnv(layout, extra = {}) {
   }
 }
 
-/**
- * The model selection this combination runs, read from combo.json's backend
- * block. Missing or malformed values are a hard failure: the probe refuses to
- * fall back to an implicit default, because no entry layer would supply one.
- */
-function agentModelOf() {
-  const { combo, path } = readCombo(repoRoot)
-  const selection = combo.backend?.agentModel
-  if (selection === undefined || typeof selection.provider !== 'string' || typeof selection.model !== 'string'
-    || selection.provider === '' || selection.model === '') {
-    fail(`${path} backend.agentModel must declare non-empty provider and model strings;`
-      + ' the probe refuses to run a turn without an explicit selection')
-  }
-  return selection
-}
-
-/** Whether the bundle declares the same model pair the launcher passes. */
+/** Whether the bundle declares the same model pair combo.json locks. */
 function bundleDeclaresAgentModel(selection) {
   const patch = readFileSync(join(repoRoot, 'backend', 'v1-bundle', 'cordis.patch.yml'), 'utf8')
   return patch.includes(`provider: ${selection.provider}`) && patch.includes(`model: ${selection.model}`)
 }
 
 function childEnv(layout, { reportPath, mode, holdMs }) {
-  const selection = agentModelOf()
+  const selection = COMBINATION.agentModel
   const env = isolatedEnv(layout, {
     OURFAIRY_PROBE_REPORT: reportPath,
     OURFAIRY_PROBE_MODE: mode,
@@ -776,6 +766,13 @@ function commandDoctor(layout, options) {
     const base = process.env.DEEPSEEK_BASE_URL
     if (base === undefined || base === '') return 'not configured (keyless startup only)'
     return `DEEPSEEK_BASE_URL=${base}`
+  })
+  check('bundle agent model', () => {
+    const selection = COMBINATION.agentModel
+    must(bundleDeclaresAgentModel(selection),
+      `backend/v1-bundle/cordis.patch.yml does not declare provider: ${selection.provider} / model: ${selection.model};`
+      + ' the bundle and combo.json backend.agentModel have drifted apart')
+    return `${selection.provider}/${selection.model} declared in both combo.json and the bundle`
   })
 
   const failed = checks.filter(entry => !entry.ok)

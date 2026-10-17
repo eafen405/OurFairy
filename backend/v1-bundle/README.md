@@ -67,5 +67,7 @@ Those layers are not mounted in the v1 baseline, so nothing consumes the service
 yet, and an Agent created directly through the agent factory would carry no model
 at all. The launcher therefore reads the same pair from `combo.json`
 (`backend.agentModel`) and passes it to the probe as an explicit `agentOptions`
-selection; `doctor` compares the two declarations so they cannot drift apart.
-The baseline never depends on an implicit model default.
+selection. `doctor` runs a `bundle agent model` check that reads this file and
+asserts both `provider:` and `model:` values match `combo.json backend.agentModel`,
+so the two declarations cannot drift apart. The baseline never depends on an
+implicit model default.
