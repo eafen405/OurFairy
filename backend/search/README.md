@@ -1,34 +1,29 @@
 # Owned conversation search
 
-`conversation_search(query, limit=5)` searches messages in the executing
-session owner's other conversations (at most 10 results). It returns session ID,
-original event `seq`, type, time, and an excerpt of up to 80 Unicode characters
-around the match. Short messages stop at their own boundary. A fresh list of
-native owned headers restricts the SQL results before ranking and truncation;
-the derived index is never an ownership authority. Administrators have the same
-personal scope. There is no user parameter.
+`conversation_search(query, limit=5)` searches messages in the executing session
+owner's other conversations (at most 10 results). It returns session id, original
+event `seq`, type, time and an excerpt of up to 80 Unicode characters around the
+match. A fresh list of native owned headers restricts the SQL results before
+ranking and truncation. Administrators have the same personal scope, and the
+query has no user parameter.
 
-`conversation_read(sessionId, fromSeq, toSeq)` independently authorizes the
-target. Endpoints are inclusive, nonnegative, ascending, and span at most 100
-original event positions. Results preserve those positions and contain only
-native semantic text from user, assistant and delivery messages. System messages,
-standalone tool calls/results, reasoning, images and attachment bytes are omitted.
-Embedded assistant tool-call blocks retain the native semantic name/arguments
-projection; this is historical content, not an instruction to execute a tool. The total
-message-text budget is 8000 Unicode characters; a final message may be shortened
-and `truncated` reports omitted text. Empty or beyond-log intervals return no
-messages. Historical text is labelled as conversation material in tool output;
-it is never injected as a deployment prompt.
+`conversation_read(sessionId, fromSeq, toSeq)` authorizes the target again.
+Endpoints are inclusive, nonnegative, ascending and span at most 100 original
+event positions. Results preserve those positions and contain the native
+semantic text of user, assistant and delivery messages; system messages,
+standalone tool calls and results, reasoning, images and attachment bytes are
+omitted. Embedded assistant tool-call blocks keep their native name and
+arguments. The total message-text budget is 8000 Unicode characters; a shortened
+final message is reported through `truncated`. Historical text is labelled as
+conversation material in tool output.
 
-The product enables the existing `session-query-sqlite` provider at first search,
-under `$DSH_HOME/query/sessions.sqlite`, with `literalSubstring: true`. This mode
-scans the existing derived semantic documents, preserving source casing and
-supporting Chinese short words without a segmentation dependency or another
-index. Ranking remains match count, shortest message, newest message, then the
-stable native tie breakers. The default upstream token search remains available
-for other profiles. A scan is sufficient for this small personal deployment.
+The `session-query-sqlite` provider opens at first search under
+`$DSH_HOME/query/sessions.sqlite` with `literalSubstring: true`. It scans the
+derived semantic documents, preserving source casing and supporting Chinese short
+words without a segmentation dependency. Ranking is match count, shortest
+message, newest message, then the native tie breakers.
 
 To rebuild: stop the backend, remove only the dedicated
 `$DSH_HOME/query/sessions.sqlite` and its `-wal`/`-shm` sidecars, then restart.
 The next search rebuilds from native logs; identity data and logs are untouched.
-No business table, ownership copy, HTTP entry, or Android screen is added.
+The index holds no ownership data; every query is restricted by the caller's own session headers first.

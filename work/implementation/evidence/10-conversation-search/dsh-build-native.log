@@ -1,2 +1,0 @@
-$ tsx native/system/scripts/build.ts --host-addon-only
-build: built linux-x64/bin/glibc/system.node

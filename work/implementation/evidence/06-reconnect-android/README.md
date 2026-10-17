@@ -22,13 +22,13 @@ Applied delegate-harness and tdd. The single mcode task `delegate-minimax-06msd9
 
 Commands were run in the ticket worktree with `ANDROID_HOME=/home/eafen405/Android/Sdk`, Gradle wrapper and `-Dorg.gradle.jvmargs='-Xmx8g -Dfile.encoding=UTF-8' --max-workers=4 --parallel`.
 
-- `api-red.log`: `:app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteChatApiTest'` failed before the page/checkpoint/recovery APIs existed. Public tests and exact fixed-cut transport literals were written before adopting implementation.
-- `recovery-first-green.log`: `:app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteChat*'` passed 27 tests (API14, old state8, initial recovery5).
-- `lifecycle-red.log`: public recovery tests caught old-account send after pending commit and lost unsaved text (10 tests,2 failed).
-- `lifecycle-green.log`: all remote tests passed after the two fixes.
-- `live-commit-red.log`: public tests caught W remaining1 when live tail3 arrived during local commit, and lost send response resurrecting already reconciled pending (12 recovery tests,2 failed).
-- `live-commit-green.log`: all remote tests passed after the two fixes.
-- `final-build-tests.log`: final `:app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.*' --tests 'me.rerere.rikkahub.ui.identity.*' :app:assembleDebug` => BUILD SUCCESSFUL in35s. `test-summary.json` records 82/82, zero failures/errors/skips (API14 + recovery12 + old state8 + related identity/session tests). `apk.json` records generated arm64/x86_64/universal APK paths,size,SHA256.
+- `:app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteChatApiTest'` failed before the page/checkpoint/recovery APIs existed. Public tests and exact fixed-cut transport literals were written before adopting implementation.
+- `:app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteChat*'` passed 27 tests (API14, old state8, initial recovery5).
+- public recovery tests caught old-account send after pending commit and lost unsaved text (10 tests,2 failed).
+- all remote tests passed after the two fixes.
+- public tests caught W remaining1 when live tail3 arrived during local commit, and lost send response resurrecting already reconciled pending (12 recovery tests,2 failed).
+- all remote tests passed after the two fixes.
+- final `:app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.*' --tests 'me.rerere.rikkahub.ui.identity.*' :app:assembleDebug` => BUILD SUCCESSFUL in35s. `test-summary.json` records 82/82, zero failures/errors/skips (API14 + recovery12 + old state8 + related identity/session tests). `apk.json` records generated arm64/x86_64/universal APK paths,size,SHA256.
 - `git diff --check` passed before final commits.
 
 Tests use actual loopback HTTP/SSE with JDK HttpServer for transport; controlled backend Flow/network/persistence adapters for public recovery state. Recovery cases include fixed-cut multipage plus concurrent live terminal, page failure/retry, writer ACK failure, local commit failure, same-user rotated token/process recreation without content cache, persisted pending before send, failed pending save, automatic reconnect/prefix, late noncancellable old-session page, account switch during local commit, and live-tail/receipt races.

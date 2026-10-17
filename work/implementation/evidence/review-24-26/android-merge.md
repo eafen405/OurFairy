@@ -11,10 +11,8 @@ Merged `fix/review-24-26-identity` (`6a58446e889de9a56e0bcdc9af8ded6f2ef76af6`) 
 - Root untracked status before/after (identical):
 
 ```text
-?? .worktrees/03-identity/
-?? .worktrees/review-24-26-identity/
+??.worktrees/03-identity/
+??.worktrees/review-24-26-identity/
 ```
 
-Root status SHA-256 before/after: `0b674eefe6aae9d94b8069cc425095f2b08d862a47c0e3fbfee7151270311f3f`. Full before/after snapshots are `android-merge-before.json` and `android-merge-after.json`; these are exactly equal. For the two untracked nested worktree entries, snapshots include their HEAD, dirty/untracked status, tracked/index diff hashes and `.git` pointer hashes; ignored build artifacts were not rehashed or modified. No stash/reset/clean or unrelated staging occurred.
-
-Merge output: `android-merge-command.log`. No repeated test/build: exact source tree was already verified by 29 identity/navigation tests and the debug APK build recorded in `android-fix-evidence/README.md`. No push, combo/tracker updates, or worktree cleanup performed.
+Root status SHA-256 before/after: `0b674eefe6aae9d94b8069cc425095f2b08d862a47c0e3fbfee7151270311f3f`. Full before/after snapshots are `android-merge-before.json` and `android-merge-after.json`; these are exactly equal. For the two untracked nested worktree entries, snapshots include their HEAD, dirty/untracked status, tracked/index diff hashes and `.git` pointer hashes; ignored build artifacts were not rehashed or modified. No stash/reset/clean or unrelated staging occurred.. No repeated test/build: exact source tree was already verified by 29 identity/navigation tests and the debug APK build recorded in `android-fix-evidence/README.md`. No push, combo/tracker updates, or worktree cleanup performed.

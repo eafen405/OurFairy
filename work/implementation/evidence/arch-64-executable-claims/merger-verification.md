@@ -12,8 +12,8 @@
 
 | 命令 | 结果 | 日志 |
 | --- | --- | --- |
-| `npm test` | 121 pass / 0 fail，EXIT 0（`tests 121`，`pass 121`，`fail 0`） | `merger-npm-test.log` |
-| `npm run combo:verify` | 3 仓全 ok，EXIT 0 | `merger-combo-verify.log` |
+| `npm test` | 121 pass / 0 fail，EXIT 0（`tests 121`，`pass 121`，`fail 0`） |  |
+| `npm run combo:verify` | 3 仓全 ok，EXIT 0 |  |
 
 `combo:verify` 输出：
 
@@ -35,6 +35,6 @@ rikkahub pin `189648274074846e`、dsh pin `fe2bbc3b1c14efd7` 均未变，本票�
 ## 范围外发现（如实转交，未修）
 
 实现者记录的 `bundleDeclaresAgentModel` 用 `patch.includes('model: ' + selection.model)` 做子串匹配，
-`model: deepseek-flash-drifted` 仍会被判为通过（`finding-doctor-accepts-prefix-drift.log`）；
+`model: deepseek-flash-drifted` 仍会被判为通过；
 本票新增测试在测试层做严格相等比较，但 doctor 自身的「cannot drift apart」声称仍未被真值化。
 merger 未改实现代码，已按要求在关票 resolution 中作为「建议另开票」记录。

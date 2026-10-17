@@ -1,15 +1,8 @@
 /**
- * The owned-session module's request paths.
- *
- * These routes live outside dsh's shared `/api` prefix on purpose, exactly as
- * the identity paths do: `/api` is admitted as a whole before any handler runs.
- * Mounted on the same `webServer` carrier and behind the same Host/Origin fence,
- * they are the product's session surface — and every one of them derives the
- * caller from the credential it presents, never from a user field in the body.
- *
- * The fence, method check, body parsing, and error envelope come from the
- * identity module's shared POST helper; only this module's error class, code
- * namespace, and handlers are its own.
+ * The owned-session module's request paths. They sit outside dsh's `/api`
+ * prefix, like the identity paths, on the same `webServer` carrier and behind
+ * the same Host/Origin fence. Every route derives the caller from the presented
+ * credential.
  *
  * @module @ourfairy/dsh-sessions/src/http
  */
@@ -25,17 +18,8 @@ export const SESSION_PATHS = Object.freeze([
   '/sessions/read',
 ])
 
-/**
- * Build the owned-session request handlers.
- *
- * @param options - the owned-session service plus the fence every path applies first.
- * @param options.service - live owned-session service.
- * @param options.fence - Connection's Host/Origin fence; product-owned routes
- * authenticate themselves but must never skip this.
- * @returns one handler per path in {@link SESSION_PATHS}.
- */
+/** Build one handler per path in {@link SESSION_PATHS}. */
 export function sessionHandlers({ service, fence }) {
-  /** Resolve the caller from the presented credential, refusing an anonymous one. */
   const callerOf = (request) => {
     const user = service.authenticate(request)
     if (user === undefined) {
@@ -50,15 +34,7 @@ export function sessionHandlers({ service, fence }) {
     codePrefix: 'sessions',
     internalMessage: 'the owned-session module failed to handle this request',
   })
-  /**
-   * One owned session, answered as `{ ok, session }`.
-   *
-   * `/sessions/read` and `/sessions/select` take the same body and answer the
-   * same document: selecting is a client-side choice that persists nothing, so
-   * both routes run this one handler. The paths stay separate because they are
-   * the client contract; a select that later persists a binding gets its own
-   * handler here, not a second copy of this one.
-   */
+  /** One owned session, answered as `{ ok, session }`. Both read routes share it. */
   const oneSession = (resolve) => post(async (body, request) => {
     const caller = callerOf(request)
     return { ok: true, session: service.expose(await resolve(caller, body.sessionId), caller.shortId) }
@@ -78,7 +54,7 @@ export function sessionHandlers({ service, fence }) {
         primarySessionId: listed.primarySessionId,
       }
     })],
-    ['/sessions/select', oneSession((caller, sessionId) => service.select(caller, sessionId))],
+    ['/sessions/select', oneSession((caller, sessionId) => service.read(caller, sessionId))],
     ['/sessions/primary', post(async (_body, request) => {
       const caller = callerOf(request)
       return { ok: true, session: service.expose(await service.primary(caller), caller.shortId) }

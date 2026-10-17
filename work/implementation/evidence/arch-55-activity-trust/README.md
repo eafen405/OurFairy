@@ -45,12 +45,12 @@ export PATH=/tmp/ourfairy-bin:$PATH
 
 | 步骤 | 命令 | 结果 |
 | --- | --- | --- |
-| red（改动前实现 + 新测试，终版测试文件） | `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteActivityTrustTest' ...` | FAILED，4 tests / 1 failed（`red-baseline.log`） |
-| red（初版测试文件，含 detach 断言） | 同上 | FAILED，4 tests / 2 failed（`red-targeted.log`） |
-| green（定向） | `--tests '...RemoteActivityTrustTest' --tests '...RemoteActivityStateTest' --tests '...RemoteNotificationStateTest' --tests '...RemoteNotificationWireTest' --tests '...RemoteChatStateTest'` | BUILD SUCCESSFUL（`green-targeted.log`） |
-| 验收 | `./gradlew :app:testDebugUnitTest :app:assembleDebug -Pourfairy.identityEndpoint=https://example.invalid -Dorg.gradle.jvmargs='-Xmx5g -Dfile.encoding=UTF-8' --max-workers=3 --parallel --console=plain` | BUILD SUCCESSFUL；**70 套件 / 520 条 / 0 失败**（`acceptance.log`），debug APK 产出 |
+| red（改动前实现 + 新测试，终版测试文件） | `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.RemoteActivityTrustTest'...` | FAILED，4 tests / 1 failed |
+| red（初版测试文件，含 detach 断言） | 同上 | FAILED，4 tests / 2 failed |
+| green（定向） | `--tests '...RemoteActivityTrustTest' --tests '...RemoteActivityStateTest' --tests '...RemoteNotificationStateTest' --tests '...RemoteNotificationWireTest' --tests '...RemoteChatStateTest'` | BUILD SUCCESSFUL |
+| 验收 | `./gradlew :app:testDebugUnitTest :app:assembleDebug -Pourfairy.identityEndpoint=https://example.invalid -Dorg.gradle.jvmargs='-Xmx5g -Dfile.encoding=UTF-8' --max-workers=3 --parallel --console=plain` | BUILD SUCCESSFUL；**70 套件 / 520 条 / 0 失败**，debug APK 产出 |
 
-条数由 `app/build/test-results/testDebugUnitTest/*.xml` 统计，验收前清空 `test-results` 重跑，避免读到旧产物。构成对账：基线 69 套件 / 515 条；合并进来的 #61（`f3248641`）+1 条；本票新增 `RemoteActivityTrustTest` 1 套件 / 4 条 → 70 套件 / 520 条，0 失败。
+条数由  统计，验收前清空 `test-results` 重跑，避免读到旧产物。构成对账：基线 69 套件 / 515 条；合并进来的 #61（`f3248641`）+1 条；本票新增 `RemoteActivityTrustTest` 1 套件 / 4 条 → 70 套件 / 520 条，0 失败。
 
 ## 集成分支合并
 
@@ -77,7 +77,7 @@ $ git rev-parse a0ffa9c02e637eb36ce699db4434c3a49d5864f8^{tree}   -> 4718a7ed783
 $ git rev-parse 07adb3430a23cad82197a351a961a455f74c8e2c^{tree}   -> 4718a7ed78370ab6265c835e5fd0566b591b8106
 ```
 
-两棵 tree sha 一致，故不重跑全量，复用实现者在同一源树上的验收证据：**70 套件 / 520 条 / 0 失败 + `:app:assembleDebug` BUILD SUCCESSFUL**（`acceptance.log`）。
+两棵 tree sha 一致，故不重跑全量，复用实现者在同一源树上的验收证据：**70 套件 / 520 条 / 0 失败 + `:app:assembleDebug` BUILD SUCCESSFUL**。
 
 ### 合并后定向回归（主 checkout，合并后 tip `07adb343`）
 
@@ -93,7 +93,7 @@ export PATH=/tmp/ourfairy-bin:$PATH
   -Dorg.gradle.jvmargs='-Xmx5g -Dfile.encoding=UTF-8' --max-workers=3 --parallel --console=plain
 ```
 
-结果：BUILD SUCCESSFUL；按 `app/build/test-results/testDebugUnitTest/*.xml` 统计 **4 套件 / 20 条 / 0 失败**（`RemoteActivityStateTest` 5、`RemoteActivityTrustTest` 4、`RemoteNotificationStateTest` 10、`RemoteNotificationWireTest` 1）。日志：`merged-targeted.log`。
+结果：BUILD SUCCESSFUL；按  统计 **4 套件 / 20 条 / 0 失败**（`RemoteActivityStateTest` 5、`RemoteActivityTrustTest` 4、`RemoteNotificationStateTest` 10、`RemoteNotificationWireTest` 1）。
 
 ### 未覆盖
 

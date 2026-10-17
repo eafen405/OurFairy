@@ -10,7 +10,7 @@ Dedicated non-exported specialUse foreground service maintains observation only,
 
 ## Actual checks so far
 
-`red-account.log`: missing AccountSession.identity public interface before implementation. `green-account.log`: BUILD SUCCESSFUL; AccountSessionTest8 + IdentityNavigationTest6 = **14/14**. No later parallel Gradle from this slice: owner serializes runtime and final combined build to avoid resource waste. New RemoteNotificationNavigationTest3 covers cold restore, wrong account/deployment without query, ownership refusal and late account change; final execution is owned by combined checks.
+missing AccountSession.identity public interface before implementation. : BUILD SUCCESSFUL; AccountSessionTest8 + IdentityNavigationTest6 = **14/14**. No later parallel Gradle from this slice: owner serializes runtime and final combined build to avoid resource waste. New RemoteNotificationNavigationTest3 covers cold restore, wrong account/deployment without query, ownership refusal and late account change; final execution is owned by combined checks.
 
 mcode bounded task (`mcode-task.md`) edited only Compose callback-only setup card and exact manifest service declaration. Child exit0 (~52s), notification-to-root exit0. Owner inspected full actual tracked/untracked diff; no runtime, prefs, permission request or account logic delegated. No mcode commits/builds/pushes.
 

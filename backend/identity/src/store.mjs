@@ -1,20 +1,16 @@
 /**
- * The OurFairy business store: users, their short numbers, invites, and
- * sessions, in one SQLite file owned by the identity module and kept apart from
- * the dsh session logs.
+ * The OurFairy business store: users, short numbers, invites, sessions, groups,
+ * upload lifecycle and delivery coordination in one SQLite file, apart from the
+ * dsh session logs.
  *
  * Every mutation that spans more than one statement runs inside one
- * `BEGIN IMMEDIATE` transaction on a synchronous connection, so a failed
- * registration leaves no identity behind and two racing registrations cannot
- * share a short number. That transaction is the only guard the module needs:
- * the schema declares no UNIQUE constraint and no foreign key, because AGENTS.md
- * forbids both, so duplicate names, short-number allocation, and association
- * existence are all checked explicitly inside the transaction.
+ * `BEGIN IMMEDIATE` transaction. The schema declares no UNIQUE constraint and no
+ * foreign key (AGENTS.md forbids both), so duplicate names, short-number
+ * allocation and association existence are checked explicitly inside that
+ * transaction.
  *
- * The business tables carry a logical deletion field and an update timestamp;
- * reads skip deleted rows and writes refresh `updated_at`. Deletion is a stored
- * state, not an operation: nothing here removes an identity, so a login name and
- * a short number stay reserved once they are issued.
+ * Deletion is a stored state: reads skip deleted rows and a login name or short
+ * number stays reserved once issued.
  *
  * @module @ourfairy/dsh-identity/src/store
  */
@@ -36,16 +32,9 @@ export const PHAETHON_SHORT_ID = 1
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
 const SCHEMA_VERSION = 6
 
-/**
- * The current shape. No UNIQUE constraint and no REFERENCES clause: AGENTS.md
- * forbids both, and the `BEGIN IMMEDIATE` transactions below already refuse the
- * duplicates and orphan rows those constraints used to catch. Only ordinary
- * primary keys and the lookup indexes the queries actually use remain.
- *
- * Held per table so the v1 migration can rebuild one table at a time.
- */
+/** Users, invites and sessions. Primary keys and the lookup indexes the queries use, nothing else. */
 const TABLE_DDL = {
-  users: `CREATE TABLE users (
+  users: `CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   short_id INTEGER NOT NULL,
   name TEXT NOT NULL,
@@ -55,7 +44,7 @@ const TABLE_DDL = {
   updated_at INTEGER NOT NULL,
   deleted_at INTEGER
 )`,
-  invites: `CREATE TABLE invites (
+  invites: `CREATE TABLE IF NOT EXISTS invites (
   code TEXT PRIMARY KEY,
   created_by INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
@@ -64,7 +53,7 @@ const TABLE_DDL = {
   redeemed_at INTEGER,
   deleted_at INTEGER
 )`,
-  sessions: `CREATE TABLE sessions (
+  sessions: `CREATE TABLE IF NOT EXISTS sessions (
   digest TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
@@ -75,32 +64,13 @@ const TABLE_DDL = {
 )`,
 }
 
-/** The v1 column list of each table, in the order the rebuild copies them. */
-const V1_COLUMNS = {
-  users: ['id', 'short_id', 'name', 'is_admin', 'password', 'created_at'],
-  invites: ['code', 'created_by', 'created_at', 'redeemed_by', 'redeemed_at'],
-  sessions: ['digest', 'user_id', 'created_at', 'expires_at', 'revoked_at'],
-}
-
 const INDEX_DDL = `
 CREATE INDEX IF NOT EXISTS sessions_by_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS users_by_short_id ON users(short_id);
 CREATE INDEX IF NOT EXISTS users_by_name ON users(name);
 `
 
-/**
- * The v3 group tables and their lookup indexes.
- *
- * Kept apart from `TABLE_DDL` because that constant drives the v1 rebuild: a
- * table listed there is renamed, recreated and copied column by column through
- * `V1_COLUMNS`, and the group tables have no v1 predecessor. Adding them here
- * instead lets every statement be written idempotently, so a fresh file, a file
- * that tracked no version, and a v1 or v2 file all reach the same shape.
- *
- * Like the tables above they declare no UNIQUE constraint and no foreign key;
- * membership and ownership uniqueness are checked explicitly inside the store's
- * immediate transactions, and the indexes below are ordinary lookup aids.
- */
+/** Group ownership and membership; uniqueness is checked inside the transactions. */
 const GROUP_SCHEMA = `
 CREATE TABLE IF NOT EXISTS groups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,41 +145,15 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
-${Object.values(TABLE_DDL).map(ddl => ddl.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')).join(';\n')};
+${Object.values(TABLE_DDL).join(';\n')};
 ${INDEX_DDL}
 ${GROUP_SCHEMA}
 ${UPLOAD_SCHEMA}
 ${DELIVERY_SCHEMA}
 `
 
-/**
- * Rebuild one v1 table into the current shape inside the caller's transaction.
- *
- * v1 declared UNIQUE constraints and `REFERENCES users(id)` clauses that
- * AGENTS.md forbids, and carried no deletion or update columns. Rebuilding
- * through a temporary table is the only way SQLite drops them; every value the
- * v1 file held is copied across, ids included, so credentials, invite
- * redemptions and session digests survive untouched.
- */
-function rebuildTable(db, table) {
-  const carried = V1_COLUMNS[table].join(', ')
-  db.exec(`ALTER TABLE ${table} RENAME TO ${table}_v1`)
-  db.exec(TABLE_DDL[table])
-  db.prepare(`
-    INSERT INTO ${table} (${carried}, updated_at, deleted_at)
-    SELECT ${carried}, created_at, NULL FROM ${table}_v1
-  `).run()
-  db.exec(`DROP TABLE ${table}_v1`)
-}
-
-
-/** Error carrying the HTTP status a request path must answer with. */
+/** Error carrying the HTTP status a request path answers with. */
 export class IdentityError extends Error {
-  /**
-   * @param status - HTTP status the caller answers with.
-   * @param code - stable machine-readable reason.
-   * @param message - human-readable explanation.
-   */
   constructor(status, code, message) {
     super(message)
     this.name = 'IdentityError'
@@ -229,7 +173,7 @@ function publicUser(row) {
 }
 
 /** Validate a login name the same way at registration and sign-in. */
-export function assertName(name) {
+function assertName(name) {
   const value = String(name ?? '').trim()
   if (!/^[A-Za-z0-9_-]{2,32}$/u.test(value)) {
     throw new IdentityError(400, 'identity/invalid-name',
@@ -239,7 +183,7 @@ export function assertName(name) {
 }
 
 /** Validate a password the same way at registration and sign-in. */
-export function assertPassword(password) {
+function assertPassword(password) {
   const value = String(password ?? '')
   if (value.length < 8) {
     throw new IdentityError(400, 'identity/weak-password', 'password must be at least 8 characters')
@@ -252,10 +196,6 @@ export class IdentityStore {
   #db
   #sessionTtlMilliseconds
 
-  /**
-   * Open (creating when absent) the business database.
-   * @param options - `path` of the SQLite file and the session lifetime.
-   */
   constructor({ path, sessionTtlDays = 30, now = () => Date.now() } = {}) {
     if (typeof path !== 'string' || path === '') {
       throw new IdentityError(500, 'identity/misconfigured', 'the identity store needs a database path')
@@ -264,17 +204,10 @@ export class IdentityStore {
     this.#db = new DatabaseSync(path)
     try {
       this.#db.exec('PRAGMA journal_mode = WAL')
-      // The current schema declares no foreign key; a v1 file may still carry the
-      // clauses it used to, and rebuilding those tables must not enforce them.
       this.#db.exec('PRAGMA foreign_keys = OFF')
       this.#migrate()
     } catch (error) {
-      // A constructor that fails leaves no open handle behind.
-      try {
-        this.#db.close()
-      } catch {
-        // Nothing to close if the handle never opened.
-      }
+      this.#db.close()
       throw error
     }
     this.#sessionTtlMilliseconds = sessionTtlDays * DAY_MILLISECONDS
@@ -282,61 +215,49 @@ export class IdentityStore {
   }
 
   /**
-   * Bring an existing file up to `SCHEMA_VERSION`, atomically.
+   * Bring a supported file to `SCHEMA_VERSION` inside one immediate transaction.
    *
-   * The version is read and every schema change happens inside one
-   * `BEGIN IMMEDIATE` transaction, so a second opener cannot migrate a v1 file
-   * behind a stale decision and then rebuild it a second time. An unsupported
-   * version is refused before any DDL runs, leaving the file untouched; v1
-   * rebuilds the legacy tables into the v2 shape and v2 only adds the v3 group
-   * tables; v3 adds uploads, v4 adds deliveries, and v5 adds the file preparation checklist.
-   * All known versions land on the current shape in one commit.
+   * Only files whose schema version is this module's own history are upgraded.
+   * The one legacy case is a file that wrote no schema version: it is in this
+   * module's current shape, so recording the version is all it needs.
    */
   #migrate() {
     this.#transaction(() => {
-      const hasMeta = Number(this.#db.prepare(
-        "SELECT COUNT(*) AS value FROM sqlite_master WHERE type = 'table' AND name = 'meta'",
-      ).get().value) > 0
-      if (!hasMeta) {
-        // A new file: create the current shape, then record its version.
+      const version = this.#storedVersion()
+      if (version === undefined) {
         this.#db.exec(SCHEMA)
-        this.#db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
-          .run('schema_version', String(SCHEMA_VERSION))
+        this.#setVersion()
         return
       }
-      const row = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version')
-      if (row === undefined) {
-        // A file that tracks no version yet is already in the current shape.
-        this.#db.exec(SCHEMA)
-        this.#db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
-          .run('schema_version', String(SCHEMA_VERSION))
-        return
-      }
-      const version = Number(row.value)
       if (version > SCHEMA_VERSION) {
         throw new IdentityError(500, 'identity/schema-too-new',
-          `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${row.value}`)
+          `this identity store speaks schema version ${SCHEMA_VERSION}, the file is version ${version}`)
       }
       if (version === SCHEMA_VERSION) return
-      if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5) {
-        throw new IdentityError(500, 'identity/schema-unsupported',
-          `unsupported identity schema version ${row.value}`)
+      if (version < 1) {
+        throw new IdentityError(500, 'identity/schema-unsupported', `unsupported identity schema version ${version}`)
       }
-      if (version === 1) {
-        // Only the tables that existed in v1 are rebuilt; the group tables were
-        // never part of that shape, so they are simply created below.
-        for (const table of Object.keys(TABLE_DDL)) rebuildTable(this.#db, table)
-        this.#db.exec(INDEX_DDL)
-      }
-      this.#db.exec(GROUP_SCHEMA)
-      this.#db.exec(UPLOAD_SCHEMA)
-      this.#db.exec(DELIVERY_SCHEMA)
+      // Every version this module itself shipped is reached by adding what the
+      // current shape has and the older one lacked. All statements are idempotent.
+      this.#db.exec(SCHEMA)
       if (!this.#db.prepare('PRAGMA table_info(deliveries)').all().some(column => column.name === 'attachments_json')) {
         this.#db.exec("ALTER TABLE deliveries ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'")
       }
-      this.#db.prepare('UPDATE meta SET value = ? WHERE key = ?')
-        .run(String(SCHEMA_VERSION), 'schema_version')
+      this.#setVersion()
     })
+  }
+
+  /** The recorded schema version, or undefined for a file that records none. */
+  #storedVersion() {
+    const hasMeta = this.#db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get() !== undefined
+    if (!hasMeta) return undefined
+    const row = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version')
+    return row === undefined ? undefined : Number(row.value)
+  }
+
+  #setVersion() {
+    this.#db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
+      .run('schema_version', String(SCHEMA_VERSION))
   }
 
   readDelivery(id) {
@@ -492,26 +413,15 @@ export class IdentityStore {
       this.#db.exec('COMMIT')
       return result
     } catch (error) {
-      try {
-        this.#db.exec('ROLLBACK')
-      } catch {
-        // A rollback that cannot run means the transaction already ended.
-      }
+      this.#db.exec('ROLLBACK')
       throw error
     }
   }
 
   /**
-   * Persist the initial Phaethon identity.
-   *
-   * Idempotent: an existing Phaethon keeps its identity and short number 1. A
-   * password is only written while the account has none, so restarting with a
-   * different environment value cannot silently change the credential. Short
-   * number 1 is reserved for good, so a Phaethon row that exists but is
-   * logically deleted is refused rather than recreated beside itself.
-   *
-   * @param options - Phaethon's name and, when the operator provisioned one, its password.
-   * @returns the stored user, and whether this call created it.
+   * Persist the initial Phaethon identity, idempotently. A password is written
+   * only while the account has none; a logically deleted Phaethon row is refused
+   * rather than recreated beside itself.
    */
   seedPhaethon({ name = 'phaethon', password } = {}) {
     const login = assertName(name)
@@ -541,28 +451,24 @@ export class IdentityStore {
     })
   }
 
-  /** One user by short number, or undefined. */
+  /** One user by short number. */
   userByShortId(shortId) {
     const row = this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(shortId))
     return row === undefined ? undefined : publicUser(row)
   }
 
-  /** One user by login name, or undefined. */
+  /** One user by login name. */
   userByName(name) {
     const row = this.#db.prepare('SELECT * FROM users WHERE name = ? AND deleted_at IS NULL').get(String(name ?? '').trim())
     return row === undefined ? undefined : publicUser(row)
   }
 
-  /** Every user, in short-number order; removed identities are not listed. */
+  /** Every live user in short-number order. */
   listUsers() {
     return this.#db.prepare('SELECT * FROM users WHERE deleted_at IS NULL ORDER BY short_id').all().map(publicUser)
   }
 
-  /**
-   * Mint one invite code for an administrator.
-   * @param adminShortId - short number the authenticated caller speaks for.
-   * @returns the created invite.
-   */
+  /** Mint one invite code for an administrator. */
   createInvite(adminShortId) {
     return this.#transaction(() => {
       const admin = this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(adminShortId))
@@ -591,13 +497,8 @@ export class IdentityStore {
   }
 
   /**
-   * Redeem one invite and create the invited identity, atomically.
-   *
-   * A repeated submission of the same invite, a name already in use, or any
-   * other refusal leaves no user, no redemption, and no session behind.
-   *
-   * @param options - invite code plus the newcomer's name and password.
-   * @returns the created user and its first session token.
+   * Redeem one invite and create the invited identity atomically. A refusal
+   * leaves no user, no redemption and no session behind.
    */
   register({ inviteCode, name, password } = {}) {
     const code = canonicalInviteCode(inviteCode)
@@ -630,11 +531,7 @@ export class IdentityStore {
     })
   }
 
-  /**
-   * Verify a login name and password.
-   * @param options - name and password.
-   * @returns the user and a fresh session token.
-   */
+  /** Verify a login name and password, answering the user and a fresh session token. */
   signIn({ name, password } = {}) {
     const row = this.#db.prepare('SELECT * FROM users WHERE name = ? AND deleted_at IS NULL').get(String(name ?? '').trim())
     if (row === undefined || row.password === null || !verifyPassword(String(password ?? ''), row.password)) {
@@ -644,16 +541,7 @@ export class IdentityStore {
     return { user: publicUser(row), token: this.#mintSession(row.id, now) }
   }
 
-  /**
-   * Resolve the identity a bearer token speaks for.
-   *
-   * The returned record is the whole authorization input for a request: the
-   * caller never names a user, so a client cannot choose whose identity it acts
-   * as.
-   *
-   * @param token - bearer value presented by a client.
-   * @returns the user, or undefined when the token is unknown, expired, or revoked.
-   */
+  /** The identity a bearer token speaks for, or undefined when unknown, expired or revoked. */
   authenticate(token) {
     if (typeof token !== 'string' || token === '') return undefined
     const row = this.#db.prepare(`
@@ -667,11 +555,7 @@ export class IdentityStore {
     return publicUser(row)
   }
 
-  /**
-   * Revoke one session token.
-   * @param token - bearer value to revoke.
-   * @returns whether a live session was revoked.
-   */
+  /** Revoke one session token; answers whether a live session was revoked. */
   signOut(token) {
     const now = this.now()
     const info = this.#db.prepare(
@@ -680,7 +564,7 @@ export class IdentityStore {
     return info.changes > 0
   }
 
-  /** Every live session count for one short number; used to observe revocation. */
+  /** Live session count for one short number. */
   liveSessionCount(shortId) {
     const user = this.#db.prepare('SELECT id FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(shortId))
     if (user === undefined) return 0

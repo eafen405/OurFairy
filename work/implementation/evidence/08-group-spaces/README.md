@@ -21,13 +21,13 @@ node scripts/ourfairy-backend.mjs doctor --json
 git diff --check
 ```
 
-- `01-red-chat-create.log`: real missing `group_create` tool failed; `02-green-chat-create.log`: first slice 1/1 green.
-- `03-group-permissions.log`: expanded tests exposed revoked-cwd prompt failure, plus an unrelated test helper counting replies inside the bounded 64-event window. The helper now compares the public stable `messageId`.
-- `04-fixture-message-id-error.log`: intermediate fixture mistakenly used `id`; retained as failed evidence, not a product failure or acceptance pass.
-- `05-red-revoked-cwd.log`: corrected fixture isolated the actual product failure (`chat failed before tool result: path outside authorized spaces`); `06-green-permissions-recovery.log`: 4/4 green after the bounded private-cwd recovery.
-- `07-related-tests.log`: 28/28 passed. Tests cover designated owner/live tool visibility, ordinary member/other-group-owner/admin parameter bypass, actual group file and confined script sharing, remove/re-add with same live cwd, no admin implicit read, concurrent duplicate additions, restart authorization, v1/v2 migrations and existing T7 regressions.
-- `08-product-suite.log`: 65/66; the old model-double catalog expectation omitted newly shipped group tools. Updated that expectation; `09-product-suite-green.log`: **66/66**, zero skipped/cancelled.
-- `10-combo.log`: verified pinned dsh/rikkahub and ticket ancestry. `11-doctor.log`: `ok: true`. `git diff --check`: no output, exit 0.
+- real missing `group_create` tool failed; : first slice 1/1 green.
+- expanded tests exposed revoked-cwd prompt failure, plus an unrelated test helper counting replies inside the bounded 64-event window. The helper now compares the public stable `messageId`.
+- intermediate fixture mistakenly used `id`; retained as failed evidence, not a product failure or acceptance pass.
+- corrected fixture isolated the actual product failure (`chat failed before tool result: path outside authorized spaces`); : 4/4 green after the bounded private-cwd recovery.
+- 28/28 passed. Tests cover designated owner/live tool visibility, ordinary member/other-group-owner/admin parameter bypass, actual group file and confined script sharing, remove/re-add with same live cwd, no admin implicit read, concurrent duplicate additions, restart authorization, v1/v2 migrations and existing T7 regressions.
+- 65/66; the old model-double catalog expectation omitted newly shipped group tools. Updated that expectation; : **66/66**, zero skipped/cancelled.
+- verified pinned dsh/rikkahub and ticket ancestry. : `ok: true`. `git diff --check`: no output, exit 0.
 
 `mcode-schema/` archives the explicitly bounded schema-only delegation and actual report. The initial sandbox invocation could not write mcode's user-state file; normal escalation ran the same task successfully. I inspected the actual additive migration diff, implemented the business checks/scoped tools/root wiring, and ran all behavioral acceptance above. mcode's own report is not substituted for acceptance.
 

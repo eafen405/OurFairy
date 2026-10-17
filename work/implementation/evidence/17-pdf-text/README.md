@@ -19,28 +19,27 @@ limit and resource limit. The original upload/download protocol is unchanged.
   discarding its uncommitted implementation. Git metadata needed normal elevated
   execution because the sandbox marks the shared `.git` directory read-only.
 - `node --test tests/pdf.test.mjs`: final run **3/3 passed**, raw log
-  `10-pdf-green.log`. This boots the shipped profile and authenticates actual
+This boots the shipped profile and authenticates actual
   users; only the external model is a loopback substitute. Real fixture bytes go
   through upload, qualified tools, model-visible page references and original
   download. It checks same-user other-session and cross-user path rejection,
   selected-page isolation, encrypted/damaged/empty/partial/page-limit cases,
   truncation and a compressed input reaching the real worker resource budget.
-- Red evidence is retained in `01-red.log`, `03-red-missing-tool.log` and
-  `09-pdf-final.log`. The resumed resource check exposed pypdf's explicit
+- Red evidence is retained in,  and
+The resumed resource check exposed pypdf's explicit
   `LimitReachedError` being mislabeled as an unreadable page; the worker now
   reports library and operating-system budget exhaustion as `resource-limit`.
-  `08-resume-check.log` is an environment failure (sandbox forbids loopback
+   is an environment failure (sandbox forbids loopback
   listening), not a product failure.
 - `curl --fail --silent --show-error https://pypi.org/pypi/pypdf/6.21.0/json
   -o /tmp/t17-pypdf-6.21.0.json`, followed by local Python zip metadata and hash
   inspection: the vendored wheel SHA256 equals the published PyPI SHA256.
-  `dependency-check.log` records version, BSD-3-Clause license, source URL,
+   records version, BSD-3-Clause license, source URL,
   runtime versions, and byte-identical fixture hashes after running
   `/usr/bin/python3 tests/fixtures/pdf/generate.py` twice. Dependency reproduction
   and all parser budgets are documented in `backend/attachments/pdf/README.md`.
 - `npm test`: **105/105 passed**, complete real-profile suite, raw log
-  `11-npm-test.log`.
-- `npm run combo:verify`: **passed**, raw log `12-combo-verify.log`.
+- `npm run combo:verify`: **passed**, raw log.
 - `git diff --check`: passed.
 
 ## Boundaries

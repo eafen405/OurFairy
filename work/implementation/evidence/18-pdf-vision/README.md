@@ -19,32 +19,32 @@ session logs, provider serialization, bwrap, Python and Poppler are used.
 
 ## Actual verification
 
-- `node --test tests/pdf.test.mjs` → **5/5 passed** (`11-seams-final.log`).
+- `node --test tests/pdf.test.mjs` → **5/5 passed**.
   Covers selected readable text-page pixels, scan/mixed/vector-chart RGB pixels
   after official provider normalization, page numbers, unchanged original,
   cross-user/cross-session denial, invalid selections, encrypted/damaged/501-page
   rejection, real resource-budget failure and observable damaged-page warnings.
-- `npm test` on the synchronized final code → **109/109 passed** (`13-npm-test.log`).
-- `npm run combo:verify` → passed (`14-combo-verify.log`), dsh
+- `npm test` on the synchronized final code → **109/109 passed**.
+- `npm run combo:verify` → passed, dsh
   `fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee`, Android
   `3426401c10379dfc...` as recorded in the combination output.
-- `node --check scripts/pdf-flash-smoke.mjs` → exit 0 (`15-smoke-check.log`).
+- `node --check scripts/pdf-flash-smoke.mjs` → exit 0.
   This is a handoff script; it has **not** been run against the real cloud.
 - `python3 tests/fixtures/pdf/generate-vision.py` and `sha256sum` → deterministic
-  synthetic fixtures (`12-fixtures.log`). mcode's scoped task/output/start and
+  synthetic fixtures. mcode's scoped task/output/start and
   completion metadata are preserved in `mcode-fixtures/`; its actual diff was
   reviewed and the samples were validated again through the product seam.
 - `git diff --check` → exit 0 before commit. Normal pre-commit hooks are retained.
 
 ## Red/green and diagnosis history
 
-`06-baseline-red.log` is the genuine baseline red: with the ticket-before
+ is the genuine baseline red: with the ticket-before
 `pdf.mjs`, the public model turn fails because `pdf_render_pages` does not exist.
 The implemented behavior passes in logs 05/07/08/11; logs 09/10 exposed the fixture
 issues below, then log 11 and the full suite passed after fixes.
 
-`01-red.log` is **not** a feature red: new-worktree Corepack cache population
-stalled before backend startup. `02-seam.log` was interrupted for the same cause.
+ is **not** a feature red: new-worktree Corepack cache population
+stalled before backend startup.  was interrupted for the same cause.
 The existing pinned pnpm cache was copied from the root checkout; no dependency
 version was changed. Logs 03/04 record fixture assertion corrections: metadata
 must select its actual text block, and the official provider normalizes rendered

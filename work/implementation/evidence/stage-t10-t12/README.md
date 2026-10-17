@@ -25,7 +25,7 @@ Raw dependency response: [dependency-query.json](dependency-query.json).
 - #33 and #34 each depend only on #28, which is CLOSED; both may start.
 - #35 depends on CLOSED #32 and OPEN #34; implementation waits for #34.
 - OurFairy was clean before this evidence. Android's existing
-  `?? .worktrees/` is preserved.
+  `??.worktrees/` is preserved.
 - All 16 pre-existing dsh dirty paths and their SHA-256 bytes equal the
   previous stage's committed snapshot. The exact `git diff --name-only`
   set also matches. No dsh dirty file was edited, reset, staged or cleaned.
@@ -52,7 +52,7 @@ Parsed original JUnit XML: API 18, state 9, recovery 14, **41/41**, zero
 failures/errors/skips. Full owner log and XML are archived at
 `../11-text-delivery/android/`; no duplicate JVM run was needed for this
 test-only merge. Post-merge Android retains only pre-existing
-`?? .worktrees/`. No device/Compose runtime acceptance is claimed.
+`??.worktrees/`. No device/Compose runtime acceptance is claimed.
 
 ## T11 backend merge and independent check
 
@@ -64,7 +64,6 @@ T10 code or dsh source change was imported.
 
 Executed from the merged main checkout:
 `node --test tests/text-delivery.test.mjs` → **6/6**, no skips/failures.
-Raw output: [t11-merged-text-delivery.log](t11-merged-text-delivery.log).
 This independently exercises real profile, local HTTP/SSE, SQLite and
 native JSONL for cold/live delivery, concurrent senders/primary creation,
 stable retry/restart after a coordination fault, rejected durability
@@ -84,7 +83,7 @@ No production DTO/UI/transport changes were needed. Parsed original XML:
 attachment API 5, attachment state 6, chat API 18, chat state 9, **38/38**,
 zero failures/errors/skips. Original evidence is under
 `../12-file-delivery/android/`. No duplicate JVM/APK run; no phone/SAF/Compose
-runtime acceptance claimed. Android still has only existing `?? .worktrees/`.
+runtime acceptance claimed. Android still has only existing `??.worktrees/`.
 
 ## T10 merge and independent checks
 
@@ -100,13 +99,13 @@ hooks, and stash pop restored them without conflict. Their original
 `client-connection` source-line 92→97 hunks/context remain exact (Git diff
 blob hashes naturally changed). The other 14 files retain exact initial
 SHA-256 bytes; all original 16 paths remain dirty and unstaged. See
-`dsh-preservation.log`, both `*.preserved.patch` and the post-T10 snapshot.
+both `*.preserved.patch` and the post-T10 snapshot.
 No pre-existing change was committed or discarded.
 
 `corepack pnpm@11.28.5 run build:lib:host` in the main dsh checkout failed
 on two unchanged, pre-existing dirty test type errors: delivery-message
-test line 92 (`TS2339`) and v3-to-v4 codec test line 60 (`TS2322`). Raw:
-`t10-main-host-build.log`. The clean owner previously passed host/client
+test line 92 (`TS2339`) and v3-to-v4 codec test line 60 (`TS2322`).
+The clean owner previously passed host/client
 build, typecheck and 116 native regressions; that evidence remains under
 `../10-conversation-search/`. The main full-host command is not reported as
 passing and those unrelated tests were left untouched.
@@ -114,12 +113,12 @@ passing and those unrelated tests were left untouched.
 Refreshed only changed production query packages, retaining typechecking:
 `tsc -b packages/session-query/session-query/tsconfig.json packages/session-query/session-query-sqlite/tsconfig.json`
 then normal host `tsdown` with both package-name filters, both exit 0
-(`t10-main-query-build.log`). Native/client source and required existing
+Native/client source and required existing
 artifacts were unchanged, so no redundant full rebuild ran.
 
 Independent merged run:
 `node --test tests/baseline-boot.test.mjs tests/conversation-search.test.mjs`
-→ **10/10**, no failures/skips (`t10-merged-profile-search.log`). It covers
+→ **10/10**, no failures/skips. It covers
 the actual configured profile, isolated home, Chinese excerpt/readback,
 owner scope before limits, foreign/admin refusal, bounded Unicode reads,
 real query-DB deletion/rebuild, and T11 recipient-only delivered-body
@@ -135,7 +134,7 @@ delivery checklist column/schema v6, existing attachment qualification and
 bounded regressions. Native/Android production source did not change for T12.
 
 Independent merged `node --test tests/file-delivery.test.mjs` → **8/8**,
-zero skips/failures (`t12-merged-file-delivery.log`). This exercises private
+zero skips/failures. This exercises private
 and shared readable files, current-session admitted originals/images,
 recipient-qualified exact originals versus source-space authority, live and
 persisted projection, per-item retry/restart, actual SQLite-trigger failures,
@@ -166,7 +165,7 @@ Spec **0 findings**. Verbatim reports and fixed ranges are archived under
 `../review-t10-t12/`; no corrective source edit or repeated whole-stage review.
 
 Ran required `corepack pnpm@11.28.5 run doc-sync` once in the clean T10 dsh
-checkout: **39 passed / 4 failed**, 0 skipped, exit 1. Raw `dsh-doc-sync.log`
+checkout: **39 passed / 4 failed**, 0 skipped, exit 1.
 names the existing event-producer-consumer graph drift, delivery/owner
 type-equivalence drift, Cordis API catalog drift and config catalog source
 line drift. The full doc-typecheck and site build passed. No failed gate is
@@ -175,7 +174,7 @@ reported as passing and no unrelated drift was repaired.
 Pure generator outputs confirm the generated Cordis API artifact exactly
 equals the preserved pre-existing root dirty file; generated config files
 exactly equal root's preserved 92→97 changes plus the integrated T10 fields
-(`dsh-doc-failure-origin.log`). The failed graph/type-equivalence files and
+The failed graph/type-equivalence files and
 their delivery/owner inputs were not changed by T10. These are established
 baseline gaps, separate from the successful T10 behavior/build evidence.
 
@@ -183,7 +182,6 @@ Restored managed root hooks with the normal `node scripts/install-lefthook.mjs`
 before eventual worktree removal. Effective root worktree hooks path remains
 `.git/dsh-hooks`; pre-push fallback now points at root dependencies, retaining
 the normal typecheck hook. No disable or bypass was used. Exact verification:
-`root-hooks-restored.log`.
 
 ## Stage closed and stopped
 
@@ -192,8 +190,8 @@ Lead closed #33/#34/#35 and recorded the stage on OPEN parent #23; see
 worktrees are removed (four normally; two clean Android submodule worktrees
 with exact Lead-authorized local `--force` after ordinary refusal). Branches,
 older worktrees, shared node_modules target and all original dsh dirty content
-are preserved. Raw removal checks: `cleanup.log`, `android-cleanup.log`.
-Final 16-path/hash/root-hook checks: `final-preservation.log`. No task-owned
+are preserved. Raw removal checks
+Final 16-path/hash/root-hook checks. No task-owned
 implementation, harness, build, check or publication process remains after
 closeout; normal final evidence push/remote verification is the final action.
 T13/#36 is not started.

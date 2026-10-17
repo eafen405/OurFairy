@@ -1,4 +1,4 @@
-/** Owned conversation tools over the native, disposable query read model. */
+/** Owned conversation tools over the native disposable query read model. */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 

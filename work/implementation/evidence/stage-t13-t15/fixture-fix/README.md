@@ -11,15 +11,15 @@ The fixture now uses the same PID-exit check as the T13 hard-crash test, through
 
 Commands, run in `.worktrees/stage1315-fixture-fix`:
 
-- `node --test --test-name-pattern='crash-orphaned turn' tests/reconnect.test.mjs` before the change: 1/1 passed, showing the original timing dependence (`crash-focused-initial.log`).
-- `node --test tests/reconnect.test.mjs` with diagnostic assertion only, exact merged combo: 5/6, failed with the original symptom and exposed EACCES (`reconnect-red.log`).
-- The same complete reconnect command after fixture exit synchronization: 6/6 (`reconnect-green.log`).
+- `node --test --test-name-pattern='crash-orphaned turn' tests/reconnect.test.mjs` before the change: 1/1 passed, showing the original timing dependence.
+- `node --test tests/reconnect.test.mjs` with diagnostic assertion only, exact merged combo: 5/6, failed with the original symptom and exposed EACCES.
+- The same complete reconnect command after fixture exit synchronization: 6/6.
 - `git diff --check`: passed.
 
 ## Cross-repository commit hook
 
-A normal linked-worktree `git commit` separately exposed Git's exported repository-local environment leaking into the tests' companion-repository Git commands. The dsh HEAD probe returned OurFairy's `a008e3f` instead of the actual dsh `fc5c7ac022`, so startup correctly refused the apparent drift (`hook-red.log`). After the hook changes into its own repository, it now unsets precisely `git rev-parse --local-env-vars` before running the unchanged `npm test` and `npm run combo:verify` commands. This is isolated in commit `af5dd74`; it does not change launcher Git calls.
+A normal linked-worktree `git commit` separately exposed Git's exported repository-local environment leaking into the tests' companion-repository Git commands. The dsh HEAD probe returned OurFairy's `a008e3f` instead of the actual dsh `fc5c7ac022`, so startup correctly refused the apparent drift. After the hook changes into its own repository, it now unsets precisely `git rev-parse --local-env-vars` before running the unchanged `npm test` and `npm run combo:verify` commands. This is isolated in commit `af5dd74`; it does not change launcher Git calls.
 
-That ordinary commit hook passed **93/93** tests and exact combo verification (`hook-green.log`), including the locally fixed crash fixture. The fixture change is committed separately. No hooks were skipped or relaxed.
+That ordinary commit hook passed **93/93** tests and exact combo verification, including the locally fixed crash fixture. The fixture change is committed separately. No hooks were skipped or relaxed.
 
 These tests use the actual product launcher, native session persistence and local HTTP, with a mock model server. No external model, phone or emulator validation was performed. No new test suite, product retry or general error handling was added. Required full tests and combo verification also run through the ordinary commit hook; the coordinator records that final command result.

@@ -1,6 +1,0 @@
-$ git show HEAD:backend/chat/src/projection.mjs | grep -n "export"
-6:export const messageText = message => (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
-7:export function attemptText(stream) {
-10:export function requestMessages(events) {
-14:export function receiptIn(events, sessionId, requestId) {
-21:export function transcript(events, sessionId) {

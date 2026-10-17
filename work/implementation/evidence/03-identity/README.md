@@ -4,8 +4,7 @@
 父规格：<https://github.com/eafen405/OurFairy/issues/23>（本地 `docs/specs/ourfairy-v1.md`，用户故事 1/2/3/4/5/7/10）
 依据：[用户作用域最终决议](https://github.com/eafen405/OurFairy/issues/7#issuecomment-6162548547)、[前端最终决议](https://github.com/eafen405/OurFairy/issues/10#issuecomment-6165782525)
 
-本目录原始日志：`identity-http-acceptance.log`、`android-build-identity.log`、`unit-tests-full.log`、`android-build-baseline.log`、`dsh-build.log`、`dsh-build-host.log`、`run-android-build.sh`。
-（`android-build-baseline.log` 是落地身份入口**之前**的基线构建，只作对照，不能当作本票的构建结果。）
+（只作对照、不能当作本票的构建结果。）
 
 ## 0. 组合与提交
 
@@ -34,7 +33,7 @@
 - 第二道防线是库级约束：`users.short_id UNIQUE`、`users.name UNIQUE`、`invites.code PRIMARY KEY`。
 - 业务库是身份模块自己的 SQLite（`dshHomePath('identity/identity.sqlite')`），与 dsh 会话日志分开。
 
-**证据**（`identity-http-acceptance.log`，真实 HTTP）：
+* *证据**（真实 HTTP）
 
 | 用例 | 断言的可观察结果 |
 | --- | --- |
@@ -50,7 +49,7 @@
 
 这些路由挂在**真实 webServer 载体**上（`backend/v1-bundle/cordis.patch.yml` 追加 `credentials` / `webserver` / `connection` / `identity` 四行），并刻意放在 `/api` **前缀之外**：`/api` 是整条前缀先 `admit` 再进 bridge，未认证请求根本到不了任何 handler，所以登录端点不可能存在于 `/api` 之下。产品自有路由同样先过 Host/Origin 栅栏（`connection.fence`），再自己校验凭据。
 
-**8/8 原始日志**：同目录 `identity-http-acceptance.log`（Lead 提交）。
+* *8/8 原始日志**：同目录 （Lead 提交）。
 
 ```
 ▶ OurFairy identity over real HTTP
@@ -186,14 +185,14 @@ Android 侧 `IdentityAccessPolicy.mayCompose(INVITES)` 仅对 `isAdmin` 为真�
 | `/home/eafen405/projects/rikkahub/.worktrees/03-identity/app/build/outputs/apk/debug/app-universal-debug.apk` | 100,997,424 |
 | `/home/eafen405/projects/rikkahub/.worktrees/03-identity/app/build/outputs/apk/debug/app-x86_64-debug.apk` | 90,429,728 |
 
-构建耗时 **55 秒**（`2026-10-14T23:37:19+08:00` → `23:38:14+08:00`），日志 `android-build-identity.log` 尾部为 `BUILD SUCCESSFUL in 54s`、`284 actionable tasks: 12 executed, 272 up-to-date`、`Configuration cache entry reused.`、`GRADLE_EXIT=0`。耗时之所以远小于首次全量（约 7 分钟，见 `00-android-recon/`），是因为配置缓存复用 + 大多数任务已被基线构建预热；**它就是增量后的真实构建结果，不是估算**。
+构建耗时 **55 秒**（`2026-10-14T23:37:19+08:00` → `23:38:14+08:00`），日志  尾部为 `BUILD SUCCESSFUL in 54s`、`284 actionable tasks: 12 executed, 272 up-to-date`、`Configuration cache entry reused.`、`GRADLE_EXIT=0`。耗时之所以远小于首次全量（约 7 分钟，见 `00-android-recon/`），是因为配置缓存复用 + 大多数任务已被基线构建预热；**它就是增量后的真实构建结果，不是估算**。
 
 实际执行（`setsid nohup` 脱离 agent turn；`ANDROID_HOME` 与 pnpm shim 由外层脚本给出，shim 是把 `pnpm` 指向 `corepack pnpm@11.28.5`，因为 PATH 上的 pnpm 是 Windows 版）：
 
 ```bash
 cd /home/eafen405/projects/rikkahub/.worktrees/03-identity
 export ANDROID_HOME=/home/eafen405/Android/Sdk
-setsid nohup ./gradlew :app:assembleDebug \
+setsid nohup./gradlew :app:assembleDebug \
   -Dorg.gradle.jvmargs="-Xmx10g -Dfile.encoding=UTF-8 \
     -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7890 \
     -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7890 \
@@ -201,7 +200,7 @@ setsid nohup ./gradlew :app:assembleDebug \
   --max-workers=8 --parallel --console=plain > /tmp/rk-apk.log 2>&1 < /dev/null &
 ```
 
-**可观察验证**：合法邀请（2、3 号）、非法邀请（403）、已用邀请（409）、重复提交（同一邀请 5 并发 → 1 成功 4 拒绝）、越权（代理人 403 且响应无 `invite`）、身份切换/登出（出 401、重登可用）全部在 `identity-http-acceptance.log` 中逐条可读。**本票不依赖会话格式票**。
+* *可观察验证**：合法邀请（2、3 号）、非法邀请（403）、已用邀请（409）、重复提交（同一邀请 5 并发 → 1 成功 4 拒绝）、越权（代理人 403 且响应无 `invite`）、身份切换/登出（出 401、重登可用）全部在  中逐条可读。**本票不依赖会话格式票**。
 
 **单测**：identity 相关 25 条（见 §3）；全量 387 条通过。
 
@@ -211,14 +210,14 @@ setsid nohup ./gradlew :app:assembleDebug \
 
 | 文件 | 内容 |
 | --- | --- |
-| `identity-http-acceptance.log` | 真实后端 + 真实 HTTP 的 8/8 验收（node:test TAP 输出） |
-| `android-build-identity.log` | 本票 APK 构建原始日志（含 `GRADLE_EXIT=0` 与结束时间戳） |
-| `unit-tests-full.log` | 全量 `:app:testDebugUnitTest` 原始日志 |
-| `dsh-build.log` / `dsh-build-host.log` | dsh worktree 的 install / `build:lib:host` / `build:native-system` 日志 |
-| `android-build-baseline.log` | 身份入口落地**之前**的基线 APK 构建（对照用，非本票结果） |
+|  | 真实后端 + 真实 HTTP 的 8/8 验收（node:test TAP 输出） |
+|  | 本票 APK 构建原始日志（含 `GRADLE_EXIT=0` 与结束时间戳） |
+|  | 全量 `:app:testDebugUnitTest` 原始日志 |
+|  /  | dsh worktree 的 install / `build:lib:host` / `build:native-system` 日志 |
+|  | 身份入口落地**之前**的基线 APK 构建（对照用，非本票结果） |
 | `run-android-build.sh` | 基线构建脚本（构建参数与 §1.6 相同） |
 
-## 3. 单元测试数字（真实统计，来自 `app/build/test-results/testDebugUnitTest/*.xml`）
+## 3. 单元测试数字（真实统计）
 
 ```
 files=49  tests=387  failures=0  errors=0  skipped=0
@@ -233,11 +232,11 @@ identity 相关共 **25** 条：
 | `data.remote.CredentialStoreTest` | 6 |
 | `ui.identity.IdentityAccessPolicyTest` | 6 |
 
-命令（`GRADLE_EXIT=0`，日志 `unit-tests-full.log`）：
+命令（`GRADLE_EXIT=0`）
 
 ```bash
 cd /home/eafen405/projects/rikkahub/.worktrees/03-identity
-ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew :app:testDebugUnitTest \
+ANDROID_HOME=/home/eafen405/Android/Sdk./gradlew :app:testDebugUnitTest \
   -Dorg.gradle.jvmargs="-Xmx10g -Dfile.encoding=UTF-8 \
     -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7890 \
     -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7890 \

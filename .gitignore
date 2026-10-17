@@ -4,3 +4,4 @@
 .vendor/
 .ourfairy/
 .corepack/
+.cleanup-logs/

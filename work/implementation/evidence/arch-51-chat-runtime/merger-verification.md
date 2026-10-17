@@ -17,10 +17,10 @@
 
 | 命令 | 结果 | 日志 |
 | --- | --- | --- |
-| `npm test` | **133/133 pass**，6 suites，0 fail / 0 cancelled / 0 skipped，29.7s | `merge-npm-test.log` |
-| `npm run combo:verify` | `combo: combination verified`；ourfairy `d575817` ok（worktree is the integration tip）、dsh `fe2bbc3` ok、rikkahub `a0c03bc` ok | `merge-combo-verify.log` |
-| `node --test tests/remote-chat.test.mjs tests/jobs.test.mjs tests/text-delivery.test.mjs tests/file-delivery.test.mjs` | **31/31 pass**，15.6s（本票触及的锁/版本递增路径定向回归） | `merge-targeted.log` |
-| `node --test tests/chat-runtime.test.mjs` | **5/5 pass**（本票新增 seam 测试） | `merge-chat-runtime.log` |
+| `npm test` | **133/133 pass**，6 suites，0 fail / 0 cancelled / 0 skipped，29.7s |  |
+| `npm run combo:verify` | `combo: combination verified`；ourfairy `d575817` ok（worktree is the integration tip）、dsh `fe2bbc3` ok、rikkahub `a0c03bc` ok |  |
+| `node --test tests/remote-chat.test.mjs tests/jobs.test.mjs tests/text-delivery.test.mjs tests/file-delivery.test.mjs` | **31/31 pass**，15.6s（本票触及的锁/版本递增路径定向回归） |  |
+| `node --test tests/chat-runtime.test.mjs` | **5/5 pass**（本票新增 seam 测试） |  |
 
 `npm test` 全量包含上述四个既有套件与新增 `chat-runtime` 套件；全量一次通过，未触发实现者记录的既有 PDF flake。
 
@@ -30,7 +30,7 @@
 
 ## 已知 flake（如实记录）
 
-实现者记录：既有 PDF 测试偶发 `worker-unavailable` vs `resource-limit`（见 `hook-fail-pdf-flake.log`、`pdf-rerun.log`），隔离重跑通过；与本票改动无关。本次合并后全量未复现。
+实现者记录：既有 PDF 测试偶发 `worker-unavailable` vs `resource-limit`，隔离重跑通过；与本票改动无关。本次合并后全量未复现。
 
 ## 未完成项 / 范围外
 

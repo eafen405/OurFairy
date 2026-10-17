@@ -10,6 +10,6 @@
 - `npm run backend:doctor -- --home /tmp/stage1315-t15-integration/doctor-home`：通过。
 - `git diff --check`：通过。
 
-首次未设置输出目录的调用失败已保留原始日志；设置票面要求的输出目录后捕获通过。原始输出在本目录 `.log.gz`。owner 的 136/136 JVM、APK 与实际 SSE→生产 RemoteChatApi/State→平台边界证据见 `../../15-notifications/README.md`。未执行官方云模型、真实设备/模拟器、APK 连接生产后端、性能或最终整体验收。
+首次未设置输出目录的调用失败已保留原始日志；设置票面要求的输出目录后捕获通过。原始输出在本目录。owner 的 136/136 JVM、APK 与实际 SSE→生产 RemoteChatApi/State→平台边界证据见 `../../15-notifications/README.md`。未执行官方云模型、真实设备/模拟器、APK 连接生产后端、性能或最终整体验收。
 
-本提交仅归档阶段证据，不发布 T15。后续由 Lead 启动 T13–T15 一次两轴 Standards + Spec review。根 dsh 的 16 个既有脏路径未暂存，哈希全部保持；Android 既有 `?? .worktrees/` 保留。
+本提交仅归档阶段证据，不发布 T15。后续由 Lead 启动 T13–T15 一次两轴 Standards + Spec review。根 dsh 的 16 个既有脏路径未暂存，哈希全部保持；Android 既有 `??.worktrees/` 保留。

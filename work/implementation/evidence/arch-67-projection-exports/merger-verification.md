@@ -12,14 +12,14 @@
 
 | 命令 | 结果 | 日志 |
 | --- | --- | --- |
-| `npm test` | **128/128 通过**，`fail 0`，耗时 41.1s，exit 0 | `merger-full.log` |
-| `npm run combo:verify` | **三项 ok**：ourfairy based on integration tip `9756c01c`、dsh `fe2bbc3b`、rikkahub `189648274`；`combo: combination verified`，exit 0 | `merger-combo-verify.log` |
+| `npm test` | **128/128 通过**，`fail 0`，耗时 41.1s，exit 0 |  |
+| `npm run combo:verify` | **三项 ok**：ourfairy based on integration tip `9756c01c`、dsh `fe2bbc3b`、rikkahub `189648274`；`combo: combination verified`，exit 0 |  |
 
 128 = 合并进来的 arch-50（+3）/arch-66（+1）/arch-67（+1）与原有基线之和；与实现者记录的 125（`1c95299` 时点）差异来自合并期间集成分支前进，不是本票行为变化。
 
 ## 已知无关 flake（实现者记录，merger 本次未复现）
 
-- `tests/pdf.test.mjs` 的 `worker-unavailable` vs `resource-limit`：既有并发负载 flake，实现者隔离重跑 5/5 通过（`pdf-rerun.log`），未改 PDF 代码。
+- `tests/pdf.test.mjs` 的 `worker-unavailable` vs `resource-limit`：既有并发负载 flake，实现者隔离重跑 5/5 通过，未改 PDF 代码。
 - `tests/product-sources.test.mjs` 在共享源码树临时创建/删除 `backend/identity/src/staleness-probe.mjs`，与 launcher staleness hash 遍历存在竞态；属既有测试设计问题，范围外。
 - 本次合并后独立全量运行未命中上述两者；未使用 `--no-verify`。
 

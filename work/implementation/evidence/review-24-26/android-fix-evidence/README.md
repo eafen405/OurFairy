@@ -43,11 +43,11 @@ Actual runner invocations:
 
 ## Actual results and raw logs
 
-- `logs/release-missing-before.log`: existing dsh edits first reproduced a useful red condition: expected missing-address failure **and** an unwanted configuration-cache serialization error because the action captured the script's property-name field. The final fix captures the name locally as well.
-- `logs/release-missing-final.log`: exit 1, `:app:generateReleaseBuildConfig FAILED`, clear command including `-Pourfairy.identityEndpoint=https://<host>`, **configuration cache entry stored**, no cache error.
-- `logs/release-missing-cache-reuse.log`: exit 1 with the same expected guard, **configuration cache entry reused**.
-- `logs/release-explicit-final.log`: exit 0, **BUILD SUCCESSFUL in 1s**, release BuildConfig generation executed, cache stored.
-- `logs/targeted-tests-debug-final.log`: exit 0, **BUILD SUCCESSFUL in 25s**, 306 tasks (17 executed), cache stored.
+- existing dsh edits first reproduced a useful red condition: expected missing-address failure **and** an unwanted configuration-cache serialization error because the action captured the script's property-name field. The final fix captures the name locally as well.
+- exit 1, `:app:generateReleaseBuildConfig FAILED`, clear command including `-Pourfairy.identityEndpoint=https://<host>`, **configuration cache entry stored**, no cache error.
+- exit 1 with the same expected guard, **configuration cache entry reused**.
+- exit 0, **BUILD SUCCESSFUL in 1s**, release BuildConfig generation executed, cache stored.
+- exit 0, **BUILD SUCCESSFUL in 25s**, 306 tasks (17 executed), cache stored.
 
 JUnit XML counted after the final targeted run (five result files; no entire app suite rerun):
 
@@ -68,10 +68,10 @@ public static final String IDENTITY_ENDPOINT = "http://192.168.1.20:3080";
 
 Final debug APK sizes: arm64-v8a 86,122,132 bytes; universal 97,545,772 bytes; x86_64 86,978,076 bytes.
 
-`git diff --check` passed. Latest product tip is unchanged at `ffc88e30`; merge result and final SHA recorded in `logs/final-git.log`.
+`git diff --check` passed. Latest product tip is unchanged at `ffc88e30`; merge result and final SHA recorded in.
 
 ## Preserved earlier evidence and limits
 
-`README-before-followup.md`, `android-build-test.log`, and `release-guard.log` describe the earlier implementation and are historical, superseded by this final README. The original external dsh's generated `.gradle-user-home` and `.review-evidence` were confirmed from timestamps/log contents and moved intact to `dsh.gradle-user-home/` and `dsh.review-evidence/` here. They are not committed or used for the final host checks. Its nested sandbox failed on a read-only Kotlin daemon path; the luo model route worked. Final checks above used the normal installed host tools via escalation.
+`README-before-followup.md`、 and  describe the earlier implementation and are historical, superseded by this final README. The original external dsh's generated `.gradle-user-home` and `.review-evidence` were confirmed from timestamps/log contents and moved intact to `dsh.gradle-user-home/` and `dsh.review-evidence/` here. They are not committed or used for the final host checks. Its nested sandbox failed on a read-only Kotlin daemon path; the luo model route worked. Final checks above used the normal installed host tools via escalation.
 
 No device/emulator or Compose runtime test, no app-to-real-backend request, no signed release or full release APK build, and no cloud model/ASR calls were performed. `app/google-services.json` remains a fake-key stub; Firebase/Crashlytics runtime functionality is unverified/unusable with it. Build/JVM test success is not claimed as UI or real deployment acceptance. Compiler warnings about existing opt-in markers/srcDirs were observed; no unrelated fixes were made.

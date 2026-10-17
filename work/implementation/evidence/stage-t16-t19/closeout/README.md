@@ -10,11 +10,11 @@
 | rikkahub | `product/ourfairy-v1` | `771bffd1424da0f8537507caec028e77d0b8b7bc` |
 | dsh | `product/ourfairy-v1` | `fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee`，本批无改动 |
 
-`01-final-integration-hook.log` 是最终组合的正常 `git commit` 原文：`npm test` 109/109、`combo:verify` 通过，无 hook 覆盖。Android 全量 515/515、release 构建原文在 `../../review-t16-t19-fix/10-final-all-android-release.log` 与 `android-suite-summary.log`。生产路径 `git diff --check 1807199...HEAD -- backend scripts tests/model-double.test.mjs tests/pdf.test.mjs tests/speech.test.mjs combo.json` 通过；原始命令日志保留其终端表格尾部空格，不改写历史输出。
+ 是最终组合的正常 `git commit` 原文：`npm test` 109/109、`combo:verify` 通过，无 hook 覆盖。Android 全量 515/515、release 构建原文在  与。生产路径 `git diff --check 1807199...HEAD -- backend scripts tests/model-double.test.mjs tests/pdf.test.mjs tests/speech.test.mjs combo.json` 通过；原始命令日志保留其终端表格尾部空格，不改写历史输出。
 
-收尾文档首次正常提交检查为 104/109：PDF 共用的 before hook 启动超时 300 秒，五项依赖该 fixture 的测试均失败。实际进程定位到临时 profile 的 `corepack pnpm@11.28.5 install --ignore-scripts --store-dir ...`，未执行到 PDF 断言；根因未确认。原文为 `07-closeout-first-attempt.log`，正常钩子重试，不覆盖或绕过检查。
+收尾文档首次正常提交检查为 104/109：PDF 共用的 before hook 启动超时 300 秒，五项依赖该 fixture 的测试均失败。实际进程定位到临时 profile 的 `corepack pnpm@11.28.5 install --ignore-scripts --store-dir...`，未执行到 PDF 断言；根因未确认。原文为，正常钩子重试，不覆盖或绕过检查。
 
-原两轴审查、P2 修复复查和最终源码 SHA256 核验在 `../../review-t16-t19/`。阅读位置修复已闭环；原 T19 首轮测试顺序的历史流程偏离保留。PDF 资源用例在并发构建的一轮完整检查中曾失败，原日志保留在 `../../review-t16-t19-fix/11-npm-final.log`；并发是否为原因尚未确认。最终正常完整检查通过，未修改 PDF 模块或伪称其问题已修复。
+原两轴审查、P2 修复复查和最终源码 SHA256 核验在 `../../review-t16-t19/`。阅读位置修复已闭环；原 T19 首轮测试顺序的历史流程偏离保留。PDF 资源用例在并发构建的一轮完整检查中曾失败，原日志保留在；并发是否为原因尚未确认。最终正常完整检查通过，未修改 PDF 模块或伪称其问题已修复。
 
 ## 实际发布
 
@@ -25,7 +25,7 @@ git -C /home/eafen405/projects/rikkahub -c remote.fork.pushurl=ssh://git@github.
 git -c remote.origin.pushurl=ssh://git@github.com/eafen405/OurFairy.git -c core.sshCommand='ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes' push origin integration/ourfairy-v1:integration/ourfairy-v1
 ```
 
-仅对该次命令设置 SSH URL，未改永久远端配置。`06-published-refs.log` 是两仓 SSH `ls-remote` 实际输出，均等于上述提交。
+仅对该次命令设置 SSH URL，未改永久远端配置。 是两仓 SSH `ls-remote` 实际输出，均等于上述提交。
 
 ## 关票与精确清理
 

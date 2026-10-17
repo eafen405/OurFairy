@@ -12,9 +12,9 @@ Small commits: `33deb53` red regression; `630d98b` green local fix. Production c
 
 ## Actual validation
 
-- `node --test tests/attachment-download-abort.test.mjs` before the fix: `01-red-download-abort.log`, **0/1**. The actual registered responder was executed against a real loopback HTTP connection and a real temporary file stream. Closing the client after its first data left the handler unsettled; test failure is the reviewed drain wait, not a synthetic denial.
-- The same command after the fix: `02-green-download-abort.log`, **1/1**. Both handler settlement and the original file descriptor's close event are asserted. The attachment byte-stream boundary is instrumented to observe cleanup; no product authorization or internal service is mocked.
-- `node --test tests/attachments.test.mjs tests/attachment-download-abort.test.mjs`: `03-download-regression.log`, **6/6**. Existing five full-profile attachment tests retain normal upload/send/download/restart, ownership and same-hash isolation, TTL/retry identity, official model-double image serialization, and real readonly file/script behavior.
+- `node --test tests/attachment-download-abort.test.mjs` before the fix: **0/1**. The actual registered responder was executed against a real loopback HTTP connection and a real temporary file stream. Closing the client after its first data left the handler unsettled; test failure is the reviewed drain wait, not a synthetic denial.
+- The same command after the fix: **1/1**. Both handler settlement and the original file descriptor's close event are asserted. The attachment byte-stream boundary is instrumented to observe cleanup; no product authorization or internal service is mocked.
+- `node --test tests/attachments.test.mjs tests/attachment-download-abort.test.mjs`: **6/6**. Existing five full-profile attachment tests retain normal upload/send/download/restart, ownership and same-hash isolation, TTL/retry identity, official model-double image serialization, and real readonly file/script behavior.
 - `git diff --check` passed.
 
 The full 71-test stage suite was not rerun for this local correction; it passed on the delivered stage and the relevant six regressions pass here. No new cloud/device/runtime acceptance is claimed. The review reports themselves remain in the parent evidence directory; there was no redundant stage review.

@@ -1,4 +1,4 @@
-/** Remote chat operations over the named live-session runtime (`runtime.mjs`). */
+/** Remote chat operations over the live-session runtime (`runtime.mjs`). */
 import { Service } from '@deepseek-ai/cordis'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { uploadIdsOf } from '@ourfairy/dsh-attachments'

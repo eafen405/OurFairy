@@ -35,8 +35,7 @@ node --test tests/pdf.test.mjs                     # 隔离重跑 5/5 pass
 npm test                                           # 重跑全量：124/124 pass, 6 suites, ~49s
 ```
 
-日志：`red-helper-missing.log`、`green-helper.log`、`green-targeted.log`、`combo-verify.log`、
-`full-npm-test.log`（首次全量，含 PDF flake 原文）、`pdf-rerun.log`、`final-full-npm-test.log`。
+（首次全量，含 PDF flake 原文）。
 
 PDF flake（`tests/pdf.test.mjs:170` 期望 `resource-limit`、实际 `worker-unavailable`）在并发负载下已有记录
 （`work/implementation/evidence/arch-64-executable-claims/README.md`、`arch-49`、`arch-54` 同名记录）；本票未改 PDF 代码，
@@ -47,7 +46,6 @@ PDF flake（`tests/pdf.test.mjs:170` 期望 `resource-limit`、实际 `worker-un
 - 实现 + 测试 + 证据提交：`d79253d`（pre-commit hook 在提交内容上复跑 `npm test` 124/124 与 `combo:verify`，均通过）。
 - `git merge integration/ourfairy-v1`：Already up to date（集成分支 tip `42bbf89` 在开工时已合入，期间未前进）。
 - 本 README 的 SHA 记录提交为分支最终 tip（见交付报告 `FINAL_SHA`）。
-
 
 ## 偏差 / 范围外
 

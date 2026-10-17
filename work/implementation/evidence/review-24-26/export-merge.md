@@ -18,7 +18,7 @@
 - Confirmed post-merge tree equals fix commit and original local changes preserved.
 - Did not repeat source tests or focused host typecheck: source tree is unchanged from verified fix, whose evidence is `/tmp/ourfairy-stage-review/export-fix-evidence/report.md`.
 - Checked current runtime `packages/session-query/session-log-export/lib/index.js` and found neither optional `owner` nor `delivery/message` export change. A build was therefore necessary.
-- Attempted documented `corepack pnpm@11.28.5 run build:lib:host`, detached per implementation convention. **Failed exit 2 at TypeScript stage, before runtime bundling.** Full log: `export-merge-build.log`; exit evidence: `export-merge-build.exit`.
+- Attempted documented `corepack pnpm@11.28.5 run build:lib:host`, detached per implementation convention. **Failed exit 2 at TypeScript stage, before runtime bundling.** Full log:; exit evidence
 
 Actual diagnostics:
 

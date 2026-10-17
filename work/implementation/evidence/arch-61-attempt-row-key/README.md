@@ -29,20 +29,20 @@
 
 | 阶段 | 命令 | 结果 |
 | --- | --- | --- |
-| red（定向） | `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.ui.identity.RemoteReadingTransitionTest'` | FAILED：`Unresolved reference 'attemptRowKey'`（测试先用了不存在的公共构造函数）— `red-directed.log` |
-| green（定向） | 同上 | BUILD SUCCESSFUL；该套件 5 tests / 0 failures — `green-directed.log` |
-| 钉住约定（定向） | 同上（新增字面量断言后） | BUILD SUCCESSFUL；6 tests / 0 failures — `green-directed2.log` |
-| 漂移演练（变异检查） | 临时把实现改成 `attempt/$generation/$attemptId` 后跑定向 | FAILED：`attempt row key spells the generation scoped attempt convention`（ComparisonFailure）→ 约定漂移现在会被测试捕获；已还原 — `drift-mutation-red.log` |
-| 验收（全量） | `./gradlew :app:testDebugUnitTest :app:assembleDebug`（合并集成分支后的 tip 上） | BUILD SUCCESSFUL；69 套件 / 516 tests / 0 failures / 0 errors（基线 515 + 本票新增 1 条）；`assembleDebug` 产出 3 个 debug APK — `acceptance.log` |
+| red（定向） | `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.ui.identity.RemoteReadingTransitionTest'` | FAILED：`Unresolved reference 'attemptRowKey'`（测试先用了不存在的公共构造函数）—  |
+| green（定向） | 同上 | BUILD SUCCESSFUL；该套件 5 tests / 0 failures —  |
+| 钉住约定（定向） | 同上（新增字面量断言后） | BUILD SUCCESSFUL；6 tests / 0 failures —  |
+| 漂移演练（变异检查） | 临时把实现改成 `attempt/$generation/$attemptId` 后跑定向 | FAILED：`attempt row key spells the generation scoped attempt convention`（ComparisonFailure）→ 约定漂移现在会被测试捕获；已还原 —  |
+| 验收（全量） | `./gradlew :app:testDebugUnitTest :app:assembleDebug`（合并集成分支后的 tip 上） | BUILD SUCCESSFUL；69 套件 / 516 tests / 0 failures / 0 errors（基线 515 + 本票新增 1 条）；`assembleDebug` 产出 3 个 debug APK —  |
 
-条数由 `app/build/test-results/testDebugUnitTest/TEST-*.xml` 聚合统计，未只看 BUILD SUCCESSFUL。
+条数由  聚合统计，未只看 BUILD SUCCESSFUL。
 
 ## 证据文件
 
-- `red-directed.log` — red（编译期未解析引用）
-- `green-directed.log`、`green-directed2.log` — 定向 green
-- `drift-mutation-red.log` — 变异检查：格式漂移被测试捕获
-- `acceptance.log` — 全量 JVM + debug 构建
+-  — red（编译期未解析引用）
+- 、 — 定向 green
+-  — 变异检查：格式漂移被测试捕获
+-  — 全量 JVM + debug 构建
 
 ## 未完成 / 边界
 

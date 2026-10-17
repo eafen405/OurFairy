@@ -60,7 +60,7 @@ function taskHistory(events, visit) {
   return snapshot()
 }
 
-/** Enrich the folded roster with current registry availability; no second task store. */
+/** The folded roster, enriched with current registry availability. */
 function projectTasks(ctx, rows, sessionId) {
   const live = new Map(ctx.jobs.list(sessionId).filter(job => job.owner === sessionId).map(job => [job.id, job]))
   return rows.map(row => {

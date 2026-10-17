@@ -1,5 +1,0 @@
-OurFairy integration/ourfairy-v1 20144666d97becf82af3a3c24553ec28c639adda; clean before stage evidence
-rikkahub product/ourfairy-v1 e58352f202ae1add0e9c4bd08b14807f4c84a9bb; only ?? .worktrees/
-dsh product/ourfairy-v1 d3fe98f969c3963c6d193e74c776692e33c1eb64
-dsh dirty SHA-256: 16/16 equal previous stage; exact tracked dirty path set equals baseline
-GitHub GraphQL blockedBy: #33 -> #28 CLOSED; #34 -> #28 CLOSED; #35 -> #34 OPEN, #32 CLOSED

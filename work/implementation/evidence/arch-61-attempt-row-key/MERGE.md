@@ -19,7 +19,7 @@ git rev-parse '5d8efe425d4abb45ad1d1333214bd0c9a23473cc^{tree}'  # 9cfd0ac85b59d
 ```
 
 tree sha 相同 → 合并后源树与实现者验收的源树**逐字节相同**。因此复用实现者已在同一源树上跑过的
-完整 JVM 测试 + `assembleDebug` 证据（见本目录 `acceptance.log`：69 套件 / 516 tests / 0 failures / 0 errors，
+完整 JVM 测试 + `assembleDebug` 证据（见本目录：69 套件 / 516 tests / 0 failures / 0 errors，
 BUILD SUCCESSFUL，产出 3 个 debug APK），不重复跑全量。
 
 ## 合并后定向回归（本次实际执行）
@@ -35,8 +35,7 @@ export PATH=/tmp/ourfairy-bin:$PATH
 ```
 
 结果：`BUILD SUCCESSFUL in 1m 54s`（230 actionable tasks: 22 executed, 208 up-to-date）；
-`app/build/test-results/testDebugUnitTest/TEST-me.rerere.rikkahub.ui.identity.RemoteReadingTransitionTest.xml`
-聚合 **1 套件 / 6 tests / 0 failures / 0 errors / 0 skipped**。完整日志：`merge-directed-regression.log`。
+聚合 **1 套件 / 6 tests / 0 failures / 0 errors / 0 skipped**。完整日志
 
 包含本票钉住约定的用例 `attempt row key spells the generation scoped attempt convention`
 （字面量 `attempt:gen-7:attempt-2`，约定漂移即红）。

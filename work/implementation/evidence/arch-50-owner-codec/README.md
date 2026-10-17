@@ -32,11 +32,11 @@
 
 ## TDD 证据（red → green）
 
-- `red-owner-codec.log`：实现前 3/3 全红 ——
+- 实现前 3/3 全红 ——
   1. 源码扫描命中 sessions 的 `` `user:${...}` ``、spaces 的 `^user:` + `owner.slice(`、chat 的模板串 + `replace(/^user:/`；
   2. sessions 未从 codec import、spaces/chat 未使用 codec；
   3. attachments 与 groups 仍对 `scope.owner()` 做 `Number(...)` 回转。
-- `green-owner-codec.log`：实现后 3/3 通过。
+- 实现后 3/3 通过。
 
 为什么用源码级断言：这是**行为保持**的收敛 —— 两套写法对规范 owner 的行为完全相同，行为测试无法区分；票面的可交付物就是「唯一 codec」。这也符合 `CODING_STANDARDS.md`「声称须可执行」：新测试就是「编码只有一处定义」这句话失效时会失败的检查。#49 已用同样方式为 search 的 seam 留证。业务行为本身由既有 `text-delivery`（投递 origin）、`spaces`/`groups`（私有/群组根）、`attachments`/`file-delivery`、`owned-sessions` 套件覆盖，未重复 codec 单测。
 
@@ -44,17 +44,17 @@
 
 | 命令 | 结果 |
 | --- | --- |
-| `node --test tests/owner-codec.test.mjs`（实现前） | 3 红（`red-owner-codec.log`） |
-| `node --test tests/owner-codec.test.mjs`（实现后） | 3/3 通过（`green-owner-codec.log`） |
-| `node --test tests/spaces.test.mjs tests/groups.test.mjs tests/text-delivery.test.mjs tests/file-delivery.test.mjs tests/owned-sessions.test.mjs tests/attachments.test.mjs tests/jobs.test.mjs tests/baseline-boot.test.mjs` | 54/54 通过（`green-targeted.log`） |
-| `npm test`（开工基线，未含新测试） | 122/123；唯一失败为既有 PDF 资源预算用例在并发负载下报 `worker-unavailable`（期望 `resource-limit`），与 #49/#64 记录的是同一 flake（`baseline-full.log`） |
-| `npm test`（改后） | 125/126；同样只有该 PDF flake（`full-after.log`） |
-| `node --test tests/pdf.test.mjs`（单独重跑） | 5/5 通过（`pdf-rerun.log`），确认失败属负载抖动 |
-| 提交时 pre-commit hook（`npm test` + `npm run combo:verify`，基线 `42bbf89`） | **126/126 通过**，`combo: combination verified`（`commit.log`） |
-| 合入前 `npm test`（`4cd3744`） | **126/126 通过**（`final-full.log`） |
-| 合入前 `npm run combo:verify` | `combo: combination verified`（`final-combo-verify.log`） |
-| 合入最新集成分支后 `npm test`（`1c95299`） | **127/127 通过**（`final-full-merged2.log`；#66 带来 1 条新测试） |
-| 合入最新集成分支后 `npm run combo:verify` | `combo: combination verified`（`final-combo-verify-merged2.log`） |
+| `node --test tests/owner-codec.test.mjs`（实现前） | 3 红 |
+| `node --test tests/owner-codec.test.mjs`（实现后） | 3/3 通过 |
+| `node --test tests/spaces.test.mjs tests/groups.test.mjs tests/text-delivery.test.mjs tests/file-delivery.test.mjs tests/owned-sessions.test.mjs tests/attachments.test.mjs tests/jobs.test.mjs tests/baseline-boot.test.mjs` | 54/54 通过 |
+| `npm test`（开工基线，未含新测试） | 122/123；唯一失败为既有 PDF 资源预算用例在并发负载下报 `worker-unavailable`（期望 `resource-limit`），与 #49/#64 记录的是同一 flake |
+| `npm test`（改后） | 125/126；同样只有该 PDF flake |
+| `node --test tests/pdf.test.mjs`（单独重跑） | 5/5 通过，确认失败属负载抖动 |
+| 提交时 pre-commit hook（`npm test` + `npm run combo:verify`，基线 `42bbf89`） | **126/126 通过**，`combo: combination verified` |
+| 合入前 `npm test`（`4cd3744`） | **126/126 通过** |
+| 合入前 `npm run combo:verify` | `combo: combination verified` |
+| 合入最新集成分支后 `npm test`（`1c95299`） | **127/127 通过** |
+| 合入最新集成分支后 `npm run combo:verify` | `combo: combination verified` |
 
 ## 行为与语义说明
 
@@ -75,8 +75,8 @@
 
 ## 合并
 
-汇报前执行 `git merge integration/ourfairy-v1`。集成分支在本票提交后前进了两次：`42bbf89 → f360385`（#66 代码合入）→ `1c95299`（#66 pin 与证据）。第一次证据提交时 combo verify 因集成分支前进而失败（`commit-evidence.log`），按协议先合入再重试；最终合并提交 `3f76997`，其后的证据提交即分支 tip（FINAL_SHA 见汇报，SHA 无法自我引用）。
+汇报前执行 `git merge integration/ourfairy-v1`。集成分支在本票提交后前进了两次：`42bbf89 → f360385`（#66 代码合入）→ `1c95299`（#66 pin 与证据）。第一次证据提交时 combo verify 因集成分支前进而失败，按协议先合入再重试；最终合并提交 `3f76997`，其后的证据提交即分支 tip（FINAL_SHA 见汇报，SHA 无法自我引用）。
 
-合并状态下复跑验收：`npm test` **127/127 通过**（`final-full-merged2.log`），`npm run combo:verify` **三项 ok**（`final-combo-verify-merged2.log`）。
+合并状态下复跑验收：`npm test` **127/127 通过**，`npm run combo:verify` **三项 ok**。
 
 `#66` 改的是 sessions 的事件读取（`d79253d`），与本票的 owner 码表改动无冲突；合并后全量复跑通过。

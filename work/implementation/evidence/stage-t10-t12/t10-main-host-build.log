@@ -1,6 +1,0 @@
-$ node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.host.json && tsdown --config-loader native --env.DSH_BUILD_FACE host && pnpm --filter @deepseek-ai/dsh-desktop run bundle
-packages/core/session/tests/delivery-message.spec.ts(92,32): error TS2339: Property 'message' does not exist on type 'UserMessage | { turn: number; } | { turn: number; reason: TurnEndReason; } | { turn: number; step: number; } | { turn: number; step: number; } | { turn: number; step: number; message: DeveloperMessage; headerSeq?: SessionSeq; } | ... 61 more ... | ToolWorkflowRunEndData'.
-  Property 'message' does not exist on type 'UserMessage'.
-packages/session/session-format-v3-to-v4/tests/codec.spec.ts(60,59): error TS2322: Type 'string | number | null' is not assignable to type 'string'.
-  Type 'null' is not assignable to type 'string'.
-[ELIFECYCLE] Command failed with exit code 2.

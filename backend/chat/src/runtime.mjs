@@ -8,13 +8,8 @@ import { projectSession } from './history.mjs'
 import { SessionQueues } from './queues.mjs'
 
 /**
- * One live chat session.
- *
- * `agent` is the resumed native Agent. `version` is bumped only by
- * `SessionRuntime.changed()`, so every published projection can be told apart
- * from the one it replaced. `attempt`, `settledAttempt`, `error`, `stopping`
- * and `durableThroughSeq` are the live inputs a projection adds to the native
- * Session events; they are derived runtime state only.
+ * One live chat session: the resumed native Agent plus the live inputs a
+ * projection adds to the native Session events. Derived runtime state only.
  */
 class LiveSession {
   generation = randomUUID()
@@ -34,12 +29,9 @@ class LiveSession {
 }
 
 /**
- * Owns every live chat session of this package.
- *
- * A session is opened once (concurrently: once), resumed through the native
- * agent registry, and from then on all of its ordered writes, event reads and
- * published projections go through this object. `delivery.mjs` and `jobs.mjs`
- * receive this runtime instead of reaching into `RemoteChat`'s private members.
+ * Owns every live chat session: opening it once, its ordered writes, its event
+ * reads and its published projections. `delivery.mjs` and `jobs.mjs` receive
+ * this runtime rather than reaching into `RemoteChat`'s private members.
  */
 export class SessionRuntime {
   #live = new Map()
@@ -49,7 +41,7 @@ export class SessionRuntime {
 
   live(sessionId) { return this.#live.get(sessionId) }
 
-  /** Authorize this owner, then return the one live session for `sessionId`, resuming at most once. */
+  /** Authorize this owner, then return the one live session for `sessionId`. */
   async open(owner, sessionId) {
     // The stored owner is checked even for a live Agent and before resume can repair/write.
     await this.ctx.ourfairySessions.read(owner, sessionId)
@@ -65,9 +57,9 @@ export class SessionRuntime {
     }
   }
 
-  /** Serialize work that writes one session; see `SessionQueues` for why keys are not raw ids. */
+  /** Serialize work that writes one session. */
   runSession(sessionId, work) { return this.#queues.runSession(sessionId, work) }
-  /** Serialize one outgoing delivery's preparation, independently of the target session's queue. */
+  /** Serialize one outgoing delivery's preparation, apart from the target session's queue. */
   runDelivery(deliveryId, work) { return this.#queues.runDelivery(deliveryId, work) }
 
   async #resume(owner, sessionId) {
@@ -110,7 +102,7 @@ export class SessionRuntime {
     return state
   }
 
-  /** One safe one-shot read of a session's event stream (shared with attachments since #66). */
+  /** One safe one-shot read of a session's event stream, shared with attachments. */
   events(sessionId) { return readSessionEvents(this.ctx, sessionId) }
 
   async barrier(state) {
@@ -123,7 +115,7 @@ export class SessionRuntime {
     }
   }
 
-  /** Record that published inputs changed — the only writer of `version` — then publish. */
+  /** The only writer of `version`: record that published inputs changed, then publish. */
   changed(state) { state.version++; this.publish(state) }
 
   /** Schedule one projection pass for the current listeners; does not change the version. */

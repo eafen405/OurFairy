@@ -14,7 +14,7 @@ const register = (contributors, contribute) => {
 const contributed = (contributors, session) => [...contributors].flatMap(contribute => contribute(session))
 export class SpaceScope extends Service {
   calls = new AsyncLocalStorage()
-  // Optional product-owned contributions, evaluated at every operation (no membership cache).
+  // Product-owned contributions, evaluated at every operation rather than cached.
   _extraRoots = new Set()
   _readonlyFiles = new Set()
   constructor(ctx, config) {
@@ -35,7 +35,7 @@ export class SpaceScope extends Service {
     this.owner(session)
     return session
   }
-  /** The short number this session's stored owner names; the codec, not this scope, owns the encoding. */
+  /** The short number this session's stored owner names. */
   owner(session) {
     const shortId = shortIdOf(session?.header?.owner)
     if (shortId === undefined) throw new FsError('file operation requires an owned session', 'FS_PERMISSION_DENIED')

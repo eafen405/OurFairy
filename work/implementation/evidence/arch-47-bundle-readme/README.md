@@ -41,14 +41,14 @@ needed; the remaining table is pinned to the runtime instead of being trusted.
 
 | Command | Result |
 | --- | --- |
-| `node --test tests/bundle-readme.test.mjs` (red, before fix) | 1 fail / 1 pass → `red-bundle-readme.log` |
-| `node recheck.mjs` (red state) | 34 forbidden ids; 33 mounted; **16** forbidden ids restated in README → `red-restated-ids.log` |
-| `node --test tests/bundle-readme.test.mjs` (green) | 2 pass → `green-bundle-readme.log` |
-| `node recheck.mjs` (green state) | restated forbidden ids: none → `green-restated-ids.log` |
-| mutation: README quotes `tool-fs-search` | test 1 fails, message names the id → `mutation-restated-id.log` |
-| mutation: table row `plugin-manager` | test 2 fails, message names the unmounted row → `mutation-unmounted-row.log` |
-| `npm test` (full) | **117 tests / 117 pass / 0 fail**, suites 6 → `full-npm-test.log` (baseline before this ticket: 115) |
-| `npm run combo:verify` | combination verified, ourfairy worktree is the integration tip → `combo-verify.log` |
+| `node --test tests/bundle-readme.test.mjs` (red, before fix) | 1 fail / 1 pass |
+| `node recheck.mjs` (red state) | 34 forbidden ids; 33 mounted; **16** forbidden ids restated in README |
+| `node --test tests/bundle-readme.test.mjs` (green) | 2 pass |
+| `node recheck.mjs` (green state) | restated forbidden ids: none |
+| mutation: README quotes `tool-fs-search` | test 1 fails, message names the id |
+| mutation: table row `plugin-manager` | test 2 fails, message names the unmounted row |
+| `npm test` (full) | **117 tests / 117 pass / 0 fail**, suites 6 (baseline before this ticket: 115) |
+| `npm run combo:verify` | combination verified, ourfairy worktree is the integration tip |
 
 `git status` after the mutation runs: clean (mutations restored with `git checkout --`).
 

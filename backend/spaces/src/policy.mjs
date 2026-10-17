@@ -1,7 +1,7 @@
 import { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import { FsError } from '@deepseek-ai/dsh-fs'
 
-/** Retain native mode events/context; only immutable ownership selects the file root. */
+/** Native mode events and context; immutable ownership selects the file root. */
 export default class OwnedSandboxPolicy extends SandboxPolicyService {
   static inject = [...SandboxPolicyService.inject, 'ourfairySpaces']
   resolve(request = {}) {

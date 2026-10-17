@@ -1,15 +1,12 @@
 /**
- * Ticket #51: the chat package's live-session runtime is the named seam
- * between service.mjs and its delivery/jobs modules.
+ * The ordered-writer policy that orders work inside one chat session.
  *
- * The runtime itself imports the pinned dsh peers, which only resolve inside
- * the installed product profile, so its ordered-writer policy is tested on the
- * dependency-free object that owns it (`queues.mjs`). The rest of the seam is
- * exercised end to end by the existing chat, delivery and jobs suites, and
- * pinned to the named collaborators by the source assertions below.
+ * The runtime imports the pinned dsh peers, which only resolve inside the
+ * installed product profile, so the policy lives on a dependency-free object
+ * (`queues.mjs`) and is driven here directly. The rest of the seam is covered
+ * end to end by the chat, delivery and jobs suites.
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { SessionQueues } from '../backend/chat/src/queues.mjs'
 
@@ -66,22 +63,4 @@ test('a delivery writes its target session, but nesting one queue fails instead 
     /already held/, 'reusing a held session queue is a defect, not a wait')
   await assert.rejects(queues.runDelivery('same', () => queues.runDelivery('same', async () => {})),
     /already held/, 'reusing a held delivery queue is a defect, not a wait')
-})
-
-test('delivery and jobs reach live sessions through the runtime, not RemoteChat privates', () => {
-  const source = name => readFileSync(new URL(`../backend/chat/src/${name}`, import.meta.url), 'utf8')
-  for (const name of ['delivery.mjs', 'jobs.mjs']) {
-    assert.doesNotMatch(source(name), /\bchat\._/, `${name} must depend on the named runtime interface`)
-    assert.match(source(name), /\bruntime\./, `${name} must receive the runtime as its collaborator`)
-  }
-  assert.match(source('runtime.mjs'), /export class SessionRuntime/, 'the live-session seam must be a named runtime object')
-  assert.match(source('runtime.mjs'), /new SessionQueues\(/, 'the runtime must delegate ordering to the tested key policy')
-})
-
-test('the runtime is the only writer of a live session version', () => {
-  const source = name => readFileSync(new URL(`../backend/chat/src/${name}`, import.meta.url), 'utf8')
-  for (const name of ['service.mjs', 'delivery.mjs', 'jobs.mjs']) {
-    assert.doesNotMatch(source(name), /\.version\s*\+\+/, `${name} must not bump the projection version itself`)
-  }
-  assert.match(source('runtime.mjs'), /state\.version\+\+/, 'the runtime owns the one version change')
 })

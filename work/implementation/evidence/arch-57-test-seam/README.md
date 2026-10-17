@@ -28,7 +28,7 @@
    - `backend/attachments/src/index.mjs` 改为 `createDownloadResponder(ctx)` 注册同一个工厂，并 re-export。
      新文件在 `files: ["src"]` 之下，自动进入 profile 安装与 staleness hash（#48 的机制）。
 3. **helper 扩接口**（`tests/helpers/backend.mjs`），每个新入口都写明消费者：
-   - `startArgs(overlays)`：`['start','--json', ...(--allow-drift if OURFAIRY_DSH_DIR), ...('--patch', path)]`。
+   - `startArgs(overlays)`：`['start','--json'...(--allow-drift if OURFAIRY_DSH_DIR)...('--patch', path)]`。
      消费者：owned-sessions、identity-http、conversation-search、jobs、text-delivery、file-delivery、spaces、
      attachments、pdf、groups、reconnect、remote-chat、speech（所有 `start`）。
    - `writeOverlay(home, rows, name)`：写测试 overlay 并返回路径。消费者：owned-sessions(2)、jobs、
@@ -63,30 +63,30 @@
 
 | 命令 | 结果 |
 | --- | --- |
-| `npm test`（基线，合并前） | 115 pass / 0 fail（`baseline-npm-test.log`） |
-| `node --test tests/attachment-download-abort.test.mjs`（red） | ERR_MODULE_NOT_FOUND：`download.mjs` 不存在（`red-download-factory.log`） |
-| 同上（green） | 1 pass（`green-download-factory.log`） |
-| `node --test --test-name-pattern="configured quiet completion" tests/jobs.test.mjs`（red） | `ourfairy-backend: unknown flag --patch`（`red-patch-overlay.log`） |
-| 同上（green） | 1 pass，4.7s（`green-patch-overlay.log`） |
-| 定向：owned-sessions + text-delivery + file-delivery + attachment-abort | 21 pass（`green-targeted-1.log`） |
-| 定向：identity-http + spaces + conversation-search | 23 pass（`green-targeted-2.log`） |
-| 定向：jobs 全文件 | 9 pass（`green-targeted-3.log`） |
-| 定向：baseline-boot（含新增拒绝用例） | 6 pass（`green-baseline-boot.log`） |
-| `npm test` 全量（helper 迁移后） | 116 pass / 0 fail（`full-npm-test.log`） |
-| `npm test` 全量（再扩 helper 消费者后） | 115 pass / 1 fail（`full-npm-test-2.log`）——唯一失败是 `lifecycle`
+| `npm test`（基线，合并前） | 115 pass / 0 fail |
+| `node --test tests/attachment-download-abort.test.mjs`（red） | ERR_MODULE_NOT_FOUND：`download.mjs` 不存在 |
+| 同上（green） | 1 pass |
+| `node --test --test-name-pattern="configured quiet completion" tests/jobs.test.mjs`（red） | `ourfairy-backend: unknown flag --patch` |
+| 同上（green） | 1 pass，4.7s |
+| 定向：owned-sessions + text-delivery + file-delivery + attachment-abort | 21 pass |
+| 定向：identity-http + spaces + conversation-search | 23 pass |
+| 定向：jobs 全文件 | 9 pass |
+| 定向：baseline-boot（含新增拒绝用例） | 6 pass |
+| `npm test` 全量（helper 迁移后） | 116 pass / 0 fail |
+| `npm test` 全量（再扩 helper 消费者后） | 115 pass / 1 fail——唯一失败是 `lifecycle`
   的 doctor 报“not based on integration/ourfairy-v1”：集成分支期间从 bd7359c 前进到 09d2a89，非本票改动 |
-| merge 09d2a89 后 `npm test` | 117 pass / 1 fail（`full-npm-test-3.log`）——同一 doctor 检查改为报 rikkahub
+| merge 09d2a89 后 `npm test` | 117 pass / 1 fail——同一 doctor 检查改为报 rikkahub
   checkout 已到 18964827、combo.json 仍锁 fcba0647；该 pin 属另一张票（#60）的 merger，本票不改 combo.json。
-  `combo-verify-pinned-rikkahub.log` 留证：即使把 rikkahub 路径指到含 fcba0647 的 worktree，combo.mjs 仍读共享分支
+   留证：即使把 rikkahub 路径指到含 fcba0647 的 worktree，combo.mjs 仍读共享分支
   tip，故该失败确为跨仓中间态 |
 | merge 06e16db（其 combo.json 已 pin 18964827）后 `npm test` 全量 | **118 pass / 0 fail**（EXIT:0） |
-| 分支被集成分支快进合入后（FINAL_SHA 4ee6b39）`npm test` | 118 pass / 1 fail（`full-npm-test-final.log`）：
+| 分支被集成分支快进合入后（FINAL_SHA 4ee6b39）`npm test` | 118 pass / 1 fail
   `groups` 在 `start` 时 ENOENT `backend/identity/src/staleness-probe.mjs`——该文件由同跑的
   `product-sources.test.mjs` 临时创建并在 `after` 删除，两文件并行时被误删；**并发 flake，非本票改动**。
-  单独跑 `groups`（`recheck-groups.log`）4 pass，全量复跑 `full-npm-test-final-2.log` **118 pass / 0 fail，EXIT:0** |
-| `npm run combo:verify`（最终） | 3 仓全 ok，exit 0（`combo-verify.log`） |
+  单独跑 `groups`4 pass，全量复跑  **118 pass / 0 fail，EXIT:0** |
+| `npm run combo:verify`（最终） | 3 仓全 ok，exit 0 |
 | merger 在合入后的集成分支 tip 4ee6b39 上复跑 | `npm test` 118 pass / 0 fail、`combo:verify` 3 仓 ok
-  （`merger-npm-test.log`、`merger-combo-verify.log`） |
+   |
 
 ## 收敛后的可度量事实
 

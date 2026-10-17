@@ -18,8 +18,8 @@ Commands run in `/home/eafen405/projects/OurFairy/.worktrees/07-space-execution`
 
 1. Real capability probe: `bwrap --unshare-all --share-net --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev --tmpfs /tmp -- /bin/sh -c 'printf probe-ok'` → `probe-ok`.
 2. `node --check backend/spaces/src/bwrap.mjs`, `node --check backend/spaces/src/fs.mjs`, `node --check backend/spaces/src/index.mjs` → exit 0.
-3. `node --test tests/spaces.test.mjs` → final `green-space-runtime.log`, **7/7**.
-4. `node --test 'tests/**/*.test.mjs'` after current integration merge → `product-suite.log`, **61/61**, no skipped tests; includes real-profile boot, doctor/combo, model, identity, session, chat/reconnect plus T7 behavior.
+3. `node --test tests/spaces.test.mjs` → final, **7/7**.
+4. `node --test 'tests/**/*.test.mjs'` after current integration merge, **61/61**, no skipped tests; includes real-profile boot, doctor/combo, model, identity, session, chat/reconnect plus T7 behavior.
 5. `git diff --check` → clean.
 
 The new tests go through real Loader/profile, authenticated HTTP `/sessions/*` + `/chat/*`, native Agent, real identity SQLite/JSONL, and an external local Messages-protocol model double. File/tool results return into the originating session. They observe actual file contents and real bwrap child processes:
@@ -35,15 +35,15 @@ The new tests go through real Loader/profile, authenticated HTTP `/sessions/*` +
 
 ## Red/intermediate evidence, without overstating it
 
-`red-files.log` is the corrected Messages-protocol test run against the prior profile (new capability rows temporarily omitted and then restored): no file was created, giving real ENOENT. Initial exploratory mock attempts used the wrong wire protocol and are not counted as behavior evidence. The red was recaptured with the corrected mock; it was not an untouched first-run test artifact.
+ is the corrected Messages-protocol test run against the prior profile (new capability rows temporarily omitted and then restored): no file was created, giving real ENOENT. Initial exploratory mock attempts used the wrong wire protocol and are not counted as behavior evidence. The red was recaptured with the corrected mock; it was not an untouched first-run test artifact.
 
-`red-directory-recovery.log` reproduces missing-cwd recovery failure before the local correction. It also records the earlier attempt to use native detached jobs without their future controller; the final implementation explicitly disables that separate entry.
+ reproduces missing-cwd recovery failure before the local correction. It also records the earlier attempt to use native detached jobs without their future controller; the final implementation explicitly disables that separate entry.
 
-`owned-policy.log` is an intermediate invalid agentless probe: Cordis refused property access because the probe had no `inject`, rather than reaching the providers. The probe was corrected to its existing public `ctx.get(...)` access. Only final green logs establish actual provider refusal.
+ is an intermediate invalid agentless probe: Cordis refused property access because the probe had no `inject`, rather than reaching the providers. The probe was corrected to its existing public `ctx.get(...)` access. Only final green logs establish actual provider refusal.
 
-`network-background.log` preserves the intermediate missing detached controller failure while the real shared dependency install already passed. `directory-image.log` and `green-processes.log` are earlier passing subsets.
+ preserves the intermediate missing detached controller failure while the real shared dependency install already passed.  and  are earlier passing subsets.
 
-`product-suite-first.log`: 59/61; obsolete baseline tool-catalog assertion and doctor correctly refused the branch until the newer integration-plan commit was merged. Updated catalog expectation + integration merge produced final 61/61.
+59/61; obsolete baseline tool-catalog assertion and doctor correctly refused the branch until the newer integration-plan commit was merged. Updated catalog expectation + integration merge produced final 61/61.
 
 `harness-approval.md` records the automatic approval rejection of the proposed mcode source-transfer task. It never executed; no model/CLI failure or bypass is claimed.
 

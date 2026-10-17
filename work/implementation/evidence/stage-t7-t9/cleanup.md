@@ -7,10 +7,10 @@ Stage ends after T9 and its one resolved two-axis review. No T10 or later ticket
 Checked all four exact stage worktrees before removal: `git status --porcelain --untracked-files=all` empty, each HEAD an ancestor of integration, and ignored files inspected. Original task evidence was already committed. Ignored entries were only `.corepack/v1/pnpm/11.28.5` tool cache; T8 additionally had task-installed `.ourfairy` profile packages/pnpm cache (no business DB). Normal commands all succeeded, no force/reset:
 
 ```sh
-git worktree remove .worktrees/07-space-execution
-git worktree remove .worktrees/08-group-spaces
-git worktree remove .worktrees/09-attachments
-git worktree remove .worktrees/review-t7-t9
+git worktree remove.worktrees/07-space-execution
+git worktree remove.worktrees/08-group-spaces
+git worktree remove.worktrees/09-attachments
+git worktree remove.worktrees/review-t7-t9
 ```
 
 Four directories are absent. Their branches remain; every older worktree and prunable old entry was preserved. Per-worktree source HEAD/ignored-count prechecks are archived in `ourfairy-cleanup-precheck.json`.

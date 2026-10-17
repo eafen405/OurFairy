@@ -4,7 +4,7 @@
 分支：`arch/56-notification-backlog`
 基线：集成分支 `product/ourfairy-v1` tip `18964827`（开工先 merge，已 up to date）
 提交：`aff55b75`（实现）
-最终 SHA：`aff55b75`（提交后再 `git merge product/ourfairy-v1` 仍为 up to date，见 `merge-integration.log`）
+最终 SHA：`aff55b75`（提交后再 `git merge product/ourfairy-v1` 仍为 up to date）
 
 ## 问题（核对后的当前代码）
 
@@ -28,9 +28,9 @@
 
 ### red 证据
 
-- `red-backlog-test.log`：新测试首次运行，编译期即失败（新接缝尚未存在）。
-- `red-per-session-publish.log`：把 `publishBacklog` 临时改回逐会话 `publish`，合并用例失败 `expected:<1> but was:<2>`——证明该用例能捕获票面缺陷，而非恒真。
-- 复跑绿：`targeted-3.log`（26 条定向全绿）。
+- 新测试首次运行，编译期即失败（新接缝尚未存在）。
+- 把 `publishBacklog` 临时改回逐会话 `publish`，合并用例失败 `expected:<1> but was:<2>`——证明该用例能捕获票面缺陷，而非恒真。
+- 复跑绿：（26 条定向全绿）。
 
 ## 验收命令与结果
 
@@ -42,8 +42,8 @@ export PATH=/home/eafen405/ourfairy-bin:$PATH
   -Dorg.gradle.jvmargs='-Xmx5g -Dfile.encoding=UTF-8' --max-workers=3 --parallel --console=plain
 ```
 
-- `acceptance-full.log`：`BUILD SUCCESSFUL in 51s`（exit 0）。
-- 测试统计（来自 `app/build/test-results/testDebugUnitTest/*.xml`，逐套件见 `suite-counts.tsv`）：**72 套件 / 527 条，failures 0 / errors 0 / skipped 0**（基线 71/524，本票 +1 套件 +3 条）。
+- `BUILD SUCCESSFUL in 51s`（exit 0）。
+- 测试统计：**72 套件 / 527 条，failures 0 / errors 0 / skipped 0**（基线 71/524，本票 +1 套件 +3 条）。
 - 产物：`app/build/outputs/apk/debug/app-universal-debug.apk` 等三个 ABI 包均生成。
 
 ## 未做 / 说明
