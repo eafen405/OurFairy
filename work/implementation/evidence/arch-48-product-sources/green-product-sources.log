@@ -1,0 +1,11 @@
+✔ an unchanged worktree reuses the installed profile instead of reinstalling it (3277.174276ms)
+✔ the hashed set follows what the packages publish, not their test fixtures (468.941619ms)
+✔ a new product source file invalidates the installed profile (1560.02755ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5366.055154
