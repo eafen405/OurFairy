@@ -3,11 +3,11 @@ import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import { assembleAssistantStream } from '@deepseek-ai/dsh-llm/assistant-stream'
 
 const attachmentsOf = message => (message.source?.attachments ?? []).map((item, index) => ({ index, type: item.image ? 2 : 1, name: item.name, mime: item.mime, bytes: item.original.bytes }))
-export const messageText = message => (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
-export function attemptText(stream) {
+const messageText = message => (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
+function attemptText(stream) {
   return assembleAssistantStream(stream).interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('')
 }
-export function requestMessages(events) {
+function requestMessages(events) {
   return events.flatMap(event => event.type === 'agent/inbox/spliced'
     ? event.data.inserted.map(message => ({ message, seq: event.seq })) : [])
 }

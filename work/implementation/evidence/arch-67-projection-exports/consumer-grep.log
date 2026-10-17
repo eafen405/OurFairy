@@ -1,0 +1,11 @@
+$ grep -rn -E "messageText|attemptText|requestMessages" backend/ tests/ --include="*.mjs"
+backend/chat/src/projection.mjs:6:const messageText = message => (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
+backend/chat/src/projection.mjs:7:function attemptText(stream) {
+backend/chat/src/projection.mjs:10:function requestMessages(events) {
+backend/chat/src/projection.mjs:15:  const found = requestMessages(events).find(({ message }) => message.source?.kind === 'user' && message.source.rpcId === requestId)
+backend/chat/src/projection.mjs:18:    text: messageText(found.message), uploadIds: (found.message.source?.attachments ?? []).map(item => item.uploadId),
+backend/chat/src/projection.mjs:28:        messages.set(message.id, { messageId: message.id, seq: event.seq, requestId: message.source.rpcId, role: 1, status: 1, text: messageText(message), attachments: attachmentsOf(message) })
+backend/chat/src/projection.mjs:32:      messages.set(message.id, { messageId: message.id, seq: event.seq, requestId: message.source.rpcId ?? null, role: 1, status: 2, text: messageText(message), attachments: attachmentsOf(message) })
+backend/chat/src/projection.mjs:35:      messages.set(message.id, { messageId: message.id, seq: event.seq, requestId: null, role: 2, status: event.data.interrupted ? 3 : 2, text: messageText(message), attachments: attachmentsOf(message) })
+backend/chat/src/projection.mjs:39:      messages.set(messageId, { messageId, seq: event.seq, requestId: null, role: 2, status: interrupted ? 3 : 4, text: attemptText(event.data.stream) })
+tests/projection-interface.test.mjs:22:const PRIVATE_HELPERS = ['attemptText', 'messageText', 'requestMessages']

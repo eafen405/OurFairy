@@ -1,0 +1,5 @@
+$ grep -rn -E "messageText|attemptText|requestMessages" backend/ tests/ | grep -v projection.mjs | grep -v projection-interface
+(no hits)
+
+$ git show f360385:backend/chat/src/service.mjs | grep projection.mjs
+import { receiptIn, transcript } from './projection.mjs'

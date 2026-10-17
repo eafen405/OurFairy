@@ -1,0 +1,9 @@
+$ node --input-type=module -e "await import(\"./backend/chat/src/projection.mjs\")"
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepseek-ai/dsh-session' imported from /home/eafen405/projects/OurFairy/.worktrees/arch-67-projection-exports/backend/chat/src/projection.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
