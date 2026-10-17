@@ -105,10 +105,10 @@ corepack pnpm@11.28.5 exec vitest run <path>
 
 ## 5. 证据协议
 
-每张票的交付必须留下**可复查的证据**，写在 `work/implementation/evidence/<NN>-<slug>/`：
+每张票的交付必须留下**可复查的证据**，写在 `work/implementation/evidence/<NN>-<slug>/`（目录入口与各票索引见 `work/implementation/evidence/README.md`）：
 
 - `README.md`：做了什么、影响哪些仓库与提交、**实际执行的命令**、**实际输出摘要**、未执行/失败项及原因。
-- 运行日志原文放同目录（`*.log`），不要只写结论。
+- 原始运行输出不入库：结论、命令与输出摘要写进 `README.md`，重放时按记录的命令在当时的 fixed commit 上执行。冻结的源码快照与可复跑脚本随目录保留。
 - 明确区分：**替身测试**（模型/网络/平台替身）与**真实服务**（官方 DeepSeek、硅基流动 ASR）证据；**模拟器/构建成功**与**真机**证据。
 - 结论用词纪律（「编译通过」不等于验收通过、不降标准不换指标）见 `CODING_STANDARDS.md`。
 

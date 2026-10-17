@@ -3,8 +3,9 @@
 每张实施票与每轮阶段整合在 `work/implementation/evidence/<slug>/` 留下一份 README：改了什么、
 实际跑了哪些命令、结果如何、哪些没有执行。本文件是这些目录的入口。
 
-原始运行输出（`*.log`、JUnit XML、APK JSON 等）从仓库移除，只保留结论与可复跑的命令。
-需要重放某次运行，按对应 README 里记录的命令在当时的 fixed commit 上执行。冻结的源码快照
+结论、实际命令与输出摘要写在各自的 `README.md`；原始运行输出（`*.log`、JUnit XML、APK JSON 等）
+不入库，重放时按 README 记录的命令在当时的 fixed commit 上执行。2026-10-17 之前合并的目录仍带
+原始输出，其后新增的证据按 `work/implementation/CONVENTIONS.md` §5 执行。冻结的源码快照
 （`*.patch`、`*.diff`、`mcode-*/` 下的 `*.kt`）与可复跑脚本（`*.sh`、`*.mjs`）仍随目录保留。
 
 ## 基线
@@ -66,7 +67,7 @@
 | [stage-t7-t9](stage-t7-t9/README.md) · [review-t7-t9](review-t7-t9/README.md) | T7–T9 整合与两轴评审 |
 | [stage-t10-t12](stage-t10-t12/README.md) · [review-t10-t12](review-t10-t12/README.md) | T10–T12 整合与两轴评审 |
 | [stage-t13-t15](stage-t13-t15/README.md) · [review-t13-t15](review-t13-t15/README.md) | T13–T15 整合与两轴评审 |
-| [stage-t16-t19](stage-t16-t19/README.md) · [review-t16-t19](review-t16-t19/README.md) · [review-t16-t19-fix](review-t16-t19-fix/README.md) | T16–T19 整合、评审与修复 |
+| [stage-t16-t19](stage-t16-t19/) · [review-t16-t19](review-t16-t19/) · [review-t16-t19-fix](review-t16-t19-fix/README.md) | T16–T19 整合、评审与修复 |
 | [review-24-26](review-24-26/README.md) · [review-24-26-backend](review-24-26-backend/evidence.md) | #24–#26 阶段评审 |
 | [retro-guardrails](retro-guardrails/README.md) | 复盘修复验证 |
 
