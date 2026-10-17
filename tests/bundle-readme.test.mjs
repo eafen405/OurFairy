@@ -10,12 +10,12 @@
  *   the loader itself;
  * - what the README says: prose, which nothing executes.
  *
- * The README used to restate the absent rows by hand. That copy drifted into
- * claiming seven rows were absent while the bundle mounted them (#47) — the
- * same failure `backend/probe` avoids by refusing to keep a copy of the list.
- * The assertions below read the README as a document and compare its claims to
- * the two live sources, so the copy cannot come back and a stale row table
- * cannot stay green.
+ * The README used to restate the absent rows by hand, and it also kept a
+ * hand-written overview table of mounted rows. Both copies drifted: the absent
+ * list claimed seven rows were missing while the bundle mounted them, and the
+ * row table listed a subset of what `cordis.patch.yml` mounts (#47). The
+ * assertions below hold the README to the two live authorities, so neither copy
+ * can come back and stay green while going stale.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -67,20 +67,11 @@ function readMountedRows() {
 }
 
 /**
- * The README's "Row set" table, as the row ids and packages it names.
- * @returns {{id: string, package: string}[]}
+ * The README's "Row set" section, as a reader sees it.
+ * @returns {string}
  */
-function readRowTable() {
-  const section = readReadme().split('## Row set')[1]?.split('\n## ')[0] ?? ''
-  return section.split('\n')
-    .map(line => /^\| `([^`]+)` \| `([^`]+)` \|/.exec(line))
-    .filter(match => match !== null)
-    .map(match => ({ id: match[1], package: match[2] }))
-}
-
-/** The package short name a README table cell uses for a bundle `name:` value. */
-function shortPackageName(name) {
-  return name.replace(/^@[^/]+\//, '').split('/')[0]
+function readRowSetSection() {
+  return readReadme().split('## Row set')[1]?.split('\n## ')[0] ?? ''
 }
 
 /**
@@ -116,25 +107,33 @@ test('the bundle README defers the absent-row list to the test that owns it', ()
   )
 })
 
-test('the bundle README row table names only rows the bundle mounts, with their package', () => {
-  const mounted = readMountedRows()
-  const table = readRowTable()
+test('the bundle README points at cordis.patch.yml instead of restating the row set', () => {
+  const section = readRowSetSection()
 
-  assert.ok(table.length > 0, 'backend/v1-bundle/README.md must keep a "Row set" table of its anchor rows')
-
-  const unmounted = table.filter(entry => !mounted.has(entry.id)).map(entry => entry.id)
-  assert.deepEqual(
-    unmounted,
-    [],
-    `backend/v1-bundle/README.md row table names row(s) cordis.patch.yml does not mount: ${unmounted.join(', ')}`,
+  // It must say where the inventory lives...
+  assert.ok(section.length > 0, 'backend/v1-bundle/README.md must keep a "Row set" section')
+  assert.ok(
+    section.includes('cordis.patch.yml'),
+    'backend/v1-bundle/README.md must name cordis.patch.yml as the row set it describes',
   )
 
-  const wrongPackage = table
-    .filter(entry => shortPackageName(mounted.get(entry.id)) !== entry.package)
-    .map(entry => `${entry.id}: README says ${entry.package}, bundle mounts ${mounted.get(entry.id)}`)
+  // ...and must not restate it. A table is the copy that went stale (#47): the
+  // README listed 15 rows while the bundle mounted 33, and nothing failed.
+  assert.doesNotMatch(
+    section,
+    /^\s*\|/m,
+    'backend/v1-bundle/README.md must not keep a row table: cordis.patch.yml is the row set,'
+    + ' so point at it instead of copying a subset that can go stale',
+  )
+
+  // Nor a list of mounted row ids in prose: the section states where the
+  // inventory lives, not what is in it.
+  const quoted = quotedIds(section)
+  const restated = [...readMountedRows().keys()].filter(id => quoted.has(id))
   assert.deepEqual(
-    wrongPackage,
+    restated,
     [],
-    `backend/v1-bundle/README.md row table states the wrong package:\n${wrongPackage.join('\n')}`,
+    `backend/v1-bundle/README.md restates mounted row(s) that cordis.patch.yml already owns:`
+    + ` ${restated.join(', ')} — point at the file instead of copying the list`,
   )
 })

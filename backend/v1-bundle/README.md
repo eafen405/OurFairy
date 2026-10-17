@@ -21,27 +21,11 @@ comments group the rows — session/model/prompt core, durable session base,
 process-local support services, the product's HTTP carrier and identity paths,
 owned sessions and chat, the scoped file/shell adapters, and attachments/speech.
 
-The table below is an overview, not the inventory: it names the rows whose
-purpose a reader would otherwise have to guess at. Every mounted row is in
-`cordis.patch.yml`.
-
-| Row id | Package | Why it is here |
-| --- | --- | --- |
-| `agent` | `dsh-agent` | Agent/session registry (`agents`) |
-| `session` | `dsh-session` | Durable session model (`sessions`) |
-| `llm` | `dsh-llm` | Model interface (`llm`) |
-| `system-prompt` | `dsh-system-prompt` | Prompt assembly (`systemPrompt`); empty persona in the baseline |
-| `session-projection` | `dsh-session-projection` | Projection registry (`sessionProjections`) |
-| `tools` | `dsh-tools` | Tool registry (`tools`) |
-| `tool-todo` | `dsh-tool-todo` | The one model-facing tool the baseline registers |
-| `agent-loop` | `dsh-agent-loop` | Loop mechanism; `agents: []` starts no Agent at boot |
-| `agent-default-model` | `dsh-agent-default-model` | Explicit `deepseek-official` / `deepseek-flash` default |
-| `llm-deepseek-api-key` | `dsh-llm-deepseek-api-key` | Official route; credential resolved per request |
-| `session-persistence-jsonl` | `dsh-session-persistence-jsonl` | Durable JSONL sessions under the isolated `DSH_HOME` |
-| `session-checkpoint-policy` | `dsh-session-checkpoint-policy` | Durability barrier before model/tool side effects |
-| `session-query-sqlite` | `dsh-session-query-sqlite` | `sessionQuery`; explicit path and `openAt: first-search` (T10 search) |
-| `jobs-local` | `dsh-jobs-local` | In-memory job registry |
-| `attachment-local` | `dsh-attachment-local` | Content-addressed attachment storage under the isolated home |
+Read that file for the inventory. This README deliberately does not repeat it:
+the hand-kept table that used to sit here listed only some of the mounted rows,
+so a reader learned a partial inventory that could go stale while the loader
+kept mounting the rest (#47). The row ids and their packages have one authority,
+and it is the file the loader reads.
 
 ## Deliberately absent rows
 

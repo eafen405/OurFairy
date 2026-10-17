@@ -12,21 +12,31 @@
  * names the files the hash covers and whose "profile project linked" check
  * names the install mode the launcher chose. Both are facts the launcher
  * reports; no test reaches into the launcher's internals.
+ *
+ * The launcher runs against a throwaway copy of the product sources: this file
+ * adds a source file to observe staleness, and doing that in the worktree made
+ * every parallel `start` of another suite hash a product tree that was changing
+ * under it (an install could fail when the file disappeared again). A copy keeps
+ * the mutation local without replacing the real launcher.
  */
 import assert from 'node:assert/strict'
 import { readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
-import { describeRun, makeHome, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
+import { copyProductRepo, describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
 
 /** One isolated home for the file: every assertion here is about staleness across runs. */
 const home = makeHome('ourfairy-product-sources-')
 
+/** The throwaway repository the launcher reads; the worktree itself stays untouched. */
+const repoCopy = copyProductRepo('ourfairy-product-sources-repo-')
+
 /** A product source file that no hand-maintained list would know about yet. */
-const addedSource = join(repoRoot, 'backend', 'identity', 'src', 'staleness-probe.mjs')
+const addedSource = join(repoCopy, 'backend', 'identity', 'src', 'staleness-probe.mjs')
 
 after(() => {
   rmSync(addedSource, { force: true })
+  rmSync(repoCopy, { recursive: true, force: true })
   removeHome(home)
 })
 
@@ -43,7 +53,7 @@ function doctor() {
     OURFAIRY_HOME: home,
     DEEPSEEK_API_KEY: undefined,
     DEEPSEEK_BASE_URL: undefined,
-  })
+  }, { root: repoCopy })
   const start = run.stdout.indexOf('{')
   assert.ok(start >= 0, `doctor printed no JSON report:\n${describeRun('doctor', run)}`)
   const report = JSON.parse(run.stdout.slice(start))
@@ -63,15 +73,15 @@ function doctor() {
 }
 
 /**
- * Product sources walked from the worktree: every packaged file under a
+ * Product sources walked from the launcher's copy: every packaged file under a
  * `src/` directory plus each package's manifest. Expected coverage is built
  * from the disk here, never from whatever the launcher chose to report.
  */
-function worktreeSources() {
+function copiedSources() {
   const found = []
-  for (const file of readdirSync(join(repoRoot, 'backend'), { recursive: true })) {
+  for (const file of readdirSync(join(repoCopy, 'backend'), { recursive: true })) {
     const parts = file.split(sep)
-    if (parts.length < 2 || !statSync(join(repoRoot, 'backend', file)).isFile()) continue
+    if (parts.length < 2 || !statSync(join(repoCopy, 'backend', file)).isFile()) continue
     const rest = parts.slice(1).join('/')
     if (rest === 'package.json' || rest.startsWith('src/')) found.push(`backend/${parts[0]}/${rest}`)
   }
@@ -101,12 +111,12 @@ test('the hashed set follows what the packages publish, not their test fixtures'
     `the PDF wheel ships in the installed package, so it must be hashed; doctor listed ${files.join(', ')}`,
   )
 
-  const missing = worktreeSources().filter(file => !files.includes(file))
+  const missing = copiedSources().filter(file => !files.includes(file))
   assert.deepEqual(missing, [], `product source(s) left out of the staleness hash: ${missing.join(', ')}`)
 })
 
 test('a new product source file invalidates the installed profile', () => {
-  const added = relative(repoRoot, addedSource)
+  const added = relative(repoCopy, addedSource)
   writeFileSync(addedSource, '// Ticket #48 staleness probe: a product source added after the last install.\n')
   try {
     const afterAdd = doctor()

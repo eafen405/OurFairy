@@ -16,10 +16,21 @@ const OWNER_PATTERN = /^user:([1-9]\d*)$/
 
 /**
  * The owner string one short number speaks for.
+ *
+ * Refuses anything `shortIdOf` would not read back: the codec's two directions
+ * must round-trip, and a caller that hands over `0`, a fraction, a numeric
+ * string, or an unsafe integer would otherwise mint an owner no reader accepts
+ * (or, for a numeric string, one that encodes to different bytes than the
+ * number). Making that a caller error keeps the authority single.
+ *
  * @param shortId - the identity's permanent short number.
  * @returns the `SessionHeader.owner` value naming that identity.
+ * @throws {TypeError} when `shortId` is not a positive safe integer.
  */
 export function ownerOf(shortId) {
+  if (!Number.isSafeInteger(shortId) || shortId <= 0) {
+    throw new TypeError(`ownerOf expects a positive safe integer short id; got ${String(shortId)}`)
+  }
   return `user:${shortId}`
 }
 

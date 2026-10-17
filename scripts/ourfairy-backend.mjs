@@ -317,10 +317,33 @@ function isolatedEnv(layout, extra = {}) {
   }
 }
 
-/** Whether the bundle declares the same model pair combo.json locks. */
+/**
+ * The provider/model pair the bundle's `agent-default-model` row declares.
+ *
+ * Read from that row rather than searched for in the whole patch: the old
+ * `includes('model: deepseek-flash')` test also matched `model:
+ * deepseek-flash-drifted`, so a drifted bundle kept the doctor check green
+ * while `combo.json backend.agentModel` and the README promised it could not.
+ * @returns {{provider?: string, model?: string}}
+ */
+function bundleAgentModel() {
+  const patchPath = join(repoRoot, COMBINATION.bundlePathInRepo, 'cordis.patch.yml')
+  const lines = readFileSync(patchPath, 'utf8').split('\n')
+  const start = lines.findIndex(line => /^\s*- id: agent-default-model\s*$/.test(line))
+  if (start < 0) return {}
+  const row = {}
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s*- id: /.test(line)) break
+    const field = /^\s*(provider|model): (.+?)\s*$/.exec(line)
+    if (field !== null) row[field[1]] = field[2]
+  }
+  return row
+}
+
+/** Whether the bundle's row declares exactly the model pair combo.json locks. */
 function bundleDeclaresAgentModel(selection) {
-  const patch = readFileSync(join(repoRoot, 'backend', 'v1-bundle', 'cordis.patch.yml'), 'utf8')
-  return patch.includes(`provider: ${selection.provider}`) && patch.includes(`model: ${selection.model}`)
+  const row = bundleAgentModel()
+  return row.provider === selection.provider && row.model === selection.model
 }
 
 function childEnv(layout, { reportPath, mode, holdMs }) {
@@ -805,9 +828,12 @@ function commandDoctor(layout, options) {
   })
   check('bundle agent model', () => {
     const selection = COMBINATION.agentModel
+    const declared = bundleAgentModel()
     must(bundleDeclaresAgentModel(selection),
-      `backend/v1-bundle/cordis.patch.yml does not declare provider: ${selection.provider} / model: ${selection.model};`
-      + ' the bundle and combo.json backend.agentModel have drifted apart')
+      `${COMBINATION.bundlePathInRepo}/cordis.patch.yml declares`
+      + ` ${declared.provider ?? '<missing provider>'}/${declared.model ?? '<missing model>'} in its agent-default-model row,`
+      + ` but combo.json backend.agentModel locks ${selection.provider}/${selection.model};`
+      + ' the two declarations have drifted apart')
     return `${selection.provider}/${selection.model} declared in both combo.json and the bundle`
   })
 
