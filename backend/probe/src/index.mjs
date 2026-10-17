@@ -23,6 +23,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
+import { ownerOf } from '@ourfairy/dsh-identity/owner'
 
 export const name = 'ourfairy-baseline-probe'
 
@@ -172,7 +173,7 @@ async function runTurn(ctx, report) {
   const sessionId = process.env.OURFAIRY_PROBE_SESSION_ID ?? `ourfairy-baseline-${Date.now()}`
   const handle = await agents.create({
     sessionId,
-    meta: { owner: 'user:1' },
+    meta: { owner: ownerOf(1) },
     agentOptions: { provider, model },
   })
   const agent = handle.agent

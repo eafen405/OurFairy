@@ -9,8 +9,16 @@
 /** An owner is `user:` plus a positive short number, written without a leading zero. */
 const OWNER_PATTERN = /^user:([1-9]\d*)$/
 
-/** The `SessionHeader.owner` value one short number speaks for. */
+/**
+ * The `SessionHeader.owner` value one short number speaks for. Anything
+ * `shortIdOf` would not read back — zero, a fraction, a numeric string, an
+ * unsafe integer — is a caller error.
+ * @throws {TypeError} when `shortId` is not a positive safe integer.
+ */
 export function ownerOf(shortId) {
+  if (!Number.isSafeInteger(shortId) || shortId <= 0) {
+    throw new TypeError(`ownerOf expects a positive safe integer short id; got ${String(shortId)}`)
+  }
   return `user:${shortId}`
 }
 
