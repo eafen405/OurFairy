@@ -12,7 +12,7 @@ export function apply(ctx) {
   const caller = exec => {
     const shortId = shortIdOf(exec.agent?.session?.header?.owner)
     if (shortId === undefined) throw new Error('search/missing-owner: conversation tools require an owned execution session')
-    const user = ctx.identity.store.userByShortId(shortId)
+    const user = ctx.identity.users.byShortId(shortId)
     if (!user) throw new Error('search/unknown-user: conversation tools require an active owner')
     return user
   }
