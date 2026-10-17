@@ -18,12 +18,11 @@ export function installGroups(ctx) {
     return realpathSync(path)
   }
   const expose = group => ({ ...group, root: rootFor(group.id) })
-  scope.extraRoots = session => {
+  ctx.effect(() => scope.contributeExtraRoots(session => {
     const shortId = Number(scope.owner(session))
     if (!store.userByShortId(shortId)) throw new Error('groups/unknown-user: file operation requires an active session owner')
     return store.groupsForMember(shortId).map(group => rootFor(group.id))
-  }
-  ctx.effect(() => () => { scope.extraRoots = () => [] })
+  }), 'ourfairy-spaces: group roots')
   const output = { schema: { type: 'object', additionalProperties: true },
     render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] }
   const registrations = new Map()

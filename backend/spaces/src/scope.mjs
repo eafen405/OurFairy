@@ -6,11 +6,16 @@ import { Service } from '@deepseek-ai/cordis'
 import { FsError } from '@deepseek-ai/dsh-fs'
 
 export const pathInside = (root, path) => path === root || path.startsWith(root + sep)
+const register = (contributors, contribute) => {
+  contributors.add(contribute)
+  return () => { contributors.delete(contribute) }
+}
+const contributed = (contributors, session) => [...contributors].flatMap(contribute => contribute(session))
 export class SpaceScope extends Service {
   calls = new AsyncLocalStorage()
   // Optional product-owned contributions, evaluated at every operation (no membership cache).
-  extraRoots = () => []
-  readonlyFiles = () => []
+  _extraRoots = new Set()
+  _readonlyFiles = new Set()
   constructor(ctx, config) {
     super(ctx, 'ourfairySpaces')
     this.root = config.root
@@ -18,6 +23,9 @@ export class SpaceScope extends Service {
     for (const dir of [join(this.root, 'public'), this.envRoot]) mkdirSync(dir, { recursive: true })
     this.envRoot = realpathSync(this.envRoot)
   }
+  /** Register one contributor; the returned disposer releases only that contribution. */
+  contributeExtraRoots(contribute) { return register(this._extraRoots, contribute) }
+  contributeReadonlyFiles(contribute) { return register(this._readonlyFiles, contribute) }
   current() { return this.calls.getStore() }
   session(id) {
     const current = this.current()
@@ -44,8 +52,9 @@ export class SpaceScope extends Service {
   }
   writeRoots(session) {
     this.owner(session)
-    return [this.privateRoot(session), realpathSync(join(this.root, 'public')), this.envRoot, ...this.extraRoots(session)]
+    return [this.privateRoot(session), realpathSync(join(this.root, 'public')), this.envRoot, ...contributed(this._extraRoots, session)]
   }
+  readonlyFiles(session) { return contributed(this._readonlyFiles, session) }
   readRoots(session) { return [...this.writeRoots(session), ...this.readonlyFiles(session)] }
   validatePolicy(policy, session) {
     this.owner(session)

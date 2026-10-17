@@ -60,7 +60,8 @@ export function apply(ctx, config) {
       await iterator.return?.()
     }
   }))
-  ctx.ourfairySpaces.readonlyFiles = session => service.readonlyFiles(session)
+  ctx.effect(() => ctx.ourfairySpaces.contributeReadonlyFiles(session => service.readonlyFiles(session)),
+    'ourfairy-attachments: read-only files')
   // Each iterator pull must inherit the session: merely constructing the async
   // generator inside AsyncLocalStorage does not scope provider serialization.
   ctx.on('llm/stream', async function* (options, next) {
