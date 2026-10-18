@@ -2,6 +2,8 @@
 
 2026-10-14。用户已确认本轮最后三项产品选择，前端首版边界讨论完成。[正式决议](https://github.com/eafen405/OurFairy/issues/10#issuecomment-6165782525)已发布，决策票及[前端地图](https://github.com/eafen405/OurFairy/issues/2)均已关闭；本文保留取舍矩阵、复用依据和实现验收素材。未实施产品功能，本地材料未提交。
 
+2026-10-18 后续确认的法厄同配置网关及共用模型范围见[父规格修订](../specs/ourfairy-v1.md)；下文保留本次历史决议的取舍与依据。
+
 ## 已有决定及来源
 
 - 后端规则以[确定后端最小装配：选用、替换与新增插件的决议](https://github.com/eafen405/OurFairy/issues/9#issuecomment-6163738839)和[确定共享与限制：能力在何处按用户提供的决议](https://github.com/eafen405/OurFairy/issues/8#issuecomment-6163344040)为准。
