@@ -62,10 +62,13 @@ export ANDROID_HOME=/home/eafen405/Android/Sdk
 产物复制到 `/tmp/ourfairy-v1-release/`，SHA256：
 
 ```text
-932889dc9a390c58cddb5210a4aaf205904f08aa396116899567d07710a58fa1  app-arm64-v8a-release.apk
-047002854ac1f4e27ae4fbda817fb5f92792ec96458d3d312595fa2591f003eb  app-universal-release.apk
-a4d248b8a3b952b1cd19cf127f996e65435529ffe66e2bdf1f8ba6175e271744  app-x86_64-release.apk
+d3600da1a5a256c595ff9e02f1b19fb0a8df5c78e275515606532536405030bf  app-arm64-v8a-release.apk
+5da14d56e63ffdf1c5b65376302e5f0392fd3248d59be88a947c6ff8a4deb4ea  app-universal-release.apk
+c2ea0de6a3b62665c3dcf7440675504ba5d0f645125d31123a344308456854f2  app-x86_64-release.apk
 ```
+
+这组产物在评审修复 `505f02c2` 上重建；更早一次构建（`90c3cfc5`）的 SHA256 为
+`932889dc…`/`04700285…`/`a4d248b8…`，两者签名身份相同，前者已被后者取代。
 
 `apksigner verify --print-certs`：V2 签名，证书 `CN=Fairy, O=Fairybot`，
 SHA-256 `406a2d5c63fd717febdffc65731b449aa209693eba266ea845b8e00d0be01d8e`。
