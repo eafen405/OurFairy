@@ -4,6 +4,8 @@
 
 权威记录：[确定首版实施路线：共同接口、依赖顺序与验证门槛的最终决议](https://github.com/eafen405/OurFairy/issues/22#issuecomment-6167313227)。本地文稿保留实施交接素材，以该 resolution 为准。
 
+2026-10-18 后续确认的上游兼容、共用模型及网关范围见[父规格修订](../specs/ourfairy-v1.md)；本文保留 2026-10-14 的路线及当时证据。后续核对见[设计校准记录](upstream-compatibility-calibration.md)。
+
 ## 已确认的实施路线
 
 先稳定 dsh 的原生会话事实与持久化，再以同一套共同接口接入 Android；身份、空间、投递等 OurFairy 规则由各自模块维护。每阶段以能跨模块验证的行为收束，不以文件或插件数量判断完成。
