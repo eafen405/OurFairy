@@ -82,7 +82,10 @@ APK 产物（本机 `/home/eafen405/projects/rikkahub/app/build/outputs/apk/rele
 - APK 下载：`https://85.137.246.15:38518/downloads/ourfairy-v1-arm64-release.apk`
 - 管理员：法厄同，短号 `1`，初始密码见 `/home/devin/deploy/ourfairy.env` 的 `OURFAIRY_PHAETHON_PASSWORD`
   （由部署时随机生成，不在本文件重复记录）。
-- 邀请码：部署时通过 `/identity/invite` 生成过一个单次邀请码，供代理人注册；用掉后可在 App 的账户页再生成。
+- 测试代理人：`tester` / `tester-pass-1`（短号 `2`，用部署时生成的一次性邀请码 `RKYXL5B9STCV` 注册；
+  该邀请码已用掉，后续代理人由管理员在账户页重新生成邀请码）。两名账号都已在公网代理上实测
+  `/sessions/*` 与一次真实 MiniMax 对话（管理员回复「收到 OurFairy 真机联调测试确认，正在待命。」，
+  代理人回复「在线」）。
 
 ## 5. 已知限制
 
