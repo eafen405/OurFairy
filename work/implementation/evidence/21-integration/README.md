@@ -13,7 +13,7 @@
 
 | 仓库 | 集成分支 | 锁定提交 |
 | --- | --- | --- |
-| OurFairy | `integration/ourfairy-v1` | `f1f8aeb`（本文件提交前的分支 tip；本文件只新增证据，不改产品代码） |
+| OurFairy | `integration/ourfairy-v1` | `d6256b3`（产品代码 tip；其后 `8b96a2f`/`d342d83` 只新增证据） |
 | dsh fork | `product/ourfairy-v1` | `fe2bbc3b`（本票无源码改动） |
 | rikkahub fork | `product/ourfairy-v1` | `90c3cfc5`（#43 客户端合并） |
 
