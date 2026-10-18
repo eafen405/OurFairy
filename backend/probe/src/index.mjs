@@ -38,6 +38,11 @@ const SERVICE_ROWS = [
   ['agentLoop', 'agent-loop', '@deepseek-ai/dsh-agent-loop'],
   ['sessionPersistence', 'session-persistence-jsonl', '@deepseek-ai/dsh-session-persistence-jsonl'],
   ['sessionQuery', 'session-query-sqlite', '@deepseek-ai/dsh-session-query-sqlite'],
+  ['settings', 'settings', '@deepseek-ai/dsh-settings'],
+  ['configEditor', 'config-editor', '@deepseek-ai/dsh-config-editor'],
+  ['agentDefaultModel', 'agent-default-model', '@deepseek-ai/dsh-agent-default-model'],
+  ['ourfairyChat', 'chat', '@ourfairy/dsh-chat'],
+  ['ourfairyGateway', 'gateway', '@ourfairy/dsh-gateway'],
   ['jobs', 'jobs-local', '@deepseek-ai/dsh-jobs-local'],
   ['attachments', 'attachment-local', '@deepseek-ai/dsh-attachment-local'],
   ...['ourfairySpaces', 'fs', 'shell', 'sandbox', 'workingDirectory'].map(service => [service, 'spaces', '@ourfairy/dsh-spaces']),
@@ -156,9 +161,9 @@ async function runTurn(ctx, report) {
   const sessions = ctx.get('sessions')
   if (sessions === undefined) throw new Error('cannot run a turn: the "sessions" service is not live')
   // The model selection arrives from the launcher (combo.json backend.agentModel).
-  // It is passed explicitly because no entry layer consumes the agentDefaultModel
-  // service in the v1 baseline: without it the created Agent has no model and the
-  // turn would make no model call at all.
+  // It is passed explicitly because this probe creates its own Agent outside the
+  // product chat runtime: the product reads agentDefaultModel per turn, while the
+  // probe's turn has no product runtime to read it for it.
   const provider = process.env.OURFAIRY_PROBE_PROVIDER
   const model = process.env.OURFAIRY_PROBE_MODEL
   if (provider === undefined || provider === '' || model === undefined || model === '') {
@@ -199,7 +204,7 @@ async function runTurn(ctx, report) {
   report.model = {
     provider,
     model,
-    selection: 'explicit agentOptions (the v1 baseline mounts no entry layer that consumes agentDefaultModel)',
+    selection: 'explicit agentOptions (the probe creates its own Agent; the product chat runtime reads agentDefaultModel per turn)',
     sessionId: String(agent.session.id),
     events,
     output: output ?? null,

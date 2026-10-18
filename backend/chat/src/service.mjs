@@ -92,6 +92,15 @@ export class RemoteChat extends Service {
   async stop(owner, { sessionId }) {
     this.runtime.stop(await this.runtime.open(owner, sessionId))
   }
+  /** Routes pinned by replies running right now; a configuration write refuses to change them. */
+  activeReplies() { return this.runtime.activeReplies() }
+
+  /**
+   * Run one shared-configuration write while the routes of running replies are
+   * held still; `refusal` names them or returns undefined to allow the write.
+   */
+  withReplyGuard(refusal, work) { return this.runtime.withReplyGuard(refusal, work) }
+
   async observe(owner, { sessionId, maxEvents }) {
     const limit = maxEventsOf(maxEvents)
     const state = await this.runtime.open(owner, sessionId)

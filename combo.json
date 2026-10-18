@@ -55,7 +55,7 @@
       "provider": "deepseek-official",
       "model": "deepseek-flash"
     },
-    "agentModelNote": "The model selection this combination runs. The bundle agent-default-model row and combo.json declare the same pair; the launcher passes this pair to the probe as explicit agentOptions because the v1 baseline mounts no entry layer. The doctor bundle-agent-model check compares the two.",
+    "agentModelNote": "The initial shared model selection this combination starts on. The bundle agent-default-model row and combo.json declare the same pair; the doctor bundle-agent-model check compares the two. The product chat runtime reads agentDefaultModel at each turn start, so a Phaethon-saved selection overrides this initial default without editing combo.json; the probe passes the pair explicitly because it creates its own Agent outside that runtime.",
     "nodeRange": "^22.19.0 || >=24",
     "pnpmPin": "11.28.5",
     "pnpmInvocation": "corepack pnpm@11.28.5",

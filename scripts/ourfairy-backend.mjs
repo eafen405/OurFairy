@@ -86,6 +86,7 @@ const LINKED_PACKAGES = [
   { name: '@ourfairy/dsh-identity', dir: 'backend/identity' },
   { name: '@ourfairy/dsh-sessions', dir: 'backend/sessions' },
   { name: '@ourfairy/dsh-chat', dir: 'backend/chat' },
+  { name: '@ourfairy/dsh-gateway', dir: 'backend/gateway' },
   { name: '@ourfairy/dsh-speech', dir: 'backend/speech' },
   { name: '@ourfairy/dsh-search', dir: 'backend/search' },
   { name: '@ourfairy/dsh-attachments', dir: 'backend/attachments' },
