@@ -3,7 +3,7 @@
  *
  * The backend boots against an EXTERNAL model double: a real loopback HTTP
  * process speaking the Messages protocol (`@deepseek-ai/dsh-llm-mock-server`),
- * selected through the same `DEEPSEEK_BASE_URL` / `DEEPSEEK_API_KEY` deployment
+ * selected through the same `OURFAIRY_MINIMAX_BASE_URL` / `MINIMAX_CN_API_KEY` deployment
  * surface a real endpoint would use. The assertions are about what actually
  * crossed the wire — the double's captured requests — not about a Loader that
  * did not throw.
@@ -36,8 +36,8 @@ test('one real turn reaches the external model double, registers tools, and pers
 
   const run = await runBackendAsync(['probe', '--turn', '--report', reportPath], {
     OURFAIRY_HOME: home,
-    DEEPSEEK_BASE_URL: `${server.baseURL}/v1`,
-    DEEPSEEK_API_KEY: 'mock-key',
+    OURFAIRY_MINIMAX_BASE_URL: `${server.baseURL}`,
+    MINIMAX_CN_API_KEY: 'mock-key',
   })
   assert.equal(run.code, 0, describeRun('probe --turn against the external model double', run))
 
@@ -106,13 +106,13 @@ test('a turn without credentials fails with a diagnostic naming the missing vari
   try {
     const run = await runBackendAsync(['probe', '--turn', '--report', join(keylessHome, 'report.json')], {
       OURFAIRY_HOME: keylessHome,
-      DEEPSEEK_API_KEY: undefined,
-      DEEPSEEK_BASE_URL: undefined,
+      MINIMAX_CN_API_KEY: undefined,
+      OURFAIRY_MINIMAX_BASE_URL: undefined,
     })
     assert.notEqual(run.code, 0, describeRun('probe --turn without credentials must fail', run))
     assert.ok(
-      `${run.stdout}\n${run.stderr}`.includes('DEEPSEEK_API_KEY'),
-      `diagnostic must name DEEPSEEK_API_KEY; output was:\n${run.stdout}\n${run.stderr}`,
+      `${run.stdout}\n${run.stderr}`.includes('MINIMAX_CN_API_KEY'),
+      `diagnostic must name MINIMAX_CN_API_KEY; output was:\n${run.stdout}\n${run.stderr}`,
     )
   } finally {
     removeHome(keylessHome)

@@ -5,14 +5,14 @@ import { deflateSync } from 'node:zlib'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
-import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, repoRoot, startArgs, startedPort } from './helpers/backend.mjs'
+import { describeRun, leadingJsonObject, makeHome, messageBlocks, registerUser, removeHome, runBackendAsync, repoRoot, startArgs, startedPort } from './helpers/backend.mjs'
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json')))
 const sharp = createRequire(join(combo.repos.dsh.localPath, 'packages/attachment/attachment-local/package.json'))('sharp')
 const home = makeHome('ourfairy-pdf-'), password = 'attachment-password'
 let model, port, admin, alice, bob
 async function start() {
   const run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    DEEPSEEK_API_KEY: 'mock-key', DEEPSEEK_BASE_URL: `${model.baseURL}/v1` })
+    MINIMAX_CN_API_KEY: 'mock-key', OURFAIRY_MINIMAX_BASE_URL: `${model.baseURL}` })
   port = startedPort(run)
 }
 async function stop() { const run = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home }); assert.equal(run.code, 0, describeRun('stop', run)) }
@@ -47,22 +47,27 @@ async function startToolModel() {
   const requests = []
   const server = createServer(async (req, res) => {
     let bytes = ''; for await (const chunk of req) bytes += chunk
-    if (req.url !== '/v1/messages') {
+    if (!req.url.startsWith('/v1/messages')) {
       res.writeHead(404, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { type: 'not_found_error', message: 'inline image fallback' } })); return
     }
     const body = JSON.parse(bytes); requests.push({ body })
     const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
     const commandIndex = blocks.findLastIndex(c => c.type === 'text' && c.text.startsWith('{"tool":'))
-    const call = JSON.parse(blocks[commandIndex].text)
+    // The user text is the tool command; the adapter appends the saved-file
+    // handle after it, so parse the leading JSON object and ignore the rest.
+    const call = leadingJsonObject(blocks[commandIndex].text)
     const result = blocks.slice(commandIndex + 1).findLast(c => c.type === 'tool_result')
     const handle = blocks.filter(c => c.type === 'text').map(c => c.text.match(/read-only copy saved at ("(?:[^"\\]|\\.)*")/)).findLast(Boolean)
     const args = JSON.parse(JSON.stringify(call.args).replaceAll('$INPUT', handle ? JSON.parse(handle[1]) : 'NO_QUALIFIED_INPUT_HANDLE'))
     res.writeHead(200, { 'content-type': 'text/event-stream' })
     const emit = event => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
-    emit({ type: 'message_start', message: { id: 'attachment-tool-model', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
+    emit({ type: 'message_start', message: { id: 'attachment-tool-model', type: 'message', role: 'assistant', model: body.model, content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
     if (result) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(result.content.filter(block => block.type === 'text'))}` } })
+      const content = typeof result.content === 'string'
+        ? [{ type: 'text', text: result.content }]
+        : result.content.filter(block => block.type === 'text')
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(content)}` } })
     } else {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'attachment-tool-call', name: call.tool, input: {} } })
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(args) } })
@@ -105,7 +110,7 @@ test('PDF upload, selected page text with citation, and immutable original use a
   const projection = (await request('/chat/read', alice.token, { sessionId: id })).body.projection
   const message = projection.messages.find(m => m.attachments?.length)
   assert.deepEqual((await request('/attachments/download', alice.token, { sessionId: id, messageId: message.messageId, index: 0 })).bytes, pdf('text'))
-  const native = model.requests.flatMap(r => r.body.messages).flatMap(m => m.content).filter(c => c.type === 'text').map(c => c.text).join('\n')
+  const native = model.requests.flatMap(r => r.body.messages).flatMap(messageBlocks).filter(c => c.type === 'text').map(c => c.text).join('\n')
   const path = JSON.parse(native.match(/read-only copy saved at ("(?:[^"\\]|\\.)*")/)[1])
   for (const [who, other] of [[bob, await session(bob)], [alice, await session(alice)]]) {
     const denied = await tool(who, other, 'pdf_read_pages', { file_path: path, pages: [2] })
@@ -195,8 +200,11 @@ test('selected PDF pages become real images in official user tool results withou
   assert.equal(blocks.filter(block => block.type === 'image').length, 1)
   assert.match(blocks.find(block => block.type === 'text').text, /"page":1/)
   const image = Buffer.from(blocks.find(block => block.type === 'image').source.data, 'base64')
-  assert.equal(blocks.find(block => block.type === 'image').source.media_type, 'image/jpeg')
-  assert.deepEqual([...image.subarray(0, 3)], [255, 216, 255])
+  const mediaType = blocks.find(block => block.type === 'image').source.media_type
+  assert.ok(['image/jpeg', 'image/png'].includes(mediaType), `an image block must carry a real image; got ${mediaType}`)
+  assert.deepEqual([...image.subarray(0, 3)],
+    mediaType === 'image/png' ? [137, 80, 78] : [255, 216, 255],
+    'image bytes must match the declared media type')
   const textPixels = await sharp(image).raw().toBuffer()
   assert.ok(textPixels.filter(value => value < 100).length > 100, 'rendered text page must contain visible ink')
   const message = (await request('/chat/read', alice.token, { sessionId: id })).body.projection.messages.find(message => message.attachments?.length)

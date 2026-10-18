@@ -79,8 +79,8 @@ after(() => removeHome(sharedHome))
 /** Keyless environment: no model credentials may leak in from the test process. */
 const keylessEnv = {
   OURFAIRY_HOME: sharedHome,
-  DEEPSEEK_API_KEY: undefined,
-  DEEPSEEK_BASE_URL: undefined,
+  MINIMAX_CN_API_KEY: undefined,
+  OURFAIRY_MINIMAX_BASE_URL: undefined,
 }
 
 describe('OurFairy v1 baseline composition', () => {
@@ -163,7 +163,7 @@ describe('OurFairy v1 baseline composition', () => {
       `the refusal must name the flag's commands:\n${run.stderr}`)
   })
 
-  test('a requested turn without DEEPSEEK_API_KEY fails loudly, naming the missing configuration', () => {
+  test('a requested turn without MINIMAX_CN_API_KEY fails loudly, naming the missing configuration', () => {
     const run = runBackend(
       ['probe', '--turn', '--report', join(sharedHome, 'turn-missing-key.json')],
       keylessEnv,
@@ -175,8 +175,8 @@ describe('OurFairy v1 baseline composition', () => {
     )
     const output = `${run.stdout}\n${run.stderr}`
     assert.ok(
-      output.includes('DEEPSEEK_API_KEY'),
-      `failure diagnostic must name the missing configuration DEEPSEEK_API_KEY; output was:\n${output}`,
+      output.includes('MINIMAX_CN_API_KEY'),
+      `failure diagnostic must name the missing configuration MINIMAX_CN_API_KEY; output was:\n${output}`,
     )
   })
 

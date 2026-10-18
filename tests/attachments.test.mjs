@@ -3,14 +3,14 @@ import { before, after, test } from 'node:test'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
-import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, repoRoot, startArgs, startedPort } from './helpers/backend.mjs'
+import { describeRun, leadingJsonObject, makeHome, messageBlocks, registerUser, removeHome, repoRoot, runBackendAsync, startArgs, startedPort, toolResultBlocks } from './helpers/backend.mjs'
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json')))
 const { startMockLlmServer } = await import(join(combo.repos.dsh.localPath, 'packages/test-support/llm-mock-server/lib/index.js'))
 const home = makeHome('ourfairy-attachments-'), password = 'attachment-password'
 let model, port, admin, alice, bob
 async function start() {
   const run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    DEEPSEEK_API_KEY: 'mock-key', DEEPSEEK_BASE_URL: `${model.baseURL}/v1` })
+    MINIMAX_CN_API_KEY: 'mock-key', OURFAIRY_MINIMAX_BASE_URL: `${model.baseURL}` })
   port = startedPort(run)
 }
 async function stop() { const run = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home }); assert.equal(run.code, 0, describeRun('stop', run)) }
@@ -143,7 +143,7 @@ test('images keep original downloads while official Messages serialization uses 
     await new Promise(resolve => setTimeout(resolve, 25))
   } while (Date.now() < until)
   assert.ok(captured, 'official provider must actually dispatch image request')
-  const images = captured.body.messages.flatMap(m => m.content).filter(c => c.type === 'image')
+  const images = captured.body.messages.flatMap(messageBlocks).filter(c => c.type === 'image')
   assert.equal(images.length, 1)
   assert.equal(images[0].source.type, 'base64')
   assert.ok(Buffer.from(images[0].source.data, 'base64').length > 0)
@@ -166,7 +166,7 @@ async function startToolModel() {
     const body = JSON.parse(bytes); requests.push({ body })
     const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
     const commandIndex = blocks.findLastIndex(c => c.type === 'text' && c.text.startsWith('{"tool":'))
-    const call = JSON.parse(blocks[commandIndex].text)
+    const call = leadingJsonObject(blocks[commandIndex].text)
     const result = blocks.slice(commandIndex + 1).findLast(c => c.type === 'tool_result')
     const handle = blocks.filter(c => c.type === 'text').map(c => c.text.match(/read-only copy saved at ("(?:[^"\\]|\\.)*")/)).findLast(Boolean)
     const args = JSON.parse(JSON.stringify(call.args).replaceAll('$INPUT', handle ? JSON.parse(handle[1]) : 'NO_QUALIFIED_INPUT_HANDLE'))
@@ -175,7 +175,7 @@ async function startToolModel() {
     emit({ type: 'message_start', message: { id: 'attachment-tool-model', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
     if (result) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(result.content)}` } })
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(toolResultBlocks(result))}` } })
     } else {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'attachment-tool-call', name: call.tool, input: {} } })
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(args) } })
@@ -208,7 +208,7 @@ test('native model file handles permit real read and sandboxed scripts only in t
   const bytes = Buffer.from('REAL_ATTACHMENT_CONTENT_私密\n')
   const receipt = await upload(alice, aliceId, bytes, 'private.txt', 'text/plain')
   assert.match(await tool(alice, aliceId, 'read', { file_path: '$INPUT' }, [receipt.uploadId]), /REAL_ATTACHMENT_CONTENT_私密/)
-  const bodyText = model.requests.flatMap(item => item.body.messages).flatMap(m => m.content).filter(c => c.type === 'text').map(c => c.text).join('\n')
+  const bodyText = model.requests.flatMap(item => item.body.messages).flatMap(messageBlocks).filter(c => c.type === 'text').map(c => c.text).join('\n')
   const handle = bodyText.match(/read-only copy saved at ("(?:[^"\\]|\\.)*")/)
   assert.ok(handle, 'actual provider text must contain a usable file handle')
   const path = JSON.parse(handle[1])

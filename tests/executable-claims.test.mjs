@@ -35,8 +35,8 @@ function lockedAgentModel() {
 function bundleAgentModelCheck({ root = repoRoot, isolatedHome = home } = {}) {
   const run = runBackend(['doctor', '--json'], {
     OURFAIRY_HOME: isolatedHome,
-    DEEPSEEK_API_KEY: undefined,
-    DEEPSEEK_BASE_URL: undefined,
+    MINIMAX_CN_API_KEY: undefined,
+    OURFAIRY_MINIMAX_BASE_URL: undefined,
   }, { root })
   const start = run.stdout.indexOf('{')
   assert.ok(start >= 0, `doctor printed no JSON report:\n${describeRun('doctor', run)}`)

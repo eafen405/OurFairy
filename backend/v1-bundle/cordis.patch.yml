@@ -49,17 +49,20 @@
       config:
         agents: []
 
-    # The v1 shared official route. Explicit here because the base bundle's
-    # default is not inherited when base itself is not mounted.
+    # The v1 initial shared selection. MiniMax is the deployment's model; the
+    # official DeepSeek route below stays mounted so Phaethon can switch back
+    # through the gateway, but it is not selected. Explicit here because the
+    # base bundle's default is not inherited when base is not mounted.
     - id: agent-default-model
       name: '@deepseek-ai/dsh-agent-default-model'
       config:
-        provider: deepseek-official
-        model: deepseek-flash
+        provider: minimax-cn
+        model: MiniMax-M3.1-Flash-Preview
+        reasoningEffort: max
 
-    # No key or endpoint is inlined: the credential reference resolves per
-    # request from the launching environment (or the credentials service when a
-    # later ticket mounts one), and DEEPSEEK_BASE_URL overrides the endpoint.
+    # Official DeepSeek route, available but unused by default. No key or
+    # endpoint is inlined: the credential reference resolves per request and
+    # DEEPSEEK_BASE_URL overrides the endpoint.
     - id: llm-deepseek-api-key
       name: '@deepseek-ai/dsh-llm-deepseek-api-key'
       config:
@@ -109,6 +112,10 @@
     # sign-in endpoint cannot exist under it.
     - id: credentials
       name: '@deepseek-ai/dsh-credentials-local'
+      config:
+        # The operator may point at the deployment's existing credential store
+        # explicitly; without an override the isolated home owns the document.
+        path: !!js process.env.OURFAIRY_CREDENTIALS_FILE ?? dshHomePath('.credentials.yaml')
 
     # Live configuration forms and the profile editor they persist through.
     # The gateway is the product's only caller; dsh's own settings UI is absent.
@@ -118,12 +125,33 @@
     - id: settings
       name: '@deepseek-ai/dsh-settings'
 
-    # pi-ai's multi-provider adapter, mounted dormant: no route exists until
-    # Phaethon saves a shared provider profile through the gateway. The official
-    # DeepSeek route stays the initial selection; keys resolve per request
-    # through their credential reference.
+    # pi-ai's multi-provider adapter. The MiniMax route reuses dsh's installed
+    # `minimax-cn` catalog (endpoint, protocol, model metadata); this row only
+    # narrows the catalog to the one model the deployment uses, declares the
+    # 1M context and the adaptive thinking the model requires, and names the
+    # credential reference. Phaethon can edit the row through the gateway.
     - id: llm-pi-ai
       name: '@deepseek-ai/dsh-llm-pi-ai'
+      config:
+        providers:
+          minimax-cn:
+            apiKeyEnv: MINIMAX_CN_API_KEY
+            baseURL: !!js process.env.OURFAIRY_MINIMAX_BASE_URL ?? 'https://api.minimaxi.com/anthropic'
+            models:
+              - id: MiniMax-M3.1-Flash-Preview
+                name: MiniMax M3.1 Flash Preview
+                contextWindow: 1000000
+                input:
+                  - text
+                  - image
+                reasoningEfforts:
+                  low: low
+                  medium: medium
+                  high: high
+                  xhigh: xhigh
+                  max: max
+                compat:
+                  forceAdaptiveThinking: true
 
     # `host` must be one concrete IP literal — the plugin rejects wildcard binds.
     # Port 0 asks the OS for one, which is how the tests get an ephemeral port.

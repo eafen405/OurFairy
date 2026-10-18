@@ -14,7 +14,7 @@ const answer = '# Fairy\n\n你好，**世界**。\n```js\n1 + 1\n```\n最后。'
 let model, port, admin, alice, bob
 async function start() {
   const run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    DEEPSEEK_API_KEY: 'mock-key', DEEPSEEK_BASE_URL: `${model.baseURL}/v1` })
+    MINIMAX_CN_API_KEY: 'mock-key', OURFAIRY_MINIMAX_BASE_URL: `${model.baseURL}` })
   port = startedPort(run)
 }
 async function stop() {

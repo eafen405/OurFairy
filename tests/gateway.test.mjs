@@ -5,7 +5,7 @@
  * Every case drives the shipped launcher and speaks HTTP to the listener it
  * bound: the native profile settings row, the native credential seam and the
  * product chat runtime are the real ones. The external model is a loopback
- * Messages-protocol double selected through `DEEPSEEK_BASE_URL`, exactly as the
+ * Messages-protocol double selected through `OURFAIRY_MINIMAX_BASE_URL`, exactly as the
  * baseline probe suite does; that is a model double, not a claim about a real
  * provider.
  */
@@ -39,7 +39,7 @@ function freshHome() {
 async function modelDouble(options = {}) {
   const server = await startMockLlmServer({ host: '127.0.0.1', port: 0, apiKey: 'mock-key', sequence: ['success'], ...options })
   servers.push(server)
-  return { server, env: { DEEPSEEK_BASE_URL: `${server.baseURL}/v1`, DEEPSEEK_API_KEY: 'mock-key' } }
+  return { server, env: { OURFAIRY_MINIMAX_BASE_URL: `${server.baseURL}`, MINIMAX_CN_API_KEY: 'mock-key' } }
 }
 
 async function boot(home, env = {}, extra = {}) {
@@ -144,16 +144,19 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     }
 
     const initial = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
-    assert.deepEqual(initial.selection, { provider: 'deepseek-official', model: 'deepseek-flash' })
+    assert.deepEqual(initial.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview', reasoningEffort: 'max' })
     assert.equal(initial.selectionApplies, 'next-turn')
     assert.deepEqual(initial.saved, { selection: false, routes: false, asr: false })
     assert.deepEqual(initial.editable, { selection: true, routes: true, asr: true })
-    assert.deepEqual(initial.routes.map(route => route.provider), ['deepseek-official'])
-    const official = initial.routes[0]
+    assert.deepEqual(initial.routes.map(route => route.provider), ['deepseek-official', 'minimax-cn'])
+    const official = initial.routes.find(route => route.provider === 'deepseek-official')
     assert.equal(official.editable, false, 'the official DeepSeek route is not the gateway\'s to redefine')
     assert.equal(official.credential.ref, 'DEEPSEEK_API_KEY')
-    assert.equal(official.credential.configured, true, 'the launching environment supplies the reference')
-    assert.ok(initial.templates.some(template => template.provider === 'minimax-cn'), 'the MiniMax path is offered as an editable draft')
+    const deployment = initial.routes.find(route => route.provider === 'minimax-cn')
+    assert.equal(deployment.editable, true, 'the deployment MiniMax route is editable')
+    assert.equal(deployment.credential.ref, 'MINIMAX_CN_API_KEY')
+    assert.equal(deployment.credential.configured, true, 'the launching environment supplies the reference')
+    assert.equal(deployment.models[0].id, 'MiniMax-M3.1-Flash-Preview')
     assert.equal(initial.asr.credential.ref, 'VOICE_API_KEY')
 
     const saved = await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute('https://api.minimax.cn/anthropic') })
@@ -166,9 +169,20 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     assert.equal(saved.route.api, 'anthropic-messages')
     assert.equal(saved.route.baseURL, 'https://api.minimax.cn/anthropic')
 
+    // Omitting the effort clears the profile override, which reveals the
+    // composition's own `max` default; the echo reports the effective value.
     const selected = await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
-    assert.deepEqual(selected.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' })
+    assert.deepEqual(selected.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview', reasoningEffort: 'max' })
     assert.equal(selected.applies, 'next-turn')
+    const lowered = await httpJson(port, '/gateway/selection', { token: admin,
+      body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview', reasoningEffort: 'low' } })
+    assert.equal(lowered.selection.reasoningEffort, 'low', 'an explicit effort is saved as given')
+    const restored = await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
+    assert.equal(restored.selection.reasoningEffort, 'max', 'clearing the override falls back to the composition default')
+    // Persist a non-default effort so the restart assertion proves the saved
+    // row survives, rather than the composition default being re-read.
+    await httpJson(port, '/gateway/selection', { token: admin,
+      body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview', reasoningEffort: 'low' } })
 
     const selectedRoute = await httpJson(port, '/gateway/route/delete', { token: admin, body: { provider: 'minimax-cn' }, expect: false })
     assert.equal(selectedRoute.status, 409)
@@ -188,11 +202,11 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
   try {
     const admin = await signIn(restarted.port)
     const after = (await httpJson(restarted.port, '/gateway/read', { token: admin, body: {} })).gateway
-    assert.deepEqual(after.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' }, 'the saved selection survives a restart')
+    assert.deepEqual(after.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview', reasoningEffort: 'low' },
+      'the saved selection survives a restart')
     assert.deepEqual(after.saved, { selection: true, routes: true, asr: true })
     assert.ok(after.routes.some(route => route.provider === 'minimax-cn'), 'the saved route survives a restart')
     assert.equal(after.asr.maxDurationMs, 30000)
-    assert.deepEqual(after.templates, [], 'a route that is already configured is no longer offered as a draft')
   } finally {
     await stop(home)
   }
@@ -206,7 +220,7 @@ test('an invalid configuration is refused with the reason, and nothing is persis
     const admin = await signIn(port)
     const cases = [
       ['/gateway/selection', { provider: 'no-such-route', model: 'x' }, 'gateway/invalid-selection'],
-      ['/gateway/selection', { provider: 'deepseek-official', model: 'no-such-model' }, 'gateway/invalid-selection'],
+      ['/gateway/selection', { provider: 'minimax-cn', model: 'no-such-model' }, 'gateway/invalid-selection'],
       ['/gateway/route', { provider: 'Not A Route', api: 'openai-completions', models: [{ id: 'm' }] }, 'gateway/invalid-route'],
       ['/gateway/route', { provider: 'acme', baseURL: 'not-a-url', api: 'openai-completions', models: [{ id: 'm' }] }, 'gateway/invalid-route'],
       ['/gateway/route', { provider: 'acme', api: 'openai-completions', models: [] }, 'gateway/invalid-route'],
@@ -224,7 +238,8 @@ test('an invalid configuration is refused with the reason, and nothing is persis
     }
     const state = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
     assert.deepEqual(state.saved, { selection: false, routes: false, asr: false }, 'a refused write persists nothing')
-    assert.deepEqual(state.routes.map(route => route.provider), ['deepseek-official'])
+    assert.deepEqual(state.routes.map(route => route.provider), ['deepseek-official', 'minimax-cn'],
+      'a refused write leaves the deployment route in place')
   } finally {
     await stop(home)
   }
@@ -257,7 +272,7 @@ test('the shared selection applies from the next turn, and a running reply keeps
     // continuation after the tool pause; the durable header records the same.
     const models = double.server.requests.map(request => request.body?.model)
     assert.ok(models.length >= 2, `each model step names its model; got ${JSON.stringify(models)}`)
-    assert.deepEqual([...new Set(models)], ['deepseek-flash'],
+    assert.deepEqual([...new Set(models)], ['MiniMax-M3.1-Flash-Preview'],
       `a turn that began before the switch keeps its original model, including after the tool pause; got ${JSON.stringify(models)}`)
 
     const inUse = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway

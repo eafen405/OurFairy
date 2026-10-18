@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { before, after, test } from 'node:test'
-import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-spaces-')
 // Two independent contributors the scope-contributor fixture registers and
@@ -68,7 +68,7 @@ before(async () => {
     emit({ type: 'message_start', message: { id: 'space-message', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
     if (result) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(result.content)}` } })
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(toolResultBlocks(result))}` } })
     } else {
       const call = JSON.parse(command.text)
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'space-call', name: call.name, input: {} } })
@@ -81,7 +81,7 @@ before(async () => {
   })
   model.listen(0, '127.0.0.1'); await once(model, 'listening'); modelPort = model.address().port
   const run = await runBackendAsync(startArgs([overlay]), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    DEEPSEEK_API_KEY: 'mock-space-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
+    MINIMAX_CN_API_KEY: 'mock-space-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}` })
   port = startedPort(run)
   admin = await request('/identity/sign-in', undefined, { name: 'phaethon', password })
   alice = await user('space-alice'); bob = await user('space-bob')
@@ -108,7 +108,7 @@ test('real child processes share public files, keep private boundaries after cd,
   const foreign = join(root, 'private', String(bob.user.shortId), 'secret.txt')
   await tool(bob, 'write', { file_path: foreign, content: 'bob-only-secret' })
   const result = await tool(alice, 'bash', { description: 'Verify actual process file and network scope', command:
-    `printf child-ok > '${own}/child.txt'; cd '${root}/public'; printf public-child > child.txt; cat '${foreign}'; printf '\\n'; curl --noproxy '*' -fsS http://127.0.0.1:${modelPort}/network-probe; test ! -e '${home}/dsh-home/identity/identity.sqlite'; test -z "$DEEPSEEK_API_KEY"` })
+    `printf child-ok > '${own}/child.txt'; cd '${root}/public'; printf public-child > child.txt; cat '${foreign}'; printf '\\n'; curl --noproxy '*' -fsS http://127.0.0.1:${modelPort}/network-probe; test ! -e '${home}/dsh-home/identity/identity.sqlite'; test -z "$MINIMAX_CN_API_KEY"` })
   assert.match(result, /network-ok/)
   assert.doesNotMatch(result, /bob-only-secret/)
   assert.equal(readFileSync(join(own, 'child.txt'), 'utf8'), 'child-ok')

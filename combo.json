@@ -52,10 +52,12 @@
     "probePathInRepo": "backend/probe",
     "launcher": "scripts/ourfairy-backend.mjs",
     "agentModel": {
-      "provider": "deepseek-official",
-      "model": "deepseek-flash"
+      "provider": "minimax-cn",
+      "model": "MiniMax-M3.1-Flash-Preview",
+      "reasoningEffort": "max",
+      "apiKeyEnv": "MINIMAX_CN_API_KEY"
     },
-    "agentModelNote": "The initial shared model selection this combination starts on. The bundle agent-default-model row and combo.json declare the same pair; the doctor bundle-agent-model check compares the two. The product chat runtime reads agentDefaultModel at each turn start, so a Phaethon-saved selection overrides this initial default without editing combo.json; the probe passes the pair explicitly because it creates its own Agent outside that runtime.",
+    "agentModelNote": "The initial shared model selection this combination starts on. The bundle agent-default-model row and combo.json declare the same provider/model pair; the doctor bundle-agent-model check compares the two. MiniMax reuses the llm-pi-ai minimax-cn catalog route (1M context, adaptive thinking at max effort) and resolves MINIMAX_CN_API_KEY per request through the credential seam. The product chat runtime reads agentDefaultModel at each turn start, so a Phaethon-saved selection overrides this initial default without editing combo.json; the probe passes the pair explicitly because it creates its own Agent outside that runtime. The official DeepSeek route stays mounted but is not selected.",
     "nodeRange": "^22.19.0 || >=24",
     "pnpmPin": "11.28.5",
     "pnpmInvocation": "corepack pnpm@11.28.5",

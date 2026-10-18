@@ -5,24 +5,28 @@
  * Boots the product backend with the deployment's real credentials, then makes
  * the smallest calls the acceptance matrix requires of external services:
  *
- *   1. one official DeepSeek Flash text turn through the product chat route;
+ *   1. one real MiniMax text turn through the product chat route, on the
+ *      combination's shared selection (`minimax-cn` / `MiniMax-M3.1-Flash-Preview`);
  *   2. the PDF scan-page path, where the model asks for a page render and the
  *      resulting tool result carries a real image (`scripts/pdf-flash-smoke.mjs`);
  *   3. one real SiliconFlow ASR transcription, on speech synthesized with the
  *      same account's TTS model and resampled to the product's 16 kHz PCM WAV
- *      contract — a synthetic sample, not a human recording;
- *   4. an optional MiniMax call, only when `MINIMAX_API_KEY` is present. Its
- *      absence is reported as not executed, never inferred from a template.
+ *      contract — a synthetic sample, not a human recording.
+ *
+ * The MiniMax credential is resolved by the backend from its credential
+ * document (`OURFAIRY_CREDENTIALS_FILE`, defaulting to the operator's
+ * `$DSH_HOME/.credentials.yaml` when present) or from the launching
+ * environment; the script never reads or prints the secret.
  *
  * The script prints one JSON document with the actual outcome of every step. It
  * does not upgrade an absent credential or a refused call into a pass.
  *
  * Usage:
- *   set -a; . ./DEEPSEEK_API_KEY.env; . ./VOICE_API_KEY.env; set +a
- *   node scripts/real-acceptance.mjs [--home <dir>] [--skip-pdf] [--minimax]
+ *   set -a; . ./VOICE_API_KEY.env; set +a
+ *   node scripts/real-acceptance.mjs [--home <dir>] [--skip-pdf]
  */
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -35,12 +39,11 @@ const AGENT_MODEL = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'
 const options = parse(process.argv.slice(2))
 
 function parse(argv) {
-  const parsed = { home: undefined, skipPdf: false, minimax: false }
+  const parsed = { home: undefined, skipPdf: false }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--home') { parsed.home = resolve(argv[index + 1]); index += 1 }
     else if (arg === '--skip-pdf') parsed.skipPdf = true
-    else if (arg === '--minimax') parsed.minimax = true
     else throw new Error(`unknown argument ${arg}`)
   }
   return parsed
@@ -180,10 +183,17 @@ function stop(home) {
 }
 
 async function main() {
-  readEnvFile('DEEPSEEK_API_KEY.env')
   readEnvFile('VOICE_API_KEY.env')
-  if (!process.env.DEEPSEEK_API_KEY) fail('DEEPSEEK_API_KEY is not set and DEEPSEEK_API_KEY.env is unreadable')
   if (!process.env.VOICE_API_KEY) fail('VOICE_API_KEY is not set and VOICE_API_KEY.env is unreadable')
+  if (process.env.MINIMAX_CN_API_KEY === undefined) {
+    // Reuse the operator's own dsh credential document: the backend resolves
+    // the reference through its credential seam, so no secret is copied or
+    // printed by this script.
+    const operatorStore = join(process.env.DSH_HOME ?? join(process.env.HOME ?? '', '.dsh'), '.credentials.yaml')
+    if (existsSync(operatorStore) && process.env.OURFAIRY_CREDENTIALS_FILE === undefined) {
+      process.env.OURFAIRY_CREDENTIALS_FILE = operatorStore
+    }
+  }
   const home = options.home ?? mkdtempSync(join(tmpdir(), 'ourfairy-real-'))
   mkdirSync(home, { recursive: true })
   const report = {
@@ -217,7 +227,7 @@ async function main() {
         .map(message => message.text).join('\n')
       report.steps.text = { requestedModel: `${AGENT_MODEL.provider}/${AGENT_MODEL.model}`, sessionId, reply: text, error: projection.error ?? null }
       if (projection.error !== null) report.failures.push(`text turn reported an error: ${JSON.stringify(projection.error)}`)
-      else if (text.trim() === '') report.failures.push('the official Flash turn produced no final text')
+      else if (text.trim() === '') report.failures.push('the shared model turn produced no final text')
     } catch (error) {
       report.steps.text = { requestedModel: `${AGENT_MODEL.provider}/${AGENT_MODEL.model}`, error: error?.message ?? String(error) }
       report.failures.push(`text step could not run: ${error?.message ?? String(error)}`)
@@ -258,27 +268,6 @@ async function main() {
       report.failures.push(`ASR step could not run: ${error?.message ?? String(error)}`)
     }
 
-    /** 4. MiniMax is only claimed when its credential exists and the call succeeds. */
-    if (!options.minimax || !process.env.MINIMAX_API_KEY) {
-      report.unexecuted.push('MiniMax plan/credential verification (MINIMAX_API_KEY not set; no call made)')
-    } else {
-      // The gateway offers the MiniMax draft; the run adopts that offer rather
-      // than keeping a second copy of the endpoint and model list.
-      const read = await request(backend.port, '/gateway/read', { token: admin, body: {} })
-      const draft = read.json?.gateway?.templates?.find(template => template.provider === 'minimax-cn')
-      if (draft === undefined) throw new Error('the gateway offered no MiniMax draft to configure')
-      const saved = await request(backend.port, '/gateway/route', { token: admin, body: draft })
-      const selected = await request(backend.port, '/gateway/selection', { token: admin, body: { provider: draft.provider, model: draft.models[0].id } })
-      const minimaxSession = (await request(backend.port, '/sessions/create', { token: admin, body: {} })).json.session.id
-      await request(backend.port, '/chat/send', { token: admin, body: { sessionId: minimaxSession, requestId: 'real-minimax', text: '请用一句话确认你是 MiniMax 模型。' } })
-      const minimaxProjection = await waitForReply(backend.port, admin, minimaxSession)
-      report.steps.minimax = { routeSaved: saved.status, selectionSaved: selected.status,
-        reply: minimaxProjection.messages.filter(message => message.role === 2).map(message => message.text).join('\n'),
-        error: minimaxProjection.error ?? null }
-      if (saved.status !== 200 || selected.status !== 200 || minimaxProjection.error !== null) {
-        report.failures.push(`MiniMax call failed: route ${saved.status}, selection ${selected.status}, error ${JSON.stringify(minimaxProjection.error)}`)
-      }
-    }
   } catch (error) {
     report.failures.push(error?.stack ?? String(error))
   } finally {

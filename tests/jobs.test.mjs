@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
 import { before, after, test } from 'node:test'
-import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-jobs-')
 const password = 'jobs-test-password'
@@ -37,7 +37,7 @@ async function startJob(user, sessionId, command) {
 }
 async function start(overlays = []) {
   const run = await runBackendAsync(startArgs(overlays), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    DEEPSEEK_API_KEY: 'mock-jobs-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
+    MINIMAX_CN_API_KEY: 'mock-jobs-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}` })
   port = startedPort(run)
 }
 async function stop() {
@@ -63,7 +63,7 @@ before(async () => {
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(call.args) } })
     } else {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: noticeIndex > latestUser ? 'REPORT: original job finished' : result ? `RESULT:${JSON.stringify(result.content)}` : 'CHAT: independent reply' } })
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: noticeIndex > latestUser ? 'REPORT: original job finished' : result ? `RESULT:${JSON.stringify(toolResultBlocks(result))}` : 'CHAT: independent reply' } })
     }
     emit({ type: 'content_block_stop', index: 0 })
     emit({ type: 'message_delta', delta: { stop_reason: command?.text.startsWith('{"name":') && !result && noticeIndex < latestUser ? 'tool_use' : noticeIndex > latestUser && command?.text.includes('FAIL_REPORT') ? 'max_tokens' : 'end_turn', stop_sequence: null }, usage: { output_tokens: 3 } })

@@ -119,20 +119,27 @@ export function affectedModels(previous, next) {
 }
 
 /**
- * The starting profiles the product offers for a new shared route. They are
- * editable drafts, not claims about a deployment: the integration ticket
- * verifies the account, plan and model capabilities by actually calling them.
+ * Carry the deployment-owned model fields (thinking capability, wire compat)
+ * from the stored profile onto a draft that no longer names them: the phone
+ * edits ids, labels, windows and modalities, and saving must not silently strip
+ * the thinking configuration the bundle declared.
  */
-const TEMPLATES = [
-  {
-    provider: 'minimax-cn',
-    displayName: 'MiniMax（中国站）',
-    api: 'anthropic-messages',
-    baseURL: 'https://api.minimax.cn/anthropic',
-    apiKeyEnv: 'MINIMAX_API_KEY',
-    models: [{ id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax M3.1 Flash Preview', input: ['text', 'image'] }],
-  },
-]
+function keepDeploymentFields(previous, draft) {
+  if (previous === undefined || !Array.isArray(draft.models)) return draft
+  const before = new Map((previous.models ?? []).map(model => [model.id, model]))
+  return {
+    ...draft,
+    models: draft.models.map(model => {
+      const prior = before.get(model.id)
+      if (prior === undefined) return model
+      return {
+        ...model,
+        ...prior.reasoningEfforts === undefined ? {} : { reasoningEfforts: prior.reasoningEfforts },
+        ...prior.compat === undefined ? {} : { compat: prior.compat },
+      }
+    }),
+  }
+}
 
 /** The shared-configuration gateway service the composition reads as `ourfairyGateway`. */
 export class GatewayService extends Service {
@@ -188,9 +195,13 @@ export class GatewayService extends Service {
     }
   }
 
+  /** The resolved provider dictionary; never the raw expression nodes. */
+  providers() {
+    return structuredClone(this.row('llm-pi-ai')?.value?.providers ?? {})
+  }
+
   providerProfile(provider) {
-    const row = this.row('llm-pi-ai')
-    return row?.value?.providers?.[provider]
+    return this.providers()[provider]
   }
 
   routeProfile(provider) {
@@ -287,8 +298,6 @@ export class GatewayService extends Service {
       selection,
       selectionApplies: 'next-turn',
       routes,
-      templates: TEMPLATES.filter(template => this.providerProfile(template.provider) === undefined)
-        .map(template => structuredClone(template)),
       asr: await this.asrView(),
       inUse,
       editable: capability,
@@ -353,11 +362,16 @@ export class GatewayService extends Service {
     if (directory !== undefined && directory.settingsNs !== 'llm-pi-ai') {
       throw new GatewayError(400, 'gateway/invalid-route', `provider "${provider}" is owned by another adapter and is not editable here`)
     }
-    const profile = routeDraft(body)
     const previous = this.providerProfile(provider)
+    const profile = keepDeploymentFields(previous, routeDraft(body))
     const affected = affectedModels(previous, profile)
     await this.guard(provider, affected, () => this.edit(() =>
-      this.settings().mutate('llm-pi-ai', [{ op: 'set', path: ['providers', provider], value: profile }])))
+      // The whole dictionary is written from the resolved values: a field path
+      // write would merge into the raw row, which still holds the bundle's
+      // environment expressions, and those must never reach the profile.
+      this.settings().mutate('llm-pi-ai', [{
+        op: 'set', path: ['providers'], value: { ...this.providers(), [provider]: profile },
+      }])))
     const selection = this.ctx.agentDefaultModel.currentSelection()
     return { route: await this.routeView(provider, profile.displayName, profile, true, selection, this.ctx.ourfairyChat.activeReplies()) }
   }
@@ -373,8 +387,11 @@ export class GatewayService extends Service {
       throw new GatewayError(409, 'gateway/route-selected',
         `provider route "${provider}" carries the shared model selection; select another route first`)
     }
-    await this.guard(provider, null, () => this.edit(() =>
-      this.settings().mutate('llm-pi-ai', [{ op: 'unset', path: ['providers', provider] }])))
+    await this.guard(provider, null, () => this.edit(() => {
+      const providers = this.providers()
+      delete providers[provider]
+      return this.settings().mutate('llm-pi-ai', [{ op: 'set', path: ['providers'], value: providers }])
+    }))
     return { provider }
   }
 

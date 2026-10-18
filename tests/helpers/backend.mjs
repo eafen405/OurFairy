@@ -287,3 +287,64 @@ export async function registerUser(port, adminToken, name, password = `${name}-p
   const invite = await httpJson(port, '/identity/invite', { token: adminToken })
   return httpJson(port, '/identity/register', { body: { inviteCode: invite.invite.code, name, password } })
 }
+
+/**
+ * Every content block of one wire message, in order.
+ *
+ * The Messages protocol allows `content` to be a plain string for a
+ * text-only message; pi-ai uses that shorthand, while a provider that
+ * builds blocks explicitly sends the array form. Tests that inspect what
+ * crossed the wire must read both, or a route switch silently changes
+ * what they can see.
+ * @param {{content?: unknown}} message - one request or response message.
+ * @returns {Array<{type: string}>} the blocks, with a string wrapped as text.
+ */
+export function messageBlocks(message) {
+  const content = message?.content
+  if (typeof content === 'string') return [{ type: 'text', text: content }]
+  return Array.isArray(content) ? content : []
+}
+
+/**
+ * Parse the JSON object that starts one text block, ignoring what follows.
+ *
+ * A tool-command text and a saved-file handle share one user message: the
+ * adapter appends the handle after the command, so the block is the command
+ * JSON plus prose, not one JSON document.
+ * @param {string} text - block text beginning with `{`.
+ * @returns {any} the parsed object.
+ */
+export function leadingJsonObject(text) {
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]
+    if (escaped) { escaped = false; continue }
+    if (character === '\\') { escaped = true; continue }
+    if (character === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (character === '{') depth += 1
+    else if (character === '}') {
+      depth -= 1
+      if (depth === 0) return JSON.parse(text.slice(0, index + 1))
+    }
+  }
+  throw new Error('text does not contain a complete JSON object')
+}
+
+/**
+ * A tool result's content as the block array a test can inspect.
+ *
+ * The Messages protocol lets a tool result carry either a plain string or a
+ * block array; the adapter chooses the string form for one text result. A
+ * test double that echoes the content must present one shape, so the test
+ * asserts the same thing whichever form the wire used.
+ * @param {{content?: unknown}} result - one `tool_result` block.
+ * @returns {Array<{type: string, text?: string}>} the blocks.
+ */
+export function toolResultBlocks(result) {
+  const content = result?.content
+  if (typeof content === 'string') return [{ type: 'text', text: content }]
+  return Array.isArray(content) ? content : []
+}

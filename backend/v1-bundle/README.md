@@ -47,10 +47,14 @@ SQL results to ids from the caller's own session headers. See
 
 **The model route starts from a declared pair, then belongs to Phaethon.** The
 `agent-default-model` row states the combination's initial shared selection
-(`deepseek-official`/`deepseek-flash`), and the product chat runtime reads that
-service at every turn start — so a selection Phaethon saves through the gateway
-(`/gateway/selection`) takes effect from each conversation's next reply without
-editing this file. The probe creates its own Agent outside that runtime, so the
+(`minimax-cn`/`MiniMax-M3.1-Flash-Preview` at `max` thinking effort), and the
+product chat runtime reads that service at every turn start — so a selection
+Phaethon saves through the gateway (`/gateway/selection`) takes effect from each
+conversation's next reply without editing this file. The MiniMax route reuses
+dsh's installed `minimax-cn` provider: this bundle only narrows it to the model
+the deployment uses, declares its 1M context, image input and adaptive thinking,
+and names `MINIMAX_CN_API_KEY`. The official DeepSeek route stays mounted as a
+switchable alternative and is not selected. The probe creates its own Agent outside that runtime, so the
 launcher passes the same pair to it as explicit `agentOptions`. `doctor`'s
 `bundle agent model` check reads this file and asserts both values match
 `combo.json`; that check covers the *initial* declaration only, never the saved
@@ -58,7 +62,7 @@ runtime selection.
 
 **Live configuration rows are mounted deliberately.** `config-editor` and
 `settings` persist the active profile, and `llm-pi-ai` supplies the multi-provider
-adapter the gateway writes into; `llm-pi-ai` starts with no routes, so it serves
-nothing until a shared provider profile is saved. The gateway is their only
+adapter the gateway writes into; the deployment route above is its first entry,
+so the shared selection has a route before anyone opens the gateway. The gateway is their only
 product caller by construction: this bundle mounts no dsh settings-UI row — and the `speech` row is
 live for the same reason: its connection settings are edited through the gateway.

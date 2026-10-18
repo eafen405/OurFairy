@@ -13,7 +13,7 @@
 
 | 路由 | 请求体 | 响应 |
 | --- | --- | --- |
-| `/gateway/read` | `{}` | `{ok:true,gateway:{selection,selectionApplies,routes,templates,asr,inUse,editable,saved}}` |
+| `/gateway/read` | `{}` | `{ok:true,gateway:{selection,selectionApplies,routes,asr,inUse,editable,saved}}` |
 | `/gateway/selection` | `{provider,model,reasoningEffort?}` | `{ok:true,selection,applies:"next-turn"}` |
 | `/gateway/route` | `{provider,displayName?,api?,baseURL?,apiKeyEnv?,models?}` | `{ok:true,route}` |
 | `/gateway/route/delete` | `{provider}` | `{ok:true,provider}` |
@@ -28,8 +28,6 @@
   `apiKeyEnv`（未设置为省略），`models` 每项 `{id,name,contextWindow?,maxTokens?,input?}`；
   官方路由的 `models` 来自适配器当前目录。`credential` 为
   `{ref,configured,writable,source?}`，永远不含密钥值。`inUse` 表示有正在运行的回复使用该路由。
-- `templates`：尚未配置的起步草稿（当前为 MiniMax 中国站）。它们是可编辑草稿，不是对该
-  账号套餐或模型能力的声明。
 - `asr`：`speech` 行的连接设置、`available`（引用的凭据能否解析）与凭据状态。
 - `editable`：`{selection,routes,asr}`，表示相应行是否挂载。缺少整个配置编辑器时读取返回
   503 `gateway/configuration-unavailable` 并说明原因，而不是假装只读。
@@ -41,19 +39,19 @@
 `/gateway/selection` 先确认 provider 已注册、model 在适配器提供的模型清单内，再写入
 `agent-default-model`。选择对**所有会话**从各自下一轮回复开始生效：每个 turn 开始时读取一次
 并固定到该 turn 结束，包括工具调用后的模型续请求；正在执行的回复不切换。保存选择不受
-在用状态限制。
+在用状态限制。省略 `reasoningEffort` 会清除该字段的 profile 覆盖，回到组合声明的默认值；
+响应回显的是生效值。`minimax-cn` / `MiniMax-M3.1-Flash-Preview` 需要自适应思考，默认
+`max`；带空格的别名会被服务端静默降级，写入时请使用连字符 id。
 
 ### 供应商路由
 
 `/gateway/route` 接受 `provider`、`displayName`、`api`、`baseURL`、`apiKeyEnv`、`models`。
 其余字段返回 400 `gateway/invalid-route`，不会被静默丢弃。`models` 每项接受 `id`、`name`、
-`contextWindow`、`maxTokens`、`input`、`reasoningEfforts`。适配器仍是协议与配置合法性的
-权威，其拒绝信息原样返回。写回时只发送 `provider`、`displayName`、`api`、`baseURL`、`apiKeyEnv`、`models`；
-读取附带的 `editable`、`declared`、`credential`、`inUse` 是只读事实，写回时若一并发送会被
-400 `gateway/invalid-route` 拒绝，而不是静默忽略。MiniMax 中国站的起步值（`provider:
-minimax-cn`、`api: anthropic-messages`、`baseURL: https://api.minimax.cn/anthropic`、
-`apiKeyEnv: MINIMAX_API_KEY`、模型 `MiniMax-M3.1-Flash-Preview`）由 `templates` 提供为可编辑
-草稿；它不声明该账号套餐或模型能力。
+`contextWindow`、`maxTokens`、`input`；思考能力（`reasoningEfforts`）与协议兼容开关
+（`compat`）由部署声明，手机改写路由时按模型 id 保留，不会因保存而丢失。适配器仍是协议与
+配置合法性的权威，其拒绝信息原样返回。写回时只发送上述六个字段；读取附带的 `editable`、
+`declared`、`credential`、`inUse` 是只读事实，写回时若一并发送会被 400
+`gateway/invalid-route` 拒绝，而不是静默忽略。
 
 修改会影响**正在运行的回复所用路由**时返回 409 `chat/route-in-use`，消息列出会话与模型；
 删除未在用的路由不受影响。按实际受影响范围判定：改端点、协议、凭据引用等路由级字段影响该

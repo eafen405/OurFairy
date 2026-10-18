@@ -149,13 +149,6 @@ function assistantTextOf(event) {
  * one user message, wait for idle, and flush the durable log.
  */
 async function runTurn(ctx, report) {
-  const apiKey = process.env.DEEPSEEK_API_KEY
-  if (apiKey === undefined || apiKey === '') {
-    throw new ProbeConfigError(
-      'missing required configuration DEEPSEEK_API_KEY: the requested turn needs a model credential. '
-      + 'Export DEEPSEEK_API_KEY (and DEEPSEEK_BASE_URL when driving the external model double) before starting the backend.',
-    )
-  }
   const agents = ctx.get('agents')
   if (agents === undefined) throw new Error('cannot run a turn: the "agents" service is not live')
   const sessions = ctx.get('sessions')
@@ -173,13 +166,31 @@ async function runTurn(ctx, report) {
       + ' combo.json backend.agentModel). Refusing to fall back to an implicit default.',
     )
   }
+  // The route's credential reference is the authority, not a hardcoded name:
+  // resolve the live settings row and let the seam answer presence.
+  const settings = ctx.get('settings')
+  const credentials = ctx.get('credentials')
+  if (settings !== undefined && credentials !== undefined) {
+    const rows = settings.describe()
+    const ref = rows.find(row => row.ns === 'llm-pi-ai')?.value?.providers?.[provider]?.apiKeyEnv
+      ?? rows.find(row => row.ns === 'llm-deepseek-api-key')?.value?.apiKeyEnv
+    const hit = typeof ref === 'string' ? await credentials.resolve(ref).catch(() => undefined) : undefined
+    if (typeof ref === 'string' && (hit?.value === undefined || hit.value.trim() === '')) {
+      throw new ProbeConfigError(
+        `missing required configuration ${ref}: the requested turn needs the credential reference its route`
+        + ` "${provider}" declares. Export ${ref} or store it in the backend credential document before starting.`,
+      )
+    }
+  }
   const { createUserMessage } = await import('@deepseek-ai/dsh-llm')
 
   const sessionId = process.env.OURFAIRY_PROBE_SESSION_ID ?? `ourfairy-baseline-${Date.now()}`
   const handle = await agents.create({
     sessionId,
     meta: { owner: ownerOf(1) },
-    agentOptions: { provider, model },
+    agentOptions: { provider, model,
+      ...process.env.OURFAIRY_PROBE_REASONING_EFFORT === undefined || process.env.OURFAIRY_PROBE_REASONING_EFFORT === ''
+        ? {} : { reasoningEffort: process.env.OURFAIRY_PROBE_REASONING_EFFORT } },
   })
   const agent = handle.agent
   let output
@@ -213,7 +224,7 @@ async function runTurn(ctx, report) {
   if (output === undefined) {
     report.failures.push(
       `model turn produced no assistant text through the configured route ${provider}/${model};`
-      + ' check the external model double (DEEPSEEK_BASE_URL / DEEPSEEK_API_KEY) and the llm-deepseek route',
+      + ' check the model endpoint override, the route credential and the provider adapter',
     )
   }
 }

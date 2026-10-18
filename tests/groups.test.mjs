@@ -4,7 +4,7 @@ import { once } from 'node:events'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { before, after, test } from 'node:test'
-import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-groups-')
 const password = 'group-test-password'
@@ -49,7 +49,7 @@ before(async () => {
     emit({ type: 'message_start', message: { id: 'group-message', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
     if (result) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(result.content)}` } })
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(toolResultBlocks(result))}` } })
     } else {
       const call = JSON.parse(command.text)
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'group-call', name: call.name, input: {} } })
@@ -62,7 +62,7 @@ before(async () => {
   })
   model.listen(0, '127.0.0.1'); await once(model, 'listening'); modelPort = model.address().port
   const run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    DEEPSEEK_API_KEY: 'mock-group-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
+    MINIMAX_CN_API_KEY: 'mock-group-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}` })
   port = startedPort(run)
   admin = await request('/identity/sign-in', undefined, { name: 'phaethon', password })
   alice = await user('group-alice'); bob = await user('group-bob')
@@ -141,7 +141,7 @@ test('concurrent duplicate membership updates stay singular and restart preserve
   const stopped = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home })
   assert.equal(stopped.code, 0, describeRun('restart stop', stopped))
   const started = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    DEEPSEEK_API_KEY: 'mock-group-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
+    MINIMAX_CN_API_KEY: 'mock-group-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}` })
   port = startedPort(started)
   assert.match(await tool(bob, 'read', { file_path: join(group.root, 'collaboration.txt') }), /group-shared-value/)
   assert.match(await tool(alice, 'groups', {}, aliceSession), /Shared lab/)

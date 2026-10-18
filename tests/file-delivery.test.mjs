@@ -4,7 +4,7 @@ import { once } from 'node:events'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { before, after, test } from 'node:test'
-import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-file-delivery-')
 const password = 'group-test-password'
@@ -39,7 +39,7 @@ async function tool(user, name, args, sessionId, callId = `delivery-call-${reque
 }
 async function startBackend(overlays = []) {
   const run = await runBackendAsync(startArgs(overlays), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    DEEPSEEK_API_KEY: 'mock-group-key', DEEPSEEK_BASE_URL: `http://127.0.0.1:${modelPort}/v1` })
+    MINIMAX_CN_API_KEY: 'mock-group-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}` })
   port = startedPort(run)
 }
 async function stopBackend() {
@@ -62,7 +62,7 @@ before(async () => {
     emit({ type: 'message_start', message: { id: 'group-message', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
     if (result) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(result.content)}` } })
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(toolResultBlocks(result))}` } })
     } else {
       const call = JSON.parse(command.text)
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: call.callId, name: call.name, input: {} } })

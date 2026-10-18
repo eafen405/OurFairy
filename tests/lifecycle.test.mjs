@@ -20,8 +20,8 @@ const home = makeHome('ourfairy-lifecycle-')
 const env = {
   OURFAIRY_HOME: home,
   OURFAIRY_PORT: '0',
-  DEEPSEEK_API_KEY: undefined,
-  DEEPSEEK_BASE_URL: undefined,
+  MINIMAX_CN_API_KEY: undefined,
+  OURFAIRY_MINIMAX_BASE_URL: undefined,
 }
 after(() => removeHome(home))
 

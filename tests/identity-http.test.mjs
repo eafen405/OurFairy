@@ -26,8 +26,8 @@ before(() => {
     OURFAIRY_HOME: home,
     OURFAIRY_PORT: '0',
     OURFAIRY_PHAETHON_PASSWORD: PHAETHON_PASSWORD,
-    DEEPSEEK_API_KEY: undefined,
-    DEEPSEEK_BASE_URL: undefined,
+    MINIMAX_CN_API_KEY: undefined,
+    OURFAIRY_MINIMAX_BASE_URL: undefined,
   })
   started.port = startedPort(run)
   started.stop = () => { started.stopped = runBackend(['stop'], { OURFAIRY_HOME: home }) }

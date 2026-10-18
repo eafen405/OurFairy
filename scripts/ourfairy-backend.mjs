@@ -354,6 +354,7 @@ function childEnv(layout, { reportPath, mode, holdMs }) {
     OURFAIRY_PROBE_MODE: mode,
     OURFAIRY_PROBE_PROVIDER: selection.provider,
     OURFAIRY_PROBE_MODEL: selection.model,
+    ...selection.reasoningEffort === undefined ? {} : { OURFAIRY_PROBE_REASONING_EFFORT: selection.reasoningEffort },
   })
   if (holdMs !== undefined) env.OURFAIRY_PROBE_HOLD_MS = String(holdMs)
   return env
@@ -823,9 +824,10 @@ function commandDoctor(layout, options) {
     return `${layout.profileDir} (${mode})`
   })
   check('model double', () => {
-    const base = process.env.DEEPSEEK_BASE_URL
+    const base = process.env.OURFAIRY_MINIMAX_BASE_URL ?? process.env.DEEPSEEK_BASE_URL
     if (base === undefined || base === '') return 'not configured (keyless startup only)'
-    return `DEEPSEEK_BASE_URL=${base}`
+    return process.env.OURFAIRY_MINIMAX_BASE_URL === undefined
+      ? `DEEPSEEK_BASE_URL=${base}` : `OURFAIRY_MINIMAX_BASE_URL=${base}`
   })
   check('bundle agent model', () => {
     const selection = COMBINATION.agentModel
