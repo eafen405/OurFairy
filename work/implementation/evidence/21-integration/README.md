@@ -2,18 +2,19 @@
 
 - 父规格：issue #23；本票：issue #44（票面 `work/tickets/ourfairy-v1/21-integration.md`）
 - 执行时间：2026-10-18
-- 结论：**版本组合与自动化门槛已完成；真实官方模型门槛未通过，本票不能关闭**。
-  - 官方 DeepSeek 账号余额为 **-0.38 CNY**，真实请求返回 `Insufficient Balance`；
-    因此「官方 Flash 文本 + 图像工具结果」「PDF 扫描页真实联调」两项未完成。
-  - MiniMax 无凭据（环境、仓库 `.env`、`.credentials.yaml` 均无），未发起真实调用。
-  - 硅基流动 ASR 真实调用**通过**（合成语音，非真人录音）。
+- 结论：**版本组合、自动化门槛与真实 MiniMax/ASR 联调已完成；vivo S50 实机验收属 #45，
+  本票保持 open 以承载真机门槛**。
+  - 2026-10-18 用户决定：共用模型改用 MiniMax `MiniMax-M3.1-Flash-Preview`（dsh 自带
+    `minimax-cn` 供应商、1M 上下文、`max` 思考强度），DeepSeek 暂不使用但路由保留为可切换
+    备选。规格与票面已同步。
+  - 真实 MiniMax 文字、PDF 扫描页图像工具结果、硅基流动 ASR 均**通过**（见第 3 节）。
   - vivo S50 实机验收属 #45，本票只交付构建与交接说明。
 
 ## 1. 版本组合
 
 | 仓库 | 集成分支 | 锁定提交 |
 | --- | --- | --- |
-| OurFairy | `integration/ourfairy-v1` | `d6256b3`（产品代码 tip；其后 `8b96a2f`/`d342d83` 只新增证据） |
+| OurFairy | `integration/ourfairy-v1` | `24f93e0`（MiniMax 切换；其后只新增证据） |
 | dsh fork | `product/ourfairy-v1` | `fe2bbc3b`（本票无源码改动） |
 | rikkahub fork | `product/ourfairy-v1` | `90c3cfc5`（#43 客户端合并） |
 
@@ -77,27 +78,32 @@ SHA-256 `406a2d5c63fd717febdffc65731b449aa209693eba266ea845b8e00d0be01d8e`。
 
 ## 3. 真实云服务
 
-复跑命令（密钥来自仓库根的两个 `.env` 文件，不提交）：
+复跑命令（ASR 密钥来自仓库根的 `.env` 文件，不提交；MiniMax 密钥由后端从操作者自己的
+凭据文档解析，脚本不读取或打印密钥值）：
 
 ```bash
-set -a; . ./DEEPSEEK_API_KEY.env; . ./VOICE_API_KEY.env; set +a
-node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-2
+set -a; . ./VOICE_API_KEY.env; set +a
+node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-mm
 ```
 
-脚本逐步记录，任一步失败不阻断其余步骤；原始 JSON 在
-`/tmp/ourfairy-real-2/real-acceptance.json`。摘要：
+产物：`/tmp/ourfairy-real-mm/real-acceptance.json`，`failures: []`、`unexecuted: []`。
+摘要：
 
 | 步骤 | 结果 |
 | --- | --- |
-| 官方 DeepSeek Flash 文本 | **失败（外部条件）**：`"Insufficient Balance (request_id: 7a140caa-…)"`；`GET /user/balance` 返回 `is_available:false`，`total_balance:-0.38` CNY |
-| PDF 扫描页（真实渲染 → 官方图像工具结果） | **未完成**：同一余额错误（request_id `8720029d-…`），`pdf-flash-smoke.mjs` 在首个模型响应即退出 |
-| 硅基流动 ASR | **通过**：同一账号 TTS 合成「主人，首版真实链路验收已经完成，语音转写返回了这段文字。」→ 24 kHz 降采样为产品要求的 16 kHz PCM WAV → `POST /speech/transcriptions` → 200，返回「主人**手板**真实链路验收已经完成，语音转写返回了这段文字。」（“首版”被识别为“手板”，实际结果原样记录） |
-| MiniMax 套餐/凭据/模型能力 | **未执行**：无 `MINIMAX_API_KEY`，未发起调用；不以模板或官方说明替代 |
+| MiniMax `MiniMax-M3.1-Flash-Preview` 文字 | **通过**：经产品 `/chat/send` 得到「已收到主人这条真实链路验收消息，OurFairy 在线待命。」 |
+| PDF 扫描页（真实渲染 → 图像工具结果） | **通过**：模型先 `pdf_info` 再 `pdf_render_pages`，图像工具结果经 MiniMax 视觉通路返回；对 `scan.pdf` 读出三根纯色柱的相对高度约 1:2:3、无文字/标题/图例，并声明只读了第 1 页、按像素估计 |
+| 硅基流动 ASR | **通过**：同账号 TTS 合成「主人，首版真实链路验收已经完成，语音转写返回了这段文字。」→ 24 kHz 降采样为产品要求的 16 kHz PCM WAV → `POST /speech/transcriptions` → 200，返回「主人**手板**真实链路验收已经完成，语音转写返回了这段文字。」（“首版”识别为“手板”，实际结果原样记录） |
 
-因此票面的「官方 DeepSeek Flash 文本和图像工具结果」「PDF 扫描页通路」与
-「MiniMax 经 `llm-pi-ai` 的实际调用」门槛**保持未完成**。余额是账户状态，不是本仓库代码缺陷；
-充值后按同一脚本重跑即可，`scripts/real-acceptance.mjs --minimax` 在有 `MINIMAX_API_KEY` 时会
-真实保存 MiniMax 路由、切换共用选模并请求一次。
+真实调用同时验证了：`minimax-cn` 路由与 `MINIMAX_CN_API_KEY` 引用、1M 上下文声明、自适应
+思考（`max`）、工具调用与图像工具结果通路。DeepSeek 路由仍挂载但未参与本轮验收；用户已确认
+暂不使用，其历史余额失败记录保留在下方“变更记录”。
+
+## 3.1 变更记录（2026-10-18）
+
+- 上一轮以官方 DeepSeek 为共用模型时，账号余额 `-0.38 CNY` 导致文字与 PDF 扫描页返回
+  `Insufficient Balance`（request_id `7a140caa-…`、`8720029d-…`）。用户随后决定改用 MiniMax，
+  本轮按新组合重跑并通过；该失败不再作为本票门槛，余额问题仍属该账号的客观状态。
 
 ## 4. 共用模型切换与附件能力（自动化）
 
@@ -108,7 +114,7 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-2
 - 保存/选择/路由/ASR 在重启后保留；启动不覆盖已保存选择。
 - 图片能力检查随下一轮选模变化。
 
-真实官方模型上的同一切换行为因余额错误未执行。
+真实 MiniMax 上的文字与工具续答已在第 3 节通过；两模型切换的逐轮时序由替身用例固定（真实供应商上 A/B 两条路由同时可用不是本部署的配置）。
 
 ## 5. 双用户关键链路
 
@@ -142,7 +148,7 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-2
 | 验收场景 | 本轮证据 | 状态 |
 | --- | --- | --- |
 | 法厄同配置网关 | `tests/gateway.test.mjs` 的读取/拒绝/无效输入/ASR 用例；[20-gateway](../20-gateway/README.md) | 自动化通过（模型替身、真实配置层） |
-| 共用模型切换 | `tests/gateway.test.mjs` 的两个模型替身用例、在用路由与按模型范围用例 | 自动化通过；真实官方模型因余额未执行 |
+| 共用模型切换 | `tests/gateway.test.mjs` 的替身用例、在用路由与按模型范围用例；第 3 节真实 MiniMax 文字/工具续答 | 自动化与真实 MiniMax 均通过 |
 | 双用户并发创建与恢复 | `tests/owned-sessions.test.mjs`、`tests/identity-http.test.mjs` | 通过 |
 | 本人跨会话搜索/区间读取 | `tests/conversation-search.test.mjs` | 通过（中文、越权、管理员不例外） |
 | 群组与文件/脚本 | `tests/groups.test.mjs`、`tests/spaces.test.mjs` | 通过（真实子进程/目录） |
@@ -154,7 +160,7 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-2
 | 首次设备与消费记录恢复 | Android `RemoteReceiveStateTest`/`RemoteNotificationBacklogTest`；[15-notifications](../15-notifications/README.md) | JVM 通过，真机未验 |
 | 附件生命周期 | `tests/attachments.test.mjs` | 通过 |
 | ASR | `tests/speech.test.mjs` + 本轮真实硅基账号调用 | 替身与真实账号均通过（合成语音） |
-| PDF 与官方视觉 | `tests/pdf.test.mjs` | 替身通过；真实官方图像结果因余额未执行 |
+| PDF 与官方视觉 | `tests/pdf.test.mjs`；第 3 节真实扫描页联调 | 替身与真实 MiniMax 图像工具结果均通过 |
 | 流式及最终格式 | `tests/reconnect.test.mjs`、`tests/remote-chat.test.mjs`；Android presentation JVM 测试 | 通过；真机性能属 #45 |
 | vivo S50 release | [device-handoff.md](device-handoff.md) | **未执行**（#45） |
 
@@ -178,11 +184,11 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-2
 
 ## 9. 未完成项汇总
 
-1. 官方 DeepSeek Flash 文本与 PDF 扫描页真实联调：账户余额不足，充值后重跑 `scripts/real-acceptance.mjs`。
-2. MiniMax 套餐/凭据/模型能力：无凭据，未调用；提供 `MINIMAX_API_KEY` 后加 `--minimax` 重跑。
-3. vivo S50 实机：属 #45。
-4. 单一会话串行的双用户八步链：未执行；各环节已分别验收。
-5. dsh 上游 rc.2 升级与重验：未执行，理由见第 7 节。
+1. **vivo S50 实机**：属 #45，交接见 [device-handoff.md](device-handoff.md)。
+2. 单一会话串行的双用户八步链：未执行；各环节已分别验收。
+3. dsh 上游 rc.2 升级与重验：未执行，理由见第 7 节。
+4. DeepSeek 路由：按用户 2026-10-18 决定暂不使用；其账号余额仍为负，若日后切回需先充值并重跑
+   `scripts/real-acceptance.mjs` 的对应步骤（当前脚本只验收 MiniMax）。
 
 
 ## 10. 两轴评审与修复
@@ -218,4 +224,4 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-2
 - 「整插件重载」：网关不提供重载入口，安装/启停/装配由部署维护。
 - 「凭据写入失败」：网关只写凭据引用，不写密钥值。
 - 写入与新回复开始的并发时序：实现有屏障，但没有计时测试；已在文档与证据中写明。
-- 官方 DeepSeek Flash 文本/PDF、MiniMax、vivo S50 仍未完成（见第 3、9 节）。
+- vivo S50 实机仍未完成（见第 3、9 节）；MiniMax 与 PDF 扫描页已真实通过，DeepSeek 按决定暂不使用。

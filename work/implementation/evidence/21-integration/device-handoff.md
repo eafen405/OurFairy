@@ -27,12 +27,18 @@ export ANDROID_HOME=/home/eafen405/Android/Sdk
 
 ```bash
 cd /home/eafen405/projects/OurFairy
-set -a; . ./DEEPSEEK_API_KEY.env; . ./VOICE_API_KEY.env; set +a
+set -a; . ./VOICE_API_KEY.env; set +a
+# MiniMax 密钥：让后端读取部署自己的凭据文档（含 MINIMAX_CN_API_KEY），
+# 或直接 export MINIMAX_CN_API_KEY。不要把密钥写进仓库。
+export OURFAIRY_CREDENTIALS_FILE="$HOME/.dsh/.credentials.yaml"
 export OURFAIRY_BIND_HOST=172.26.211.174        # 手机可达的地址，不能是 127.0.0.1
 export OURFAIRY_TRUSTED_HOSTS=172.26.211.174:3080   # 非 loopback 必须列入，否则一律 403
 export OURFAIRY_PHAETHON_PASSWORD='<至少 8 位>'
 node scripts/ourfairy-backend.mjs start
 ```
+
+共用模型为 `minimax-cn` / `MiniMax-M3.1-Flash-Preview`（1M 上下文、`max` 思考强度），复用 dsh
+自带供应商；法厄同可在网关页切换模型或调整思考强度。官方 DeepSeek 路由仍挂载，但本轮不使用。
 
 管理员 = 法厄同（短号 1，用上面的密码登录）；代理人通过管理员在账户页生成的邀请码注册。
 `/speech` 的可用性取决于 `VOICE_API_KEY`；ASR 连接参数可在管理员网关页调整。
