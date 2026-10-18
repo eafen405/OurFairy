@@ -3,23 +3,47 @@ export class SpeechError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = `speech/${code}` }
 }
 const fail = () => new SpeechError(502, 'failed', '语音识别失败')
-export function createSpeechHandler(config, authorize, sendJson) {
+
+/**
+ * Validate the live ASR connection settings; called at load and again per
+ * request, because the speech row is editable through the gateway.
+ * @param {object} config - resolved model, endpoint and limits.
+ * @returns {object} the validated snapshot.
+ */
+export function resolveSpeechSettings(config) {
   for (const key of ['maxDurationMs', 'maxAudioBytes', 'timeoutMs', 'maxGlobalInFlight', 'maxUserInFlight']) {
     if (!Number.isSafeInteger(config[key]) || config[key] <= 0) throw new Error(`invalid speech ${key}`)
   }
+  if (typeof config.model !== 'string' || config.model === '') throw new Error('invalid speech model')
+  if (typeof config.endpoint !== 'string' || !/^https?:\/\/[^\s]+$/u.test(config.endpoint)) throw new Error('invalid speech endpoint')
+  if (typeof config.apiKeyEnv !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(config.apiKeyEnv)) throw new Error('invalid speech apiKeyEnv')
+  return config
+}
+
+/**
+ * @param {() => object} settings - reads the live, validated connection settings.
+ * @param {(request) => object} authorize - the signed-in caller.
+ * @param {(response, status, payload) => void} sendJson - the shared JSON writer.
+ * @param {() => Promise<string|undefined>} voiceKey - resolves the configured credential reference per request.
+ */
+export function createSpeechHandler(settings, authorize, sendJson, voiceKey) {
+  resolveSpeechSettings(settings())
   const active = new Map()
   let closed = false
-  const available = () => !closed && Boolean(process.env.VOICE_API_KEY?.trim())
+  const available = async () => !closed && (await voiceKey()) !== undefined
   return {
     async handle(req, res, transcribe) {
       const user = authorize(req)
+      const config = settings()
       if (!transcribe) {
         if (req.method !== 'GET') throw new SpeechError(405, 'method-not-allowed', 'use GET')
-        sendJson(res, 200, { ok: true, available: available(), maxDurationMs: config.maxDurationMs, maxAudioBytes: config.maxAudioBytes })
+        sendJson(res, 200, { ok: true, available: await available(), maxDurationMs: config.maxDurationMs, maxAudioBytes: config.maxAudioBytes,
+          model: config.model, endpoint: config.endpoint, apiKeyEnv: config.apiKeyEnv })
         return
       }
       if (req.method !== 'POST') throw new SpeechError(405, 'method-not-allowed', 'use POST')
-      if (!available()) throw new SpeechError(503, 'unavailable', '语音输入不可用')
+      const key = await voiceKey()
+      if (key === undefined) throw new SpeechError(503, 'unavailable', '语音输入不可用')
       const own = [...active.values()].filter(id => id === user.shortId).length
       if (own >= config.maxUserInFlight || active.size >= config.maxGlobalInFlight) throw new SpeechError(429, 'busy', '语音输入正忙')
       if (req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'audio/wav') throw new SpeechError(415, 'invalid-audio', '请发送 PCM WAV 录音')
@@ -38,7 +62,7 @@ export function createSpeechHandler(config, authorize, sendJson) {
         const form = new FormData()
         form.set('model', config.model)
         form.set('file', new Blob([audio], { type: 'audio/wav' }), 'speech.wav')
-        const response = await fetch(config.endpoint, { method: 'POST', headers: { authorization: `Bearer ${process.env.VOICE_API_KEY.trim()}` }, body: form, redirect: 'error', signal: controller.signal })
+        const response = await fetch(config.endpoint, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, redirect: 'error', signal: controller.signal })
         if (!response.ok) {
           await response.body?.cancel()
           if (response.status === 429) throw new SpeechError(429, 'busy', '语音服务正忙')

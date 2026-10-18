@@ -110,6 +110,21 @@
     - id: credentials
       name: '@deepseek-ai/dsh-credentials-local'
 
+    # Live configuration forms and the profile editor they persist through.
+    # The gateway is the product's only caller; dsh's own settings UI is absent.
+    - id: config-editor
+      name: '@deepseek-ai/dsh-config-editor'
+
+    - id: settings
+      name: '@deepseek-ai/dsh-settings'
+
+    # pi-ai's multi-provider adapter, mounted dormant: no route exists until
+    # Phaethon saves a shared provider profile through the gateway. The official
+    # DeepSeek route stays the initial selection; keys resolve per request
+    # through their credential reference.
+    - id: llm-pi-ai
+      name: '@deepseek-ai/dsh-llm-pi-ai'
+
     # `host` must be one concrete IP literal — the plugin rejects wildcard binds.
     # Port 0 asks the OS for one, which is how the tests get an ephemeral port.
     - id: webserver
@@ -153,6 +168,11 @@
     - id: chat
       name: '@ourfairy/dsh-chat'
 
+    # Phaethon's shared-configuration gateway: provider routes, the shared model
+    # selection and the ASR connection, persisted through the row settings above.
+    - id: gateway
+      name: '@ourfairy/dsh-gateway'
+
     # Scoped file operations and network-enabled script execution (#30).
     - id: spaces
       name: '@ourfairy/dsh-spaces'
@@ -190,6 +210,9 @@
     - id: speech
       name: '@ourfairy/dsh-speech'
       config:
+        # Phaethon edits these through the gateway; the environment only seeds
+        # the initial row. The credential is a reference, resolved per request.
+        apiKeyEnv: !!js process.env.OURFAIRY_ASR_API_KEY_ENV ?? 'VOICE_API_KEY'
         model: !!js process.env.OURFAIRY_ASR_MODEL ?? 'FunAudioLLM/SenseVoiceSmall'
         endpoint: !!js process.env.OURFAIRY_ASR_ENDPOINT ?? 'https://api.siliconflow.cn/v1/audio/transcriptions'
         maxDurationMs: !!js Number(process.env.OURFAIRY_ASR_MAX_DURATION_MS ?? 60000)

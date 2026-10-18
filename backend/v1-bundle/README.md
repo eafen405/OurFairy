@@ -45,10 +45,20 @@ Chinese substring matching, and the `@ourfairy/dsh-search` tools restrict native
 SQL results to ids from the caller's own session headers. See
 [`backend/search/README.md`](../search/README.md) for interval semantics and rebuild.
 
-**The model route is declared twice from one source.** The `agent-default-model`
-row states `deepseek-official`/`deepseek-flash` for the entry layers that consume
-`agentDefaultModel`; those layers are not mounted in v1, and an Agent created
-directly through the agent factory would otherwise carry no model. The launcher
-therefore reads the same pair from `combo.json` (`backend.agentModel`) and passes
-it to the probe as explicit `agentOptions`. `doctor`'s `bundle agent model` check
-reads this file and asserts both values match `combo.json`.
+**The model route starts from a declared pair, then belongs to Phaethon.** The
+`agent-default-model` row states the combination's initial shared selection
+(`deepseek-official`/`deepseek-flash`), and the product chat runtime reads that
+service at every turn start — so a selection Phaethon saves through the gateway
+(`/gateway/selection`) takes effect from each conversation's next reply without
+editing this file. The probe creates its own Agent outside that runtime, so the
+launcher passes the same pair to it as explicit `agentOptions`. `doctor`'s
+`bundle agent model` check reads this file and asserts both values match
+`combo.json`; that check covers the *initial* declaration only, never the saved
+runtime selection.
+
+**Live configuration rows are mounted deliberately.** `config-editor` and
+`settings` persist the active profile, and `llm-pi-ai` supplies the multi-provider
+adapter the gateway writes into; `llm-pi-ai` starts with no routes, so it serves
+nothing until a shared provider profile is saved. The gateway is their only
+product caller — dsh's own settings UI is not mounted — and the `speech` row is
+live for the same reason: its connection settings are edited through the gateway.
