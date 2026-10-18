@@ -134,8 +134,29 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-2
 
 [user-stories.md](user-stories.md) 由父规格故事列表与票面「用户故事覆盖」生成，覆盖 #1–#75；
 `tests/story-coverage.test.mjs` 断言行数/顺序/所属票与票列表派生一致、每条证据链接可解析。
-规格「验收场景」表的每条行为由对应票证据与上面的测试覆盖；法厄同配置网关与共用模型切换两行
-由 #43 新增用例覆盖。唯一没有真实服务证据的两行（官方视觉、MiniMax）已在上节明确列为未完成。
+规格「验收场景」表的 16 行逐项对应：
+
+| 验收场景 | 本轮证据 | 状态 |
+| --- | --- | --- |
+| 法厄同配置网关 | `tests/gateway.test.mjs` 的读取/拒绝/无效输入/ASR 用例；[20-gateway](../20-gateway/README.md) | 自动化通过（模型替身、真实配置层） |
+| 共用模型切换 | `tests/gateway.test.mjs` 的两个模型替身用例与在用路由用例 | 自动化通过；真实官方模型因余额未执行 |
+| 双用户并发创建与恢复 | `tests/owned-sessions.test.mjs`、`tests/identity-http.test.mjs` | 通过 |
+| 本人跨会话搜索/区间读取 | `tests/conversation-search.test.mjs` | 通过（中文、越权、管理员不例外） |
+| 群组与文件/脚本 | `tests/groups.test.mjs`、`tests/spaces.test.mjs` | 通过（真实子进程/目录） |
+| 投递 live/cold/生成中 | `tests/text-delivery.test.mjs`、`tests/file-delivery.test.mjs` | 通过 |
+| 投递重试及故障 | 同上（业务更新失败、flush 失败、通知出口失败） | 通过 |
+| 回复、jobs 与报告并行 | `tests/jobs.test.mjs` | 通过 |
+| 多会话活动及通知 | [14-activity](../14-activity/README.md) 的活动投影证据；[15-notifications](../15-notifications/README.md) 与 Android `RemoteNotification*` JVM 测试 | 通过（通知为客户端投影，真机未验） |
+| 长断线与并发实时尾部 | `tests/reconnect.test.mjs` | 通过 |
+| 首次设备与消费记录恢复 | Android `RemoteReceiveStateTest`/`RemoteNotificationBacklogTest`；[15-notifications](../15-notifications/README.md) | JVM 通过，真机未验 |
+| 附件生命周期 | `tests/attachments.test.mjs` | 通过 |
+| ASR | `tests/speech.test.mjs` + 本轮真实硅基账号调用 | 替身与真实账号均通过（合成语音） |
+| PDF 与官方视觉 | `tests/pdf.test.mjs` | 替身通过；真实官方图像结果因余额未执行 |
+| 流式及最终格式 | `tests/reconnect.test.mjs`、`tests/remote-chat.test.mjs`；Android presentation JVM 测试 | 通过；真机性能属 #45 |
+| vivo S50 release | [device-handoff.md](device-handoff.md) | **未执行**（#45） |
+
+唯一没有真实服务证据的两行（PDF/官方视觉、MiniMax）已在上节明确列为未完成；ASR 的真实调用
+已完成但样本是合成的。
 
 ## 7. dsh 上游版本
 

@@ -47,8 +47,9 @@
 `/gateway/route` 接受 `provider`、`displayName`、`api`、`baseURL`、`apiKeyEnv`、`models`。
 其余字段返回 400 `gateway/invalid-route`，不会被静默丢弃。`models` 每项接受 `id`、`name`、
 `contextWindow`、`maxTokens`、`input`、`reasoningEfforts`。适配器仍是协议与配置合法性的
-权威，其拒绝信息原样返回。读到的路由对象就是可写回的草稿形状（会忽略 `editable`、
-`declared`、`credential`、`inUse` 等只读事实）。MiniMax 中国站的起步值（`provider:
+权威，其拒绝信息原样返回。写回时只发送 `provider`、`displayName`、`api`、`baseURL`、`apiKeyEnv`、`models`；
+读取附带的 `editable`、`declared`、`credential`、`inUse` 是只读事实，写回时若一并发送会被
+400 `gateway/invalid-route` 拒绝，而不是静默忽略。MiniMax 中国站的起步值（`provider:
 minimax-cn`、`api: anthropic-messages`、`baseURL: https://api.minimax.cn/anthropic`、
 `apiKeyEnv: MINIMAX_API_KEY`、模型 `MiniMax-M3.1-Flash-Preview`）由 `templates` 提供为可编辑
 草稿；它不声明该账号套餐或模型能力。

@@ -324,6 +324,38 @@ test('a route a running reply uses refuses the change, and the retry succeeds on
   }
 })
 
+test('a model-scoped edit is refused only while a reply still uses that model', async () => {
+  const home = freshHome()
+  const double = await modelDouble({ sequence: ['tool_call_success', 'success'] })
+  const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
+  try {
+    const admin = await signIn(port)
+    const twoModels = minimaxRoute(`${double.server.baseURL}/v1`)
+    twoModels.models = [...twoModels.models, { id: 'MiniMax-other', name: 'Other', input: ['text'] }]
+    await httpJson(port, '/gateway/route', { token: admin, body: twoModels })
+    await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
+    const { session } = await httpJson(port, '/sessions/create', { token: admin, body: {} })
+    await httpJson(port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'scoped', text: 'first request' } })
+    await waitForRunning(port, admin, session.id)
+
+    // A different model on the same route is not what the running reply uses.
+    const unrelated = minimaxRoute(`${double.server.baseURL}/v1`)
+    unrelated.models = [...unrelated.models, { id: 'MiniMax-other', name: 'Other renamed', input: ['text'] }]
+    const allowed = await httpJson(port, '/gateway/route', { token: admin, expect: false, body: unrelated })
+    assert.equal(allowed.status, 200, allowed.text)
+
+    // The running reply's own model is still protected.
+    const used = minimaxRoute(`${double.server.baseURL}/v1`)
+    used.models = [{ ...used.models[0], contextWindow: 128000 }, { id: 'MiniMax-other', name: 'Other renamed', input: ['text'] }]
+    const refused = await httpJson(port, '/gateway/route', { token: admin, expect: false, body: used })
+    assert.equal(refused.status, 409, refused.text)
+    assert.equal(refused.json.error.code, 'chat/route-in-use')
+    await settle(port, admin, session.id)
+  } finally {
+    await stop(home)
+  }
+})
+
 test('the shared ASR connection is edited through the gateway and the next recording uses it', async () => {
   const home = freshHome()
   const provider = (await import('node:http')).createServer((request, response) => {

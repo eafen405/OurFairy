@@ -105,18 +105,17 @@ function routeDraft(input) {
  */
 export function affectedModels(previous, next) {
   if (previous === undefined || next === undefined) return null
+  // The stored row carries adapter defaults the draft never sets, so compare
+  // only the fields a draft owns; otherwise every edit would look route-wide.
   for (const field of ROUTE_WIDE_FIELDS) {
-    if (JSON.stringify(previous[field]) !== JSON.stringify(next[field])) return null
+    if (previous[field] !== next[field]) return null
   }
+  const project = model => JSON.stringify(Object.fromEntries(Object.entries(model).filter(([key]) => MODEL_FIELDS.has(key))))
   const changed = new Set()
   const before = new Map((previous.models ?? []).map(model => [model.id, model]))
   const after = new Map((next.models ?? []).map(model => [model.id, model]))
   for (const id of new Set([...before.keys(), ...after.keys()])) {
-    if (JSON.stringify(before.get(id)) !== JSON.stringify(after.get(id))) changed.add(id)
-  }
-  const overrides = new Set([...Object.keys(previous.modelOverrides ?? {}), ...Object.keys(next.modelOverrides ?? {})])
-  for (const id of overrides) {
-    if (JSON.stringify(previous.modelOverrides?.[id]) !== JSON.stringify(next.modelOverrides?.[id])) changed.add(id)
+    if (project(before.get(id) ?? {}) !== project(after.get(id) ?? {})) changed.add(id)
   }
   return changed
 }
