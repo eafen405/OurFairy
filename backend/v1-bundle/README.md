@@ -60,5 +60,5 @@ runtime selection.
 `settings` persist the active profile, and `llm-pi-ai` supplies the multi-provider
 adapter the gateway writes into; `llm-pi-ai` starts with no routes, so it serves
 nothing until a shared provider profile is saved. The gateway is their only
-product caller — dsh's own settings UI is not mounted — and the `speech` row is
+product caller by construction: this bundle mounts no dsh settings-UI row — and the `speech` row is
 live for the same reason: its connection settings are edited through the gateway.

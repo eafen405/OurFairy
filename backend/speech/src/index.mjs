@@ -37,13 +37,11 @@ export function apply(ctx, config) {
     return [field, value !== null && typeof value === 'object' && typeof value.get === 'function' ? value.get() : value]
   }))
   resolveSpeechSettings(values())
-  /** Resolve the configured reference; an unset one is unavailable, never a guessed key. */
+  /** Resolve the configured reference through the native seam; an unset one is unavailable. */
   const voiceKey = async () => {
-    const ref = values().apiKeyEnv
     const credentials = ctx.get('credentials')
-    const hit = credentials === undefined
-      ? (process.env[ref] === undefined ? undefined : { value: process.env[ref] })
-      : await credentials.resolve(ref)
+    if (credentials === undefined) return undefined
+    const hit = await credentials.resolve(values().apiKeyEnv).catch(() => undefined)
     const value = hit?.value?.trim()
     return value === undefined || value === '' ? undefined : value
   }

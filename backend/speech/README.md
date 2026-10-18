@@ -13,7 +13,12 @@ module owns temporary audio and the provider request only.
   `speech/invalid-audio` (400 or 415), `speech/too-large` (413),
   `speech/no-match` (422), `speech/failed` (502), `speech/timeout` (504).
 
-`VOICE_API_KEY` is read on the backend only, separately from DeepSeek credentials.
+The credential reference (`apiKeyEnv`, default `VOICE_API_KEY`) is resolved on the
+backend only, through the native credential seam, separately from DeepSeek
+credentials. The connection settings live in the `speech` profile row and are
+edited through the administrator gateway (`/gateway/asr`); the recording routes
+re-read the row per request and expose only availability and the recording
+budget.
 `backend/v1-bundle/cordis.patch.yml` maps the deployment variables
 `OURFAIRY_ASR_MODEL`, `OURFAIRY_ASR_ENDPOINT`, `OURFAIRY_ASR_MAX_DURATION_MS`,
 `OURFAIRY_ASR_MAX_AUDIO_BYTES`, `OURFAIRY_ASR_TIMEOUT_MS`,

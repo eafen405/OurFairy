@@ -27,14 +27,14 @@ git -C /home/eafen405/projects/OurFairy worktree add --detach /tmp/ourfairy-clea
 cd /tmp/ourfairy-clean-v1 && OURFAIRY_HOME=/tmp/ourfairy-clean-home npm test
 ```
 
-结果：**131 / 131 pass，0 fail**（7 suites）。同一提交上 `doctor` 的 9 项检查通过。
+结果：**131 / 131 pass，0 fail**（7 suites，`efd09d1` 之前；加上评审修复的用例后为 **133/133**）。同一提交上 `doctor` 的 9 项检查通过。
 `/tmp/ourfairy-clean-v1` 为临时检出，不随仓库保留。
 
 ## 2. 自动化门槛
 
 | 命令 | 结果 |
 | --- | --- |
-| `npm test`（OurFairy，干净工作树） | **131/131 pass** |
+| `npm test`（OurFairy） | **133/133 pass** |
 | `npm run backend:doctor` | **all checks passed**（9 项，keyless） |
 | `node scripts/combo.mjs verify` | **combination verified** |
 | Android `:app:testDebugUnitTest` | **76 suites / 560 tests / 0 failures / 0 errors / 0 skipped** |
@@ -47,7 +47,7 @@ Android 运行于合并后的 `product/ourfairy-v1 = 90c3cfc5`，`ANDROID_HOME=/
 
 一次与 Android release 构建并发运行的 `npm test` 出现已知偶发：
 `tests/pdf.test.mjs` 的资源预算用例返回 `worker-unavailable` 而非 `resource-limit`；
-并发结束后单独重跑 `node --test tests/pdf.test.mjs` **5/5 pass**，全量再跑 **131/131 pass**。
+并发结束后单独重跑 `node --test tests/pdf.test.mjs` **5/5 pass**，全量再跑 **131/131 pass**（此后新增用例使总数为 133）。
 该偶发在 T16–T19 交接中已记录，原因仍未确认；此处只记录实际现象，不声称已修复 PDF。
 
 ### release 构建产物
@@ -139,7 +139,7 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-2
 | 验收场景 | 本轮证据 | 状态 |
 | --- | --- | --- |
 | 法厄同配置网关 | `tests/gateway.test.mjs` 的读取/拒绝/无效输入/ASR 用例；[20-gateway](../20-gateway/README.md) | 自动化通过（模型替身、真实配置层） |
-| 共用模型切换 | `tests/gateway.test.mjs` 的两个模型替身用例与在用路由用例 | 自动化通过；真实官方模型因余额未执行 |
+| 共用模型切换 | `tests/gateway.test.mjs` 的两个模型替身用例、在用路由与按模型范围用例 | 自动化通过；真实官方模型因余额未执行 |
 | 双用户并发创建与恢复 | `tests/owned-sessions.test.mjs`、`tests/identity-http.test.mjs` | 通过 |
 | 本人跨会话搜索/区间读取 | `tests/conversation-search.test.mjs` | 通过（中文、越权、管理员不例外） |
 | 群组与文件/脚本 | `tests/groups.test.mjs`、`tests/spaces.test.mjs` | 通过（真实子进程/目录） |
@@ -155,8 +155,9 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-2
 | 流式及最终格式 | `tests/reconnect.test.mjs`、`tests/remote-chat.test.mjs`；Android presentation JVM 测试 | 通过；真机性能属 #45 |
 | vivo S50 release | [device-handoff.md](device-handoff.md) | **未执行**（#45） |
 
-唯一没有真实服务证据的两行（PDF/官方视觉、MiniMax）已在上节明确列为未完成；ASR 的真实调用
-已完成但样本是合成的。
+唯一没有真实服务证据的行（PDF/官方视觉、MiniMax，以及共用模型切换在真实供应商上的行为）已在
+上节明确列为未完成；ASR 的真实调用已完成但样本是合成的。本表由
+`tests/story-coverage.test.mjs` 检查：规格验收场景表的每一行都必须在这里出现。
 
 ## 7. dsh 上游版本
 
@@ -179,3 +180,39 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-2
 3. vivo S50 实机：属 #45。
 4. 单一会话串行的双用户八步链：未执行；各环节已分别验收。
 5. dsh 上游 rc.2 升级与重验：未执行，理由见第 7 节。
+
+
+## 10. 两轴评审与修复
+
+`code-review` skill 在 `9975f2f...HEAD` 上跑了两轴，发现的问题与处理：
+
+**Standards（已修）**
+- 写入屏障在两次重叠写入后不会清空（`#configWrite === gate` 比较错对象）→ 改为比较实际链上的
+  promise；同一数据的 `#active` 与 `state.route` 两份权威合并为只读 live session。
+- 「读到的路由对象就是可写回草稿」不实 → 文档改为只发送六个字段，只读事实写回会被 400。
+- `reasoningEfforts` 可写但不回读、`modelOverrides` 分支永不可达、`GatewayError.details` 未用 →
+  从草稿契约与代码中删除。
+- 「缺少编辑器时 editable=false+reason」不可达 → 改为缺编辑器时读取 503 并说明；只保留逐行
+  `editable` 事实。
+- `resolveSpeechSettings` 声称每请求复验但未做 → 现在每请求复验；`/speech` 只返回可用性与预算，
+  不再向普通代理人暴露连接字段。
+- `scripts/real-acceptance.mjs` 硬编码模型对与 MiniMax 草稿 → 改为读 `combo.json` 与网关
+  `templates`。
+- speech 重复原生凭据 seam 的环境回退 → 删除，统一经 `credentials.resolve`；网关的
+  `asr.available` 与 `/speech` 现在用同一解析事实。
+- 故事矩阵只校验 75 条故事、不校验验收场景 → 新增用例要求规格 16 行场景都出现在本文件。
+- 真机交接与证据中的计数、未执行边界按实际重写。
+
+**Spec（已修）**
+- 共用选模只覆盖单会话 → 测试加入第二个会话、重启后从磁盘恢复的会话，以及排队消息在后续
+  turn 起点重新读取选择。
+- 工具续请求的「工具暂停」用的是未注册的 `mock_tool` → 改为真实 `todo_write` 调用。
+- 排队图片在模型切换后被原生层投影为文字（静默降级）→ turn 起点对图片做显式检查，不兼容时
+  该轮明确失败并给出原因；发送时预检仍保留。
+- 「两个模型替身」措辞不实 → 改为「一个替身服务两条路由，按请求体 model 区分」。
+
+**记录为不适用/未执行（未声称通过）**
+- 「整插件重载」：网关不提供重载入口，安装/启停/装配由部署维护。
+- 「凭据写入失败」：网关只写凭据引用，不写密钥值。
+- 写入与新回复开始的并发时序：实现有屏障，但没有计时测试；已在文档与证据中写明。
+- 官方 DeepSeek Flash 文本/PDF、MiniMax、vivo S50 仍未完成（见第 3、9 节）。

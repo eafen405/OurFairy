@@ -95,6 +95,15 @@ function minimaxRoute(baseURL, extra = {}) {
   }
 }
 
+/** One valid 16 kHz mono PCM WAV the speech route accepts. */
+function wav() {
+  const buffer = Buffer.alloc(364)
+  buffer.write('RIFF'); buffer.writeUInt32LE(356, 4); buffer.write('WAVEfmt ', 8); buffer.writeUInt32LE(16, 16)
+  buffer.writeUInt16LE(1, 20); buffer.writeUInt16LE(1, 22); buffer.writeUInt32LE(16000, 24); buffer.writeUInt32LE(32000, 28)
+  buffer.writeUInt16LE(2, 32); buffer.writeUInt16LE(16, 34); buffer.write('data', 36); buffer.writeUInt32LE(320, 40)
+  return buffer
+}
+
 /** Wait until the session reports a running reply; that is the fact the guard reads. */
 async function waitForRunning(port, token, sessionId, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs
@@ -138,7 +147,7 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     assert.deepEqual(initial.selection, { provider: 'deepseek-official', model: 'deepseek-flash' })
     assert.equal(initial.selectionApplies, 'next-turn')
     assert.deepEqual(initial.saved, { selection: false, routes: false, asr: false })
-    assert.deepEqual(initial.editable, { selection: true, routes: true, asr: true, reason: null })
+    assert.deepEqual(initial.editable, { selection: true, routes: true, asr: true })
     assert.deepEqual(initial.routes.map(route => route.provider), ['deepseek-official'])
     const official = initial.routes[0]
     assert.equal(official.editable, false, 'the official DeepSeek route is not the gateway\'s to redefine')
@@ -223,7 +232,8 @@ test('an invalid configuration is refused with the reason, and nothing is persis
 
 test('the shared selection applies from the next turn, and a running reply keeps its original model', async () => {
   const home = freshHome()
-  const double = await modelDouble({ sequence: ['tool_call_success', 'success', 'success'] })
+  const double = await modelDouble({ sequence: ['tool_call_success', 'success', 'success'],
+    toolName: 'todo_write', toolArguments: '{"todos":[{"content":"pause","status":"in_progress"}]}' })
   const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
   try {
     const admin = await signIn(port)
@@ -259,6 +269,28 @@ test('the shared selection applies from the next turn, and a running reply keeps
     await settle(port, admin, session.id)
     assert.equal(double.server.requests.at(-1).body?.model, 'MiniMax-M3.1-Flash-Preview',
       `the next turn must adopt the saved selection; got ${JSON.stringify(double.server.requests.map(request => request.body?.model))}`)
+
+    // A second session and a session that only exists on disk (never resumed in
+    // this process) must adopt the same saved selection on their next turn.
+    const { session: second } = await httpJson(port, '/sessions/create', { token: admin, body: {} })
+    await httpJson(port, '/chat/send', { token: admin, body: { sessionId: second.id, requestId: 'second-session', text: 'another session' } })
+    await settle(port, admin, second.id)
+    assert.equal(double.server.requests.at(-1).body?.model, 'MiniMax-M3.1-Flash-Preview',
+      'a session opened after the switch adopts the saved selection')
+
+    // Queued input: accepted while a reply runs, executed by a later turn, which
+    // re-reads the selection at its own turn start.
+    await stop(home)
+    const cold = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
+    try {
+      const adminAgain = await signIn(cold.port)
+      await httpJson(cold.port, '/chat/send', { token: adminAgain, body: { sessionId: second.id, requestId: 'cold-turn', text: 'after restart' } })
+      await settle(cold.port, adminAgain, second.id)
+      assert.equal(double.server.requests.at(-1).body?.model, 'MiniMax-M3.1-Flash-Preview',
+        'a session recovered from disk after a restart adopts the saved selection')
+    } finally {
+      await stop(home)
+    }
   } finally {
     await stop(home)
   }
@@ -266,7 +298,8 @@ test('the shared selection applies from the next turn, and a running reply keeps
 
 test('the attachment capability check follows the selection the next turn will execute', async () => {
   const home = freshHome()
-  const double = await modelDouble({ sequence: ['success', 'success'] })
+  const double = await modelDouble({ sequence: ['tool_call_success', 'success', 'success'], repeatLast: true,
+    toolName: 'bash', toolArguments: '{"command":"sleep 2","description":"hold the turn open"}' })
   const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
   try {
     const admin = await signIn(port)
@@ -274,21 +307,36 @@ test('the attachment capability check follows the selection the next turn will e
     const textOnly = { provider: 'text-only', displayName: 'Text only', api: 'anthropic-messages',
       baseURL: `${double.server.baseURL}/v1`, apiKeyEnv: 'MINIMAX_API_KEY', models: [{ id: 'text-1', name: 'Text One', input: ['text'] }] }
     await httpJson(port, '/gateway/route', { token: admin, body: textOnly })
-    await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'text-only', model: 'text-1' } })
+    await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute(`${double.server.baseURL}/v1`) })
 
+    // 1. The next turn's selection decides: text-only refuses an image at send.
+    await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'text-only', model: 'text-1' } })
     const refusedUpload = await uploadImage(port, admin, session.id)
     const refused = await httpJson(port, '/chat/send', { token: admin, expect: false,
       body: { sessionId: session.id, requestId: 'text-image', text: '', uploadIds: [refusedUpload] } })
     assert.equal(refused.status, 400, refused.text)
     assert.equal(refused.json.error.code, 'attachments/image-unsupported')
 
-    await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute(`${double.server.baseURL}/v1`) })
+    // 2. An image accepted under an image-capable selection, but queued past a
+    // switch to text-only, must fail its turn loudly rather than be silently
+    // projected to text by the native adapter.
     await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
-    const acceptedUpload = await uploadImage(port, admin, session.id)
-    const accepted = await httpJson(port, '/chat/send', { token: admin, expect: false,
-      body: { sessionId: session.id, requestId: 'vision-image', text: '', uploadIds: [acceptedUpload] } })
-    assert.equal(accepted.status, 200, accepted.text)
-    await settle(port, admin, session.id)
+    const queuedUpload = await uploadImage(port, admin, session.id)
+    await httpJson(port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'running', text: 'hold' } })
+    await waitForRunning(port, admin, session.id)
+    const queued = await httpJson(port, '/chat/send', { token: admin, expect: false,
+      body: { sessionId: session.id, requestId: 'queued-image', text: '', uploadIds: [queuedUpload] } })
+    assert.equal(queued.status, 200, queued.text)
+    await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'text-only', model: 'text-1' } })
+
+    const deadline = Date.now() + 60000
+    let projection
+    while (Date.now() < deadline) {
+      projection = (await httpJson(port, '/chat/read', { token: admin, body: { sessionId: session.id } })).projection
+      if (projection.replyStatus === 0 && projection.error) break
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    assert.match(projection.error ?? '', /不接受图片输入/, `the queued image must be refused loudly; got ${JSON.stringify(projection.error)}`)
   } finally {
     await stop(home)
   }
@@ -296,7 +344,8 @@ test('the attachment capability check follows the selection the next turn will e
 
 test('a route a running reply uses refuses the change, and the retry succeeds once it ends', async () => {
   const home = freshHome()
-  const double = await modelDouble({ sequence: ['tool_call_success', 'success'] })
+  const double = await modelDouble({ sequence: ['tool_call_success', 'success'],
+    toolName: 'todo_write', toolArguments: '{"todos":[{"content":"pause","status":"in_progress"}]}' })
   const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
   try {
     const admin = await signIn(port)
@@ -326,7 +375,8 @@ test('a route a running reply uses refuses the change, and the retry succeeds on
 
 test('a model-scoped edit is refused only while a reply still uses that model', async () => {
   const home = freshHome()
-  const double = await modelDouble({ sequence: ['tool_call_success', 'success'] })
+  const double = await modelDouble({ sequence: ['tool_call_success', 'success'],
+    toolName: 'todo_write', toolArguments: '{"todos":[{"content":"pause","status":"in_progress"}]}' })
   const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
   try {
     const admin = await signIn(port)
@@ -381,7 +431,17 @@ test('the shared ASR connection is edited through the gateway and the next recor
     const available = await httpJson(port, '/speech', { method: 'GET', token: admin, expect: false })
     assert.equal(available.status, 200, available.text)
     assert.equal(available.json.maxAudioBytes, 500, 'the transcription route reads the edited row, not the boot value')
-    assert.equal(available.json.model, 'FunAudioLLM/SenseVoiceSmall')
+    assert.equal(available.json.model, undefined, 'the recording route exposes availability and budget only; the connection itself belongs to the gateway')
+    const gateway = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
+    assert.equal(gateway.asr.model, 'FunAudioLLM/SenseVoiceSmall', 'the gateway is where the connection is shown')
+
+    const transcription = await fetch(`http://127.0.0.1:${port}/speech/transcriptions`, {
+      method: 'POST', headers: { authorization: `Bearer ${admin}`, 'content-type': 'audio/wav' }, body: wav(),
+    })
+    const body = await transcription.text()
+    assert.equal(transcription.status, 200, body)
+    assert.deepEqual(JSON.parse(body), { ok: true, text: '编辑后的转写' },
+      'the next recording reaches the edited endpoint')
   } finally {
     await stop(home)
     provider.closeAllConnections()

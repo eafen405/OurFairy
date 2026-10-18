@@ -30,6 +30,8 @@ import http from 'node:http'
 import { repoRoot } from './combo.mjs'
 
 const PHAETHON_PASSWORD = 'real-acceptance-password'
+/** The initial shared selection this combination declares; the run reports it rather than restating it. */
+const AGENT_MODEL = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8')).backend.agentModel
 const options = parse(process.argv.slice(2))
 
 function parse(argv) {
@@ -213,11 +215,11 @@ async function main() {
       const projection = await waitForReply(backend.port, admin, sessionId)
       const text = projection.messages.filter(message => message.role === 2 && message.status === 2)
         .map(message => message.text).join('\n')
-      report.steps.text = { requestedModel: 'deepseek-official/deepseek-flash', sessionId, reply: text, error: projection.error ?? null }
+      report.steps.text = { requestedModel: `${AGENT_MODEL.provider}/${AGENT_MODEL.model}`, sessionId, reply: text, error: projection.error ?? null }
       if (projection.error !== null) report.failures.push(`text turn reported an error: ${JSON.stringify(projection.error)}`)
       else if (text.trim() === '') report.failures.push('the official Flash turn produced no final text')
     } catch (error) {
-      report.steps.text = { requestedModel: 'deepseek-official/deepseek-flash', error: error?.message ?? String(error) }
+      report.steps.text = { requestedModel: `${AGENT_MODEL.provider}/${AGENT_MODEL.model}`, error: error?.message ?? String(error) }
       report.failures.push(`text step could not run: ${error?.message ?? String(error)}`)
     }
 
@@ -260,12 +262,13 @@ async function main() {
     if (!options.minimax || !process.env.MINIMAX_API_KEY) {
       report.unexecuted.push('MiniMax plan/credential verification (MINIMAX_API_KEY not set; no call made)')
     } else {
-      const saved = await request(backend.port, '/gateway/route', { token: admin, body: {
-        provider: 'minimax-cn', displayName: 'MiniMax（中国站）', api: 'anthropic-messages',
-        baseURL: 'https://api.minimax.cn/anthropic', apiKeyEnv: 'MINIMAX_API_KEY',
-        models: [{ id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax M3.1 Flash Preview', input: ['text', 'image'] }],
-      } })
-      const selected = await request(backend.port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
+      // The gateway offers the MiniMax draft; the run adopts that offer rather
+      // than keeping a second copy of the endpoint and model list.
+      const read = await request(backend.port, '/gateway/read', { token: admin, body: {} })
+      const draft = read.json?.gateway?.templates?.find(template => template.provider === 'minimax-cn')
+      if (draft === undefined) throw new Error('the gateway offered no MiniMax draft to configure')
+      const saved = await request(backend.port, '/gateway/route', { token: admin, body: draft })
+      const selected = await request(backend.port, '/gateway/selection', { token: admin, body: { provider: draft.provider, model: draft.models[0].id } })
       const minimaxSession = (await request(backend.port, '/sessions/create', { token: admin, body: {} })).json.session.id
       await request(backend.port, '/chat/send', { token: admin, body: { sessionId: minimaxSession, requestId: 'real-minimax', text: '请用一句话确认你是 MiniMax 模型。' } })
       const minimaxProjection = await waitForReply(backend.port, admin, minimaxSession)

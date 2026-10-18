@@ -31,7 +31,8 @@
 - `templates`：尚未配置的起步草稿（当前为 MiniMax 中国站）。它们是可编辑草稿，不是对该
   账号套餐或模型能力的声明。
 - `asr`：`speech` 行的连接设置、`available`（引用的凭据能否解析）与凭据状态。
-- `editable`：`{selection,routes,asr,reason}`；缺少配置编辑器或相应行时为 `false` 并给出原因。
+- `editable`：`{selection,routes,asr}`，表示相应行是否挂载。缺少整个配置编辑器时读取返回
+  503 `gateway/configuration-unavailable` 并说明原因，而不是假装只读。
 - `saved`：`{selection,routes,asr}`，表示 profile 用户层是否已有覆盖；`false` 表示仍在使用
   组合声明的初始值。
 
@@ -56,8 +57,10 @@ minimax-cn`、`api: anthropic-messages`、`baseURL: https://api.minimax.cn/anthr
 
 修改会影响**正在运行的回复所用路由**时返回 409 `chat/route-in-use`，消息列出会话与模型；
 删除未在用的路由不受影响。按实际受影响范围判定：改端点、协议、凭据引用等路由级字段影响该
-路由全部模型；只改某个模型的清单项时只影响该模型。写入与新回复开始相互协调：在写入期间开始
-的回复会等写入提交后再读选择与路由，不会跨两份定义。路由是共用选择的 provider 时不能删除
+路由全部模型；只改某个模型的清单项时只影响该模型（读到的配置含适配器默认值，比较只看草稿
+拥有的字段）。写入期间开始的回复会在首个模型请求前重新读取已提交的选择；这条时序路径尚未由
+计时测试固定，已被测试固定的是：运行中回复所用路由的修改被拒绝，结束后重试成功。路由是共用
+选择的 provider 时不能删除
 （409 `gateway/route-selected`），先切换选择。
 
 ### ASR 连接

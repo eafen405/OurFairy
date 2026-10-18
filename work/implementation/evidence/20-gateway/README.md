@@ -6,7 +6,7 @@
   - `1ca230d` 网关模块、配置行挂载、ASR 行活配置
   - `8178c18` 每轮选模与在用路由保护
   - `f9926a2` 公开接口测试
-- rikkahub 合并：`90c3cfc5`（`product/ourfairy-v1`），客户端实现 `b874282a`
+- rikkahub 合并：`90c3cfc5`（客户端实现 `b874282a`）+ `505f02c2`（评审修复），`product/ourfairy-v1`
 - 依赖研究：`docs/decisions/upstream-compatibility-calibration.md`、`docs/adr/0001-upstream-extension-policy.md`
 
 ## 做了什么
@@ -35,8 +35,8 @@
 
 | 命令 | 结果 |
 | --- | --- |
-| `node --test tests/gateway.test.mjs` | **7/7 pass** |
-| `node --test "tests/**/*.test.mjs"` | **129/129 pass**（基线 122 + 本票 7） |
+| `node --test tests/gateway.test.mjs` | **8/8 pass** |
+| `node --test "tests/**/*.test.mjs"` | **133/133 pass**（基线 122 + 本票 8 + 故事/验收矩阵 3） |
 | `node scripts/ourfairy-backend.mjs doctor` | **all checks passed**（9 项；keyless） |
 | `node scripts/combo.mjs verify` | **combination verified**（ourfairy 基于集成分支；dsh/rikkahub 按组合锁定） |
 | `git diff --check` | 通过 |
@@ -50,13 +50,16 @@
 2. 无效选模（未知 provider/未知 model）、无效路由（非法 provider id、非 http(s) 端点、
    空模型清单、未知模态、未知字段、改写官方路由）、未知路由删除、非法 ASR → 400/404 且
    `saved` 全部保持 false（没有半写入）。
-3. 两个模型替身观察线上请求体：首请求 + 工具暂停 + 切到另一模型 + 同轮续请求仍为原 model；
-   下一轮请求才采用新 model。
+3. 一个 loopback Messages 替身同时服务两条路由（按请求体里的 model 区分），观察线上请求体：
+   首请求 + 真实 `todo_write` 工具暂停 + 切到另一模型 + 同轮续请求仍为原 model；下一轮、
+   切换后新建的第二个会话、以及重启后从磁盘恢复的会话都采用新 model。
 4. 附件能力检查跟随下一轮选模：选纯文本路由时图片发送被 400 `attachments/image-unsupported`
    拒绝；切回支持图片的路由后同一图片被接受。
 5. 正在运行的回复所用路由：改端点 409 `chat/route-in-use`、删除选择指向路由 409
-   `gateway/route-selected`；回复结束后同一修改成功。
-6. ASR 行保存后，`/speech` 立即读回新限制与新 model（同一行、同一来源），不重启。
+   `gateway/route-selected`；回复结束后同一修改成功。另有一例固定「按实际受影响模型」：
+   同一路由的另一个模型可在回复运行期间修改，运行中回复正在用的模型被拒。
+6. ASR 行保存后，`/speech` 立即读回新限制与新 model，且下一次真实录音请求（测试内 WAV）
+   打到被编辑的端点并返回其文字（同一行、同一来源），不重启。
 7. probe 报告 `settings`、`config-editor`、`llm-pi-ai`、`gateway` 行组合且
    `settings`/`configEditor`/`agentDefaultModel`/`ourfairyChat`/`ourfairyGateway` 服务 live。
 
@@ -77,11 +80,22 @@
   本票只验证配置路径与引用状态。模板中的模型与图片模态是可编辑草稿，不是能力声明。
 - **Android 客户端**：见下节；模拟器/真机未运行。
 - 网关不提供插件安装/启停/装配（由部署维护），也不提供 dsh Web 设置界面。
+- 「写入期间开始的回复等提交后再读」这条时序路径没有计时测试；被测试固定的是运行中路由的
+  拒绝与结束后重试。该限制同时写在 `backend/gateway/README.md`。
+- 「排队输入」只覆盖到「排队消息由后续 turn 执行时按该 turn 起点重新读取选择」这一层；没有
+  单独的排队输入用例，也没有在同一 turn 内插入排队消息的用例。
+- 「整插件重载覆盖其全部路由」：本网关不提供插件重载入口（安装/启停/装配由部署维护），
+  因此没有该路径的在用状态测试；票面该子句在本实现里不适用，已如实记录而非声称通过。
+- 「凭据写入失败」：网关只写凭据**引用**，不写密钥值，因此没有凭据写入路径；密钥的写入/失效
+  由原生凭据 seam 与其部署工具负责。该子句同样如实记录为不适用。
+- 附件能力检查按发送时的共用选择判定；排队消息在后续 turn 执行时，实际路由以该 turn 起点为准，
+  原生 `llm` 服务对纯文本模型会把图片投影为文字而非失败，因此不声称「排队输入的图片一定被拒绝」。
 - 模型替身不等于真实供应商；真实官方 Flash 与 MiniMax 的调用属 #44。
 
 ## 客户端（rikkahub）
 
-客户端实现 `b874282a`，合并 `90c3cfc5`：
+客户端实现 `b874282a`，合并 `90c3cfc5`；评审修复 `505f02c2`（重新读取与写入共用同一把锁；
+ASR 行缺失时字段可为 null，不再让整份读取解码失败）。
 
 - `IdentityAccessPolicy`：`GATEWAY` 进入 DELIVERED，`mayCompose` 只允许 `isAdmin`；普通代理人
   没有可组合的页面，不是隐藏按钮。`CONVERSATION` 仍不交付（远程对话走 sessions 页）。
@@ -100,6 +114,7 @@
 | --- | --- |
 | `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.Gateway*' --tests 'me.rerere.rikkahub.ui.identity.*'` | BUILD SUCCESSFUL；GatewayApiTest 9、GatewayStateTest 10、GatewayEditingTest 4、IdentityAccessPolicyTest 7、ScreenIdentityDestinationTest 3，0 失败 |
 | `./gradlew :app:testDebugUnitTest :app:assembleDebug` | **BUILD SUCCESSFUL**；XML 聚合 **76 suites / 560 tests / 0 failures / 0 errors / 0 skipped**；3 个 debug APK |
+| `./gradlew :app:testDebugUnitTest`（`505f02c2` 之后全量） | BUILD SUCCESSFUL；聚合仍为 **76 suites / 560 tests / 0 failures / 0 errors / 0 skipped** |
 | `./gradlew :app:assembleRelease -Pourfairy.identityEndpoint=http://172.26.211.174:3080` | 见 [21-integration](../21-integration/README.md) 的 release 记录（签名宿主不在本票范围，构建入口相同） |
 
 构建准备（均不提交）：工作树缺 `local.properties`、`google-services.json`（假 key 桩）、

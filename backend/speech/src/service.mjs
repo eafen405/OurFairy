@@ -34,11 +34,15 @@ export function createSpeechHandler(settings, authorize, sendJson, voiceKey) {
   return {
     async handle(req, res, transcribe) {
       const user = authorize(req)
-      const config = settings()
+      // The row is editable through the gateway, so the request validates the
+      // configuration it is about to use rather than trusting the load check.
+      const config = resolveSpeechSettings(settings())
       if (!transcribe) {
         if (req.method !== 'GET') throw new SpeechError(405, 'method-not-allowed', 'use GET')
-        sendJson(res, 200, { ok: true, available: await available(), maxDurationMs: config.maxDurationMs, maxAudioBytes: config.maxAudioBytes,
-          model: config.model, endpoint: config.endpoint, apiKeyEnv: config.apiKeyEnv })
+        // Availability and the recording budget are the whole client contract;
+        // the connection's model, endpoint and credential reference are the
+        // gateway's to show, not every signed-in agent's.
+        sendJson(res, 200, { ok: true, available: await available(), maxDurationMs: config.maxDurationMs, maxAudioBytes: config.maxAudioBytes })
         return
       }
       if (req.method !== 'POST') throw new SpeechError(405, 'method-not-allowed', 'use POST')

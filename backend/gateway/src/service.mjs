@@ -15,12 +15,11 @@ import { Service } from '@deepseek-ai/cordis'
 
 /** One refusal with the HTTP status and product error code the route answers with. */
 export class GatewayError extends Error {
-  constructor(status, code, message, details) {
+  constructor(status, code, message) {
     super(message)
     this.name = 'GatewayError'
     this.status = status
     this.code = code
-    this.details = details
   }
 }
 
@@ -28,12 +27,11 @@ export class GatewayError extends Error {
 const PROVIDER_ID = /^[a-z][a-z0-9-]*$/
 
 /** Fields a shared model entry may declare. */
-const MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input', 'reasoningEfforts'])
+const MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input'])
 
 /** Input modalities this product declares; the adapter still owns the endpoint's truth. */
 const MODALITIES = new Set(['text', 'image'])
 
-/** Provider-profile fields outside `models`/`modelOverrides` reshape every model on the route. */
 /** Draft fields outside `models` reshape every model on the route. */
 const ROUTE_WIDE_FIELDS = ['api', 'baseURL', 'apiKeyEnv']
 
@@ -241,6 +239,11 @@ export class GatewayService extends Service {
     const value = row?.value ?? {}
     const ref = value.apiKeyEnv ?? 'VOICE_API_KEY'
     const credential = await this.credential(ref)
+    // The speech route answers "available" from the resolved value, so the
+    // gateway must ask the same seam the same way rather than describing a
+    // second fact.
+    const credentials = this.ctx.get('credentials')
+    const resolved = credentials === undefined ? undefined : await credentials.resolve(ref).catch(() => undefined)
     return {
       editable: row !== undefined,
       model: value.model ?? null,
@@ -251,22 +254,17 @@ export class GatewayService extends Service {
       timeoutMs: value.timeoutMs ?? null,
       maxGlobalInFlight: value.maxGlobalInFlight ?? null,
       maxUserInFlight: value.maxUserInFlight ?? null,
-      available: credential?.configured === true,
+      available: resolved?.value?.trim() !== undefined && resolved.value.trim() !== '',
       credential,
     }
   }
 
   /** Read the shared configuration, live usage and the editability facts behind them. */
   async read() {
-    const capability = this.ctx.get('settings') === undefined
-      ? { selection: false, routes: false, asr: false, reason: 'no configuration editor is mounted' }
-      : { selection: true, routes: true, asr: this.row('llm-pi-ai') !== undefined, reason: null }
-    if (this.row('llm-pi-ai') === undefined) {
-      capability.routes = false
-      capability.reason = capability.reason ?? 'the multi-provider adapter is not mounted'
-    }
-    if (this.row('agent-default-model') === undefined) capability.selection = false
-    if (this.row('speech') === undefined) capability.asr = false
+    // A deployment without the editor answers 503 from settings(); reaching here
+    // means the editor is mounted, so only per-row presence can differ.
+    const capability = { selection: this.row('agent-default-model') !== undefined,
+      routes: this.row('llm-pi-ai') !== undefined, asr: this.row('speech') !== undefined }
     const selection = this.ctx.agentDefaultModel.currentSelection()
     const inUse = this.ctx.ourfairyChat.activeReplies()
     const profiles = this.row('llm-pi-ai')?.value?.providers ?? {}

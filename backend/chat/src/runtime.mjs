@@ -44,8 +44,6 @@ export class SessionRuntime {
   #live = new Map()
   #opening = new Map()
   #queues = new SessionQueues()
-  /** Replies whose route a configuration write must not change under them. */
-  #active = new Map()
   /** Non-null while one shared-configuration write is in flight (admission barrier). */
   #configWrite = null
   constructor(ctx) { this.ctx = ctx }
@@ -93,13 +91,28 @@ export class SessionRuntime {
             selection.current = this.ctx.agentDefaultModel.currentSelection()
             state.route = { provider: selection.current.provider, model: selection.current.model }
             state.recheckSelection = this.#configWrite !== null
-            this.#active.set(state.sessionId, state.route)
-          } else if (event.type === 'turn/end' && state.route !== null) {
+          } else if (event.type === 'turn/end') {
             state.route = null
-            this.#active.delete(state.sessionId)
           }
           changed()
         })
+        // A message accepted while an image-capable model was selected must not
+        // be silently projected to text when the shared selection changed before
+        // its turn began: refuse that turn and say why. The native adapter would
+        // otherwise downgrade the image to a text reference without failing.
+        agentCtx.on('agent/pre-step', async ({ messages, step }, next) => {
+          if (step === 1 && messages.some(message => (message.content ?? []).some(block => block.type === 'image'))) {
+            const shared = selection.current
+            const info = await this.ctx.get('llm').resolveModelInfo(shared.provider, shared.model)
+            // Only an explicit negative declaration is a refusal; an adapter that
+            // declares nothing keeps the native behaviour of sending the image.
+            if (info.inputModalities !== undefined && !info.inputModalities.includes('image')) {
+              state.error = `共享模型 ${shared.provider}/${shared.model} 不接受图片输入；本次排队消息已拒绝，请切换到支持图片的模型后重发。`
+              throw new Error(state.error)
+            }
+          }
+          return next()
+        }, { prepend: true })
         // A configuration write in flight delays the model request, so a reply
         // that began during the write adopts the committed route instead of a
         // half-applied one.
@@ -112,7 +125,6 @@ export class SessionRuntime {
             selection.current = shared
             selection.assembled = shared
             state.route = { provider: shared.provider, model: shared.model }
-            this.#active.set(state.sessionId, state.route)
           }
           return next()
         }, { prepend: true })
@@ -145,8 +157,12 @@ export class SessionRuntime {
     return state
   }
 
-  /** Routes pinned by replies that are running right now. */
-  activeReplies() { return [...this.#active].map(([sessionId, route]) => ({ sessionId, ...route })) }
+  /** Routes pinned by replies that are running right now; the live sessions are the only roster. */
+  activeReplies() {
+    return [...this.#live.values()]
+      .filter(state => state.route !== null)
+      .map(state => ({ sessionId: state.sessionId, ...state.route }))
+  }
 
   /**
    * Run one shared-configuration write with the routes of running replies held
@@ -159,7 +175,8 @@ export class SessionRuntime {
     const previous = this.#configWrite
     let release
     const gate = new Promise(resolve => { release = resolve })
-    this.#configWrite = previous === null ? gate : previous.then(() => gate)
+    const mine = previous === null ? gate : previous.then(() => gate)
+    this.#configWrite = mine
     await previous
     try {
       const reason = refusal(this.activeReplies())
@@ -167,7 +184,7 @@ export class SessionRuntime {
       return await work()
     } finally {
       release()
-      if (this.#configWrite === gate) this.#configWrite = null
+      if (this.#configWrite === mine) this.#configWrite = null
     }
   }
 

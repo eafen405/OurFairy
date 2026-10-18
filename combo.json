@@ -38,7 +38,7 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/rikkahub.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "90c3cfc51da6e79604a3bb36e08b9dedd22f459c",
+      "productCommit": "505f02c2969efe46f8a1cca3fc831e00f559429e",
       "researchUpstreamSha": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
       "researchUpstreamRef": "origin/master",
       "note": "productCommit is the Android fork integration branch tip."

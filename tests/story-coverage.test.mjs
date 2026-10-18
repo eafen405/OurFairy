@@ -16,6 +16,8 @@ const spec = readFileSync(join(repoRoot, 'docs', 'specs', 'ourfairy-v1.md'), 'ut
 const ticketReadme = readFileSync(join(repoRoot, 'work', 'tickets', 'ourfairy-v1', 'README.md'), 'utf8')
 const matrixPath = join(repoRoot, 'work', 'implementation', 'evidence', '21-integration', 'user-stories.md')
 const matrix = readFileSync(matrixPath, 'utf8')
+const acceptancePath = join(repoRoot, 'work', 'implementation', 'evidence', '21-integration', 'README.md')
+const acceptance = readFileSync(acceptancePath, 'utf8')
 
 /** Story number to the owning ticket numbers, read from the ticket list's coverage section. */
 function coverage() {
@@ -65,5 +67,18 @@ test('every story is owned by the ticket the ticket list derives, and its eviden
       const target = resolve(dirname(matrixPath), link[1])
       assert.ok(existsSync(target), `story ${number} evidence link ${link[1]} must resolve`)
     }
+  }
+})
+
+test('every acceptance scenario in the specification is mapped in the integration record', () => {
+  const section = spec.split('### 验收场景')[1]?.split('### ')[0]
+  assert.ok(section !== undefined, 'the specification carries an 验收场景 table')
+  const scenarios = [...section.matchAll(/^\| ([^|]+?) \| .+ \|$/gm)]
+    .map(match => match[1].trim())
+    .filter(name => name !== '场景' && !name.startsWith('---'))
+  assert.ok(scenarios.length >= 10, `the acceptance table should list its scenarios; got ${JSON.stringify(scenarios)}`)
+  for (const scenario of scenarios) {
+    assert.ok(acceptance.includes(`| ${scenario} |`),
+      `acceptance scenario "${scenario}" must have a row in 21-integration/README.md`)
   }
 })
