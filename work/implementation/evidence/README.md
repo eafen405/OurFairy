@@ -37,6 +37,14 @@
 | [17-pdf-text](17-pdf-text/README.md) | #40 PDF 按页文字 |
 | [18-pdf-vision](18-pdf-vision/README.md) | #41 PDF 指定页读图 |
 | [19-presentation](19-presentation/README.md) | #42 Fairy 视觉与完整回复呈现 |
+| [20-gateway](20-gateway/README.md) | #43 法厄同配置网关与首版入口收束 |
+
+## 最终验收
+
+| 目录 | 内容 |
+| --- | --- |
+| [21-integration](21-integration/README.md) | #44 首版版本组合、真实云服务与整体验收（含 [75 条故事矩阵](21-integration/user-stories.md)） |
+| [22-device](22-device/README.md) | #45 vivo S50 实机验收（未执行，等待目标设备） |
 
 ## 架构收敛票
 

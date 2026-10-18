@@ -6,7 +6,7 @@
   - `1ca230d` 网关模块、配置行挂载、ASR 行活配置
   - `8178c18` 每轮选模与在用路由保护
   - `f9926a2` 公开接口测试
-- rikkahub 合并：`<client merge sha>`（见「客户端」）
+- rikkahub 合并：`90c3cfc5`（`product/ourfairy-v1`），客户端实现 `b874282a`
 - 依赖研究：`docs/decisions/upstream-compatibility-calibration.md`、`docs/adr/0001-upstream-extension-policy.md`
 
 ## 做了什么
@@ -81,6 +81,35 @@
 
 ## 客户端（rikkahub）
 
-`<client merge sha>`：等宽待客户端分支合并后回填。客户端改动包括 `Screen.Gateway`、
-`IdentityDestination.GATEWAY`（仅管理员可进入）、账户页入口、`GatewayPage`/`GatewayApi`/
-`GatewayState` 与 JVM 测试。构建与测试结果见下方回填。
+客户端实现 `b874282a`，合并 `90c3cfc5`：
+
+- `IdentityAccessPolicy`：`GATEWAY` 进入 DELIVERED，`mayCompose` 只允许 `isAdmin`；普通代理人
+  没有可组合的页面，不是隐藏按钮。`CONVERSATION` 仍不交付（远程对话走 sessions 页）。
+- `RouteActivity`：`Screen.Gateway` 映射到 `GATEWAY`、注册页面入口；账户页在邀请块上方给
+  管理员一个入口。映射函数改为 `internal` 以便测试。
+- `GatewayPage` / `GatewayApi` / `GatewayState` / `GatewayEditing`：读取共用选模、路由与 ASR；
+  选择模型、增删改路由、编辑 ASR；写入后重新读取，不信任回显；失败原样显示后端 code/message
+  （含 `gateway/route-in-use`、`gateway/route-selected`、`gateway/forbidden`）；凭据只显示
+  环境变量名，没有任何密钥输入框。在用路由禁用编辑并说明原因。
+- 客户端按「扁平 route 草稿 + `gateway` 包装的读取」契约实现，后端在 `45f7c93` 对齐同一契约。
+
+实际命令与结果（`ANDROID_HOME=/home/eafen405/Android/Sdk`；在合并后的
+`product/ourfairy-v1` = `90c3cfc5` 上执行）：
+
+| 命令 | 结果 |
+| --- | --- |
+| `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.data.remote.Gateway*' --tests 'me.rerere.rikkahub.ui.identity.*'` | BUILD SUCCESSFUL；GatewayApiTest 9、GatewayStateTest 10、GatewayEditingTest 4、IdentityAccessPolicyTest 7、ScreenIdentityDestinationTest 3，0 失败 |
+| `./gradlew :app:testDebugUnitTest :app:assembleDebug` | **BUILD SUCCESSFUL**；XML 聚合 **76 suites / 560 tests / 0 failures / 0 errors / 0 skipped**；3 个 debug APK |
+| `./gradlew :app:assembleRelease -Pourfairy.identityEndpoint=http://172.26.211.174:3080` | 见 [21-integration](../21-integration/README.md) 的 release 记录（签名宿主不在本票范围，构建入口相同） |
+
+构建准备（均不提交）：工作树缺 `local.properties`、`google-services.json`（假 key 桩）、
+`material3` 子模块与 `web-ui/node_modules`；已按 CONVENTIONS §3 准备。Firebase 桩不代表
+Firebase/Crashlytics 可用。
+
+## 验收边界（客户端）
+
+- 未运行模拟器/真机，Compose 的禁用/可见状态是代码审查 + gate/mapping 测试；
+  授权由后端与 gate 双重保证。
+- 未连接真实 dsh 后端的 Android 端到端；`GatewayApiTest` 用真实 loopback HTTP 服务器
+  固定 wire 形状与拒绝码。
+- 真实模型/供应商调用、release 设备票在 #44/#45。

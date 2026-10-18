@@ -204,17 +204,22 @@ async function main() {
     const agent = registered.json.token
 
     /** 1. Official Flash text through the product chat runtime. */
-    const { json: created } = await request(backend.port, '/sessions/create', { token: admin, body: {} })
-    const sessionId = created.session.id
-    const prompt = '请用一句话确认你已收到这条真实链路验收消息，并在句子里包含 OurFairy。'
-    const sent = await request(backend.port, '/chat/send', { token: admin, body: { sessionId, requestId: `real-text-${Date.now()}`, text: prompt } })
-    if (sent.status !== 200) throw new Error(`chat send failed: ${sent.status} ${sent.bytes.toString('utf8')}`)
-    const projection = await waitForReply(backend.port, admin, sessionId)
-    const reply = projection.messages.filter(message => message.role === 2 && message.status === 2)
-    const text = reply.map(message => message.text).join('\n')
-    if (text.trim() === '') throw new Error('the official Flash turn produced no final text')
-    report.steps.text = { requestedModel: 'deepseek-official/deepseek-flash', reply: text, error: projection.error ?? null }
-    if (projection.error !== null) report.failures.push(`text turn reported an error: ${JSON.stringify(projection.error)}`)
+    try {
+      const { json: created } = await request(backend.port, '/sessions/create', { token: admin, body: {} })
+      const sessionId = created.session.id
+      const prompt = '请用一句话确认你已收到这条真实链路验收消息，并在句子里包含 OurFairy。'
+      const sent = await request(backend.port, '/chat/send', { token: admin, body: { sessionId, requestId: `real-text-${Date.now()}`, text: prompt } })
+      if (sent.status !== 200) throw new Error(`chat send failed: ${sent.status} ${sent.bytes.toString('utf8')}`)
+      const projection = await waitForReply(backend.port, admin, sessionId)
+      const text = projection.messages.filter(message => message.role === 2 && message.status === 2)
+        .map(message => message.text).join('\n')
+      report.steps.text = { requestedModel: 'deepseek-official/deepseek-flash', sessionId, reply: text, error: projection.error ?? null }
+      if (projection.error !== null) report.failures.push(`text turn reported an error: ${JSON.stringify(projection.error)}`)
+      else if (text.trim() === '') report.failures.push('the official Flash turn produced no final text')
+    } catch (error) {
+      report.steps.text = { requestedModel: 'deepseek-official/deepseek-flash', error: error?.message ?? String(error) }
+      report.failures.push(`text step could not run: ${error?.message ?? String(error)}`)
+    }
 
     /** 2. The PDF scan-page path: a real render becomes an official image tool result. */
     if (options.skipPdf) {
@@ -237,14 +242,19 @@ async function main() {
     }
 
     /** 3. Real ASR on synthesized speech, through the product's recording route. */
-    const spoken = '主人，首版真实链路验收已经完成，语音转写返回了这段文字。'
-    const wav = await synthesizeSpeech(spoken)
-    const transcribed = await request(backend.port, '/speech/transcriptions', {
-      token: agent, body: wav, headers: { 'content-type': 'audio/wav' },
-    })
-    report.steps.asr = { status: transcribed.status, synthesized: spoken, text: transcribed.json?.text ?? null,
-      error: transcribed.json?.error ?? null, bytes: wav.length }
-    if (transcribed.status !== 200) report.failures.push(`ASR answered ${transcribed.status}: ${transcribed.bytes.toString('utf8').slice(0, 500)}`)
+    try {
+      const spoken = '主人，首版真实链路验收已经完成，语音转写返回了这段文字。'
+      const wav = await synthesizeSpeech(spoken)
+      const transcribed = await request(backend.port, '/speech/transcriptions', {
+        token: agent, body: wav, headers: { 'content-type': 'audio/wav' },
+      })
+      report.steps.asr = { status: transcribed.status, synthesized: spoken, text: transcribed.json?.text ?? null,
+        error: transcribed.json?.error ?? null, bytes: wav.length }
+      if (transcribed.status !== 200) report.failures.push(`ASR answered ${transcribed.status}: ${transcribed.bytes.toString('utf8').slice(0, 500)}`)
+    } catch (error) {
+      report.steps.asr = { error: error?.message ?? String(error) }
+      report.failures.push(`ASR step could not run: ${error?.message ?? String(error)}`)
+    }
 
     /** 4. MiniMax is only claimed when its credential exists and the call succeeds. */
     if (!options.minimax || !process.env.MINIMAX_API_KEY) {
