@@ -2,8 +2,8 @@
 
 - 父规格：issue #23；本票：issue #44（票面 `work/tickets/ourfairy-v1/21-integration.md`）
 - 执行时间：2026-10-18
-- 结论：**版本组合、自动化门槛与真实 MiniMax/ASR 联调已完成；vivo S50 实机验收属 #45，
-  本票保持 open 以承载真机门槛**。
+- 结论：**版本组合、自动化门槛、真实 MiniMax/ASR 联调与 release 构建已完成**，可交付 #45
+  真机票。vivo S50 实机验收属 #45，不在本票范围。
   - 2026-10-18 用户决定：共用模型改用 MiniMax `MiniMax-M3.1-Flash-Preview`（dsh 自带
     `minimax-cn` 供应商、1M 上下文、`max` 思考强度），DeepSeek 暂不使用但路由保留为可切换
     备选。规格与票面已同步。
@@ -185,10 +185,10 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-mm
 ## 9. 未完成项汇总
 
 1. **vivo S50 实机**：属 #45，交接见 [device-handoff.md](device-handoff.md)。
-2. 单一会话串行的双用户八步链：未执行；各环节已分别验收。
+2. 单一会话串行的双用户八步链：未执行；各环节已分别验收（见第 5 节）。
 3. dsh 上游 rc.2 升级与重验：未执行，理由见第 7 节。
-4. DeepSeek 路由：按用户 2026-10-18 决定暂不使用；其账号余额仍为负，若日后切回需先充值并重跑
-   `scripts/real-acceptance.mjs` 的对应步骤（当前脚本只验收 MiniMax）。
+4. DeepSeek 路由：按用户 2026-10-18 决定暂不使用；其账号余额仍为负，若日后切回需先充值并
+   重跑对应真实调用（当前脚本只验收 MiniMax）。
 
 
 ## 10. 两轴评审与修复
