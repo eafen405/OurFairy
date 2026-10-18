@@ -82,18 +82,16 @@ async function uploadImage(port, token, sessionId) {
   return upload.uploadId
 }
 
-/** One route save with a valid, template-shaped profile. */
-function minimaxProfile(baseURL, extra = {}) {
+/** One route draft in the shape the phone sends. */
+function minimaxRoute(baseURL, extra = {}) {
   return {
     provider: 'minimax-cn',
-    profile: {
-      displayName: 'MiniMax（中国站）',
-      api: 'anthropic-messages',
-      baseURL,
-      apiKeyEnv: 'MINIMAX_API_KEY',
-      models: [{ id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax M3.1 Flash Preview', contextWindow: 200000, input: ['text', 'image'] }],
-      ...extra,
-    },
+    displayName: 'MiniMax（中国站）',
+    api: 'anthropic-messages',
+    baseURL,
+    apiKeyEnv: 'MINIMAX_API_KEY',
+    models: [{ id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax M3.1 Flash Preview', contextWindow: 200000, input: ['text', 'image'] }],
+    ...extra,
   }
 }
 
@@ -136,7 +134,7 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
       assert.equal(refused.json.error.code, 'gateway/forbidden')
     }
 
-    const initial = await httpJson(port, '/gateway/read', { token: admin, body: {} })
+    const initial = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
     assert.deepEqual(initial.selection, { provider: 'deepseek-official', model: 'deepseek-flash' })
     assert.equal(initial.selectionApplies, 'next-turn')
     assert.deepEqual(initial.saved, { selection: false, routes: false, asr: false })
@@ -149,12 +147,15 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     assert.ok(initial.templates.some(template => template.provider === 'minimax-cn'), 'the MiniMax path is offered as an editable draft')
     assert.equal(initial.asr.credential.ref, 'VOICE_API_KEY')
 
-    const saved = await httpJson(port, '/gateway/route', { token: admin, body: minimaxProfile('https://api.minimax.cn/anthropic') })
+    const saved = await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute('https://api.minimax.cn/anthropic') })
     assert.equal(saved.route.provider, 'minimax-cn')
     assert.equal(saved.route.declared, true)
     assert.equal(saved.route.credential.ref, 'MINIMAX_API_KEY')
     assert.equal(saved.route.credential.configured, false, 'an unset reference reports unconfigured instead of inventing a key')
     assert.deepEqual(saved.route.models.map(model => model.id), ['MiniMax-M3.1-Flash-Preview'])
+    assert.deepEqual(saved.route.models[0].input, ['text', 'image'])
+    assert.equal(saved.route.api, 'anthropic-messages')
+    assert.equal(saved.route.baseURL, 'https://api.minimax.cn/anthropic')
 
     const selected = await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
     assert.deepEqual(selected.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' })
@@ -177,7 +178,7 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
   const restarted = await boot(home, second.env)
   try {
     const admin = await signIn(restarted.port)
-    const after = await httpJson(restarted.port, '/gateway/read', { token: admin, body: {} })
+    const after = (await httpJson(restarted.port, '/gateway/read', { token: admin, body: {} })).gateway
     assert.deepEqual(after.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' }, 'the saved selection survives a restart')
     assert.deepEqual(after.saved, { selection: true, routes: true, asr: true })
     assert.ok(after.routes.some(route => route.provider === 'minimax-cn'), 'the saved route survives a restart')
@@ -197,12 +198,12 @@ test('an invalid configuration is refused with the reason, and nothing is persis
     const cases = [
       ['/gateway/selection', { provider: 'no-such-route', model: 'x' }, 'gateway/invalid-selection'],
       ['/gateway/selection', { provider: 'deepseek-official', model: 'no-such-model' }, 'gateway/invalid-selection'],
-      ['/gateway/route', { provider: 'Not A Route', profile: {} }, 'gateway/invalid-route'],
-      ['/gateway/route', { provider: 'acme', profile: { baseURL: 'not-a-url', api: 'openai-completions', models: [{ id: 'm' }] } }, 'gateway/invalid-route'],
-      ['/gateway/route', { provider: 'acme', profile: { api: 'openai-completions', models: [] } }, 'gateway/invalid-route'],
-      ['/gateway/route', { provider: 'acme', profile: { api: 'openai-completions', models: [{ id: 'm', input: ['audio'] }] } }, 'gateway/invalid-route'],
-      ['/gateway/route', { provider: 'acme', profile: { api: 'openai-completions', models: [{ id: 'm' }], unknownField: true } }, 'gateway/invalid-route'],
-      ['/gateway/route', { provider: 'deepseek-official', profile: { api: 'openai-completions', models: [{ id: 'm' }] } }, 'gateway/invalid-route'],
+      ['/gateway/route', { provider: 'Not A Route', api: 'openai-completions', models: [{ id: 'm' }] }, 'gateway/invalid-route'],
+      ['/gateway/route', { provider: 'acme', baseURL: 'not-a-url', api: 'openai-completions', models: [{ id: 'm' }] }, 'gateway/invalid-route'],
+      ['/gateway/route', { provider: 'acme', api: 'openai-completions', models: [] }, 'gateway/invalid-route'],
+      ['/gateway/route', { provider: 'acme', api: 'openai-completions', models: [{ id: 'm', input: ['audio'] }] }, 'gateway/invalid-route'],
+      ['/gateway/route', { provider: 'acme', api: 'openai-completions', models: [{ id: 'm' }], unknownField: true }, 'gateway/invalid-route'],
+      ['/gateway/route', { provider: 'deepseek-official', api: 'openai-completions', models: [{ id: 'm' }] }, 'gateway/invalid-route'],
       ['/gateway/route/delete', { provider: 'missing-route' }, 'gateway/unknown-route'],
       ['/gateway/asr', { model: 'm', endpoint: 'not-a-url' }, 'gateway/invalid-asr'],
       ['/gateway/asr', { model: 'm', endpoint: 'https://asr.example/v1', maxAudioBytes: 0 }, 'gateway/invalid-asr'],
@@ -212,7 +213,7 @@ test('an invalid configuration is refused with the reason, and nothing is persis
       assert.ok(response.status >= 400 && response.status < 500, `${path} ${JSON.stringify(body)} answered ${response.status}`)
       assert.equal(response.json.error.code, code, `${path} ${JSON.stringify(body)}: ${response.text}`)
     }
-    const state = await httpJson(port, '/gateway/read', { token: admin, body: {} })
+    const state = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
     assert.deepEqual(state.saved, { selection: false, routes: false, asr: false }, 'a refused write persists nothing')
     assert.deepEqual(state.routes.map(route => route.provider), ['deepseek-official'])
   } finally {
@@ -228,7 +229,7 @@ test('the shared selection applies from the next turn, and a running reply keeps
     const admin = await signIn(port)
     // The MiniMax route points at the same double so the switch is observable:
     // the request body names the model each step actually selected.
-    await httpJson(port, '/gateway/route', { token: admin, body: minimaxProfile(`${double.server.baseURL}/v1`) })
+    await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute(`${double.server.baseURL}/v1`) })
     const { session } = await httpJson(port, '/sessions/create', { token: admin, body: {} })
 
     // The bash tool is the "tool pause": its result returns to the same turn.
@@ -249,7 +250,7 @@ test('the shared selection applies from the next turn, and a running reply keeps
     assert.deepEqual([...new Set(models)], ['deepseek-flash'],
       `a turn that began before the switch keeps its original model, including after the tool pause; got ${JSON.stringify(models)}`)
 
-    const inUse = await httpJson(port, '/gateway/read', { token: admin, body: {} })
+    const inUse = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
     assert.deepEqual(inUse.inUse, [], 'no reply is running after the turn settles')
 
     // The next turn reads the saved selection. The tool double's next scripted
@@ -270,8 +271,8 @@ test('the attachment capability check follows the selection the next turn will e
   try {
     const admin = await signIn(port)
     const { session } = await httpJson(port, '/sessions/create', { token: admin, body: {} })
-    const textOnly = { provider: 'text-only', profile: { displayName: 'Text only', api: 'anthropic-messages',
-      baseURL: `${double.server.baseURL}/v1`, apiKeyEnv: 'MINIMAX_API_KEY', models: [{ id: 'text-1', name: 'Text One', input: ['text'] }] } }
+    const textOnly = { provider: 'text-only', displayName: 'Text only', api: 'anthropic-messages',
+      baseURL: `${double.server.baseURL}/v1`, apiKeyEnv: 'MINIMAX_API_KEY', models: [{ id: 'text-1', name: 'Text One', input: ['text'] }] }
     await httpJson(port, '/gateway/route', { token: admin, body: textOnly })
     await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'text-only', model: 'text-1' } })
 
@@ -281,7 +282,7 @@ test('the attachment capability check follows the selection the next turn will e
     assert.equal(refused.status, 400, refused.text)
     assert.equal(refused.json.error.code, 'attachments/image-unsupported')
 
-    await httpJson(port, '/gateway/route', { token: admin, body: minimaxProfile(`${double.server.baseURL}/v1`) })
+    await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute(`${double.server.baseURL}/v1`) })
     await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
     const acceptedUpload = await uploadImage(port, admin, session.id)
     const accepted = await httpJson(port, '/chat/send', { token: admin, expect: false,
@@ -299,14 +300,14 @@ test('a route a running reply uses refuses the change, and the retry succeeds on
   const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
   try {
     const admin = await signIn(port)
-    await httpJson(port, '/gateway/route', { token: admin, body: minimaxProfile(`${double.server.baseURL}/v1`) })
+    await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute(`${double.server.baseURL}/v1`) })
     await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
     const { session } = await httpJson(port, '/sessions/create', { token: admin, body: {} })
     await httpJson(port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'running', text: 'first request' } })
     await waitForRunning(port, admin, session.id)
 
     const refused = await httpJson(port, '/gateway/route', { token: admin, expect: false,
-      body: minimaxProfile('https://api.minimax.cn/other') })
+      body: minimaxRoute('https://api.minimax.cn/other') })
     assert.equal(refused.status, 409, refused.text)
     assert.equal(refused.json.error.code, 'chat/route-in-use')
     assert.match(refused.json.error.message, /minimax-cn/)
@@ -316,8 +317,8 @@ test('a route a running reply uses refuses the change, and the retry succeeds on
     assert.equal(deleting.json.error.code, 'gateway/route-selected')
 
     await settle(port, admin, session.id)
-    const retried = await httpJson(port, '/gateway/route', { token: admin, body: minimaxProfile('https://api.minimax.cn/other') })
-    assert.equal(retried.route.profile.baseURL, 'https://api.minimax.cn/other')
+    const retried = await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute('https://api.minimax.cn/other') })
+    assert.equal(retried.route.baseURL, 'https://api.minimax.cn/other')
   } finally {
     await stop(home)
   }

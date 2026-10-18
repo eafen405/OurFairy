@@ -27,13 +27,6 @@ export class GatewayError extends Error {
 /** A provider route key is the same grammar the credential seam uses for its id half. */
 const PROVIDER_ID = /^[a-z][a-z0-9-]*$/
 
-/** Fields a Phaethon edit may set on one provider route profile. */
-const PROFILE_FIELDS = new Set([
-  'displayName', 'api', 'baseURL', 'apiKeyEnv', 'models', 'modelOverrides', 'compat',
-  'defaultContextWindow', 'defaultMaxTokens', 'requestImagePixelBudget', 'requestImageMaxBytes',
-  'maxRequestImageBytes', 'retryPolicy',
-])
-
 /** Fields a shared model entry may declare. */
 const MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input', 'reasoningEfforts'])
 
@@ -41,10 +34,8 @@ const MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input
 const MODALITIES = new Set(['text', 'image'])
 
 /** Provider-profile fields outside `models`/`modelOverrides` reshape every model on the route. */
-const ROUTE_WIDE_FIELDS = [
-  'api', 'baseURL', 'apiKeyEnv', 'compat', 'defaultContextWindow', 'defaultMaxTokens',
-  'requestImagePixelBudget', 'requestImageMaxBytes', 'maxRequestImageBytes', 'retryPolicy',
-]
+/** Draft fields outside `models` reshape every model on the route. */
+const ROUTE_WIDE_FIELDS = ['api', 'baseURL', 'apiKeyEnv']
 
 function isPlainObject(value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
@@ -83,32 +74,26 @@ function modelEntry(entry, index) {
   return { ...entry }
 }
 
-/** Validate one provider profile the gateway is allowed to write. */
-function providerProfile(input, provider) {
-  if (!isPlainObject(input)) throw invalid('profile must be an object')
-  onlyFields(input, PROFILE_FIELDS, 'profile')
-  const profile = { ...input }
+/** The fields one route draft may set; the same list read returns. */
+const DRAFT_FIELDS = new Set(['provider', 'displayName', 'api', 'baseURL', 'apiKeyEnv', 'models'])
+
+/** Validate one flat route draft and return the provider profile the settings row stores. */
+function routeDraft(input) {
+  if (!isPlainObject(input)) throw invalid('the route must be an object')
+  onlyFields(input, DRAFT_FIELDS, 'the route')
+  const profile = {}
   for (const field of ['displayName', 'api', 'baseURL', 'apiKeyEnv']) {
-    if (profile[field] !== undefined && (typeof profile[field] !== 'string' || profile[field].trim() === '')) {
-      throw invalid(`profile.${field} must be a non-empty string`)
-    }
+    if (input[field] === undefined) continue
+    if (typeof input[field] !== 'string' || input[field].trim() === '') throw invalid(`${field} must be a non-empty string`)
+    profile[field] = input[field]
   }
   if (profile.baseURL !== undefined && !/^https?:\/\/[^\s]+$/u.test(profile.baseURL)) {
-    throw invalid('profile.baseURL must be an http(s) URL')
+    throw invalid('baseURL must be an http(s) URL')
   }
-  if (profile.models !== undefined) {
-    if (!Array.isArray(profile.models) || profile.models.length === 0) throw invalid('profile.models must be a non-empty array')
-    profile.models = profile.models.map(modelEntry)
+  if (input.models !== undefined) {
+    if (!Array.isArray(input.models) || input.models.length === 0) throw invalid('models must be a non-empty array')
+    profile.models = input.models.map(modelEntry)
   }
-  if (profile.modelOverrides !== undefined && !isPlainObject(profile.modelOverrides)) {
-    throw invalid('profile.modelOverrides must be an object')
-  }
-  for (const field of ['defaultContextWindow', 'defaultMaxTokens', 'requestImagePixelBudget', 'requestImageMaxBytes', 'maxRequestImageBytes']) {
-    if (profile[field] !== undefined && (!Number.isSafeInteger(profile[field]) || profile[field] < 1)) {
-      throw invalid(`profile.${field} must be a positive integer`)
-    }
-  }
-  if (profile.provider !== undefined && profile.provider !== provider) throw invalid('profile.provider cannot rename the route')
   return profile
 }
 
@@ -151,19 +136,6 @@ const TEMPLATES = [
     models: [{ id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax M3.1 Flash Preview', input: ['text', 'image'] }],
   },
 ]
-
-/** Project a configured route onto the fields Phaethon owns, without adapter defaults. */
-function editableProfile(profile) {
-  if (!isPlainObject(profile)) return undefined
-  const picked = {}
-  for (const field of PROFILE_FIELDS) {
-    if (profile[field] !== undefined) picked[field] = profile[field]
-  }
-  if (Array.isArray(picked.models)) {
-    picked.models = picked.models.map(model => Object.fromEntries(Object.entries(model).filter(([key]) => MODEL_FIELDS.has(key))))
-  }
-  return picked
-}
 
 /** The shared-configuration gateway service the composition reads as `ourfairyGateway`. */
 export class GatewayService extends Service {
@@ -231,30 +203,36 @@ export class GatewayService extends Service {
   }
 
   async modelList(provider, profile, selection) {
+    // A configured route answers with its own declaration, so the page edits
+    // exactly what it will store. An adapter-owned route answers from the
+    // adapter's live catalog.
+    if (Array.isArray(profile?.models)) {
+      return profile.models.map(model => ({ id: model.id, name: model.name ?? model.id,
+        ...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow }),
+        ...(model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens }),
+        ...(model.input === undefined ? {} : { input: [...model.input] }) }))
+    }
     let models = []
     try { models = await this.ctx.llm.listModels(provider) } catch { models = [] }
-    if (models.length === 0 && Array.isArray(profile?.models)) {
-      models = profile.models.map(model => ({ id: model.id, name: model.name ?? model.id,
-        ...(model.input === undefined ? {} : { inputModalities: [...model.input] }) }))
-    }
-    if (models.length === 0 && selection.provider === provider) {
-      models = [{ id: selection.model, name: selection.model }]
-    }
+    if (models.length === 0 && selection.provider === provider) models = [{ id: selection.model, name: selection.model }]
     return models.map(model => ({ id: model.id, name: model.name ?? model.id,
-      ...(model.inputModalities === undefined ? {} : { inputModalities: [...model.inputModalities] }) }))
+      ...(model.inputModalities === undefined ? {} : { input: [...model.inputModalities] }) }))
   }
 
   async routeView(provider, displayName, profile, editable, selection, inUse) {
     const { declared } = this.routeProfile(provider)
     const officialRef = provider === 'deepseek-official' ? this.row('llm-deepseek-api-key')?.value?.apiKeyEnv : undefined
+    const configured = editable ? profile : undefined
     return {
       provider,
-      displayName: displayName ?? profile?.displayName ?? provider,
+      displayName: configured?.displayName ?? displayName ?? provider,
       editable,
-      declared: declared || profile !== undefined,
-      ...(profile === undefined ? {} : { profile: editableProfile(profile) }),
-      models: await this.modelList(provider, profile, selection),
-      credential: await this.credential(profile?.apiKeyEnv ?? officialRef),
+      declared: declared || configured !== undefined,
+      ...(configured?.api === undefined ? {} : { api: configured.api }),
+      ...(configured?.baseURL === undefined ? {} : { baseURL: configured.baseURL }),
+      ...(configured?.apiKeyEnv === undefined ? {} : { apiKeyEnv: configured.apiKeyEnv }),
+      models: await this.modelList(provider, configured, selection),
+      credential: await this.credential(configured?.apiKeyEnv ?? officialRef),
       inUse: inUse.some(reply => reply.provider === provider),
     }
   }
@@ -308,6 +286,7 @@ export class GatewayService extends Service {
     const selectionRow = this.row('agent-default-model')
     const asrRow = this.row('speech')
     return {
+      gateway: {
       selection,
       selectionApplies: 'next-turn',
       routes,
@@ -320,6 +299,7 @@ export class GatewayService extends Service {
         selection: Object.keys(selectionRow?.user ?? {}).length > 0,
         routes: Object.keys(routesRow?.user?.providers ?? {}).length > 0,
         asr: Object.keys(asrRow?.user ?? {}).length > 0,
+      },
       },
     }
   }
@@ -376,7 +356,7 @@ export class GatewayService extends Service {
     if (directory !== undefined && directory.settingsNs !== 'llm-pi-ai') {
       throw new GatewayError(400, 'gateway/invalid-route', `provider "${provider}" is owned by another adapter and is not editable here`)
     }
-    const profile = providerProfile(body.profile, provider)
+    const profile = routeDraft(body)
     const previous = this.providerProfile(provider)
     const affected = affectedModels(previous, profile)
     await this.guard(provider, affected, () => this.edit(() =>

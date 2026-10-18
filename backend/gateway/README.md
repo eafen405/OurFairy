@@ -13,9 +13,9 @@
 
 | 路由 | 请求体 | 响应 |
 | --- | --- | --- |
-| `/gateway/read` | `{}` | `{ok:true,selection,selectionApplies,routes,templates,asr,inUse,editable,saved}` |
+| `/gateway/read` | `{}` | `{ok:true,gateway:{selection,selectionApplies,routes,templates,asr,inUse,editable,saved}}` |
 | `/gateway/selection` | `{provider,model,reasoningEffort?}` | `{ok:true,selection,applies:"next-turn"}` |
-| `/gateway/route` | `{provider,profile}` | `{ok:true,route}` |
+| `/gateway/route` | `{provider,displayName?,api?,baseURL?,apiKeyEnv?,models?}` | `{ok:true,route}` |
 | `/gateway/route/delete` | `{provider}` | `{ok:true,provider}` |
 | `/gateway/asr` | `{model,endpoint,apiKeyEnv?,maxDurationMs?,maxAudioBytes?,timeoutMs?,maxGlobalInFlight?,maxUserInFlight?}` | `{ok:true,asr}` |
 
@@ -24,8 +24,9 @@
 - `selection`：当前共用选择 `{provider,model,reasoningEffort?}`；`selectionApplies` 固定
   `"next-turn"`。
 - `routes`：已注册的路由。`editable` 表示该路由由 `llm-pi-ai` 的 `providers` 配置，
-  可由本网关改写；官方 `deepseek-official` 路由为 `false`。`profile` 只含网关拥有的字段，
-  不含适配器默认值。`models` 是适配器当前提供的模型与输入模态。`credential` 为
+  可由本网关改写；官方 `deepseek-official` 路由为 `false`。可编辑路由返回 `api`、`baseURL`、
+  `apiKeyEnv`（未设置为省略），`models` 每项 `{id,name,contextWindow?,maxTokens?,input?}`；
+  官方路由的 `models` 来自适配器当前目录。`credential` 为
   `{ref,configured,writable,source?}`，永远不含密钥值。`inUse` 表示有正在运行的回复使用该路由。
 - `templates`：尚未配置的起步草稿（当前为 MiniMax 中国站）。它们是可编辑草稿，不是对该
   账号套餐或模型能力的声明。
@@ -43,12 +44,14 @@
 
 ### 供应商路由
 
-`/gateway/route` 接受 `displayName`、`api`、`baseURL`、`apiKeyEnv`、`models`、
-`modelOverrides`、`compat`、`defaultContextWindow`、`defaultMaxTokens`、
-`requestImagePixelBudget`、`requestImageMaxBytes`、`maxRequestImageBytes`、`retryPolicy`。
+`/gateway/route` 接受 `provider`、`displayName`、`api`、`baseURL`、`apiKeyEnv`、`models`。
 其余字段返回 400 `gateway/invalid-route`，不会被静默丢弃。`models` 每项接受 `id`、`name`、
 `contextWindow`、`maxTokens`、`input`、`reasoningEfforts`。适配器仍是协议与配置合法性的
-权威，其拒绝信息原样返回。
+权威，其拒绝信息原样返回。读到的路由对象就是可写回的草稿形状（会忽略 `editable`、
+`declared`、`credential`、`inUse` 等只读事实）。MiniMax 中国站的起步值（`provider:
+minimax-cn`、`api: anthropic-messages`、`baseURL: https://api.minimax.cn/anthropic`、
+`apiKeyEnv: MINIMAX_API_KEY`、模型 `MiniMax-M3.1-Flash-Preview`）由 `templates` 提供为可编辑
+草稿；它不声明该账号套餐或模型能力。
 
 修改会影响**正在运行的回复所用路由**时返回 409 `chat/route-in-use`，消息列出会话与模型；
 删除未在用的路由不受影响。按实际受影响范围判定：改端点、协议、凭据引用等路由级字段影响该
