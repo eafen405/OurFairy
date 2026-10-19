@@ -13,9 +13,10 @@ default file/shell/sandbox rows with host-wide access. The scoped
 ## Row set and package set
 
 `cordis.patch.yml` is the row set: it is the file the profile loads. Its section
-comments group the rows — session/model/prompt core, durable session base,
-process-local support services, the HTTP carrier and identity paths, owned
-sessions and chat, the scoped file/shell adapters, and attachments/speech.
+comments group the rows — session/model/prompt core, model-request recovery and
+tool-result retention, durable session base, process-local support services, the
+HTTP carrier and identity paths, owned sessions and chat, the scoped file/shell
+adapters, and attachments/speech.
 
 Read that file for the inventory. The row ids and their packages have one
 authority, and it is the file the loader reads; a hand-kept table here listed
@@ -77,6 +78,18 @@ launcher passes the same pair to it as explicit `agentOptions`. `doctor`'s
 `bundle agent model` check reads this file and asserts both values match
 `combo.json`; that check covers the *initial* declaration only, never the saved
 runtime selection.
+
+**Model recovery and tool-result retention are native rows.** `llm-retry` re-runs a
+failed model step inside the same open turn, and each provider profile owns the
+policy it executes: the `llm-pi-ai` route declares `retryPolicy: { mode: normal }`,
+the native bounded default. `spill-local` writes an oversized tool result under
+`dshHomePath('spill')` — inside the isolated home, beside `sessions` and `uploads` —
+and `spill-policy` keeps the model's copy within `maxInlineTokens: 8000`. That
+budget is measured, not copied: a 5-page PDF read costs 5 004 estimated tokens and
+the shell's own 64 000-byte stream cap costs 16 004, so ordinary document results
+stay inline while a large shell result spills to a file the model can read or grep.
+[ticket #82's evidence](../../work/implementation/evidence/82-native-rows/README.md)
+records the measurements and the observed retry/spill behaviour.
 
 **Live configuration rows are mounted deliberately.** `config-editor` and
 `settings` persist the active profile, and `llm-pi-ai` supplies the multi-provider

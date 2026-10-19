@@ -47,6 +47,12 @@
 | [22-device](22-device/README.md) | #45 vivo S50 实机验收（未执行，等待目标设备） |
 | [74-presentation](74-presentation/README.md) | #74/#75–#80 长回复呈现性能：测量入口入库，设备基线未建立，未做性能改动（[#45 交接](74-presentation/handoff.md)） |
 
+## 投影性能（spec #72）
+
+| 目录 | 内容 |
+| --- | --- |
+| [72-projection-perf](72-projection-perf/README.md) | #88 固定负载投影基准与改造前同机基线（脚本与两次基线 JSON 入库） |
+
 ## 架构收敛票
 
 | 目录 | 内容 |
@@ -67,6 +73,12 @@
 | [arch-64-executable-claims](arch-64-executable-claims/README.md) | #64 可执行声称检查 |
 | [arch-66-session-events](arch-66-session-events/README.md) | #66 会话事件单次安全读取 |
 | [arch-67-projection-exports](arch-67-projection-exports/README.md) | #67 projection 多余导出 |
+
+## 原生能力收敛（规格 #71）
+
+| 目录 | 内容 |
+| --- | --- |
+| [82-native-rows](82-native-rows/README.md) | #82 原生模型重试与大工具结果 spill |
 
 ## 阶段整合与评审
 
