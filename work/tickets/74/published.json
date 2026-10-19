@@ -1,0 +1,32 @@
+{
+  "01-benchmark-entry.md": {
+    "number": 75,
+    "id": 5921381501,
+    "url": "https://github.com/eafen405/OurFairy/issues/75"
+  },
+  "02-fixed-workloads.md": {
+    "number": 76,
+    "id": 5921382126,
+    "url": "https://github.com/eafen405/OurFairy/issues/76"
+  },
+  "03-applied-state.md": {
+    "number": 77,
+    "id": 5921382796,
+    "url": "https://github.com/eafen405/OurFairy/issues/77"
+  },
+  "04-emulator-baseline.md": {
+    "number": 78,
+    "id": 5921383504,
+    "url": "https://github.com/eafen405/OurFairy/issues/78"
+  },
+  "05-hotspot.md": {
+    "number": 79,
+    "id": 5921384166,
+    "url": "https://github.com/eafen405/OurFairy/issues/79"
+  },
+  "06-closeout.md": {
+    "number": 80,
+    "id": 5921384803,
+    "url": "https://github.com/eafen405/OurFairy/issues/80"
+  }
+}
