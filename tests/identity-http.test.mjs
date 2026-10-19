@@ -170,6 +170,22 @@ describe('OurFairy identity over real HTTP', () => {
     assert.equal(restored.status, 200, `a fresh credential must work: ${restored.text}`)
   })
 
+  test('a request for an untrusted Host is refused by the same fence the /api route uses', async () => {
+    // The boundary doc records that every product route runs the native fence
+    // before it reads a body or a credential. A rebound browser sends the
+    // attacker's domain in Host, so an unconfigured authority must be refused
+    // at the door — while the same sign-in succeeds on the loopback authority.
+    const refused = await request('/identity/sign-in', {
+      host: 'attacker.invalid',
+      body: { name: 'phaethon', password: PHAETHON_PASSWORD },
+    })
+    assert.equal(refused.status, 403, `an untrusted Host must be fenced off: ${refused.text}`)
+    assert.equal(refused.json?.error?.code, 'identity/forbidden-authority', refused.text)
+
+    const admitted = await signIn('phaethon', PHAETHON_PASSWORD)
+    assert.equal(typeof admitted.token, 'string', 'the loopback authority must still sign in')
+  })
+
   test('a session credential admits dsh /api while an anonymous request is refused at the door', async () => {
     const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
     const agent = await register(await createInvite(phaethon.token), 'agent-api-admission')

@@ -23,3 +23,9 @@ npm run hooks:install
 仓库当前未启用 `extensions.worktreeConfig`，安装命令会修改 worktree
 共享的 Git config；各 worktree 从自己的 `.githooks` 运行检查。
 检查针对当前工作树，未暂存的修改也会影响结果，并非仅验证暂存快照。
+
+## 架构
+
+后端以 dsh profile 的插件组合运行。哪些原生接缝**没有**使用、哪些能力保留产品实现及理由，
+以及各自的重新评估条件，见[生态边界：并行传输与保留的产品实现](docs/architecture/dsh-ecosystem-boundary.md)。
+行与包的权威始终是 `backend/v1-bundle/cordis.patch.yml` 与 `backend/v1-bundle/package.json`。
