@@ -1,4 +1,4 @@
-// Adapted from Fairybot processing/bwrap.ts: narrow mounts with networking enabled.
+// Adapted from Fairybot processing/bwrap.ts: narrow mounts, networking chosen by each caller.
 import { spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, realpathSync } from 'node:fs'
 const BASE_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
@@ -48,7 +48,8 @@ function bindRuntimeBase(args, mounted, roBind, extraRoDirs = []) {
   }
 }
 export function buildBwrapArgv(bwrapPath, spec, argv) {
-  const args = [bwrapPath, '--die-with-parent', '--new-session', '--unshare-all', '--share-net', '--clearenv',
+  if (typeof spec.network !== 'boolean') throw new Error('bwrap spec.network must state whether the caller shares the host network')
+  const args = [bwrapPath, '--die-with-parent', '--new-session', '--unshare-all', ...spec.network ? ['--share-net'] : [], '--clearenv',
     '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp']
   const mounted = new Set()
   const roBind = (hostPath) => {
