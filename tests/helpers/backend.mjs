@@ -238,12 +238,14 @@ export function describeRun(label, run) {
  * to inspect the raw response when a test asserts a refusal status itself.
  * @param {number} port - the port `start --json` reported.
  * @param {string} path - request path on that backend.
- * @param {{method?: string, token?: string, body?: unknown, expect?: number|false}} [options]
+ * @param {{method?: string, token?: string, body?: unknown, expect?: number|false, host?: string}} [options]
+ *   `host` overrides the `Host` header, which is how a test presents an authority
+ *   the deployment's fence must refuse; it defaults to the loopback authority.
  * @returns {Promise<any>} the parsed body, or the raw response for `expect: false`.
  */
-export function httpJson(port, path, { method = 'POST', token, body, expect = 200 } = {}) {
+export function httpJson(port, path, { method = 'POST', token, body, expect = 200, host = `127.0.0.1:${port}` } = {}) {
   const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body))
-  const headers = { host: `127.0.0.1:${port}` }
+  const headers = { host }
   if (token !== undefined) headers.authorization = `Bearer ${token}`
   if (payload !== undefined) {
     headers['content-type'] = 'application/json'
