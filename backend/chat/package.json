@@ -7,6 +7,9 @@
   "main": "./src/index.mjs",
   "exports": { ".": "./src/index.mjs" },
   "files": ["src", "README.md"],
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-llm": "workspace:~",

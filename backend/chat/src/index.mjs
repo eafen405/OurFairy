@@ -4,11 +4,15 @@ import { RemoteChat } from './service.mjs'
 import { SessionRuntime } from './runtime.mjs'
 import { installDelivery } from './delivery.mjs'
 import { installJobs } from './jobs.mjs'
+import { registerProjectionUnits } from './units.mjs'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 
 export const name = 'ourfairy-chat'
-export const inject = ['webServer', 'connection', 'ourfairySessions', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'identity', 'tools', 'sessionPersistence', 'jobs']
+export const inject = ['webServer', 'connection', 'ourfairySessions', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'identity', 'tools', 'sessionPersistence', 'jobs', 'sessionProjections']
 export function apply(ctx) {
+  // Every registered unit folds on the native event drive, once per session and
+  // shared by every observer; `register` installs its own effect on this fiber.
+  registerProjectionUnits(ctx)
   const runtime = new SessionRuntime(ctx)
   const chat = new RemoteChat(ctx, runtime)
   installDelivery(ctx, runtime)

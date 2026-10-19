@@ -3,7 +3,8 @@ import { Service } from '@deepseek-ai/cordis'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { uploadIdsOf } from '@ourfairy/dsh-attachments'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { receiptIn, transcript } from './projection.mjs'
+import { transcript } from './projection.mjs'
+import { receiptFrom, transcriptDefinition } from './units.mjs'
 
 export class ChatError extends SessionScopeError {}
 function requestIdOf(requestId) {
@@ -31,13 +32,20 @@ export class RemoteChat extends Service {
     if (caller === undefined) throw new ChatError(401, 'chat/unauthorized', 'present a live session credential')
     return caller
   }
+  /** The transcript unit state for one live session; it must be registered to answer. */
+  transcriptState(state) {
+    const unit = this.ctx.sessionProjections.stateOf(state.session, transcriptDefinition.key)
+    if (unit === undefined) throw new ChatError(500, 'chat/projection-unavailable', 'the transcript projection is not registered')
+    return unit
+  }
   async send(owner, { sessionId, requestId, text, uploadIds = [] }) {
     requestIdOf(requestId)
     uploadIds = uploadIdsOf(uploadIds)
     if (typeof text !== 'string' || (!text.trim() && uploadIds.length === 0)) throw new ChatError(400, 'chat/invalid-request', 'provide text or an attachment')
     const state = await this.runtime.open(owner, sessionId)
     return this.runtime.runSession(sessionId, async () => {
-      let found = receiptIn((await this.runtime.events(sessionId)).events, sessionId, requestId)
+      // Receipts live in the transcript unit, so a retry never reads the log.
+      let found = receiptFrom(this.transcriptState(state), sessionId, requestId)
       if (found !== null && (found.text !== text || JSON.stringify(found.uploadIds) !== JSON.stringify(uploadIds))) throw new ChatError(409, 'chat/request-conflict', 'this requestId already accepted different text')
       if (found === null) {
         state.error = null
@@ -46,7 +54,9 @@ export class RemoteChat extends Service {
           ...(text ? [{ type: 'text', text }] : []),
           ...attachments.map(item => item.image ? { type: 'image', attachment: item.image } : { type: 'file', attachment: item.original }),
         ], source: { kind: 'user', rpcId: requestId, ...(attachments.length ? { attachments } : {}) } }))
-        found = receiptIn((await this.runtime.events(sessionId)).events, sessionId, requestId)
+        // The follow-up splice is a committed native event, so the unit cell
+        // already holds the receipt the moment it returns.
+        found = receiptFrom(this.transcriptState(state), sessionId, requestId)
       }
       await this.runtime.barrier(state)
       this.runtime.publish(state)
@@ -58,7 +68,7 @@ export class RemoteChat extends Service {
     const state = await this.runtime.open(owner, sessionId)
     return this.runtime.runSession(sessionId, async () => {
       await this.runtime.barrier(state)
-      return receiptIn((await this.runtime.events(sessionId)).events, sessionId, requestId)?.receipt ?? null
+      return receiptFrom(this.transcriptState(state), sessionId, requestId)?.receipt ?? null
     })
   }
   async read(owner, { sessionId, maxEvents }) {

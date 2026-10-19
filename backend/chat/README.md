@@ -26,6 +26,20 @@
 
 `/chat/stop` 调用原生 cancel 停止当前回复并保留已排队的输入；关闭订阅不停止任何工作。
 
+## 投影单元
+
+`src/units.mjs` 把 transcript 与「任务 + 活动」注册到原生 `ctx.sessionProjections`
+（key `ourfairyTranscript` / `ourfairyWork`，均无 `wire`，只用公开的 `register` / `stateOf`）。
+两个单元都是同步纯 fold，state 为纯 JSON；不关心的事件返回同一 state 引用。
+每个单元的 `stateVersion` 在折叠语义或 state 形状变化时递增，旧版本的持久化行会被丢弃并从 `init` 重折。
+
+- 任务与活动是同一次 fold：activity 依赖每个事件后的任务/report 快照，拆开会形成第二套 report 状态机。
+- durable state 只含日志派生事实。`availability`、Agent running、`replyStatus`、`stopping`、`error`、
+  attempt 累计文本不进 state，读取时叠加。
+- transcript 行记首次出现位置与结算位置（`first` / `settled`），因此任意 `throughSeq`
+  都能还原该行的 `seq` 与 `status`，无需重折前缀。行顺序是首次出现顺序，不是 seq 顺序。
+- receipt 由 transcript 单元的 `receipts` 回答（`receiptFrom`），`/chat/send` 的幂等与冲突检测不再扫描事件日志。
+
 ## 投影
 
 ```text
