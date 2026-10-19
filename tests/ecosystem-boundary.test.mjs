@@ -114,8 +114,6 @@ const CITED_CHECKS = [
     'agentless filesystem and script Interface calls refuse instead of inheriting a default user'],
   ['tests/attachments.test.mjs',
     'unfinished and foreign receipts never grant message or download access, including identical stored bytes'],
-  ['tests/product-sources.test.mjs',
-    'an unchanged worktree reuses the installed profile instead of reinstalling it'],
 ]
 
 test('the boundary doc is reachable from the repository README', () => {
@@ -190,8 +188,8 @@ test('the doc names the native capabilities each retained product implementation
 })
 
 test('the bundle mounts no Gateway, Remote/Typert or plugin-manager package', () => {
-  const absent = [/^@deepseek-ai\/dsh-api-gateway$/u, /^@deepseek-ai\/dsh-api-remotes$/u,
-    /^@deepseek-ai\/dsh-typert-/u, /^@deepseek-ai\/dsh-plugin-manager/u]
+  const absent = [/^@deepseek-ai\/dsh-api-/u, /^@deepseek-ai\/dsh-typert-/u,
+    /^@deepseek-ai\/dsh-plugin-manager/u]
   const mounted = mountedRows().filter(row => absent.some(pattern => pattern.test(row.package)))
   assert.deepEqual(
     mounted.map(row => `${row.id} (${row.package})`),

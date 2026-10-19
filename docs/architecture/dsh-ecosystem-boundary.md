@@ -157,9 +157,12 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 
 ### 3.4 附件生命周期
 
-原生 attachment store 拥有不可变字节；产品 `uploads` 表只拥有上传生命周期（数字状态：
-0 上传中、1 完成、2 过期），完成后的原件按认证归属与目标会话限定。它保留的原因是原生 store
-没有上传会话、过期与按消息资格下载的语义。检查：`tests/attachments.test.mjs` 的
+原生 attachment store 拥有不可变字节，且**从不自动删除**对象；产品 `uploads` 表只拥有上传
+生命周期（数字状态：0 上传中、1 完成、2 过期），完成后的原件按认证归属与目标会话限定。保留
+它的原因是原生 store 没有上传预登记、过期状态与「哪条消息有权取原件」的规则——这些是产品
+语义，不是存储能力。
+
+检查：`tests/attachments.test.mjs` 的
 `unfinished and foreign receipts never grant message or download access, including identical stored bytes`。
 
 ## 4. 不在范围
@@ -167,8 +170,8 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | 事项 | 现在的可执行事实 | 失效即失败的检查 |
 | --- | --- | --- |
 | 挂载 plugin manager、提供运行时插件安装/启停 | 组合不挂载 plugin manager 行；插件装配由部署（bundle 与 profile）负责 | `tests/ecosystem-boundary.test.mjs`（bundle 行集合中不出现 plugin manager 包） |
-| npm 发布、registry 与版本发布流程 | 产品包保持 `private`，只支持本地 checkout 的 `file:` 安装，由 launcher 生成 profile | `tests/ecosystem-boundary.test.mjs`（任一产品包 `private` 不为 true 即失败）；`tests/product-sources.test.mjs`：`an unchanged worktree reuses the installed profile instead of reinstalling it` |
-| 把 Android API 迁到 `/api` | 客户端调用的仍是本文 1.1 的产品路由；`/api` 上没有产品端点 | `tests/owned-sessions.test.mjs`：`cold ownerless and foreign sessions are refused without changing durable artifacts`（断言 `/api/sessions/*` 为 404） |
+| npm 发布、registry 与版本发布流程 | 产品包全部 `private`，仓库里没有发布步骤；安装与启动只走本地 checkout 生成的 profile | `tests/ecosystem-boundary.test.mjs`（`backend/` 下任一产品包 `private` 不为 true 即失败） |
+| 把 Android API 迁到 `/api` | 本仓库的产品 API 仍是本文 1.1 的路由；`/api` 上没有产品端点（客户端代码不在本仓库） | `tests/owned-sessions.test.mjs`：`cold ownerless and foreign sessions are refused without changing durable artifacts`（断言 `/api/sessions/*` 为 404） |
 | 把业务 SQLite 换成 storage-domain、把身份换成 authorization、把 fs/sandbox 换成更弱的原生实现 | 见 3 节；这些是产品能力差异，不是生态兼容缺口 | 见 3 节各表 |
 
 Android 客户端不在本仓库，本文不对其代码做检查声明；本仓库能固定的是它会调用的 HTTP/SSE
