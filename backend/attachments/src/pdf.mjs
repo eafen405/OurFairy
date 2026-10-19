@@ -25,11 +25,10 @@ async function runWorker(ctx, directory, request, callerSignal) {
   try {
     const outcome = await handle.done
     const output = handle.collected.stdout.readFrom(0)
-    // bwrap reports a killed payload as 128+signal and no signal of its own, so a
-    // worker killed by its own signal or by the service is a resource failure:
-    // prlimit's SIGXCPU is 152, the deadline's SIGKILL and an OOM kill are 137.
-    if (deadline.aborted || output.lossy || outcome.signal !== null
-      || outcome.exitCode === 137 || outcome.exitCode === 152) return failure('resource-limit')
+    // bwrap re-raises a killed payload as 128+signal and reports no signal of its
+    // own: prlimit's SIGXCPU is 152, the SIGKILL escalation and an OOM kill are 137.
+    const killed = outcome.signal === 'SIGKILL' || outcome.signal === 'SIGXCPU' || outcome.exitCode === 137 || outcome.exitCode === 152
+    if (deadline.aborted || output.lossy || killed) return failure('resource-limit')
     if (outcome.exitCode !== 0) return failure('worker-unavailable')
     try { return JSON.parse(output.text) } catch { return failure('worker-unavailable') }
   } catch (error) {
