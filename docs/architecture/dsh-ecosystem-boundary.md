@@ -19,7 +19,7 @@
 | 载体 | 原生 Web 载体服务 `ctx.webServer`，产品模块注册 `exact` 路由（身份、会话、对话、网关、附件、语音） |
 | 路径 | `/identity/*`、`/sessions/*`、`/chat/*`、`/gateway/*`、`/attachments/*`、`/speech/*`，全部在 `/api` 之外 |
 | 鉴权 | 请求头 `Authorization: Bearer <session token>`；调用者只由凭据派生，不接受请求体里的用户字段 |
-| 栅栏 | 每个产品路由先调 `ctx.connection.fence(request)`（与原生 `/api` 同一个 Host/Origin 栅栏），再读请求体 |
+| 栅栏 | 每个产品路由先调 `ctx.connection.fence(request)`（与原生 `/api` 同一个 Host/Origin 栅栏），再读请求体；JSON 路由共用同一个 `postHandler` 包装 |
 | 错误 | `{ ok: false, error: { code, message } }`，code 以模块前缀区分（如 `chat/unauthorized`） |
 | 流 | `/chat/observe` 返回 `text/event-stream`；断线补齐用 `/chat/read` 与 `/chat/page` |
 
@@ -38,14 +38,14 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 
 ### 1.3 为什么
 
-- **客户端不是 dsh 的 Web 客户端。** 首版客户端是 Android（OkHttp/Retrofit），没有 dsh
-  Client 的浏览器装配；Remote 的价值是浏览器侧的生成式类型与 mux 流，产品侧拿不到。
+- **客户端不是 dsh 的 Web 客户端。** 首版客户端是 Android 的 HTTP 客户端，没有 dsh Client
+  的浏览器装配；Remote 提供的是浏览器侧的生成式类型与 mux 流，产品侧拿不到这部分价值。
 - **准入口径不同。** 原生 `/api` 准入表达的是一个 operator Peer；产品要求按 Bearer 凭据
   得出多用户主体，并在产品路由内以会话归属和角色（法厄同/代理人）判定，判定发生在任何
   业务副作用之前。把这些判定搬进 `/api` 会先经过一层与本产品无关的 operator 语义。
 - **`/api` 是整条前缀先准入的。** 见 3 节：登录路由因此只能留在外面。
-- **SSE 契约已经交付并被客户端验证。** 迁移传输会改变响应形状与流语义，牵动 Android 与
-  已完成的真机验收；本 spec 明确不做。
+- **SSE 契约已经交付，Android 客户端按它实现。** 迁移传输会改变响应形状与流语义，等于要求
+  客户端同步改版；本 spec 明确不做，也不需要 Android 改动。
 - **维护成本按 ADR-0001 计入。** 产品只借用原生 Web 载体与 Connection 的 Host/Origin 栅栏，不复制
   Remote 的类型图、生成物和浏览器装配；升级 dsh 时这部分不产生新的适配面。
 
@@ -53,7 +53,8 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 
 出现下列任一事实时重开这个决定，而不是默认迁移：
 
-1. Android 需要复用 dsh 的共享 Web UI 或 Remote 事件面（同一套 Client 装配成为需求）。
+1. Android 需要复用 dsh 的共享 Web UI 或 Remote 事件面（同一套 Client 装配成为需求），
+   客户端因此需要改版。
 2. 上游准入能在 handler 之前表达任意产品主体，且产品归属/角色仍可执行地前置。
 3. 产品路由的形状超出 exact 路由可维护的范围（例如按会话的双向流式控制），且 SSE +
    `read`/`page` 无法表达断线补齐语义。
@@ -67,7 +68,7 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | `/api` 在 handler 之前整体准入：匿名 401，已准入后无端点 404 | `tests/identity-http.test.mjs`：`a session credential admits dsh /api while an anonymous request is refused at the door` |
 | 产品流式面是自建 SSE，断开观察不停止后端回复 | `tests/remote-chat.test.mjs`：`SSE preserves every text prefix and disconnecting observation leaves the backend reply running` |
 | 产品路由拒绝匿名与越权（含法厄同），且早于冷恢复 | `tests/remote-chat.test.mjs`：`all remote paths reject anonymous and foreign owners, including administrator, before cold resume` |
-| 产品路由在业务处理前拒绝不受信的 Host（与 `/api` 同一栅栏） | `tests/identity-http.test.mjs`：`a request for an untrusted Host is refused by the same fence the /api route uses` |
+| 产品路由在业务处理前拒绝不受信的 Host（登录路由是该包装的可观察实例） | `tests/identity-http.test.mjs`：`a request for an untrusted Host is refused by the same fence the /api route uses` |
 | 组合不挂载 Gateway、Remote/Typert 与 plugin manager 行 | `tests/ecosystem-boundary.test.mjs`（解析 bundle 行集合，任一包名出现即失败） |
 
 ## 2. 登录路径留在 `/api` 之外
@@ -150,13 +151,18 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | 声称 | 检查（失效即失败） |
 | --- | --- |
 | 两个用户（含管理员）的私有文件互相不可读，公有文件可共享 | `tests/spaces.test.mjs`：`chat tools write own private files, share public files, and deny another user including administrator` |
+| 请求 `danger-full-access` 提权得到拒绝而不是无约束执行 | `tests/spaces.test.mjs`：`real child processes share public files, keep private boundaries after cd, and retain networking` |
+| 符号链接不能把授权范围内的路径变成对外部路径的读写 | `tests/spaces.test.mjs`：`directory changes, edits, image reads and symlinks retain the same owner boundary` |
 | 没有会话身份的文件与脚本调用直接拒绝，而不是继承默认用户 | `tests/spaces.test.mjs`：`agentless filesystem and script Interface calls refuse instead of inheriting a default user` |
 
 ### 3.4 附件生命周期
 
-原生 attachment store 拥有不可变字节；产品 `uploads` 表只拥有上传生命周期（数字状态：
-0 上传中、1 完成、2 过期），完成后的原件按认证归属与目标会话限定。它保留的原因是原生 store
-没有上传会话、过期与按消息资格下载的语义。检查：`tests/attachments.test.mjs` 的
+原生 attachment store 拥有不可变字节，且**从不自动删除**对象；产品 `uploads` 表只拥有上传
+生命周期（数字状态：0 上传中、1 完成、2 过期），完成后的原件按认证归属与目标会话限定。保留
+它的原因是原生 store 没有上传预登记、过期状态与「哪条消息有权取原件」的规则——这些是产品
+语义，不是存储能力。
+
+检查：`tests/attachments.test.mjs` 的
 `unfinished and foreign receipts never grant message or download access, including identical stored bytes`。
 
 ## 4. 不在范围
@@ -164,8 +170,8 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | 事项 | 现在的可执行事实 | 失效即失败的检查 |
 | --- | --- | --- |
 | 挂载 plugin manager、提供运行时插件安装/启停 | 组合不挂载 plugin manager 行；插件装配由部署（bundle 与 profile）负责 | `tests/ecosystem-boundary.test.mjs`（bundle 行集合中不出现 plugin manager 包） |
-| npm 发布、registry 与版本发布流程 | 产品包保持 `private`，只支持本地 checkout 的 `file:` 安装，由 launcher 生成 profile | `tests/ecosystem-boundary.test.mjs`（任一产品包 `private` 不为 true 即失败）；`tests/product-sources.test.mjs`：`an unchanged worktree reuses the installed profile instead of reinstalling it` |
-| 把 Android API 迁到 `/api` | 客户端调用的仍是本文 1.1 的产品路由；`/api` 上没有产品端点 | `tests/owned-sessions.test.mjs`：`cold ownerless and foreign sessions are refused without changing durable artifacts`（断言 `/api/sessions/*` 为 404） |
+| npm 发布、registry 与版本发布流程 | 产品包全部 `private`，仓库里没有发布步骤；安装与启动只走本地 checkout 生成的 profile | `tests/ecosystem-boundary.test.mjs`（`backend/` 下任一产品包 `private` 不为 true 即失败） |
+| 把 Android API 迁到 `/api` | 本仓库的产品 API 仍是本文 1.1 的路由；`/api` 上没有产品端点（客户端代码不在本仓库） | `tests/owned-sessions.test.mjs`：`cold ownerless and foreign sessions are refused without changing durable artifacts`（断言 `/api/sessions/*` 为 404） |
 | 把业务 SQLite 换成 storage-domain、把身份换成 authorization、把 fs/sandbox 换成更弱的原生实现 | 见 3 节；这些是产品能力差异，不是生态兼容缺口 | 见 3 节各表 |
 
 Android 客户端不在本仓库，本文不对其代码做检查声明；本仓库能固定的是它会调用的 HTTP/SSE

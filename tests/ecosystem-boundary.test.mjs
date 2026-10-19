@@ -107,11 +107,13 @@ const CITED_CHECKS = [
   ['tests/spaces.test.mjs',
     'chat tools write own private files, share public files, and deny another user including administrator'],
   ['tests/spaces.test.mjs',
+    'real child processes share public files, keep private boundaries after cd, and retain networking'],
+  ['tests/spaces.test.mjs',
+    'directory changes, edits, image reads and symlinks retain the same owner boundary'],
+  ['tests/spaces.test.mjs',
     'agentless filesystem and script Interface calls refuse instead of inheriting a default user'],
   ['tests/attachments.test.mjs',
     'unfinished and foreign receipts never grant message or download access, including identical stored bytes'],
-  ['tests/product-sources.test.mjs',
-    'an unchanged worktree reuses the installed profile instead of reinstalling it'],
 ]
 
 test('the boundary doc is reachable from the repository README', () => {
@@ -186,8 +188,8 @@ test('the doc names the native capabilities each retained product implementation
 })
 
 test('the bundle mounts no Gateway, Remote/Typert or plugin-manager package', () => {
-  const absent = [/^@deepseek-ai\/dsh-api-gateway$/u, /^@deepseek-ai\/dsh-api-remotes$/u,
-    /^@deepseek-ai\/dsh-typert-/u, /^@deepseek-ai\/dsh-plugin-manager/u]
+  const absent = [/^@deepseek-ai\/dsh-api-/u, /^@deepseek-ai\/dsh-typert-/u,
+    /^@deepseek-ai\/dsh-plugin-manager/u]
   const mounted = mountedRows().filter(row => absent.some(pattern => pattern.test(row.package)))
   assert.deepEqual(
     mounted.map(row => `${row.id} (${row.package})`),
