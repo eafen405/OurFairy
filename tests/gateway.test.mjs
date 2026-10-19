@@ -388,6 +388,50 @@ test('a route a running reply uses refuses the change, and the retry succeeds on
   }
 })
 
+test('a route saved from the phone keeps the deployment retry policy the draft does not own', async () => {
+  const home = freshHome()
+  // The double answers one rate limit then succeeds: only a route that still
+  // carries the deployment's `retryPolicy` recovers within the turn.
+  // `repeatLast` lets the second boot of this case reuse the same double.
+  const double = await modelDouble({ sequence: ['rate_limit', 'success', 'rate_limit', 'success'], successText: 'recovered after the save' })
+  const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
+  try {
+    const admin = await signIn(port)
+    const saved = await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute(`${double.server.baseURL}/v1`) })
+    assert.equal(saved.route.provider, 'minimax-cn')
+    assert.equal(saved.route.baseURL, `${double.server.baseURL}/v1`)
+
+    const { session } = await httpJson(port, '/sessions/create', { token: admin, body: {} })
+    await httpJson(port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'after-save', text: 'retry after the save' } })
+    const projection = await settle(port, admin, session.id)
+    assert.deepEqual(double.server.requests.map(request => request.behavior), ['rate_limit', 'success'],
+      'the saved route still executes the deployment retry policy; without it the turn ends on the 429')
+    assert.equal(projection.error, null)
+    assert.deepEqual(projection.messages.filter(message => message.role === 2 && message.status === 2).map(message => message.text),
+      ['recovered after the save'])
+    assert.equal(projection.events.filter(event => event.type === 'llm/retry').length, 1,
+      'the retry went through the native row, not a second policy the gateway invented')
+  } finally {
+    await stop(home)
+  }
+
+  // The saved route is persisted, not just held live: after a restart the same
+  // double answers the saved base URL, and the policy still comes from the
+  // deployment layer the draft never writes.
+  const restarted = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
+  try {
+    const admin = await signIn(restarted.port)
+    const { session } = await httpJson(restarted.port, '/sessions/create', { token: admin, body: {} })
+    await httpJson(restarted.port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'after-save-cold', text: 'retry after the restart' } })
+    const projection = await settle(restarted.port, admin, session.id)
+    assert.deepEqual(double.server.requests.map(request => request.behavior).slice(-2), ['rate_limit', 'success'],
+      'the saved route keeps the deployment retry policy across a restart')
+    assert.equal(projection.error, null)
+  } finally {
+    await stop(home)
+  }
+})
+
 test('a model-scoped edit is refused only while a reply still uses that model', async () => {
   const home = freshHome()
   const double = await modelDouble({ sequence: ['tool_call_success', 'success'],

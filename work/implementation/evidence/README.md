@@ -74,6 +74,12 @@
 | [arch-66-session-events](arch-66-session-events/README.md) | #66 会话事件单次安全读取 |
 | [arch-67-projection-exports](arch-67-projection-exports/README.md) | #67 projection 多余导出 |
 
+## 原生能力收敛（规格 #71）
+
+| 目录 | 内容 |
+| --- | --- |
+| [82-native-rows](82-native-rows/README.md) | #82 原生模型重试与大工具结果 spill |
+
 ## 阶段整合与评审
 
 | 目录 | 内容 |
