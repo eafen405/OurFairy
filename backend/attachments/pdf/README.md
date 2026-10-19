@@ -32,6 +32,16 @@ reads at most five selected pages and returns at most 4,000 characters per page.
 `pdf_info` reads only a 1,000-character first-page sample and the page count.
 The library's own decompression limits also report `resource-limit`.
 
+The worker runs under the native `ctx.subprocess` service: the module passes the
+bwrap/prlimit argv, the 10-second wall deadline as the spawn `signal`, `graceMs`
+and the 256 KiB stdout collect cap, and the service kills the whole range and
+proves it empty (`waitForExit`) before the module removes its temporary directory.
+The module keeps only its own budgets and the numeric result mapping. `done`
+reports exit facts rather than the killing signal, and `bwrap` turns a killed
+payload into `128+signal`: 152 (SIGXCPU from `--cpu=5`) and 137 (SIGKILL
+escalation or OOM) map to `resource-limit`; any other nonzero exit is
+`worker-unavailable`.
+
 These are product demo budgets, not a promise of perfect complex-layout or OCR
 extraction. Encrypted PDFs are rejected even when an empty password could open
 them. No-text pages request image reading through `pdf_render_pages` when needed.
