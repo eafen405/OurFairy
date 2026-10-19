@@ -10,7 +10,7 @@ mounts capabilities v1 excludes (skill, goal, subagent, telemetry, web tools) an
 default file/shell/sandbox rows with host-wide access. The scoped
 `@ourfairy/dsh-spaces` adapters replace those defaults.
 
-## Row set
+## Row set and package set
 
 `cordis.patch.yml` is the row set: it is the file the profile loads. Its section
 comments group the rows — session/model/prompt core, durable session base,
@@ -20,6 +20,21 @@ sessions and chat, the scoped file/shell adapters, and attachments/speech.
 Read that file for the inventory. The row ids and their packages have one
 authority, and it is the file the loader reads; a hand-kept table here listed
 only some of the mounted rows and went stale while the loader mounted the rest.
+
+The product package set is this manifest's `dependencies`: every `@ourfairy/*`
+module a row mounts is declared here as a `file:` dependency on its directory in
+this repository. Read `package.json` for the list — it is not repeated in this
+README. The launcher derives the generated profile's product dependencies from
+that field (plus the test-only probe that combo.json names), and `doctor`'s
+`bundle packages` check compares the composed rows, this manifest, and the
+installed profile, naming the package and row id when they disagree. Adding a
+product package therefore means adding its directory, declaring it here, and
+mounting it in the patch; no launcher file changes.
+
+The published `files` list is the installed copy's contents: the patch, this
+README, and `locale/*.json` — dsh reads `locale/<language>.json` for a bundle's
+display metadata. A boot reads nothing from this checkout that the manifest does
+not publish.
 
 ## Absent rows
 
@@ -35,7 +50,10 @@ and sandbox defaults the scoped adapters replace.
 
 The launcher (`scripts/ourfairy-backend.mjs`) generates a profile under the
 isolated `OURFAIRY_HOME` that declares this package through a `file:` dependency
-and lists it in `dsh.profile.bundles`, then boots the real dsh CLI.
+and lists it in `dsh.profile.bundles`, then boots the real dsh CLI. pnpm installs
+this package's own `file:` dependencies from this checkout, so the profile
+receives one copy of every declared product package without the launcher naming
+any of them.
 
 ## Two choices a reviewer will ask about
 
