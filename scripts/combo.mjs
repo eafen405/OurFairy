@@ -169,6 +169,22 @@ function packageOf(specifier) {
 }
 
 /**
+ * Every entry of a composed tree, including the rows nested in a group's
+ * `config` list. The loader mounts group children the same way it mounts
+ * top-level rows, so a package set comparison that walked only the top level
+ * would miss them.
+ * @param {object[]} entries
+ * @returns {object[]}
+ */
+function flattenEntries(entries) {
+  return entries.flatMap(entry => [
+    entry,
+    // The loader treats any truthy `group` with a list `config` as nesting.
+    ...(entry.group && Array.isArray(entry.config) ? flattenEntries(entry.config) : []),
+  ])
+}
+
+/**
  * Compare the bundle's patch rows with the product packages it declares and
  * with the packages the generated profile installs.
  *
@@ -210,7 +226,7 @@ export function verifyBundlePackages({ binName, bundlePackage, installAnchor, pr
 
   const manifest = boot.readProfileManifest(binName, layer.packageDir)
   const declared = Object.keys(manifest.dependencies ?? {}).sort()
-  const rows = boot.composeEntries([layer.patches])
+  const rows = flattenEntries(boot.composeEntries([layer.patches]))
   // The product scope is the bundle's own scope: every product package shares
   // it, so a row mounting a product package is recognizable without a list.
   const productScope = `${bundlePackage.split('/')[0]}/`

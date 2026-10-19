@@ -77,6 +77,11 @@ function appendRow(root, id, name) {
   )
 }
 
+/** Append one `insert` patch as written, for rows the loader nests or targets. */
+function appendPatch(root, patch) {
+  writeFileSync(bundlePatch(root), `${readFileSync(bundlePatch(root), 'utf8')}\n${patch}\n`)
+}
+
 test('the bundle rows, its declared packages, and the installed profile agree', () => {
   const { root, home } = isolatedRun()
   const { check } = doctor({ root, home })
@@ -241,4 +246,18 @@ test('the installed copy boots with no product source tree behind it', () => {
   assert.equal(report.ok, true, `the installed copy alone must boot serving: ${JSON.stringify(report.failures)}`)
   const productRows = (report.rows ?? []).filter(row => String(row.name).startsWith('@ourfairy/'))
   assert.ok(productRows.length > 0, `the boot reported no product rows: ${JSON.stringify(report.rows)}`)
+})
+
+test('a product row nested in a group is part of the package set', () => {
+  const { root, home } = isolatedRun()
+  // The loader mounts a group's children too, so a package set that only read
+  // the top level would miss a row #99-#101 might nest. A nested undeclared row
+  // must be reported like any other.
+  appendPatch(root, "- insert:\n    - id: group-test\n      name: '@deepseek-ai/dsh-tool-todo'\n      group: true\n      config:\n        - id: nested-product-row\n          name: '@ourfairy/dsh-nested'")
+
+  const { check } = doctor({ root, home })
+  assert.equal(check.ok, false, `a nested undeclared product row must fail the check: ${JSON.stringify(check)}`)
+  for (const needle of ['@ourfairy/dsh-nested', 'nested-product-row']) {
+    assert.ok(check.detail.includes(needle), `the failure must name ${needle}: ${check.detail}`)
+  }
 })

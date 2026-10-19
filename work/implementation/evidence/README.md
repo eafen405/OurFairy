@@ -74,6 +74,12 @@
 | [arch-66-session-events](arch-66-session-events/README.md) | #66 会话事件单次安全读取 |
 | [arch-67-projection-exports](arch-67-projection-exports/README.md) | #67 projection 多余导出 |
 
+## 插件生态（规格 #73）
+
+| 目录 | 内容 |
+| --- | --- |
+| [96-bundle-authority](96-bundle-authority/README.md) | #96 bundle 成为产品包集合的唯一权威 |
+
 ## 原生能力收敛（规格 #71）
 
 | 目录 | 内容 |
