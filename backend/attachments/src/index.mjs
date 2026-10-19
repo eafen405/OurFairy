@@ -7,7 +7,7 @@ import { SessionScopeError } from '@ourfairy/dsh-sessions'
 export { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES, uploadIdsOf } from './service.mjs'
 export { createDownloadResponder } from './download.mjs'
 export const name = 'ourfairy-attachments'
-export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory', 'agents', 'tools']
+export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory', 'agents', 'tools', 'subprocess']
 export function apply(ctx, config) {
   const service = new AttachmentService(ctx, config)
   installPdf(ctx, service)
