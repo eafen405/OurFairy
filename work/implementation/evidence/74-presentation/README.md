@@ -80,6 +80,10 @@ export ANDROID_HOME=/home/eafen405/Android/Sdk
 实测中修掉一处真实缺陷：`terminalEmitNanos` 曾被赋成版本号（`publish()` 的返回值）而不是时间戳，
 导致 `terminalRichPresentedMs` 报出 5,582,695 ms 的荒谬值。修复后同一量级回到 11,100 ms 左右。
 
+第二处：`history` 没有回复，却在等终态文档，每次白等满 60 s 截止，并把这段空闲的帧算进工作负载窗口
+（`rikkahub` `38d3d5a7` 之后修复，`2a599985`）。现在它只等 2 s 让已渲染历史稳定，且
+`terminalPresented`/`terminalRichPresentedMs` 对它为 `null`，不是「未呈现」。
+
 ## 票 #78 模拟器基线：未完成
 
 ### 实际发生的事
