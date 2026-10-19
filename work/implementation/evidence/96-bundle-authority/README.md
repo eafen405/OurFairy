@@ -4,7 +4,9 @@
 > `work/tickets/73/01-bundle-package-authority.md`；协作边界
 > `work/implementation/notes/73-boundary.md`、`73-row-plan.md`。
 > 分支 `ticket/96-bundle-authority`；基线 `integration/spec-73`（合并时 tip
-> `9e0b42c`），并合入 `integration/ourfairy-v1` tip `32aa081`。
+> `9e0b42c`）。完成前按约定合入 `integration/spec-73` tip `22a86aa` 与
+> `integration/ourfairy-v1` tip `78949a4`（它把 dsh 锁定提交推进到 `5b8ec0f1`，
+> 来自 #84 历史 seam 的合并）。最终状态 `13edf1f`。
 
 ## 改了什么
 
@@ -106,7 +108,8 @@ ok  bundle packages: 8 declared package(s) mounted by 9 row(s):
 2. **dsh 公开导出足够。** 在真实生成的 profile 上跑
    `loadProfileDirectory('dsh', <abs profileDir>, <abs dsh apps/cli/package.json>)`，得到
    `layers[0].packageName === '@ourfairy/dsh-v1-bundle'`、`skippedBundles` 为空；
-   `composeEntries([layer.patches])` 返回 37 行（合入 #82 后 40 行），其中 9 行 `@ourfairy/*`。
+   `composeEntries([layer.patches])` 返回 37 行；合入 #82 的三原生行后 40 行，其中 9 行
+   `@ourfairy/*`（实测于锁定的 dsh `5b8ec0f1`）。
    `resolveBundleDir` 能解析声明的 8 个包。`readProfileManifest` 读到的是**安装副本**的 manifest。
 3. **locale 确实被 dsh 读到。** `readPluginMeta('@ourfairy/dsh-v1-bundle', 'file://<profileDir>/package.json')`
    返回 `{"title":{"en":"OurFairy v1 backend"},"description":{"en":"…"}}`；不装 locale 时该调用返回
@@ -117,23 +120,22 @@ ok  bundle packages: 8 declared package(s) mounted by 9 row(s):
 
 ## 实际执行的命令与输出摘要
 
-在 `/home/eafen405/projects/OurFairy/.worktrees/96-authority`，最终状态 `f28c0bd`
-（本票 3 个提交 + 2 个合并提交）上执行。
+在 `/home/eafen405/projects/OurFairy/.worktrees/96-authority` 的最终状态 `13edf1f` 上执行
+（本票 4 个提交 + 3 个合并提交）。
 
 ```
 $ npm test
-ℹ tests 145
+ℹ tests 155
 ℹ suites 7
-ℹ pass 145
+ℹ pass 155
 ℹ fail 0
-ℹ duration_ms 75491.556631
 ```
 
 ```
 $ node scripts/combo.mjs verify
 repo      branch                   expected          actual            result
-ourfairy  integration/ourfairy-v1  based on integra  f28c0bd396b67f71  ok (worktree is based on the integration tip)
-dsh       product/ourfairy-v1      fe2bbc3b1c14efd7  fe2bbc3b1c14efd7  ok
+ourfairy  integration/ourfairy-v1  based on integra  13edf1fbae5a643e  ok (worktree is based on the integration tip)
+dsh       product/ourfairy-v1      5b8ec0f175d3d7ba  5b8ec0f175d3d7ba  ok
 rikkahub  product/ourfairy-v1      2a5999855d608fd0  2a5999855d608fd0  ok
 combo: combination verified
 ```
@@ -161,6 +163,9 @@ $ node --test tests/bundle-packages.test.mjs
    "product packages","isolated home","profile project linked","model double","bundle agent model"]
 ℹ tests 6 / pass 0 / fail 6
 ```
+
+分组行用例的敏感性也单独实测过：把 `flattenEntries` 换回只读顶层后重跑，该用例由绿变红
+（`✖ a product row nested in a group is part of the package set`），恢复实现后再绿。
 
 Green（实现后）同上 8/8。
 

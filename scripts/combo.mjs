@@ -169,6 +169,17 @@ function packageOf(specifier) {
 }
 
 /**
+ * The npm scope a package name belongs to (`@scope/`), or undefined for an
+ * unscoped name. Product rows are recognized by scope rather than by an
+ * enumerated package list.
+ * @param {string} name
+ * @returns {string|undefined}
+ */
+function scopeOf(name) {
+  return name.startsWith('@') ? `${name.split('/')[0]}/` : undefined
+}
+
+/**
  * Every entry of a composed tree, including the rows nested in a group's
  * `config` list. The loader mounts group children the same way it mounts
  * top-level rows, so a package set comparison that walked only the top level
@@ -193,7 +204,9 @@ function flattenEntries(entries) {
  * never mounts). This reads the composed rows through dsh's own patch loader
  * (never a YAML parse of our own), the declared set from the installed bundle
  * manifest, and the installed set through dsh's own bundle resolution — so the
- * answer cannot disagree with what a boot reads.
+ * answer cannot disagree with what a boot reads. Which rows count as product
+ * rows follows from the scopes of those same names, so adding a package to the
+ * manifest cannot make a mounted row invisible to the comparison.
  *
  * A row mounts one module specifier. Subpath exports (`@ourfairy/x/y`) are
  * distinct modules of one declared package, so a package may contribute
@@ -209,8 +222,8 @@ function flattenEntries(entries) {
  * @returns {{ok: boolean, declared: string[], mounted: {id: string, name: string, package: string}[], failures: string[]}}
  */
 export function verifyBundlePackages({ binName, bundlePackage, installAnchor, profileDir }) {
-  // Loaded the same way the launcher boots: the profile's bundle layers, their
-  // declared patches, and the row list composed from them.
+  // Loaded the same way the launcher boots: the profile's bundle layer, the
+  // patches it declares, and the rows composed from them.
   const boot = createRequire(installAnchor)('@deepseek-ai/dsh-app-boot')
   const profile = boot.loadProfileDirectory(binName, profileDir, installAnchor)
   const failures = []
@@ -227,12 +240,14 @@ export function verifyBundlePackages({ binName, bundlePackage, installAnchor, pr
   const manifest = boot.readProfileManifest(binName, layer.packageDir)
   const declared = Object.keys(manifest.dependencies ?? {}).sort()
   const rows = flattenEntries(boot.composeEntries([layer.patches]))
-  // The product scope is the bundle's own scope: every product package shares
-  // it, so a row mounting a product package is recognizable without a list.
-  const productScope = `${bundlePackage.split('/')[0]}/`
+  // Product rows share a scope with the bundle's own package or with a declared
+  // package. Taking that scope from the data, not from a package list, is what
+  // lets a row mounting an undeclared product package be reported rather than
+  // silently ignored.
+  const productScopes = new Set([bundlePackage, ...declared].map(scopeOf).filter(scope => scope !== undefined))
 
   const mounted = rows
-    .filter(row => typeof row.name === 'string' && row.name.startsWith(productScope))
+    .filter(row => typeof row.name === 'string' && [...productScopes].some(scope => row.name.startsWith(scope)))
     .map(row => ({ id: String(row.id), name: row.name, package: packageOf(row.name) }))
 
   const declaredSet = new Set(declared)
