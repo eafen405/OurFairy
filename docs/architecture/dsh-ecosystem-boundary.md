@@ -19,7 +19,7 @@
 | 载体 | 原生 Web 载体服务 `ctx.webServer`，产品模块注册 `exact` 路由（身份、会话、对话、网关、附件、语音） |
 | 路径 | `/identity/*`、`/sessions/*`、`/chat/*`、`/gateway/*`、`/attachments/*`、`/speech/*`，全部在 `/api` 之外 |
 | 鉴权 | 请求头 `Authorization: Bearer <session token>`；调用者只由凭据派生，不接受请求体里的用户字段 |
-| 栅栏 | 每个产品路由先调 `ctx.connection.fence(request)`（与原生 `/api` 同一个 Host/Origin 栅栏），再读请求体 |
+| 栅栏 | 每个产品路由先调 `ctx.connection.fence(request)`（与原生 `/api` 同一个 Host/Origin 栅栏），再读请求体；JSON 路由共用同一个 `postHandler` 包装 |
 | 错误 | `{ ok: false, error: { code, message } }`，code 以模块前缀区分（如 `chat/unauthorized`） |
 | 流 | `/chat/observe` 返回 `text/event-stream`；断线补齐用 `/chat/read` 与 `/chat/page` |
 
@@ -68,7 +68,7 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | `/api` 在 handler 之前整体准入：匿名 401，已准入后无端点 404 | `tests/identity-http.test.mjs`：`a session credential admits dsh /api while an anonymous request is refused at the door` |
 | 产品流式面是自建 SSE，断开观察不停止后端回复 | `tests/remote-chat.test.mjs`：`SSE preserves every text prefix and disconnecting observation leaves the backend reply running` |
 | 产品路由拒绝匿名与越权（含法厄同），且早于冷恢复 | `tests/remote-chat.test.mjs`：`all remote paths reject anonymous and foreign owners, including administrator, before cold resume` |
-| 产品路由在业务处理前拒绝不受信的 Host（与 `/api` 同一栅栏） | `tests/identity-http.test.mjs`：`a request for an untrusted Host is refused by the same fence the /api route uses` |
+| 产品路由在业务处理前拒绝不受信的 Host（登录路由是该包装的可观察实例） | `tests/identity-http.test.mjs`：`a request for an untrusted Host is refused by the same fence the /api route uses` |
 | 组合不挂载 Gateway、Remote/Typert 与 plugin manager 行 | `tests/ecosystem-boundary.test.mjs`（解析 bundle 行集合，任一包名出现即失败） |
 
 ## 2. 登录路径留在 `/api` 之外
@@ -151,6 +151,8 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | 声称 | 检查（失效即失败） |
 | --- | --- |
 | 两个用户（含管理员）的私有文件互相不可读，公有文件可共享 | `tests/spaces.test.mjs`：`chat tools write own private files, share public files, and deny another user including administrator` |
+| 请求 `danger-full-access` 提权得到拒绝而不是无约束执行 | `tests/spaces.test.mjs`：`real child processes share public files, keep private boundaries after cd, and retain networking` |
+| 符号链接不能把授权范围内的路径变成对外部路径的读写 | `tests/spaces.test.mjs`：`directory changes, edits, image reads and symlinks retain the same owner boundary` |
 | 没有会话身份的文件与脚本调用直接拒绝，而不是继承默认用户 | `tests/spaces.test.mjs`：`agentless filesystem and script Interface calls refuse instead of inheriting a default user` |
 
 ### 3.4 附件生命周期
