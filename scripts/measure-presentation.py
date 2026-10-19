@@ -18,6 +18,42 @@ ACTIVITY = "me.rerere.rikkahub.ui.identity.PresentationBenchmarkActivity"
 LOG_TAG = "OurFairyPresentation"
 
 
+
+
+def wait_for_device(adb, timeout):
+    """Wait for an attached device that reports `device`, up to [timeout] seconds."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        state = subprocess.run([*adb, "get-state"], capture_output=True, text=True)
+        if state.returncode == 0 and state.stdout.strip() == "device":
+            return True
+        time.sleep(5)
+    return False
+
+def read_result_file(scenario, run_id, package="me.rerere.rikkahub", adb=None):
+    """Read the activity's own result file for this run, or None when it is absent.
+
+    The activity writes one file per run id, so a result can only ever be read back for the run
+    that produced it. The measurement app is not debuggable, so this needs a device that allows
+    root; the logcat line remains the fallback.
+    """
+    if adb is None:
+        return None
+    path = f"/data/data/{package}/files/presentation-{scenario}-{run_id}.json"
+    try:
+        text = subprocess.run([*adb, "shell", "cat", path], capture_output=True, text=True,
+                              timeout=30)
+    except subprocess.TimeoutExpired:
+        return None
+    if text.returncode != 0 or not text.stdout.strip().startswith("{"):
+        return None
+    try:
+        return json.loads(text.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--adb", default="adb")
@@ -55,6 +91,9 @@ def main():
     failures = []
     for round_index in range(1, args.rounds + 1):
         for scenario in selected:
+            if not wait_for_device(adb, args.timeout):
+                raise SystemExit(f"device unavailable before {scenario} round {round_index}; "
+                                 f"see {args.out}")
             run_id = f"{scenario}-r{round_index}-{time.time_ns()}"
             started = time.monotonic()
             log = subprocess.Popen([*adb, "logcat", "-T", time.strftime("%m-%d %H:%M:%S.000", time.localtime(started)),
@@ -72,6 +111,9 @@ def main():
                 reverse = False
                 result = None
                 while time.monotonic() - started < args.timeout:
+                    # Prefer the run's own result file: it is written before the log line and
+                    # survives a rotated log ring, which a busy device produces routinely.
+                    result = read_result_file(scenario, run_id, args.package, adb)
                     if args.scroll and scenario == "stream" and time.monotonic() >= next_swipe:
                         size = call("shell", "wm", "size").strip().split()[-1]
                         width, height = (int(value) for value in size.split("x"))
@@ -92,8 +134,23 @@ def main():
                             break
                     if result is not None:
                         break
+                    time.sleep(1.0)
                 if result is None:
+                    # The activity also writes its own result file. A busy device can rotate the
+                    # logcat ring before this reader sees the line, so fall back to that file
+                    # before declaring the run missing.
+                    result = read_result_file(scenario, run_id, args.package, adb)
+                if result is None:
+                    # Preserve whatever the activity did write, so a timeout still carries evidence.
+                    late = read_result_file(scenario, run_id, args.package, adb)
+                    if late is not None:
+                        (args.out / f"{scenario}-r{round_index}-late.json").write_text(
+                            json.dumps(late, ensure_ascii=False, indent=2) + "\n")
                     raise TimeoutError(f"{scenario} round {round_index} did not report in {args.timeout}s")
+                if result.get("runId") != run_id:
+                    raise TimeoutError(
+                        f"{scenario} round {round_index}: the result belongs to run {result.get('runId')},"
+                        f" not {run_id}")
                 (args.out / f"{scenario}-r{round_index}.json").write_text(
                     json.dumps(result, ensure_ascii=False, indent=2) + "\n")
                 (args.out / f"{scenario}-r{round_index}-frames.txt").write_text(
