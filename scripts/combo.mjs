@@ -22,6 +22,7 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -155,6 +156,99 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
     rows.push(row)
   }
   return { ok: failures.length === 0 || allowDrift, failures, rows }
+}
+
+/**
+ * The package a module specifier belongs to: `@scope/name` for both
+ * `@scope/name` and `@scope/name/subpath`.
+ * @param {string} specifier
+ * @returns {string}
+ */
+function packageOf(specifier) {
+  return specifier.split('/').slice(0, 2).join('/')
+}
+
+/**
+ * Compare the bundle's patch rows with the product packages it declares and
+ * with the packages the generated profile installs.
+ *
+ * The bundle's `dependencies` are the product package inventory: the profile
+ * derives its product dependencies from them (plus the probe, which the bundle
+ * never mounts). This reads the composed rows through dsh's own patch loader
+ * (never a YAML parse of our own), the declared set from the installed bundle
+ * manifest, and the installed set through dsh's own bundle resolution — so the
+ * answer cannot disagree with what a boot reads.
+ *
+ * A row mounts one module specifier. Subpath exports (`@ourfairy/x/y`) are
+ * distinct modules of one declared package, so a package may contribute
+ * several rows, but the same specifier twice is a duplicate mount. Every
+ * declared package must also resolve as installed in the profile, which is
+ * what makes the bundle's declaration the set the launcher installs.
+ * @param {{
+ *   binName: string,
+ *   bundlePackage: string,
+ *   installAnchor: string,
+ *   profileDir: string,
+ * }} options
+ * @returns {{ok: boolean, declared: string[], mounted: {id: string, name: string, package: string}[], failures: string[]}}
+ */
+export function verifyBundlePackages({ binName, bundlePackage, installAnchor, profileDir }) {
+  // Loaded the same way the launcher boots: the profile's bundle layers, their
+  // declared patches, and the row list composed from them.
+  const boot = createRequire(installAnchor)('@deepseek-ai/dsh-app-boot')
+  const profile = boot.loadProfileDirectory(binName, profileDir, installAnchor)
+  const failures = []
+  const skipped = profile.skippedBundles.find(entry => entry.packageName === bundlePackage)
+  if (skipped !== undefined) {
+    failures.push(`${bundlePackage} was not loaded from ${profileDir}: ${skipped.reason}`)
+  }
+  const layer = profile.layers.find(entry => entry.packageName === bundlePackage)
+  if (layer === undefined) {
+    if (skipped === undefined) failures.push(`${bundlePackage} is not a loaded bundle of ${profileDir}`)
+    return { ok: false, declared: [], mounted: [], failures }
+  }
+
+  const manifest = boot.readProfileManifest(binName, layer.packageDir)
+  const declared = Object.keys(manifest.dependencies ?? {}).sort()
+  const rows = boot.composeEntries([layer.patches])
+  // The product scope is the bundle's own scope: every product package shares
+  // it, so a row mounting a product package is recognizable without a list.
+  const productScope = `${bundlePackage.split('/')[0]}/`
+
+  const mounted = rows
+    .filter(row => typeof row.name === 'string' && row.name.startsWith(productScope))
+    .map(row => ({ id: String(row.id), name: row.name, package: packageOf(row.name) }))
+
+  const declaredSet = new Set(declared)
+  const mountedPackages = new Set()
+  const seen = new Map()
+  for (const row of mounted) {
+    if (!declaredSet.has(row.package)) {
+      failures.push(`bundle row "${row.id}" mounts ${row.name}, but ${bundlePackage} does not declare ${row.package}`)
+    }
+    mountedPackages.add(row.package)
+    const ids = seen.get(row.name) ?? []
+    ids.push(row.id)
+    seen.set(row.name, ids)
+  }
+  for (const [name, ids] of seen) {
+    if (ids.length > 1) {
+      failures.push(`bundle rows ${ids.map(id => `"${id}"`).join(' and ')} both mount ${name} (${packageOf(name)}); a module specifier may be mounted once`)
+    }
+  }
+  for (const name of declared) {
+    if (!mountedPackages.has(name)) {
+      failures.push(`${bundlePackage} declares ${name}, but no bundle row mounts it`)
+    }
+    try {
+      boot.resolveBundleDir(binName, name, installAnchor, profileDir)
+    } catch (error) {
+      failures.push(`${bundlePackage} declares ${name}, but it is not installed in ${profileDir};`
+        + ` run 'ourfairy-backend start --reinstall': ${error.message}`)
+    }
+  }
+
+  return { ok: failures.length === 0, declared, mounted, failures }
 }
 
 function printTable(rows) {
