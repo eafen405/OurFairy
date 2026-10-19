@@ -38,10 +38,10 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/rikkahub.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "505f02c2969efe46f8a1cca3fc831e00f559429e",
+      "productCommit": "38d3d5a7d412d6c9b60a45ee9ce36fb43e68cf45",
       "researchUpstreamSha": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
       "researchUpstreamRef": "origin/master",
-      "note": "productCommit is the Android fork integration branch tip."
+      "note": "productCommit is the Android fork integration branch tip. It carries the presentation measurement as its own perf variant: the offline workloads run through the production RemoteChatState and RemoteTranscript, and a result reports whether the newest snapshot was applied and presented. The measurement does not ship in release."
     }
   },
   "backend": {

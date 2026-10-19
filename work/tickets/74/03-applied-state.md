@@ -15,4 +15,8 @@
 
 ## Blocked by
 
+<<<<<<< HEAD
 - [五档负载唯一化并驱动生产接收状态](https://github.com/eafen405/OurFairy/issues/76)
+=======
+- 五档固定负载票
+>>>>>>> integration/ourfairy-v1

@@ -15,4 +15,8 @@
 
 ## Blocked by
 
+<<<<<<< HEAD
 - [测量结果回答最新快照是否已应用并呈现](https://github.com/eafen405/OurFairy/issues/77)
+=======
+- 结果回答"最新快照是否已应用并呈现"票
+>>>>>>> integration/ourfairy-v1

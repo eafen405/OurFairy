@@ -15,4 +15,4 @@
 
 ## Blocked by
 
-- [按问题判据定位热点并做受控优化](https://github.com/eafen405/OurFairy/issues/79)
+- 热点判定与受控优化票
