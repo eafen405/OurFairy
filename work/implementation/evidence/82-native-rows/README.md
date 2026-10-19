@@ -73,8 +73,8 @@
 一次真实 spill 的端到端测量（`bash` 打印 140 000 + 30 000 字节，spill 后模型实际收到）：
 
 ```
-preview  31 930 字符 / 7 987 估算 token（预算内）
-locator  /tmp/<home>/dsh-home/spill/session-d850127a0036/311a04b3e33d-bash.txt
+preview  31 931 字符 / 7 987 估算 token（预算内），notice 报告 Omitted 32 396 bytes
+locator  /tmp/<home>/dsh-home/spill/session-<sha256 前 12 位>/<随机前缀>-bash.txt
 file     64 108 字节（bash 自身 64 000 字节尾截断后的完整结果）
 ```
 
@@ -122,7 +122,7 @@ spill 只负责模型上下文那一层。
 `bash` 打印 140 000 字节 + 中间标记 + 30 000 字节 + 尾标记，模型收到的 `tool_result`：
 
 - `is_error` 为 false（工具调用本身没有失败）。
-- 预览 31 930 字符（< 48 000 断言上限），保留尾部、省略中间标记。
+- 预览 31 931 字符（< 48 000 断言上限），保留尾部、省略中间标记；notice 报告省略 32 396 字节。
 - 末尾是原生 notice：`(Omitted N bytes. Full formatted result stored at: <path>. Use read with offset/limit, or grep this path to search within it.)`。
 - `<path>` 在隔离 `DSH_HOME` 的 `spill` 根下；文件存在，包含被省略的中间标记与尾部标记，
   长度 > 预览长度。
@@ -161,7 +161,7 @@ spill 只负责模型上下文那一层。
 $ node --test tests/native-rows.test.mjs
 ✔ a rate-limited step retries once at the durable boundary without a second user message
 ✔ stopping while a retry backoff is pending ends the turn promptly and never starts it
-✔ an oversized bash result reaches the model with a bounded preview and a complete spill file
+✔ an oversized bash result reaches the model as a bounded preview and a complete spill file
 ✔ the recovery is the mounted row: without it the same failure ends the turn
 ℹ tests 4 / pass 4 / fail 0
 
@@ -176,7 +176,22 @@ $ node scripts/ourfairy-backend.mjs doctor --json
 profile project linked、model double、bundle agent model 全部 ok）
 ```
 
-`npm run combo:verify`：见「未执行项」。
+```
+$ npm run combo:verify
+ourfairy  integration/ourfairy-v1  based on integra  004417d      ok
+dsh       product/ourfairy-v1      fe2bbc3b1c14efd7  fe2bbc3b1c14efd7  ok
+rikkahub  product/ourfairy-v1      2a5999855d608fd0  2a5999855d608fd0  ok
+combo: combination verified
+```
+
+合并 `integration/ourfairy-v1` 后的状态：`43dd235` → `bc44f78`（无冲突），随后 3 次提交
+（`615d781`、`65b7190`、`004417d`）各自的 pre-commit 钩子都在合并后状态跑了全量测试 +
+`combo:verify`，均通过。
+
+一次无关 flake：`615d781` 之后的那次 pre-commit 全量在
+`tests/pdf.test.mjs`（`resource-limit` 期望，实得 `worker-unavailable`）失败，当时 load
+average 15.58；隔离重跑 `node --test tests/pdf.test.mjs` 为 5/5 通过，未改 PDF 代码。本仓
+`17-pdf-text/`、`arch-49`、`arch-54` 已记录过同名并发负载 flake。
 
 ## Red / green
 
@@ -188,7 +203,7 @@ $ node --test tests/native-rows.test.mjs
   projection 里没有 llm/retry 事件（替身只收到 1 个请求）
 ✖ stopping while a retry backoff is pending ...
   condition not reached ... error: "500 ..."
-✖ an oversized bash result ... 
+✖ an oversized bash result reaches the model as a bounded preview and a complete spill file
   the model must receive a locator; preview tail 以 bash 自身的
   "[output truncated; ...]" 结尾，没有 spill notice
 ```
@@ -221,9 +236,6 @@ Green：挂载三行 + 声明 `retryPolicy` 后 4/4 通过。
 
 ## 未执行项
 
-- `npm run combo:verify` 未在本票分支上单跑：`doctor --json` 的 `combo combination` 检查通过了
-  同一组合校验（`verifyCombination`，`scripts/ourfairy-backend.mjs`），但整条命令的独立输出没有
-  留证。合并集成分支后由 Lead 在最终状态复跑。
 - 真实模型服务（MiniMax / DeepSeek）上的重试未验证：需要真实 429，本机没有可控的限流入口。
 - spill 的可读回（`read`/`grep` 打开 locator）由 #83 验收；本票只断言文件存在且完整。
 - 图像结果的 spill 未覆盖：`llm-pi-ai` 未实现 `imageRequestPricing`，含图片的 tool 结果在
