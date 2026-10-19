@@ -1,0 +1,3502 @@
+{
+  "schemaVersion": 1,
+  "ticket": 88,
+  "benchmark": "chat projection read/observe baseline (pre-change)",
+  "startedAt": "2026-10-19T12:22:23.486Z",
+  "params": {
+    "historyTurnCounts": [
+      40,
+      160
+    ],
+    "replyChars": 2048,
+    "chunkSize": 16,
+    "streamChunkDelayMs": 15,
+    "observerCounts": [
+      1,
+      2
+    ],
+    "repetitions": 2,
+    "readSamples": 32,
+    "readSampleIntervalMs": 10,
+    "rssSampleIntervalMs": 25,
+    "streamTimeoutMs": 60000
+  },
+  "machine": {
+    "uname": "Linux LAPTOP-45RC44AF 6.6.87.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun  5 18:30:46 UTC 2025 x86_64 GNU/Linux",
+    "kernel": "6.6.87.2-microsoft-standard-WSL2",
+    "arch": "x64",
+    "node": "v24.18.0",
+    "cpuModel": "AMD Ryzen 9 8945HX with Radeon Graphics",
+    "cpuCount": 32,
+    "totalMemoryBytes": 25195302912,
+    "productHead": "d9fa037d748c5920388e10d3e2721fcd53374451",
+    "combination": {
+      "dsh": "fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee",
+      "rikkahub": "38d3d5a7d412d6c9b60a45ee9ce36fb43e68cf45"
+    },
+    "loadAverageAtStart": [
+      1.75,
+      2.77,
+      3.5
+    ],
+    "loadedAtEnd": [
+      1.05,
+      2.36,
+      3.31
+    ]
+  },
+  "backend": {
+    "dshHead": "fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee",
+    "installMode": "installed",
+    "isolatedHome": "/tmp/ourfairy-bench-projection-IK5ZCR",
+    "firstStartMs": 3179.69,
+    "memoryAtFirstStart": {
+      "rssKb": 147584,
+      "peakKb": 147584
+    }
+  },
+  "mock": {
+    "baseURL": "http://127.0.0.1:44941",
+    "successTextChars": 2048,
+    "chunkSize": 16,
+    "chunkDelayMs": 15
+  },
+  "runs": [
+    {
+      "index": 0,
+      "historyTurns": 40,
+      "observers": 1,
+      "startedAt": "2026-10-19T12:22:27.720Z",
+      "sessionId": "ourfairy-user-2-primary",
+      "seeding": {
+        "turns": 40,
+        "elapsedMs": 1524.74,
+        "eventCount": 326,
+        "cursor": 325,
+        "messages": 16,
+        "sessionLogBytes": 66233
+      },
+      "quiescentReads": {
+        "count": 32,
+        "min": 5.12,
+        "p50": 6.85,
+        "p95": 8.38,
+        "max": 8.51,
+        "mean": 6.73
+      },
+      "quiescentCpuMsPerRead": 3.94,
+      "stream": {
+        "fragments": 128,
+        "mockChunksSent": 133,
+        "durationMs": 1986.56,
+        "sendRttMs": 9.93,
+        "cpuMs": 382.37,
+        "cpuMsPerFragment": 2.99,
+        "cpuMsPerFragmentPerObserver": 2.99,
+        "probeCpuMsApprox": 118.2,
+        "cpuMsExcludingProbeApprox": 264.17,
+        "cpuMsPerFragmentExcludingProbeApprox": 2.06,
+        "reads": {
+          "count": 30,
+          "min": 5.48,
+          "p50": 6.87,
+          "p95": 10.33,
+          "max": 13.87,
+          "mean": 7.42
+        },
+        "samplesDuringReply": 29,
+        "sampleIntervalMs": 59,
+        "readSamples": [
+          {
+            "atMs": 31.18,
+            "rttMs": 10.33,
+            "replyStatus": 1,
+            "attemptChars": 16,
+            "messages": 16
+          },
+          {
+            "atMs": 101.51,
+            "rttMs": 7.71,
+            "replyStatus": 1,
+            "attemptChars": 96,
+            "messages": 16
+          },
+          {
+            "atMs": 168.61,
+            "rttMs": 6.02,
+            "replyStatus": 1,
+            "attemptChars": 160,
+            "messages": 16
+          },
+          {
+            "atMs": 234.76,
+            "rttMs": 8.45,
+            "replyStatus": 1,
+            "attemptChars": 240,
+            "messages": 16
+          },
+          {
+            "atMs": 302.52,
+            "rttMs": 6.97,
+            "replyStatus": 1,
+            "attemptChars": 304,
+            "messages": 16
+          },
+          {
+            "atMs": 369.48,
+            "rttMs": 7.8,
+            "replyStatus": 1,
+            "attemptChars": 368,
+            "messages": 16
+          },
+          {
+            "atMs": 437,
+            "rttMs": 5.48,
+            "replyStatus": 1,
+            "attemptChars": 448,
+            "messages": 16
+          },
+          {
+            "atMs": 502.19,
+            "rttMs": 6.92,
+            "replyStatus": 1,
+            "attemptChars": 512,
+            "messages": 16
+          },
+          {
+            "atMs": 569.43,
+            "rttMs": 7.1,
+            "replyStatus": 1,
+            "attemptChars": 592,
+            "messages": 16
+          },
+          {
+            "atMs": 635.91,
+            "rttMs": 6.64,
+            "replyStatus": 1,
+            "attemptChars": 656,
+            "messages": 16
+          },
+          {
+            "atMs": 702.29,
+            "rttMs": 6.56,
+            "replyStatus": 1,
+            "attemptChars": 720,
+            "messages": 16
+          },
+          {
+            "atMs": 768.57,
+            "rttMs": 8.01,
+            "replyStatus": 1,
+            "attemptChars": 800,
+            "messages": 16
+          },
+          {
+            "atMs": 835.68,
+            "rttMs": 5.97,
+            "replyStatus": 1,
+            "attemptChars": 864,
+            "messages": 16
+          },
+          {
+            "atMs": 901.44,
+            "rttMs": 8.16,
+            "replyStatus": 1,
+            "attemptChars": 928,
+            "messages": 16
+          },
+          {
+            "atMs": 969.35,
+            "rttMs": 6.82,
+            "replyStatus": 1,
+            "attemptChars": 1008,
+            "messages": 16
+          },
+          {
+            "atMs": 1035.71,
+            "rttMs": 7.25,
+            "replyStatus": 1,
+            "attemptChars": 1072,
+            "messages": 16
+          },
+          {
+            "atMs": 1102.49,
+            "rttMs": 8.5,
+            "replyStatus": 1,
+            "attemptChars": 1152,
+            "messages": 16
+          },
+          {
+            "atMs": 1170.45,
+            "rttMs": 5.81,
+            "replyStatus": 1,
+            "attemptChars": 1216,
+            "messages": 16
+          },
+          {
+            "atMs": 1236.06,
+            "rttMs": 6.62,
+            "replyStatus": 1,
+            "attemptChars": 1280,
+            "messages": 16
+          },
+          {
+            "atMs": 1302.82,
+            "rttMs": 6.82,
+            "replyStatus": 1,
+            "attemptChars": 1360,
+            "messages": 16
+          },
+          {
+            "atMs": 1369.71,
+            "rttMs": 6.87,
+            "replyStatus": 1,
+            "attemptChars": 1424,
+            "messages": 16
+          },
+          {
+            "atMs": 1436.25,
+            "rttMs": 6.66,
+            "replyStatus": 1,
+            "attemptChars": 1504,
+            "messages": 16
+          },
+          {
+            "atMs": 1501.84,
+            "rttMs": 6.36,
+            "replyStatus": 1,
+            "attemptChars": 1568,
+            "messages": 16
+          },
+          {
+            "atMs": 1567.55,
+            "rttMs": 9.29,
+            "replyStatus": 1,
+            "attemptChars": 1632,
+            "messages": 16
+          },
+          {
+            "atMs": 1637.95,
+            "rttMs": 6.56,
+            "replyStatus": 1,
+            "attemptChars": 1712,
+            "messages": 16
+          },
+          {
+            "atMs": 1704.33,
+            "rttMs": 6.27,
+            "replyStatus": 1,
+            "attemptChars": 1776,
+            "messages": 16
+          },
+          {
+            "atMs": 1770,
+            "rttMs": 8.59,
+            "replyStatus": 1,
+            "attemptChars": 1856,
+            "messages": 16
+          },
+          {
+            "atMs": 1838.51,
+            "rttMs": 5.93,
+            "replyStatus": 1,
+            "attemptChars": 1920,
+            "messages": 16
+          },
+          {
+            "atMs": 1904.5,
+            "rttMs": 8.35,
+            "replyStatus": 1,
+            "attemptChars": 1984,
+            "messages": 16
+          },
+          {
+            "atMs": 1972.24,
+            "rttMs": 13.87,
+            "replyStatus": 0,
+            "attemptChars": 0,
+            "messages": 16
+          }
+        ],
+        "frames": {
+          "count": 139,
+          "bytesTotal": 27178104,
+          "perObserver": [
+            {
+              "count": 139,
+              "bytesTotal": 27178104,
+              "bytes": {
+                "count": 139,
+                "min": 192302,
+                "p50": 195271,
+                "p95": 197811,
+                "max": 215648,
+                "mean": 195525.93
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 1.07,
+                "p50": 15.07,
+                "p95": 16.62,
+                "max": 19.75,
+                "mean": 14.3
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0.07,
+                "p95": 1.62,
+                "max": 4.75,
+                "mean": 0.42
+              },
+              "openingBytes": 191628
+            }
+          ],
+          "observerSpreadMs": null
+        },
+        "finalProjection": {
+          "cursor": 333,
+          "messages": 16,
+          "lastRole": 2,
+          "lastStatus": 2,
+          "lastSeq": 331
+        },
+        "observersAgree": true
+      },
+      "memory": {
+        "beforeKb": 237944,
+        "samples": [
+          240504,
+          241784,
+          242552,
+          243320,
+          244344,
+          219284,
+          220820,
+          221076,
+          221844,
+          223124,
+          223636,
+          224404,
+          225428,
+          225940,
+          227476,
+          227732,
+          228500,
+          229524,
+          231060,
+          231828,
+          232596,
+          233364,
+          234644,
+          235412,
+          235924,
+          237204,
+          237972,
+          238228,
+          239508,
+          240020,
+          241300,
+          242068,
+          242324,
+          243860,
+          244628,
+          244884,
+          246164,
+          246932,
+          247956,
+          248724,
+          249492,
+          250260,
+          220204,
+          220716,
+          221484,
+          222252,
+          223532,
+          224044,
+          224812,
+          226092,
+          226604,
+          227884,
+          228652,
+          228908,
+          230444,
+          231212,
+          231468,
+          232748,
+          233516,
+          234540,
+          235308,
+          236076,
+          237100,
+          237868,
+          238636,
+          239660,
+          240428,
+          241964,
+          242220,
+          242988,
+          244268,
+          244780,
+          245548,
+          246828,
+          247084,
+          248620,
+          248876,
+          249644
+        ],
+        "sampledPeakKb": 250260,
+        "streamEndRssKb": 220912,
+        "peakVmHwmKb": 252204
+      },
+      "endedAt": "2026-10-19T12:22:31.804Z",
+      "backendStartMs": 659.18
+    },
+    {
+      "index": 1,
+      "historyTurns": 40,
+      "observers": 2,
+      "startedAt": "2026-10-19T12:22:32.760Z",
+      "sessionId": "ourfairy-user-2-9b26164c-38d8-4530-ae8c-1bb3d8b92257",
+      "seeding": {
+        "turns": 40,
+        "elapsedMs": 1545.29,
+        "eventCount": 326,
+        "cursor": 325,
+        "messages": 16,
+        "sessionLogBytes": 66253
+      },
+      "quiescentReads": {
+        "count": 32,
+        "min": 4.94,
+        "p50": 6.67,
+        "p95": 8.66,
+        "max": 9.19,
+        "mean": 6.7
+      },
+      "quiescentCpuMsPerRead": 3.85,
+      "stream": {
+        "fragments": 128,
+        "mockChunksSent": 133,
+        "durationMs": 1996.41,
+        "sendRttMs": 10.83,
+        "cpuMs": 503.47,
+        "cpuMsPerFragment": 3.93,
+        "cpuMsPerFragmentPerObserver": 1.97,
+        "probeCpuMsApprox": 111.65,
+        "cpuMsExcludingProbeApprox": 391.82,
+        "cpuMsPerFragmentExcludingProbeApprox": 3.06,
+        "reads": {
+          "count": 29,
+          "min": 5.44,
+          "p50": 7.53,
+          "p95": 13,
+          "max": 13.06,
+          "mean": 8.03
+        },
+        "samplesDuringReply": 29,
+        "sampleIntervalMs": 59,
+        "readSamples": [
+          {
+            "atMs": 31.24,
+            "rttMs": 13.06,
+            "replyStatus": 1,
+            "attemptChars": 16,
+            "messages": 16
+          },
+          {
+            "atMs": 103.41,
+            "rttMs": 7.41,
+            "replyStatus": 1,
+            "attemptChars": 96,
+            "messages": 16
+          },
+          {
+            "atMs": 169.81,
+            "rttMs": 5.57,
+            "replyStatus": 1,
+            "attemptChars": 160,
+            "messages": 16
+          },
+          {
+            "atMs": 235.25,
+            "rttMs": 9.07,
+            "replyStatus": 1,
+            "attemptChars": 240,
+            "messages": 16
+          },
+          {
+            "atMs": 304.29,
+            "rttMs": 6.14,
+            "replyStatus": 1,
+            "attemptChars": 304,
+            "messages": 16
+          },
+          {
+            "atMs": 370.02,
+            "rttMs": 8.53,
+            "replyStatus": 1,
+            "attemptChars": 368,
+            "messages": 16
+          },
+          {
+            "atMs": 437.72,
+            "rttMs": 5.45,
+            "replyStatus": 1,
+            "attemptChars": 448,
+            "messages": 16
+          },
+          {
+            "atMs": 502.33,
+            "rttMs": 7.24,
+            "replyStatus": 1,
+            "attemptChars": 512,
+            "messages": 16
+          },
+          {
+            "atMs": 568.93,
+            "rttMs": 10.45,
+            "replyStatus": 1,
+            "attemptChars": 576,
+            "messages": 16
+          },
+          {
+            "atMs": 638.71,
+            "rttMs": 8.59,
+            "replyStatus": 1,
+            "attemptChars": 656,
+            "messages": 16
+          },
+          {
+            "atMs": 706.7,
+            "rttMs": 8.61,
+            "replyStatus": 1,
+            "attemptChars": 736,
+            "messages": 16
+          },
+          {
+            "atMs": 774.87,
+            "rttMs": 5.56,
+            "replyStatus": 1,
+            "attemptChars": 800,
+            "messages": 16
+          },
+          {
+            "atMs": 840.04,
+            "rttMs": 9.66,
+            "replyStatus": 1,
+            "attemptChars": 864,
+            "messages": 16
+          },
+          {
+            "atMs": 908.9,
+            "rttMs": 7.53,
+            "replyStatus": 1,
+            "attemptChars": 944,
+            "messages": 16
+          },
+          {
+            "atMs": 975.8,
+            "rttMs": 5.44,
+            "replyStatus": 1,
+            "attemptChars": 1008,
+            "messages": 16
+          },
+          {
+            "atMs": 1040.6,
+            "rttMs": 9.84,
+            "replyStatus": 1,
+            "attemptChars": 1088,
+            "messages": 16
+          },
+          {
+            "atMs": 1109.84,
+            "rttMs": 5.58,
+            "replyStatus": 1,
+            "attemptChars": 1152,
+            "messages": 16
+          },
+          {
+            "atMs": 1175.01,
+            "rttMs": 7.8,
+            "replyStatus": 1,
+            "attemptChars": 1216,
+            "messages": 16
+          },
+          {
+            "atMs": 1242.32,
+            "rttMs": 6.78,
+            "replyStatus": 1,
+            "attemptChars": 1296,
+            "messages": 16
+          },
+          {
+            "atMs": 1309.2,
+            "rttMs": 6.08,
+            "replyStatus": 1,
+            "attemptChars": 1360,
+            "messages": 16
+          },
+          {
+            "atMs": 1374.83,
+            "rttMs": 8.37,
+            "replyStatus": 1,
+            "attemptChars": 1440,
+            "messages": 16
+          },
+          {
+            "atMs": 1442.75,
+            "rttMs": 6,
+            "replyStatus": 1,
+            "attemptChars": 1504,
+            "messages": 16
+          },
+          {
+            "atMs": 1507.66,
+            "rttMs": 11.4,
+            "replyStatus": 1,
+            "attemptChars": 1568,
+            "messages": 16
+          },
+          {
+            "atMs": 1578.52,
+            "rttMs": 5.88,
+            "replyStatus": 1,
+            "attemptChars": 1648,
+            "messages": 16
+          },
+          {
+            "atMs": 1643.66,
+            "rttMs": 9.23,
+            "replyStatus": 1,
+            "attemptChars": 1712,
+            "messages": 16
+          },
+          {
+            "atMs": 1713.6,
+            "rttMs": 6.68,
+            "replyStatus": 1,
+            "attemptChars": 1792,
+            "messages": 16
+          },
+          {
+            "atMs": 1779.58,
+            "rttMs": 13,
+            "replyStatus": 1,
+            "attemptChars": 1872,
+            "messages": 16
+          },
+          {
+            "atMs": 1851.85,
+            "rttMs": 6.4,
+            "replyStatus": 1,
+            "attemptChars": 1936,
+            "messages": 16
+          },
+          {
+            "atMs": 1918.07,
+            "rttMs": 11.63,
+            "replyStatus": 1,
+            "attemptChars": 2000,
+            "messages": 16
+          }
+        ],
+        "frames": {
+          "count": 278,
+          "bytesTotal": 54396228,
+          "perObserver": [
+            {
+              "count": 139,
+              "bytesTotal": 27198114,
+              "bytes": {
+                "count": 139,
+                "min": 192418,
+                "p50": 195416,
+                "p95": 197956,
+                "max": 215764,
+                "mean": 195669.88
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 1.09,
+                "p50": 15.09,
+                "p95": 17.24,
+                "max": 23.44,
+                "mean": 14.34
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0.09,
+                "p95": 2.24,
+                "max": 8.44,
+                "mean": 0.61
+              },
+              "openingBytes": 383488
+            },
+            {
+              "count": 139,
+              "bytesTotal": 27198114,
+              "bytes": {
+                "count": 139,
+                "min": 192418,
+                "p50": 195416,
+                "p95": 197956,
+                "max": 215764,
+                "mean": 195669.88
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 1.16,
+                "p50": 15.04,
+                "p95": 17.2,
+                "max": 23.22,
+                "mean": 14.39
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0.04,
+                "p95": 2.2,
+                "max": 8.22,
+                "mean": 0.64
+              },
+              "openingBytes": 191744
+            }
+          ],
+          "observerSpreadMs": {
+            "count": 139,
+            "min": 0.71,
+            "p50": 1.16,
+            "p95": 2.54,
+            "max": 8.08,
+            "mean": 1.42
+          }
+        },
+        "finalProjection": {
+          "cursor": 333,
+          "messages": 16,
+          "lastRole": 2,
+          "lastStatus": 2,
+          "lastSeq": 331
+        },
+        "observersAgree": true
+      },
+      "memory": {
+        "beforeKb": 241220,
+        "samples": [
+          245316,
+          248644,
+          227184,
+          225832,
+          227368,
+          228648,
+          230440,
+          231720,
+          233000,
+          234536,
+          235816,
+          237352,
+          238632,
+          240168,
+          242216,
+          242984,
+          244520,
+          246568,
+          247336,
+          248872,
+          250152,
+          251688,
+          253736,
+          255016,
+          256040,
+          230168,
+          226184,
+          227720,
+          229768,
+          231048,
+          232584,
+          234120,
+          235400,
+          236936,
+          238472,
+          239240,
+          241288,
+          242824,
+          244360,
+          245640,
+          247176,
+          248456,
+          249992,
+          251528,
+          253064,
+          254600,
+          256904,
+          257672,
+          226264,
+          228312,
+          229080,
+          230616,
+          232920,
+          233688,
+          235736,
+          237272,
+          238040,
+          240088,
+          241624,
+          242392,
+          244696,
+          245720,
+          247512,
+          249048,
+          250072,
+          251864,
+          253400,
+          254936,
+          256216,
+          257752,
+          226020,
+          228068,
+          229604,
+          231396,
+          232420,
+          233956,
+          235748,
+          237028
+        ],
+        "sampledPeakKb": 257752,
+        "streamEndRssKb": 241380,
+        "peakVmHwmKb": 258520
+      },
+      "endedAt": "2026-10-19T12:22:36.885Z",
+      "backendStartMs": 662.31
+    },
+    {
+      "index": 2,
+      "historyTurns": 40,
+      "observers": 2,
+      "startedAt": "2026-10-19T12:22:37.828Z",
+      "sessionId": "ourfairy-user-2-1dcdc138-da3e-4cff-9193-6d5e70dfb710",
+      "seeding": {
+        "turns": 40,
+        "elapsedMs": 1513.6,
+        "eventCount": 326,
+        "cursor": 325,
+        "messages": 16,
+        "sessionLogBytes": 66245
+      },
+      "quiescentReads": {
+        "count": 32,
+        "min": 5.47,
+        "p50": 6.21,
+        "p95": 7.54,
+        "max": 8.27,
+        "mean": 6.32
+      },
+      "quiescentCpuMsPerRead": 3.64,
+      "stream": {
+        "fragments": 128,
+        "mockChunksSent": 133,
+        "durationMs": 1998.36,
+        "sendRttMs": 20.1,
+        "cpuMs": 509.65,
+        "cpuMsPerFragment": 3.98,
+        "cpuMsPerFragmentPerObserver": 1.99,
+        "probeCpuMsApprox": 105.56,
+        "cpuMsExcludingProbeApprox": 404.09,
+        "cpuMsPerFragmentExcludingProbeApprox": 3.16,
+        "reads": {
+          "count": 29,
+          "min": 5.64,
+          "p50": 7.05,
+          "p95": 15.03,
+          "max": 16.48,
+          "mean": 8.01
+        },
+        "samplesDuringReply": 29,
+        "sampleIntervalMs": 59,
+        "readSamples": [
+          {
+            "atMs": 43.57,
+            "rttMs": 9.22,
+            "replyStatus": 1,
+            "attemptChars": 16,
+            "messages": 16
+          },
+          {
+            "atMs": 112,
+            "rttMs": 7.05,
+            "replyStatus": 1,
+            "attemptChars": 96,
+            "messages": 16
+          },
+          {
+            "atMs": 177.52,
+            "rttMs": 8.44,
+            "replyStatus": 1,
+            "attemptChars": 160,
+            "messages": 16
+          },
+          {
+            "atMs": 245.32,
+            "rttMs": 8.28,
+            "replyStatus": 1,
+            "attemptChars": 224,
+            "messages": 16
+          },
+          {
+            "atMs": 313.17,
+            "rttMs": 6.73,
+            "replyStatus": 1,
+            "attemptChars": 304,
+            "messages": 16
+          },
+          {
+            "atMs": 379.29,
+            "rttMs": 7.03,
+            "replyStatus": 1,
+            "attemptChars": 368,
+            "messages": 16
+          },
+          {
+            "atMs": 446.22,
+            "rttMs": 9.52,
+            "replyStatus": 1,
+            "attemptChars": 448,
+            "messages": 16
+          },
+          {
+            "atMs": 515.47,
+            "rttMs": 6.55,
+            "replyStatus": 1,
+            "attemptChars": 512,
+            "messages": 16
+          },
+          {
+            "atMs": 580.76,
+            "rttMs": 9.1,
+            "replyStatus": 1,
+            "attemptChars": 592,
+            "messages": 16
+          },
+          {
+            "atMs": 648.94,
+            "rttMs": 6.5,
+            "replyStatus": 1,
+            "attemptChars": 656,
+            "messages": 16
+          },
+          {
+            "atMs": 714.82,
+            "rttMs": 6.01,
+            "replyStatus": 1,
+            "attemptChars": 720,
+            "messages": 16
+          },
+          {
+            "atMs": 780.49,
+            "rttMs": 8.28,
+            "replyStatus": 1,
+            "attemptChars": 800,
+            "messages": 16
+          },
+          {
+            "atMs": 848.57,
+            "rttMs": 5.64,
+            "replyStatus": 1,
+            "attemptChars": 864,
+            "messages": 16
+          },
+          {
+            "atMs": 913.89,
+            "rttMs": 8.9,
+            "replyStatus": 1,
+            "attemptChars": 928,
+            "messages": 16
+          },
+          {
+            "atMs": 982.71,
+            "rttMs": 5.66,
+            "replyStatus": 1,
+            "attemptChars": 1008,
+            "messages": 16
+          },
+          {
+            "atMs": 1047.76,
+            "rttMs": 16.48,
+            "replyStatus": 1,
+            "attemptChars": 1072,
+            "messages": 16
+          },
+          {
+            "atMs": 1124,
+            "rttMs": 15.03,
+            "replyStatus": 1,
+            "attemptChars": 1152,
+            "messages": 16
+          },
+          {
+            "atMs": 1198.06,
+            "rttMs": 5.99,
+            "replyStatus": 1,
+            "attemptChars": 1232,
+            "messages": 16
+          },
+          {
+            "atMs": 1262.86,
+            "rttMs": 7.72,
+            "replyStatus": 1,
+            "attemptChars": 1312,
+            "messages": 16
+          },
+          {
+            "atMs": 1330.21,
+            "rttMs": 5.97,
+            "replyStatus": 1,
+            "attemptChars": 1376,
+            "messages": 16
+          },
+          {
+            "atMs": 1395.75,
+            "rttMs": 10.5,
+            "replyStatus": 1,
+            "attemptChars": 1440,
+            "messages": 16
+          },
+          {
+            "atMs": 1466.52,
+            "rttMs": 7.03,
+            "replyStatus": 1,
+            "attemptChars": 1520,
+            "messages": 16
+          },
+          {
+            "atMs": 1532.53,
+            "rttMs": 6.36,
+            "replyStatus": 1,
+            "attemptChars": 1584,
+            "messages": 16
+          },
+          {
+            "atMs": 1597.69,
+            "rttMs": 9.26,
+            "replyStatus": 1,
+            "attemptChars": 1664,
+            "messages": 16
+          },
+          {
+            "atMs": 1667.48,
+            "rttMs": 6.22,
+            "replyStatus": 1,
+            "attemptChars": 1728,
+            "messages": 16
+          },
+          {
+            "atMs": 1733.04,
+            "rttMs": 8.53,
+            "replyStatus": 1,
+            "attemptChars": 1808,
+            "messages": 16
+          },
+          {
+            "atMs": 1801.19,
+            "rttMs": 6.55,
+            "replyStatus": 1,
+            "attemptChars": 1872,
+            "messages": 16
+          },
+          {
+            "atMs": 1866.59,
+            "rttMs": 6.06,
+            "replyStatus": 1,
+            "attemptChars": 1936,
+            "messages": 16
+          },
+          {
+            "atMs": 1931.39,
+            "rttMs": 7.68,
+            "replyStatus": 1,
+            "attemptChars": 2016,
+            "messages": 16
+          }
+        ],
+        "frames": {
+          "count": 278,
+          "bytesTotal": 54396228,
+          "perObserver": [
+            {
+              "count": 139,
+              "bytesTotal": 27198114,
+              "bytes": {
+                "count": 139,
+                "min": 192418,
+                "p50": 195416,
+                "p95": 197956,
+                "max": 215764,
+                "mean": 195669.88
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 0.96,
+                "p50": 14.99,
+                "p95": 16.95,
+                "max": 23.16,
+                "mean": 14.38
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0,
+                "p95": 1.95,
+                "max": 8.16,
+                "mean": 0.59
+              },
+              "openingBytes": 191744
+            },
+            {
+              "count": 139,
+              "bytesTotal": 27198114,
+              "bytes": {
+                "count": 139,
+                "min": 192418,
+                "p50": 195416,
+                "p95": 197956,
+                "max": 215764,
+                "mean": 195669.88
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 0.97,
+                "p50": 14.96,
+                "p95": 17.31,
+                "max": 23.59,
+                "mean": 14.35
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0,
+                "p95": 2.31,
+                "max": 8.59,
+                "mean": 0.57
+              },
+              "openingBytes": 383488
+            }
+          ],
+          "observerSpreadMs": {
+            "count": 139,
+            "min": 0.49,
+            "p50": 1.14,
+            "p95": 2.35,
+            "max": 5.25,
+            "mean": 1.34
+          }
+        },
+        "finalProjection": {
+          "cursor": 333,
+          "messages": 16,
+          "lastRole": 2,
+          "lastStatus": 2,
+          "lastSeq": 331
+        },
+        "observersAgree": true
+      },
+      "memory": {
+        "beforeKb": 238852,
+        "samples": [
+          220008,
+          223336,
+          224872,
+          226408,
+          227688,
+          229224,
+          230760,
+          232040,
+          233576,
+          235624,
+          236392,
+          237928,
+          239976,
+          240744,
+          242280,
+          244328,
+          245096,
+          247144,
+          245340,
+          219156,
+          221204,
+          222740,
+          223508,
+          225556,
+          227092,
+          228372,
+          229908,
+          231188,
+          232724,
+          234004,
+          235540,
+          236820,
+          238356,
+          240404,
+          241172,
+          242708,
+          245012,
+          245780,
+          247828,
+          249364,
+          250132,
+          219988,
+          221524,
+          222292,
+          224340,
+          225876,
+          227156,
+          228692,
+          230228,
+          232532,
+          233300,
+          234836,
+          236884,
+          237652,
+          239188,
+          241492,
+          242516,
+          244308,
+          245844,
+          247380,
+          248660,
+          250196,
+          250964,
+          219628,
+          221676,
+          222956,
+          224492,
+          226028,
+          228076,
+          228844,
+          230380,
+          232428,
+          233196,
+          235500,
+          237036,
+          237804,
+          239852,
+          241132
+        ],
+        "sampledPeakKb": 250964,
+        "streamEndRssKb": 245228,
+        "peakVmHwmKb": 252244
+      },
+      "endedAt": "2026-10-19T12:22:41.906Z",
+      "backendStartMs": 653.75
+    },
+    {
+      "index": 3,
+      "historyTurns": 40,
+      "observers": 1,
+      "startedAt": "2026-10-19T12:22:42.852Z",
+      "sessionId": "ourfairy-user-2-500ae072-a812-4c2b-b6b3-2f2f6f254e10",
+      "seeding": {
+        "turns": 40,
+        "elapsedMs": 1557.08,
+        "eventCount": 326,
+        "cursor": 325,
+        "messages": 16,
+        "sessionLogBytes": 66303
+      },
+      "quiescentReads": {
+        "count": 32,
+        "min": 5.19,
+        "p50": 6.63,
+        "p95": 8.27,
+        "max": 8.48,
+        "mean": 6.71
+      },
+      "quiescentCpuMsPerRead": 3.97,
+      "stream": {
+        "fragments": 128,
+        "mockChunksSent": 133,
+        "durationMs": 1993.7,
+        "sendRttMs": 11.11,
+        "cpuMs": 428.39,
+        "cpuMsPerFragment": 3.35,
+        "cpuMsPerFragmentPerObserver": 3.35,
+        "probeCpuMsApprox": 119.1,
+        "cpuMsExcludingProbeApprox": 309.29,
+        "cpuMsPerFragmentExcludingProbeApprox": 2.42,
+        "reads": {
+          "count": 30,
+          "min": 6,
+          "p50": 7.21,
+          "p95": 13.7,
+          "max": 16.49,
+          "mean": 8.02
+        },
+        "samplesDuringReply": 29,
+        "sampleIntervalMs": 59,
+        "readSamples": [
+          {
+            "atMs": 31.69,
+            "rttMs": 10.83,
+            "replyStatus": 1,
+            "attemptChars": 16,
+            "messages": 16
+          },
+          {
+            "atMs": 100.93,
+            "rttMs": 8.43,
+            "replyStatus": 1,
+            "attemptChars": 96,
+            "messages": 16
+          },
+          {
+            "atMs": 168.42,
+            "rttMs": 6.64,
+            "replyStatus": 1,
+            "attemptChars": 160,
+            "messages": 16
+          },
+          {
+            "atMs": 234.62,
+            "rttMs": 8.62,
+            "replyStatus": 1,
+            "attemptChars": 224,
+            "messages": 16
+          },
+          {
+            "atMs": 302.77,
+            "rttMs": 7.5,
+            "replyStatus": 1,
+            "attemptChars": 304,
+            "messages": 16
+          },
+          {
+            "atMs": 369.73,
+            "rttMs": 8.87,
+            "replyStatus": 1,
+            "attemptChars": 368,
+            "messages": 16
+          },
+          {
+            "atMs": 438.42,
+            "rttMs": 9.31,
+            "replyStatus": 1,
+            "attemptChars": 448,
+            "messages": 16
+          },
+          {
+            "atMs": 507.42,
+            "rttMs": 6.46,
+            "replyStatus": 1,
+            "attemptChars": 512,
+            "messages": 16
+          },
+          {
+            "atMs": 573.96,
+            "rttMs": 8.08,
+            "replyStatus": 1,
+            "attemptChars": 592,
+            "messages": 16
+          },
+          {
+            "atMs": 641.38,
+            "rttMs": 6.37,
+            "replyStatus": 1,
+            "attemptChars": 656,
+            "messages": 16
+          },
+          {
+            "atMs": 707.04,
+            "rttMs": 7.1,
+            "replyStatus": 1,
+            "attemptChars": 720,
+            "messages": 16
+          },
+          {
+            "atMs": 773.15,
+            "rttMs": 7.56,
+            "replyStatus": 1,
+            "attemptChars": 800,
+            "messages": 16
+          },
+          {
+            "atMs": 840.86,
+            "rttMs": 6.63,
+            "replyStatus": 1,
+            "attemptChars": 864,
+            "messages": 16
+          },
+          {
+            "atMs": 906.1,
+            "rttMs": 7.54,
+            "replyStatus": 1,
+            "attemptChars": 928,
+            "messages": 16
+          },
+          {
+            "atMs": 973.01,
+            "rttMs": 6,
+            "replyStatus": 1,
+            "attemptChars": 1008,
+            "messages": 16
+          },
+          {
+            "atMs": 1038.34,
+            "rttMs": 7.53,
+            "replyStatus": 1,
+            "attemptChars": 1072,
+            "messages": 16
+          },
+          {
+            "atMs": 1105.07,
+            "rttMs": 8.67,
+            "replyStatus": 1,
+            "attemptChars": 1152,
+            "messages": 16
+          },
+          {
+            "atMs": 1173.36,
+            "rttMs": 7.1,
+            "replyStatus": 1,
+            "attemptChars": 1216,
+            "messages": 16
+          },
+          {
+            "atMs": 1239.56,
+            "rttMs": 7.41,
+            "replyStatus": 1,
+            "attemptChars": 1280,
+            "messages": 16
+          },
+          {
+            "atMs": 1306.12,
+            "rttMs": 7.15,
+            "replyStatus": 1,
+            "attemptChars": 1360,
+            "messages": 16
+          },
+          {
+            "atMs": 1372.06,
+            "rttMs": 7.2,
+            "replyStatus": 1,
+            "attemptChars": 1424,
+            "messages": 16
+          },
+          {
+            "atMs": 1438.23,
+            "rttMs": 7.21,
+            "replyStatus": 1,
+            "attemptChars": 1488,
+            "messages": 16
+          },
+          {
+            "atMs": 1504.94,
+            "rttMs": 9.11,
+            "replyStatus": 1,
+            "attemptChars": 1568,
+            "messages": 16
+          },
+          {
+            "atMs": 1573.42,
+            "rttMs": 6.9,
+            "replyStatus": 1,
+            "attemptChars": 1632,
+            "messages": 16
+          },
+          {
+            "atMs": 1638.99,
+            "rttMs": 6.58,
+            "replyStatus": 1,
+            "attemptChars": 1696,
+            "messages": 16
+          },
+          {
+            "atMs": 1705.14,
+            "rttMs": 6.28,
+            "replyStatus": 1,
+            "attemptChars": 1776,
+            "messages": 16
+          },
+          {
+            "atMs": 1770.06,
+            "rttMs": 6.48,
+            "replyStatus": 1,
+            "attemptChars": 1840,
+            "messages": 16
+          },
+          {
+            "atMs": 1836.27,
+            "rttMs": 6.87,
+            "replyStatus": 1,
+            "attemptChars": 1904,
+            "messages": 16
+          },
+          {
+            "atMs": 1902.96,
+            "rttMs": 13.7,
+            "replyStatus": 1,
+            "attemptChars": 1984,
+            "messages": 16
+          },
+          {
+            "atMs": 1976.88,
+            "rttMs": 16.49,
+            "replyStatus": 0,
+            "attemptChars": 0,
+            "messages": 16
+          }
+        ],
+        "frames": {
+          "count": 139,
+          "bytesTotal": 27198114,
+          "perObserver": [
+            {
+              "count": 139,
+              "bytesTotal": 27198114,
+              "bytes": {
+                "count": 139,
+                "min": 192418,
+                "p50": 195416,
+                "p95": 197956,
+                "max": 215764,
+                "mean": 195669.88
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 1.12,
+                "p50": 15.11,
+                "p95": 16.48,
+                "max": 17.54,
+                "mean": 14.37
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0.11,
+                "p95": 1.48,
+                "max": 2.54,
+                "mean": 0.42
+              },
+              "openingBytes": 191744
+            }
+          ],
+          "observerSpreadMs": null
+        },
+        "finalProjection": {
+          "cursor": 333,
+          "messages": 16,
+          "lastRole": 2,
+          "lastStatus": 2,
+          "lastSeq": 331
+        },
+        "observersAgree": true
+      },
+      "memory": {
+        "beforeKb": 236176,
+        "samples": [
+          216624,
+          218928,
+          219696,
+          219952,
+          221488,
+          221744,
+          223024,
+          223792,
+          224560,
+          226096,
+          226864,
+          227120,
+          228400,
+          229168,
+          230192,
+          230960,
+          231728,
+          233264,
+          234032,
+          234800,
+          235824,
+          236592,
+          237872,
+          238128,
+          238896,
+          240432,
+          240688,
+          241456,
+          242992,
+          243248,
+          244784,
+          245552,
+          245808,
+          247088,
+          247856,
+          218684,
+          215784,
+          216552,
+          217576,
+          218344,
+          219112,
+          219880,
+          220648,
+          221416,
+          222440,
+          223208,
+          224488,
+          225000,
+          225768,
+          227048,
+          227560,
+          228840,
+          229096,
+          229864,
+          231144,
+          231656,
+          232424,
+          233704,
+          234216,
+          235496,
+          236264,
+          236520,
+          238056,
+          238824,
+          239080,
+          240360,
+          241128,
+          242152,
+          242920,
+          243688,
+          244712,
+          245480,
+          246760,
+          247016,
+          247784,
+          216304,
+          216816,
+          217584,
+          220144
+        ],
+        "sampledPeakKb": 247856,
+        "streamEndRssKb": 220656,
+        "peakVmHwmKb": 248368
+      },
+      "endedAt": "2026-10-19T12:22:46.976Z",
+      "backendStartMs": 660.88
+    },
+    {
+      "index": 4,
+      "historyTurns": 160,
+      "observers": 1,
+      "startedAt": "2026-10-19T12:22:47.928Z",
+      "sessionId": "ourfairy-user-2-ecef3b24-8b64-4ed9-87df-95609b759950",
+      "seeding": {
+        "turns": 160,
+        "elapsedMs": 6432.96,
+        "eventCount": 1286,
+        "cursor": 1285,
+        "messages": 16,
+        "sessionLogBytes": 245660
+      },
+      "quiescentReads": {
+        "count": 32,
+        "min": 6.18,
+        "p50": 7.24,
+        "p95": 9.51,
+        "max": 12.77,
+        "mean": 7.46
+      },
+      "quiescentCpuMsPerRead": 4.61,
+      "stream": {
+        "fragments": 128,
+        "mockChunksSent": 133,
+        "durationMs": 2006.43,
+        "sendRttMs": 11.1,
+        "cpuMs": 519.74,
+        "cpuMsPerFragment": 4.06,
+        "cpuMsPerFragmentPerObserver": 4.06,
+        "probeCpuMsApprox": 133.69,
+        "cpuMsExcludingProbeApprox": 386.05,
+        "cpuMsPerFragmentExcludingProbeApprox": 3.02,
+        "reads": {
+          "count": 29,
+          "min": 6.3,
+          "p50": 7.81,
+          "p95": 10.87,
+          "max": 13.47,
+          "mean": 8.49
+        },
+        "samplesDuringReply": 29,
+        "sampleIntervalMs": 59,
+        "readSamples": [
+          {
+            "atMs": 31.01,
+            "rttMs": 8.95,
+            "replyStatus": 1,
+            "attemptChars": 16,
+            "messages": 16
+          },
+          {
+            "atMs": 99.8,
+            "rttMs": 8.94,
+            "replyStatus": 1,
+            "attemptChars": 80,
+            "messages": 16
+          },
+          {
+            "atMs": 168.81,
+            "rttMs": 7.44,
+            "replyStatus": 1,
+            "attemptChars": 160,
+            "messages": 16
+          },
+          {
+            "atMs": 234.97,
+            "rttMs": 7.06,
+            "replyStatus": 1,
+            "attemptChars": 224,
+            "messages": 16
+          },
+          {
+            "atMs": 300.93,
+            "rttMs": 9.18,
+            "replyStatus": 1,
+            "attemptChars": 304,
+            "messages": 16
+          },
+          {
+            "atMs": 369.15,
+            "rttMs": 7.81,
+            "replyStatus": 1,
+            "attemptChars": 368,
+            "messages": 16
+          },
+          {
+            "atMs": 436,
+            "rttMs": 13.47,
+            "replyStatus": 1,
+            "attemptChars": 432,
+            "messages": 16
+          },
+          {
+            "atMs": 509.26,
+            "rttMs": 7.41,
+            "replyStatus": 1,
+            "attemptChars": 512,
+            "messages": 16
+          },
+          {
+            "atMs": 576.18,
+            "rttMs": 9.22,
+            "replyStatus": 1,
+            "attemptChars": 592,
+            "messages": 16
+          },
+          {
+            "atMs": 645.46,
+            "rttMs": 7.11,
+            "replyStatus": 1,
+            "attemptChars": 656,
+            "messages": 16
+          },
+          {
+            "atMs": 712.43,
+            "rttMs": 9.81,
+            "replyStatus": 1,
+            "attemptChars": 736,
+            "messages": 16
+          },
+          {
+            "atMs": 782.26,
+            "rttMs": 7.21,
+            "replyStatus": 1,
+            "attemptChars": 800,
+            "messages": 16
+          },
+          {
+            "atMs": 849.79,
+            "rttMs": 9.52,
+            "replyStatus": 1,
+            "attemptChars": 880,
+            "messages": 16
+          },
+          {
+            "atMs": 918.82,
+            "rttMs": 8.24,
+            "replyStatus": 1,
+            "attemptChars": 944,
+            "messages": 16
+          },
+          {
+            "atMs": 986.72,
+            "rttMs": 10.87,
+            "replyStatus": 1,
+            "attemptChars": 1008,
+            "messages": 16
+          },
+          {
+            "atMs": 1058.57,
+            "rttMs": 7.38,
+            "replyStatus": 1,
+            "attemptChars": 1088,
+            "messages": 16
+          },
+          {
+            "atMs": 1125.3,
+            "rttMs": 10.2,
+            "replyStatus": 1,
+            "attemptChars": 1152,
+            "messages": 16
+          },
+          {
+            "atMs": 1195.27,
+            "rttMs": 7.48,
+            "replyStatus": 1,
+            "attemptChars": 1232,
+            "messages": 16
+          },
+          {
+            "atMs": 1262.3,
+            "rttMs": 9.63,
+            "replyStatus": 1,
+            "attemptChars": 1296,
+            "messages": 16
+          },
+          {
+            "atMs": 1331.09,
+            "rttMs": 6.3,
+            "replyStatus": 1,
+            "attemptChars": 1376,
+            "messages": 16
+          },
+          {
+            "atMs": 1396.4,
+            "rttMs": 7.04,
+            "replyStatus": 1,
+            "attemptChars": 1440,
+            "messages": 16
+          },
+          {
+            "atMs": 1463.52,
+            "rttMs": 9.38,
+            "replyStatus": 1,
+            "attemptChars": 1520,
+            "messages": 16
+          },
+          {
+            "atMs": 1532.03,
+            "rttMs": 6.71,
+            "replyStatus": 1,
+            "attemptChars": 1584,
+            "messages": 16
+          },
+          {
+            "atMs": 1598.48,
+            "rttMs": 7.58,
+            "replyStatus": 1,
+            "attemptChars": 1648,
+            "messages": 16
+          },
+          {
+            "atMs": 1665.01,
+            "rttMs": 7.68,
+            "replyStatus": 1,
+            "attemptChars": 1728,
+            "messages": 16
+          },
+          {
+            "atMs": 1732.49,
+            "rttMs": 7.07,
+            "replyStatus": 1,
+            "attemptChars": 1792,
+            "messages": 16
+          },
+          {
+            "atMs": 1799.09,
+            "rttMs": 9.19,
+            "replyStatus": 1,
+            "attemptChars": 1856,
+            "messages": 16
+          },
+          {
+            "atMs": 1868.29,
+            "rttMs": 7.52,
+            "replyStatus": 1,
+            "attemptChars": 1936,
+            "messages": 16
+          },
+          {
+            "atMs": 1935.47,
+            "rttMs": 10.8,
+            "replyStatus": 1,
+            "attemptChars": 2000,
+            "messages": 16
+          }
+        ],
+        "frames": {
+          "count": 139,
+          "bytesTotal": 27224938,
+          "perObserver": [
+            {
+              "count": 139,
+              "bytesTotal": 27224938,
+              "bytes": {
+                "count": 139,
+                "min": 192606,
+                "p50": 195609,
+                "p95": 198149,
+                "max": 215962,
+                "mean": 195862.86
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 1.04,
+                "p50": 15.26,
+                "p95": 16.81,
+                "max": 21.62,
+                "mean": 14.47
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0.26,
+                "p95": 1.81,
+                "max": 6.62,
+                "mean": 0.51
+              },
+              "openingBytes": 191927
+            }
+          ],
+          "observerSpreadMs": null
+        },
+        "finalProjection": {
+          "cursor": 1293,
+          "messages": 16,
+          "lastRole": 2,
+          "lastStatus": 2,
+          "lastSeq": 1291
+        },
+        "observersAgree": true
+      },
+      "memory": {
+        "beforeKb": 313772,
+        "samples": [
+          316076,
+          318124,
+          318892,
+          319148,
+          320684,
+          321196,
+          322220,
+          322988,
+          323756,
+          324780,
+          325548,
+          326316,
+          327084,
+          327852,
+          329132,
+          329644,
+          330412,
+          311624,
+          312136,
+          312904,
+          314184,
+          314440,
+          315976,
+          316744,
+          317000,
+          318280,
+          319048,
+          319560,
+          320840,
+          321608,
+          322632,
+          323144,
+          323912,
+          324936,
+          325704,
+          326216,
+          327496,
+          328264,
+          329032,
+          329800,
+          330568,
+          331592,
+          311356,
+          312124,
+          313148,
+          313916,
+          314684,
+          315708,
+          316476,
+          317756,
+          318012,
+          318780,
+          320316,
+          320572,
+          321340,
+          322620,
+          323132,
+          324412,
+          325180,
+          325436,
+          326972,
+          327228,
+          328252,
+          329532,
+          330044,
+          331324,
+          332092,
+          311612,
+          312636,
+          313404,
+          313916,
+          315196,
+          315964,
+          316988,
+          317756,
+          318524,
+          319292,
+          320060,
+          322108
+        ],
+        "sampledPeakKb": 332092,
+        "streamEndRssKb": 322620,
+        "peakVmHwmKb": 362716
+      },
+      "endedAt": "2026-10-19T12:22:56.968Z",
+      "backendStartMs": 660.27
+    },
+    {
+      "index": 5,
+      "historyTurns": 160,
+      "observers": 2,
+      "startedAt": "2026-10-19T12:22:57.942Z",
+      "sessionId": "ourfairy-user-2-34e0b9e1-a3c6-4445-b6f2-1ba3964c8190",
+      "seeding": {
+        "turns": 160,
+        "elapsedMs": 6383.29,
+        "eventCount": 1286,
+        "cursor": 1285,
+        "messages": 16,
+        "sessionLogBytes": 245625
+      },
+      "quiescentReads": {
+        "count": 32,
+        "min": 5.72,
+        "p50": 6.56,
+        "p95": 7.69,
+        "max": 12.11,
+        "mean": 6.81
+      },
+      "quiescentCpuMsPerRead": 4.1,
+      "stream": {
+        "fragments": 128,
+        "mockChunksSent": 133,
+        "durationMs": 2053.62,
+        "sendRttMs": 13.47,
+        "cpuMs": 672.87,
+        "cpuMsPerFragment": 5.26,
+        "cpuMsPerFragmentPerObserver": 2.63,
+        "probeCpuMsApprox": 118.9,
+        "cpuMsExcludingProbeApprox": 553.97,
+        "cpuMsPerFragmentExcludingProbeApprox": 4.33,
+        "reads": {
+          "count": 29,
+          "min": 5.69,
+          "p50": 9.18,
+          "p95": 19.09,
+          "max": 19.63,
+          "mean": 9.69
+        },
+        "samplesDuringReply": 29,
+        "sampleIntervalMs": 59,
+        "readSamples": [
+          {
+            "atMs": 46.06,
+            "rttMs": 19.63,
+            "replyStatus": 1,
+            "attemptChars": 32,
+            "messages": 16
+          },
+          {
+            "atMs": 124.46,
+            "rttMs": 9.18,
+            "replyStatus": 1,
+            "attemptChars": 96,
+            "messages": 16
+          },
+          {
+            "atMs": 192.93,
+            "rttMs": 9,
+            "replyStatus": 1,
+            "attemptChars": 176,
+            "messages": 16
+          },
+          {
+            "atMs": 262.02,
+            "rttMs": 11.43,
+            "replyStatus": 1,
+            "attemptChars": 256,
+            "messages": 16
+          },
+          {
+            "atMs": 335.34,
+            "rttMs": 7.61,
+            "replyStatus": 1,
+            "attemptChars": 320,
+            "messages": 16
+          },
+          {
+            "atMs": 403.07,
+            "rttMs": 9.22,
+            "replyStatus": 1,
+            "attemptChars": 400,
+            "messages": 16
+          },
+          {
+            "atMs": 471.95,
+            "rttMs": 6.64,
+            "replyStatus": 1,
+            "attemptChars": 464,
+            "messages": 16
+          },
+          {
+            "atMs": 537.77,
+            "rttMs": 10.12,
+            "replyStatus": 1,
+            "attemptChars": 544,
+            "messages": 16
+          },
+          {
+            "atMs": 608.2,
+            "rttMs": 6.35,
+            "replyStatus": 1,
+            "attemptChars": 608,
+            "messages": 16
+          },
+          {
+            "atMs": 674.59,
+            "rttMs": 11.25,
+            "replyStatus": 1,
+            "attemptChars": 688,
+            "messages": 16
+          },
+          {
+            "atMs": 744.5,
+            "rttMs": 7.32,
+            "replyStatus": 1,
+            "attemptChars": 752,
+            "messages": 16
+          },
+          {
+            "atMs": 810.59,
+            "rttMs": 10.86,
+            "replyStatus": 1,
+            "attemptChars": 816,
+            "messages": 16
+          },
+          {
+            "atMs": 880.62,
+            "rttMs": 7.92,
+            "replyStatus": 1,
+            "attemptChars": 896,
+            "messages": 16
+          },
+          {
+            "atMs": 947.97,
+            "rttMs": 6.38,
+            "replyStatus": 1,
+            "attemptChars": 960,
+            "messages": 16
+          },
+          {
+            "atMs": 1013.84,
+            "rttMs": 10.19,
+            "replyStatus": 1,
+            "attemptChars": 1024,
+            "messages": 16
+          },
+          {
+            "atMs": 1083.86,
+            "rttMs": 8.35,
+            "replyStatus": 1,
+            "attemptChars": 1104,
+            "messages": 16
+          },
+          {
+            "atMs": 1152.09,
+            "rttMs": 10.01,
+            "replyStatus": 1,
+            "attemptChars": 1184,
+            "messages": 16
+          },
+          {
+            "atMs": 1222.35,
+            "rttMs": 6.27,
+            "replyStatus": 1,
+            "attemptChars": 1248,
+            "messages": 16
+          },
+          {
+            "atMs": 1288.15,
+            "rttMs": 5.69,
+            "replyStatus": 1,
+            "attemptChars": 1312,
+            "messages": 16
+          },
+          {
+            "atMs": 1352.95,
+            "rttMs": 10.56,
+            "replyStatus": 1,
+            "attemptChars": 1392,
+            "messages": 16
+          },
+          {
+            "atMs": 1422.45,
+            "rttMs": 6.86,
+            "replyStatus": 1,
+            "attemptChars": 1456,
+            "messages": 16
+          },
+          {
+            "atMs": 1489.05,
+            "rttMs": 10.93,
+            "replyStatus": 1,
+            "attemptChars": 1520,
+            "messages": 16
+          },
+          {
+            "atMs": 1558.83,
+            "rttMs": 8.34,
+            "replyStatus": 1,
+            "attemptChars": 1600,
+            "messages": 16
+          },
+          {
+            "atMs": 1626.89,
+            "rttMs": 11.73,
+            "replyStatus": 1,
+            "attemptChars": 1680,
+            "messages": 16
+          },
+          {
+            "atMs": 1697.64,
+            "rttMs": 16.69,
+            "replyStatus": 1,
+            "attemptChars": 1744,
+            "messages": 16
+          },
+          {
+            "atMs": 1773.65,
+            "rttMs": 6.9,
+            "replyStatus": 1,
+            "attemptChars": 1824,
+            "messages": 16
+          },
+          {
+            "atMs": 1839.85,
+            "rttMs": 19.09,
+            "replyStatus": 1,
+            "attemptChars": 1904,
+            "messages": 16
+          },
+          {
+            "atMs": 1918.21,
+            "rttMs": 10.73,
+            "replyStatus": 1,
+            "attemptChars": 1984,
+            "messages": 16
+          },
+          {
+            "atMs": 1988.32,
+            "rttMs": 5.76,
+            "replyStatus": 1,
+            "attemptChars": 2048,
+            "messages": 16
+          }
+        ],
+        "frames": {
+          "count": 278,
+          "bytesTotal": 54449972,
+          "perObserver": [
+            {
+              "count": 139,
+              "bytesTotal": 27224986,
+              "bytes": {
+                "count": 139,
+                "min": 192606,
+                "p50": 195609,
+                "p95": 198149,
+                "max": 215962,
+                "mean": 195863.21
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 1,
+                "p50": 15.12,
+                "p95": 17.7,
+                "max": 25.29,
+                "mean": 14.55
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0.12,
+                "p95": 2.7,
+                "max": 10.29,
+                "mean": 0.71
+              },
+              "openingBytes": 383854
+            },
+            {
+              "count": 139,
+              "bytesTotal": 27224986,
+              "bytes": {
+                "count": 139,
+                "min": 192606,
+                "p50": 195609,
+                "p95": 198149,
+                "max": 215962,
+                "mean": 195863.21
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 1.1,
+                "p50": 15.18,
+                "p95": 17.09,
+                "max": 19.32,
+                "mean": 14.53
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0.18,
+                "p95": 2.09,
+                "max": 4.32,
+                "mean": 0.55
+              },
+              "openingBytes": 191927
+            }
+          ],
+          "observerSpreadMs": {
+            "count": 139,
+            "min": 0.64,
+            "p50": 1.16,
+            "p95": 2.02,
+            "max": 4.48,
+            "mean": 1.32
+          }
+        },
+        "finalProjection": {
+          "cursor": 1293,
+          "messages": 16,
+          "lastRole": 2,
+          "lastStatus": 2,
+          "lastSeq": 1291
+        },
+        "observersAgree": true
+      },
+      "memory": {
+        "beforeKb": 360396,
+        "samples": [
+          340652,
+          342700,
+          345516,
+          347052,
+          347820,
+          349868,
+          350892,
+          352684,
+          354220,
+          355244,
+          357036,
+          358572,
+          359340,
+          341556,
+          342836,
+          344372,
+          345652,
+          347188,
+          348468,
+          350004,
+          351284,
+          352820,
+          354100,
+          355636,
+          357172,
+          358452,
+          360244,
+          361268,
+          341880,
+          343672,
+          344696,
+          346232,
+          348536,
+          349304,
+          351096,
+          352888,
+          353656,
+          355704,
+          357240,
+          358008,
+          360056,
+          360824,
+          341376,
+          342912,
+          344192,
+          346240,
+          347264,
+          348544,
+          350592,
+          351360,
+          352896,
+          354944,
+          355712,
+          358016,
+          359552,
+          360320,
+          362368,
+          342220,
+          342988,
+          345036,
+          346572,
+          347852,
+          349388,
+          350924,
+          352204,
+          353740,
+          354764,
+          356812,
+          358348,
+          359372,
+          361164,
+          341708,
+          342988,
+          344268,
+          345804,
+          347084,
+          348620,
+          350156,
+          352460,
+          355532,
+          355532
+        ],
+        "sampledPeakKb": 362368,
+        "streamEndRssKb": 356044,
+        "peakVmHwmKb": 363468
+      },
+      "endedAt": "2026-10-19T12:23:06.966Z",
+      "backendStartMs": 666.08
+    },
+    {
+      "index": 6,
+      "historyTurns": 160,
+      "observers": 2,
+      "startedAt": "2026-10-19T12:23:07.928Z",
+      "sessionId": "ourfairy-user-2-60a7df29-d0ba-4b51-8f65-d090c9e22588",
+      "seeding": {
+        "turns": 160,
+        "elapsedMs": 6281.49,
+        "eventCount": 1286,
+        "cursor": 1285,
+        "messages": 16,
+        "sessionLogBytes": 245766
+      },
+      "quiescentReads": {
+        "count": 32,
+        "min": 6.25,
+        "p50": 7.18,
+        "p95": 11.03,
+        "max": 11.96,
+        "mean": 7.45
+      },
+      "quiescentCpuMsPerRead": 5.21,
+      "stream": {
+        "fragments": 128,
+        "mockChunksSent": 133,
+        "durationMs": 2015.38,
+        "sendRttMs": 15.79,
+        "cpuMs": 718.44,
+        "cpuMsPerFragment": 5.61,
+        "cpuMsPerFragmentPerObserver": 2.81,
+        "probeCpuMsApprox": 151.09,
+        "cpuMsExcludingProbeApprox": 567.35,
+        "cpuMsPerFragmentExcludingProbeApprox": 4.43,
+        "reads": {
+          "count": 29,
+          "min": 5.86,
+          "p50": 9.58,
+          "p95": 22.82,
+          "max": 25.5,
+          "mean": 10.19
+        },
+        "samplesDuringReply": 28,
+        "sampleIntervalMs": 59,
+        "readSamples": [
+          {
+            "atMs": 45.83,
+            "rttMs": 19.41,
+            "replyStatus": 1,
+            "attemptChars": 16,
+            "messages": 16
+          },
+          {
+            "atMs": 125.03,
+            "rttMs": 6.32,
+            "replyStatus": 1,
+            "attemptChars": 96,
+            "messages": 16
+          },
+          {
+            "atMs": 190.47,
+            "rttMs": 11.14,
+            "replyStatus": 1,
+            "attemptChars": 176,
+            "messages": 16
+          },
+          {
+            "atMs": 260.2,
+            "rttMs": 6.45,
+            "replyStatus": 1,
+            "attemptChars": 240,
+            "messages": 16
+          },
+          {
+            "atMs": 325.41,
+            "rttMs": 10.18,
+            "replyStatus": 1,
+            "attemptChars": 320,
+            "messages": 16
+          },
+          {
+            "atMs": 394.58,
+            "rttMs": 6.91,
+            "replyStatus": 1,
+            "attemptChars": 384,
+            "messages": 16
+          },
+          {
+            "atMs": 460.26,
+            "rttMs": 11.35,
+            "replyStatus": 1,
+            "attemptChars": 448,
+            "messages": 16
+          },
+          {
+            "atMs": 530.72,
+            "rttMs": 7.88,
+            "replyStatus": 1,
+            "attemptChars": 528,
+            "messages": 16
+          },
+          {
+            "atMs": 598.87,
+            "rttMs": 11.37,
+            "replyStatus": 1,
+            "attemptChars": 608,
+            "messages": 16
+          },
+          {
+            "atMs": 669.28,
+            "rttMs": 7.95,
+            "replyStatus": 1,
+            "attemptChars": 672,
+            "messages": 16
+          },
+          {
+            "atMs": 736.56,
+            "rttMs": 12.12,
+            "replyStatus": 1,
+            "attemptChars": 752,
+            "messages": 16
+          },
+          {
+            "atMs": 808.62,
+            "rttMs": 10.4,
+            "replyStatus": 1,
+            "attemptChars": 816,
+            "messages": 16
+          },
+          {
+            "atMs": 881.49,
+            "rttMs": 6.4,
+            "replyStatus": 1,
+            "attemptChars": 896,
+            "messages": 16
+          },
+          {
+            "atMs": 951.69,
+            "rttMs": 9.59,
+            "replyStatus": 1,
+            "attemptChars": 976,
+            "messages": 16
+          },
+          {
+            "atMs": 1021.11,
+            "rttMs": 7.53,
+            "replyStatus": 1,
+            "attemptChars": 1040,
+            "messages": 16
+          },
+          {
+            "atMs": 1087.36,
+            "rttMs": 9.58,
+            "replyStatus": 1,
+            "attemptChars": 1120,
+            "messages": 16
+          },
+          {
+            "atMs": 1156.53,
+            "rttMs": 6.35,
+            "replyStatus": 1,
+            "attemptChars": 1184,
+            "messages": 16
+          },
+          {
+            "atMs": 1222.51,
+            "rttMs": 9.94,
+            "replyStatus": 1,
+            "attemptChars": 1264,
+            "messages": 16
+          },
+          {
+            "atMs": 1291.26,
+            "rttMs": 7.14,
+            "replyStatus": 1,
+            "attemptChars": 1328,
+            "messages": 16
+          },
+          {
+            "atMs": 1357.62,
+            "rttMs": 10.89,
+            "replyStatus": 1,
+            "attemptChars": 1392,
+            "messages": 16
+          },
+          {
+            "atMs": 1428.74,
+            "rttMs": 7.54,
+            "replyStatus": 1,
+            "attemptChars": 1472,
+            "messages": 16
+          },
+          {
+            "atMs": 1495.82,
+            "rttMs": 10.4,
+            "replyStatus": 1,
+            "attemptChars": 1552,
+            "messages": 16
+          },
+          {
+            "atMs": 1566.5,
+            "rttMs": 5.86,
+            "replyStatus": 1,
+            "attemptChars": 1616,
+            "messages": 16
+          },
+          {
+            "atMs": 1631.54,
+            "rttMs": 12.18,
+            "replyStatus": 1,
+            "attemptChars": 1680,
+            "messages": 16
+          },
+          {
+            "atMs": 1704.67,
+            "rttMs": 6.88,
+            "replyStatus": 1,
+            "attemptChars": 1760,
+            "messages": 16
+          },
+          {
+            "atMs": 1772.03,
+            "rttMs": 22.82,
+            "replyStatus": 1,
+            "attemptChars": 1840,
+            "messages": 16
+          },
+          {
+            "atMs": 1854.38,
+            "rttMs": 8.41,
+            "replyStatus": 1,
+            "attemptChars": 1920,
+            "messages": 16
+          },
+          {
+            "atMs": 1922.98,
+            "rttMs": 7.06,
+            "replyStatus": 1,
+            "attemptChars": 1984,
+            "messages": 16
+          },
+          {
+            "atMs": 1989.53,
+            "rttMs": 25.5,
+            "replyStatus": 0,
+            "attemptChars": 0,
+            "messages": 16
+          }
+        ],
+        "frames": {
+          "count": 278,
+          "bytesTotal": 54449876,
+          "perObserver": [
+            {
+              "count": 139,
+              "bytesTotal": 27224938,
+              "bytes": {
+                "count": 139,
+                "min": 192606,
+                "p50": 195609,
+                "p95": 198149,
+                "max": 215962,
+                "mean": 195862.86
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 1.03,
+                "p50": 15.05,
+                "p95": 17.01,
+                "max": 21.22,
+                "mean": 14.5
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0.05,
+                "p95": 2.01,
+                "max": 6.22,
+                "mean": 0.54
+              },
+              "openingBytes": 191927
+            },
+            {
+              "count": 139,
+              "bytesTotal": 27224938,
+              "bytes": {
+                "count": 139,
+                "min": 192606,
+                "p50": 195609,
+                "p95": 198149,
+                "max": 215962,
+                "mean": 195862.86
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 1.04,
+                "p50": 15.12,
+                "p95": 17.23,
+                "max": 20.57,
+                "mean": 14.52
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0.12,
+                "p95": 2.23,
+                "max": 5.57,
+                "mean": 0.56
+              },
+              "openingBytes": 383854
+            }
+          ],
+          "observerSpreadMs": {
+            "count": 139,
+            "min": 0.82,
+            "p50": 1.26,
+            "p95": 2.09,
+            "max": 3.69,
+            "mean": 1.38
+          }
+        },
+        "finalProjection": {
+          "cursor": 1293,
+          "messages": 16,
+          "lastRole": 2,
+          "lastStatus": 2,
+          "lastSeq": 1291
+        },
+        "observersAgree": true
+      },
+      "memory": {
+        "beforeKb": 318184,
+        "samples": [
+          321000,
+          324072,
+          317308,
+          305788,
+          307324,
+          309372,
+          310140,
+          312188,
+          313724,
+          314748,
+          316540,
+          317820,
+          319356,
+          320636,
+          322172,
+          323964,
+          324988,
+          305600,
+          307136,
+          308416,
+          309952,
+          311488,
+          312768,
+          314304,
+          315584,
+          317120,
+          319168,
+          319936,
+          321472,
+          323520,
+          324288,
+          305088,
+          307136,
+          307904,
+          309440,
+          311488,
+          312256,
+          314304,
+          315840,
+          316608,
+          318656,
+          320192,
+          321728,
+          323264,
+          324800,
+          311592,
+          305856,
+          307392,
+          309440,
+          310208,
+          311744,
+          313792,
+          314560,
+          316608,
+          318144,
+          318912,
+          320960,
+          322496,
+          323264,
+          325568,
+          305792,
+          307072,
+          308608,
+          310144,
+          311424,
+          312960,
+          314496,
+          315776,
+          317312,
+          318848,
+          320384,
+          321920,
+          322688,
+          324736,
+          325760,
+          306048,
+          307840,
+          309120,
+          312192
+        ],
+        "sampledPeakKb": 325760,
+        "streamEndRssKb": 314496,
+        "peakVmHwmKb": 362836
+      },
+      "endedAt": "2026-10-19T12:23:16.830Z",
+      "backendStartMs": 661.75
+    },
+    {
+      "index": 7,
+      "historyTurns": 160,
+      "observers": 1,
+      "startedAt": "2026-10-19T12:23:17.796Z",
+      "sessionId": "ourfairy-user-2-88961cfa-4fe7-43f8-973b-04a6b46fd43a",
+      "seeding": {
+        "turns": 160,
+        "elapsedMs": 6493.31,
+        "eventCount": 1286,
+        "cursor": 1285,
+        "messages": 16,
+        "sessionLogBytes": 245705
+      },
+      "quiescentReads": {
+        "count": 32,
+        "min": 5.7,
+        "p50": 6.57,
+        "p95": 8.22,
+        "max": 9.62,
+        "mean": 6.73
+      },
+      "quiescentCpuMsPerRead": 4.57,
+      "stream": {
+        "fragments": 128,
+        "mockChunksSent": 133,
+        "durationMs": 2044.29,
+        "sendRttMs": 12.07,
+        "cpuMs": 461.04,
+        "cpuMsPerFragment": 3.6,
+        "cpuMsPerFragmentPerObserver": 3.6,
+        "probeCpuMsApprox": 137.1,
+        "cpuMsExcludingProbeApprox": 323.94,
+        "cpuMsPerFragmentExcludingProbeApprox": 2.53,
+        "reads": {
+          "count": 30,
+          "min": 5.9,
+          "p50": 7.24,
+          "p95": 9.53,
+          "max": 10.38,
+          "mean": 7.52
+        },
+        "samplesDuringReply": 30,
+        "sampleIntervalMs": 59,
+        "readSamples": [
+          {
+            "atMs": 34.06,
+            "rttMs": 9.53,
+            "replyStatus": 1,
+            "attemptChars": 16,
+            "messages": 16
+          },
+          {
+            "atMs": 103.22,
+            "rttMs": 9.17,
+            "replyStatus": 1,
+            "attemptChars": 80,
+            "messages": 16
+          },
+          {
+            "atMs": 172.52,
+            "rttMs": 7.43,
+            "replyStatus": 1,
+            "attemptChars": 160,
+            "messages": 16
+          },
+          {
+            "atMs": 239.68,
+            "rttMs": 9.27,
+            "replyStatus": 1,
+            "attemptChars": 240,
+            "messages": 16
+          },
+          {
+            "atMs": 308.38,
+            "rttMs": 6.93,
+            "replyStatus": 1,
+            "attemptChars": 304,
+            "messages": 16
+          },
+          {
+            "atMs": 374.88,
+            "rttMs": 6.41,
+            "replyStatus": 1,
+            "attemptChars": 368,
+            "messages": 16
+          },
+          {
+            "atMs": 440.98,
+            "rttMs": 8.31,
+            "replyStatus": 1,
+            "attemptChars": 448,
+            "messages": 16
+          },
+          {
+            "atMs": 508.69,
+            "rttMs": 6.07,
+            "replyStatus": 1,
+            "attemptChars": 512,
+            "messages": 16
+          },
+          {
+            "atMs": 574.62,
+            "rttMs": 9.03,
+            "replyStatus": 1,
+            "attemptChars": 592,
+            "messages": 16
+          },
+          {
+            "atMs": 643.24,
+            "rttMs": 6.57,
+            "replyStatus": 1,
+            "attemptChars": 656,
+            "messages": 16
+          },
+          {
+            "atMs": 708.7,
+            "rttMs": 6.61,
+            "replyStatus": 1,
+            "attemptChars": 720,
+            "messages": 16
+          },
+          {
+            "atMs": 774.89,
+            "rttMs": 10.38,
+            "replyStatus": 1,
+            "attemptChars": 800,
+            "messages": 16
+          },
+          {
+            "atMs": 844.61,
+            "rttMs": 6.14,
+            "replyStatus": 1,
+            "attemptChars": 864,
+            "messages": 16
+          },
+          {
+            "atMs": 909.84,
+            "rttMs": 8.22,
+            "replyStatus": 1,
+            "attemptChars": 928,
+            "messages": 16
+          },
+          {
+            "atMs": 977.96,
+            "rttMs": 8.42,
+            "replyStatus": 1,
+            "attemptChars": 1008,
+            "messages": 16
+          },
+          {
+            "atMs": 1045.71,
+            "rttMs": 6.51,
+            "replyStatus": 1,
+            "attemptChars": 1072,
+            "messages": 16
+          },
+          {
+            "atMs": 1111.43,
+            "rttMs": 6.36,
+            "replyStatus": 1,
+            "attemptChars": 1136,
+            "messages": 16
+          },
+          {
+            "atMs": 1176.7,
+            "rttMs": 7.68,
+            "replyStatus": 1,
+            "attemptChars": 1200,
+            "messages": 16
+          },
+          {
+            "atMs": 1244.17,
+            "rttMs": 7.24,
+            "replyStatus": 1,
+            "attemptChars": 1280,
+            "messages": 16
+          },
+          {
+            "atMs": 1310.42,
+            "rttMs": 6.34,
+            "replyStatus": 1,
+            "attemptChars": 1344,
+            "messages": 16
+          },
+          {
+            "atMs": 1376.07,
+            "rttMs": 8.47,
+            "replyStatus": 1,
+            "attemptChars": 1424,
+            "messages": 16
+          },
+          {
+            "atMs": 1443.67,
+            "rttMs": 5.9,
+            "replyStatus": 1,
+            "attemptChars": 1488,
+            "messages": 16
+          },
+          {
+            "atMs": 1508.98,
+            "rttMs": 7.87,
+            "replyStatus": 1,
+            "attemptChars": 1552,
+            "messages": 16
+          },
+          {
+            "atMs": 1575.33,
+            "rttMs": 7.42,
+            "replyStatus": 1,
+            "attemptChars": 1632,
+            "messages": 16
+          },
+          {
+            "atMs": 1641.48,
+            "rttMs": 5.92,
+            "replyStatus": 1,
+            "attemptChars": 1696,
+            "messages": 16
+          },
+          {
+            "atMs": 1707.02,
+            "rttMs": 9.04,
+            "replyStatus": 1,
+            "attemptChars": 1776,
+            "messages": 16
+          },
+          {
+            "atMs": 1775.88,
+            "rttMs": 6.87,
+            "replyStatus": 1,
+            "attemptChars": 1840,
+            "messages": 16
+          },
+          {
+            "atMs": 1843.24,
+            "rttMs": 6.35,
+            "replyStatus": 1,
+            "attemptChars": 1904,
+            "messages": 16
+          },
+          {
+            "atMs": 1909.3,
+            "rttMs": 8.41,
+            "replyStatus": 1,
+            "attemptChars": 1984,
+            "messages": 16
+          },
+          {
+            "atMs": 1977.81,
+            "rttMs": 6.58,
+            "replyStatus": 1,
+            "attemptChars": 2048,
+            "messages": 16
+          }
+        ],
+        "frames": {
+          "count": 139,
+          "bytesTotal": 27224938,
+          "perObserver": [
+            {
+              "count": 139,
+              "bytesTotal": 27224938,
+              "bytes": {
+                "count": 139,
+                "min": 192606,
+                "p50": 195609,
+                "p95": 198149,
+                "max": 215962,
+                "mean": 195862.86
+              },
+              "intervalMs": {
+                "count": 138,
+                "min": 1.02,
+                "p50": 15.19,
+                "p95": 16.51,
+                "max": 20.75,
+                "mean": 14.42
+              },
+              "abovePacingMs": {
+                "count": 138,
+                "min": 0,
+                "p50": 0.19,
+                "p95": 1.51,
+                "max": 5.75,
+                "mean": 0.46
+              },
+              "openingBytes": 191927
+            }
+          ],
+          "observerSpreadMs": null
+        },
+        "finalProjection": {
+          "cursor": 1293,
+          "messages": 16,
+          "lastRole": 2,
+          "lastStatus": 2,
+          "lastSeq": 1291
+        },
+        "observersAgree": true
+      },
+      "memory": {
+        "beforeKb": 323092,
+        "samples": [
+          324628,
+          327188,
+          327700,
+          328468,
+          329748,
+          330004,
+          330772,
+          310684,
+          311196,
+          312476,
+          312732,
+          313500,
+          314780,
+          315292,
+          316060,
+          317340,
+          317596,
+          319132,
+          319644,
+          320156,
+          321436,
+          322204,
+          322716,
+          323996,
+          324764,
+          325532,
+          326300,
+          327068,
+          328092,
+          328860,
+          329116,
+          330396,
+          318804,
+          311264,
+          312032,
+          312800,
+          313824,
+          314592,
+          315360,
+          316384,
+          316896,
+          317920,
+          318688,
+          319456,
+          320480,
+          321248,
+          322272,
+          323040,
+          323808,
+          324576,
+          325344,
+          326112,
+          327136,
+          327904,
+          329184,
+          329952,
+          330464,
+          310688,
+          311200,
+          311712,
+          312736,
+          313504,
+          314528,
+          315296,
+          316064,
+          317088,
+          317856,
+          318880,
+          319648,
+          320416,
+          321696,
+          321952,
+          322720,
+          323744,
+          324512,
+          325792,
+          326304,
+          327072,
+          328864,
+          329888,
+          329888
+        ],
+        "sampledPeakKb": 330772,
+        "streamEndRssKb": 330656,
+        "peakVmHwmKb": 348312
+      },
+      "endedAt": "2026-10-19T12:23:26.907Z",
+      "backendStartMs": 666.87
+    }
+  ],
+  "summary": {
+    "byHistory": {
+      "40turns/1observers": [
+        {
+          "repetition": 1,
+          "eventCount": 326,
+          "sessionLogBytes": 66233,
+          "readP50Ms": 6.87,
+          "readP95Ms": 10.33,
+          "readCount": 30,
+          "quiescentP95Ms": 8.38,
+          "quiescentCpuMsPerRead": 3.94,
+          "frames": 139,
+          "bytesTotal": 27178104,
+          "intervalP50Ms": 15.07,
+          "intervalP95Ms": 16.62,
+          "observerSpreadP50Ms": null,
+          "observerSpreadP95Ms": null,
+          "cpuMs": 382.37,
+          "cpuMsExcludingProbeApprox": 264.17,
+          "cpuMsPerFragmentPerObserver": 2.99,
+          "cpuMsPerFragmentExcludingProbeApprox": 2.06,
+          "sampledPeakKb": 250260,
+          "peakVmHwmKb": 252204,
+          "streamDurationMs": 1986.56
+        },
+        {
+          "repetition": 2,
+          "eventCount": 326,
+          "sessionLogBytes": 66303,
+          "readP50Ms": 7.21,
+          "readP95Ms": 13.7,
+          "readCount": 30,
+          "quiescentP95Ms": 8.27,
+          "quiescentCpuMsPerRead": 3.97,
+          "frames": 139,
+          "bytesTotal": 27198114,
+          "intervalP50Ms": 15.11,
+          "intervalP95Ms": 16.48,
+          "observerSpreadP50Ms": null,
+          "observerSpreadP95Ms": null,
+          "cpuMs": 428.39,
+          "cpuMsExcludingProbeApprox": 309.29,
+          "cpuMsPerFragmentPerObserver": 3.35,
+          "cpuMsPerFragmentExcludingProbeApprox": 2.42,
+          "sampledPeakKb": 247856,
+          "peakVmHwmKb": 248368,
+          "streamDurationMs": 1993.7
+        }
+      ],
+      "40turns/2observers": [
+        {
+          "repetition": 1,
+          "eventCount": 326,
+          "sessionLogBytes": 66253,
+          "readP50Ms": 7.53,
+          "readP95Ms": 13,
+          "readCount": 29,
+          "quiescentP95Ms": 8.66,
+          "quiescentCpuMsPerRead": 3.85,
+          "frames": 278,
+          "bytesTotal": 54396228,
+          "intervalP50Ms": 15.09,
+          "intervalP95Ms": 17.24,
+          "observerSpreadP50Ms": 1.16,
+          "observerSpreadP95Ms": 2.54,
+          "cpuMs": 503.47,
+          "cpuMsExcludingProbeApprox": 391.82,
+          "cpuMsPerFragmentPerObserver": 1.97,
+          "cpuMsPerFragmentExcludingProbeApprox": 3.06,
+          "sampledPeakKb": 257752,
+          "peakVmHwmKb": 258520,
+          "streamDurationMs": 1996.41
+        },
+        {
+          "repetition": 2,
+          "eventCount": 326,
+          "sessionLogBytes": 66245,
+          "readP50Ms": 7.05,
+          "readP95Ms": 15.03,
+          "readCount": 29,
+          "quiescentP95Ms": 7.54,
+          "quiescentCpuMsPerRead": 3.64,
+          "frames": 278,
+          "bytesTotal": 54396228,
+          "intervalP50Ms": 14.99,
+          "intervalP95Ms": 16.95,
+          "observerSpreadP50Ms": 1.14,
+          "observerSpreadP95Ms": 2.35,
+          "cpuMs": 509.65,
+          "cpuMsExcludingProbeApprox": 404.09,
+          "cpuMsPerFragmentPerObserver": 1.99,
+          "cpuMsPerFragmentExcludingProbeApprox": 3.16,
+          "sampledPeakKb": 250964,
+          "peakVmHwmKb": 252244,
+          "streamDurationMs": 1998.36
+        }
+      ],
+      "160turns/1observers": [
+        {
+          "repetition": 1,
+          "eventCount": 1286,
+          "sessionLogBytes": 245660,
+          "readP50Ms": 7.81,
+          "readP95Ms": 10.87,
+          "readCount": 29,
+          "quiescentP95Ms": 9.51,
+          "quiescentCpuMsPerRead": 4.61,
+          "frames": 139,
+          "bytesTotal": 27224938,
+          "intervalP50Ms": 15.26,
+          "intervalP95Ms": 16.81,
+          "observerSpreadP50Ms": null,
+          "observerSpreadP95Ms": null,
+          "cpuMs": 519.74,
+          "cpuMsExcludingProbeApprox": 386.05,
+          "cpuMsPerFragmentPerObserver": 4.06,
+          "cpuMsPerFragmentExcludingProbeApprox": 3.02,
+          "sampledPeakKb": 332092,
+          "peakVmHwmKb": 362716,
+          "streamDurationMs": 2006.43
+        },
+        {
+          "repetition": 2,
+          "eventCount": 1286,
+          "sessionLogBytes": 245705,
+          "readP50Ms": 7.24,
+          "readP95Ms": 9.53,
+          "readCount": 30,
+          "quiescentP95Ms": 8.22,
+          "quiescentCpuMsPerRead": 4.57,
+          "frames": 139,
+          "bytesTotal": 27224938,
+          "intervalP50Ms": 15.19,
+          "intervalP95Ms": 16.51,
+          "observerSpreadP50Ms": null,
+          "observerSpreadP95Ms": null,
+          "cpuMs": 461.04,
+          "cpuMsExcludingProbeApprox": 323.94,
+          "cpuMsPerFragmentPerObserver": 3.6,
+          "cpuMsPerFragmentExcludingProbeApprox": 2.53,
+          "sampledPeakKb": 330772,
+          "peakVmHwmKb": 348312,
+          "streamDurationMs": 2044.29
+        }
+      ],
+      "160turns/2observers": [
+        {
+          "repetition": 1,
+          "eventCount": 1286,
+          "sessionLogBytes": 245625,
+          "readP50Ms": 9.18,
+          "readP95Ms": 19.09,
+          "readCount": 29,
+          "quiescentP95Ms": 7.69,
+          "quiescentCpuMsPerRead": 4.1,
+          "frames": 278,
+          "bytesTotal": 54449972,
+          "intervalP50Ms": 15.12,
+          "intervalP95Ms": 17.7,
+          "observerSpreadP50Ms": 1.16,
+          "observerSpreadP95Ms": 2.02,
+          "cpuMs": 672.87,
+          "cpuMsExcludingProbeApprox": 553.97,
+          "cpuMsPerFragmentPerObserver": 2.63,
+          "cpuMsPerFragmentExcludingProbeApprox": 4.33,
+          "sampledPeakKb": 362368,
+          "peakVmHwmKb": 363468,
+          "streamDurationMs": 2053.62
+        },
+        {
+          "repetition": 2,
+          "eventCount": 1286,
+          "sessionLogBytes": 245766,
+          "readP50Ms": 9.58,
+          "readP95Ms": 22.82,
+          "readCount": 29,
+          "quiescentP95Ms": 11.03,
+          "quiescentCpuMsPerRead": 5.21,
+          "frames": 278,
+          "bytesTotal": 54449876,
+          "intervalP50Ms": 15.05,
+          "intervalP95Ms": 17.01,
+          "observerSpreadP50Ms": 1.26,
+          "observerSpreadP95Ms": 2.09,
+          "cpuMs": 718.44,
+          "cpuMsExcludingProbeApprox": 567.35,
+          "cpuMsPerFragmentPerObserver": 2.81,
+          "cpuMsPerFragmentExcludingProbeApprox": 4.43,
+          "sampledPeakKb": 325760,
+          "peakVmHwmKb": 362836,
+          "streamDurationMs": 2015.38
+        }
+      ]
+    }
+  },
+  "finishedAt": "2026-10-19T12:23:27.168Z",
+  "durationMs": 63685.32
+}

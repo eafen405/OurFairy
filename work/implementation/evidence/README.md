@@ -47,6 +47,12 @@
 | [22-device](22-device/README.md) | #45 vivo S50 实机验收（未执行，等待目标设备） |
 | [74-presentation](74-presentation/README.md) | #74/#75–#80 长回复呈现性能：测量入口入库，设备基线未建立，未做性能改动（[#45 交接](74-presentation/handoff.md)） |
 
+## 投影性能（spec #72）
+
+| 目录 | 内容 |
+| --- | --- |
+| [72-projection-perf](72-projection-perf/README.md) | #88 固定负载投影基准与改造前同机基线（脚本与两次基线 JSON 入库） |
+
 ## 架构收敛票
 
 | 目录 | 内容 |
