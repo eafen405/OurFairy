@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/eafen405/rikkahub",
+  "branch": "product/ourfairy-v1",
+  "commit": "460109d1b89b824a2ddb7f3201d8d3f7af7e02ce",
+  "note": "The Android client was imported as a snapshot from this commit and no longer follows upstream."
+}

@@ -1,0 +1,106 @@
+package me.rerere.rikkahub.di
+
+import android.content.Context
+import androidx.lifecycle.ProcessLifecycleOwner
+import me.rerere.rikkahub.data.remote.RemoteAttachmentApi
+import me.rerere.rikkahub.data.remote.RemoteSpeechApi
+import me.rerere.rikkahub.data.remote.RemoteSpeechBackend
+import me.rerere.rikkahub.data.remote.RemoteAttachmentBackend
+import me.rerere.rikkahub.data.remote.RemoteChatApi
+import me.rerere.rikkahub.data.remote.RemoteChatBackend
+import me.rerere.rikkahub.data.remote.RemoteJobApi
+import me.rerere.rikkahub.data.remote.RemoteJobBackend
+import me.rerere.rikkahub.data.remote.RemoteChatState
+import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.data.remote.RemoteReceiveState
+import me.rerere.rikkahub.service.AndroidRemoteNotifications
+import me.rerere.rikkahub.service.RemoteReceiveController
+import me.rerere.rikkahub.service.RemoteReceiveServiceLauncher
+import me.rerere.rikkahub.data.remote.AndroidChatSyncStore
+import me.rerere.rikkahub.data.remote.ChatSyncStore
+import me.rerere.rikkahub.data.remote.AccountSession
+import me.rerere.rikkahub.data.remote.AndroidKeystoreCredentialStore
+import me.rerere.rikkahub.data.remote.CredentialStore
+import me.rerere.rikkahub.data.remote.GatewayApi
+import me.rerere.rikkahub.data.remote.GatewayBackend
+import me.rerere.rikkahub.data.remote.IdentityApi
+import me.rerere.rikkahub.data.remote.IdentityBackend
+import me.rerere.rikkahub.data.remote.SessionApi
+import me.rerere.rikkahub.data.remote.SessionBackend
+import okhttp3.OkHttpClient
+import org.koin.dsl.module
+
+/** Build-time deployment address; release requires an explicit Gradle property. */
+private val identityEndpoint: String = BuildConfig.IDENTITY_ENDPOINT
+
+/** Account identity, owned sessions and remote reception share one process lifetime. */
+val identityModule = module {
+    single<CredentialStore> {
+        AndroidKeystoreCredentialStore(context = get<Context>())
+    }
+
+    single<IdentityBackend> {
+        IdentityApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
+    }
+
+    single<SessionBackend> {
+        SessionApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
+    }
+
+    single<RemoteChatBackend> {
+        RemoteChatApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
+    }
+
+    single<GatewayBackend> {
+        GatewayApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
+    }
+
+    single<RemoteAttachmentBackend> { RemoteAttachmentApi(identityEndpoint, get<OkHttpClient>()) }
+
+    single<RemoteSpeechBackend> { RemoteSpeechApi(identityEndpoint, get<OkHttpClient>()) }
+
+    single<RemoteJobBackend> { RemoteJobApi(identityEndpoint, get<OkHttpClient>()) }
+
+    single<ChatSyncStore> { AndroidChatSyncStore(get<Context>()) }
+
+    single { AndroidRemoteNotifications(get<Context>()) }
+
+    single {
+        val runtimeScope = get<AppScope>()
+        val notifications = get<AndroidRemoteNotifications>()
+        val chatBackend = get<RemoteChatBackend>()
+        val syncStore = get<ChatSyncStore>()
+        val files = get<RemoteAttachmentBackend>()
+        val jobs = get<RemoteJobBackend>()
+        RemoteReceiveState(get<SessionBackend>(), runtimeScope, { settles ->
+            RemoteChatState(
+                chatBackend, runtimeScope, syncStore, identityEndpoint,
+                attachmentsBackend = files, jobsBackend = jobs,
+                speechBackend = get<RemoteSpeechBackend>(),
+                settleReminders = settles,
+            )
+        }, notifications, { notifications.enabled.value })
+    }
+
+    single { RemoteReceiveServiceLauncher(get<Context>()) }
+
+    single {
+        // The app-wide foreground fact is the notification boundary's own read; the
+        // process lifecycle only tells reception when to ask for it again.
+        RemoteReceiveController(get<AccountSession>(), get<RemoteReceiveState>(),
+            get<AndroidRemoteNotifications>(), get<RemoteReceiveServiceLauncher>(),
+            ProcessLifecycleOwner.get().lifecycle, get<AppScope>())
+    }
+
+    single {
+        val receiver = get<RemoteReceiveState>()
+        AccountSession(
+            backend = get<IdentityBackend>(),
+            store = get<CredentialStore>(),
+            // The publisher binds reception as it publishes the account, so the sessions page
+            // never renders a list that belongs to the previous one.
+            onAccountChanged = receiver::bindIdentity,
+        )
+    }
+}
