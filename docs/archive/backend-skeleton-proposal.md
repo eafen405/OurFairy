@@ -1,3 +1,5 @@
+> 归档于 2026-10-20。原因：首版装配已定案，本文只保留 2026-10-14 的实现规划素材，不描述当前状态。现行见 [首版总规格](../specs/ourfairy-v1.md)。
+
 # 首版后端最小模块设计草案
 
 日期：2026-10-14。状态：首版装配决定已收束，本文保留实现规划素材；没有实施产品代码。最终决定以[确定后端最小装配：选用、替换与新增插件](https://github.com/eafen405/OurFairy/issues/9#issuecomment-6163738839)为权威，后端地图已完成。本文中的接口示意和验证清单不代表已完成兼容验证。
@@ -48,7 +50,7 @@
 
 若首版开放会话 fork，必须继承归属；未开放则关闭该入口。子代理不在首版，不为本票新增子代理实现任务。格式版本号、索引迁移代码和插件最终依赖清单属于后续实现设计，不影响归属承载方式的结论。
 
-源码定位见[归属执行路径](research/session-owner-execution.md)。额外核对点：dsh `core/session/src/types.ts:94,151`、`core/agent/src/index.ts:79`（均在 packages/）；`session/session-persistence-jsonl/src/format.ts:96`、`session/session-format-v3-to-v4/src/validation.ts:19`、`session/session-format-v1-to-v2/src/codec.ts:19`；`session-query/session-query/src/sources.ts:11`。以上为静态证据，尚未实施或运行兼容测试。
+源码定位见[归属执行路径](../research/session-owner-execution.md)。额外核对点：dsh `core/session/src/types.ts:94,151`、`core/agent/src/index.ts:79`（均在 packages/）；`session/session-persistence-jsonl/src/format.ts:96`、`session/session-format-v3-to-v4/src/validation.ts:19`、`session/session-format-v1-to-v2/src/codec.ts:19`；`session-query/session-query/src/sources.ts:11`。以上为静态证据，尚未实施或运行兼容测试。
 
 ## 模块及数据归属
 
@@ -168,7 +170,7 @@ jobs 原生按所属 sessionId 和 Agent 生命周期核对调用；建议直接
 
 建议首版适配旧 Android 前台服务维持连接的方案，接收后端已保存事件后展示系统通知；后端维护可恢复的送达依据，重连补取、客户端去重。需用户完成目标系统的通知／后台运行设置，并在 vivo S50 验证切后台、锁屏、断网重连与进程回收。Doze 可能暂停普通网络，前台服务不构成锁屏即时到达保证。具体 Android 交互和省电设置说明交前端票，后端契约明确会话标识、事件定位、订阅范围及补取方式。
 
-正式厂商推送作为满足上架等条件后的可选通道，消息保存与客户端同步不依赖它。研究来源：https://dev.vivo.com.cn/documentCenter/doc/156 及[国内 Android 后台送达研究](research/domestic-android-background-delivery.md)。用户已接受这套首版方案；接收进程被回收时连接中断，恢复前无法及时提醒，这是通道边界，不能只描述成测试尚未完成。
+正式厂商推送作为满足上架等条件后的可选通道，消息保存与客户端同步不依赖它。研究来源：https://dev.vivo.com.cn/documentCenter/doc/156 及[国内 Android 后台送达研究](../research/domestic-android-background-delivery.md)。用户已接受这套首版方案；接收进程被回收时连接中断，恢复前无法及时提醒，这是通道边界，不能只描述成测试尚未完成。
 
 ## 关键流程与失败归属
 
@@ -190,6 +192,6 @@ jobs 原生按所属 sessionId 和 Agent 生命周期核对调用；建议直接
 
 后续实现验证应至少覆盖：显式 profile 启动及依赖缺失；归属格式往返与恢复；两用户文件和脚本范围一致；同用户跨会话检索及越权读取拒绝；投递 live/cold 和正在生成的会话、落盘后通知与重试去重；手机断线后继续执行、显式停止和重连同步；vivo S50 后台／锁屏／网络恢复。此处为验证清单，未执行。
 
-前三份研究分别支持会话事件定位、身份传递和 sandbox 复用：[消息模型](research/message-model.md)、[归属执行路径](research/session-owner-execution.md)、[sandbox 对照](research/dsh-sandbox-reuse.md)。本草案没有把这些未验证点当作完成项，也不把首版之外能力重新列为首版待办。
+前三份研究分别支持会话事件定位、身份传递和 sandbox 复用：[消息模型](../research/message-model.md)、[归属执行路径](../research/session-owner-execution.md)、[sandbox 对照](../research/dsh-sandbox-reuse.md)。本草案没有把这些未验证点当作完成项，也不把首版之外能力重新列为首版待办。
 
 源码补充：dsh `packages/core/agent-loop/src/index.ts:342`、`packages/fs/tool-fs/src/index.ts:23`、`packages/shell/tool-bash/src/index.ts:34` 为直接注入依赖；`packages/core/agent-loop/src/agent.ts:155` 的 send/inject/followup 面向 UserMessage，不能因为 inject 不主动唤醒就直接拿来实现 Fairy 已发送的投递消息。版本均为上述研究记录的 `d743267388641bc76f17c45ce8b4c231aed1d32c`。未运行测试或原型。
