@@ -16,8 +16,8 @@
  *     HEAD is the branch tip or an ancestor of it, i.e. that the worktree really
  *     is based on the combination.
  *
- * The research upstream SHA is reported separately and is never a product
- * deliverable.
+ * The research upstream baselines are not part of the combination; they live in
+ * docs/research/README.md.
  *
  * Usage:
  *   node scripts/combo.mjs verify [--json] [--allow-drift]
@@ -99,7 +99,6 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
       path,
       branch: entry.integrationBranch,
       lock: entry.lock ?? 'commit',
-      researchUpstreamSha: entry.researchUpstreamSha ?? null,
     }
     if (!existsSync(join(path, '.git'))) {
       const failure = `${key}: checkout missing at ${path}${envName === undefined ? '' : ` (override ${envName})`}`
@@ -146,7 +145,6 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
       ...base,
       expected: locked,
       actual: tip,
-      productHasOwnCommits: entry.researchUpstreamSha !== null && tip !== entry.researchUpstreamSha,
       ok,
     }
     if (!ok) {
@@ -213,8 +211,7 @@ function resultLabel(row) {
   if (row.lock === 'integration-branch') {
     return `ok (worktree ${row.headIsTip ? 'is the integration tip' : 'is based on the integration tip'})`
   }
-  return `ok${row.researchUpstreamSha !== null && !row.productHasOwnCommits
-    ? ' (research upstream only; no product commits yet)' : ''}`
+  return 'ok'
 }
 
 /**
@@ -554,7 +551,7 @@ function printTable(rows) {
   const header = ['row', 'branch', 'expected', 'actual', 'result']
   const cells = rows.map((row) => [
     row.key,
-    row.branch,
+    row.branch === null || row.branch === undefined ? '-' : String(row.branch),
     row.expected === null || row.expected === undefined ? '-' : String(row.expected).slice(0, 16),
     row.actual === null || row.actual === undefined ? 'MISSING' : String(row.actual).slice(0, 16),
     resultLabel(row),
@@ -569,26 +566,23 @@ function printShow(combo) {
   for (const [key, entry] of Object.entries(combo.repos)) {
     lines.push(`${key} (${entry.role}, lock: ${entry.lock ?? 'commit'})`)
     lines.push(`  path                  ${repoPath(combo, key)}`)
-    lines.push(`  fork remote           ${entry.remoteName ?? 'origin'} ${entry.remoteUrl ?? ''}`.trimEnd())
+    if (entry.remoteUrl !== undefined) {
+      lines.push(`  fork remote           ${entry.remoteName ?? 'origin'} ${entry.remoteUrl}`)
+    }
     lines.push(`  integration branch    ${entry.integrationBranch}`)
     lines.push(entry.productCommit === undefined || entry.productCommit === null
       ? '  productCommit         (self repository: the integration branch tip is the lock)'
       : `  productCommit         ${entry.productCommit}`)
-    lines.push(`  researchUpstreamSha   ${entry.researchUpstreamSha ?? '(not applicable)'}`
-      + `${entry.researchUpstreamRef === undefined ? '' : ` @ ${entry.researchUpstreamRef}`}`)
   }
   if (combo.androidSource !== undefined) {
     const source = combo.androidSource
     lines.push(`android source (${source.role}, lock: declaration)`)
-    lines.push(`  repository            ${source.repository}`)
-    lines.push(`  remote                ${source.remoteUrl}`)
-    lines.push(`  branch                ${source.branch}`)
     lines.push(`  commit                ${source.commit}`)
     lines.push(`  declaration           ${resolve(repoRoot, source.declaration)}`)
-    lines.push(`  note                  ${source.note}`)
   }
   lines.push(`backend                 profile ${combo.backend.profileName}; bundle ${combo.backend.bundlePackage} (${combo.backend.bundlePathInRepo})`)
   lines.push(`launcher                ${combo.backend.launcher}; ${combo.backend.pnpmInvocation}`)
+  lines.push('research baseline       docs/research/README.md (upstream SHAs, not product commits)')
   return lines.join('\n')
 }
 
