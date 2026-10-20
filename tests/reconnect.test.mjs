@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { join } from 'node:path'
-import { readFileSync, readdirSync, statSync, chmodSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { readFileSync, readdirSync, statSync, chmodSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { before, after, test } from 'node:test'
-import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, repoRoot, startArgs, startedPort } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, repoRoot, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
 const { startMockLlmServer } = await import(join(combo.repos.dsh.localPath, 'packages/test-support/llm-mock-server/lib/index.js'))
@@ -12,8 +13,8 @@ const home = makeHome('ourfairy-reconnect-')
 const password = 'test-chat-password'
 const answer = '# Fairy\n\n你好，**世界**。\n```js\n1 + 1\n```\n最后。'
 let model, port, admin, alice, bob
-async function start() {
-  const run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
+async function start(overlays = []) {
+  const run = await runBackendAsync(startArgs(overlays), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     MINIMAX_CN_API_KEY: 'mock-key', OURFAIRY_MINIMAX_BASE_URL: `${model.baseURL}` })
   port = startedPort(run)
 }
@@ -331,4 +332,102 @@ test('a crash-orphaned turn is resumed and writer-saved before its recovery clos
   await start()
   const recovered = await request('/chat/read', bob.token, { sessionId, maxEvents: 256 })
   assert.deepEqual(recovered.body.projection.events.find(event => event.seq === closer.seq), closer)
+})
+
+
+const fixture = name => fileURLToPath(new URL(`../backend/chat/test-support/${name}`, import.meta.url))
+
+test('a lost Assistant frame drops the live attempt instead of publishing text from two attempts as one', async () => {
+  await stop()
+  await model.close()
+  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
+    successText: answer, chunkSize: 2, chunkDelayMs: 30 })
+  await start()
+  const sessionId = await session(alice.token)
+  await stop()
+  const triggerPath = join(home, 'frame-gap-trigger')
+  const reportPath = join(home, 'frame-gap-report.json')
+  const overlay = writeOverlay(home, [{ insert: [{
+    id: 'assistant-frame-gap', name: fixture('frame-gap.mjs'),
+    config: { sessionId, afterChunks: 1, triggerPath, marker: 'FRAME_GAP_TEXT', reportPath },
+  }] }], 'frame-gap.patch.yml')
+  await start([overlay])
+  const stream = observe(alice.token, sessionId, 256)
+  await stream.ready
+  try {
+    const sent = await request('/chat/send', alice.token, { sessionId, requestId: 'frame-gap', text: 'keep the real stream' })
+    assert.equal(sent.status, 200, JSON.stringify(sent))
+    // Only fault after the product has published a real attempt prefix: the
+    // frame loss must withdraw that attempt, not become its continuation.
+    const beforeGap = await eventually(async () => stream.frames, frames => frames.some(frame => frame.attempt?.text.length > 3))
+    const attemptId = beforeGap.find(frame => frame.attempt?.text.length > 3).attempt.attemptId
+    writeFileSync(triggerPath, 'go\n')
+    const finished = await eventually(async () => stream.frames.at(-1), frame => frame.replyStatus === 0
+      && frame.messages.some(message => message.role === 2 && message.status === 2), 30000)
+    assert.match(readFileSync(reportPath, 'utf8'), /"revision"/, 'the lost-frame fault fired')
+    // One attempt's text can never be carried into another: a published attempt
+    // is always a prefix of the real answer, never a concatenation that contains
+    // the frame the fold never accepted.
+    const attempts = stream.frames.filter(frame => frame.attempt !== null).map(frame => frame.attempt)
+    assert.ok(attempts.length > 0)
+    for (const attempt of attempts) {
+      assert.ok(answer.startsWith(attempt.text), `published attempt text is not one real prefix: ${JSON.stringify(attempt.text)}`)
+      assert.ok(!attempt.text.includes('FRAME_GAP_TEXT'))
+    }
+    assert.ok(stream.frames.some(frame => frame.attempt === null && frame.replyStatus === 1),
+      'after the fold loses continuity the live attempt is withdrawn instead of being published corrupted')
+    // The durable settlement is the real one: end frame, message and settled identity.
+    assert.equal(finished.attempt, null)
+    const reply = finished.messages.find(message => message.role === 2 && message.status === 2)
+    assert.equal(reply.text, answer)
+    assert.deepEqual(finished.settledAttempt, { attemptId, seq: reply.seq })
+  } finally {
+    stream.close()
+    await stop()
+    await start()
+  }
+})
+
+test('a torn durable read is reopened from a fresh cut instead of publishing the gap as continuous history', async () => {
+  await stop()
+  await start()
+  const sessionId = await session(alice.token)
+  await stop()
+  const triggerPath = join(home, 'lost-event-trigger')
+  const reportPath = join(home, 'lost-event-report.json')
+  const overlay = writeOverlay(home, [{ insert: [{
+    id: 'session-event-loss', name: fixture('lost-event.mjs'),
+    config: { sessionId, triggerPath, reportPath },
+  }] }], 'lost-event.patch.yml')
+  await start([overlay])
+  try {
+    const sent = await request('/chat/send', alice.token, { sessionId, requestId: 'torn-read', text: 'keep every committed event' })
+    assert.equal(sent.status, 200, JSON.stringify(sent))
+    const settled = await eventually(() => request('/chat/read', alice.token, { sessionId, maxEvents: 256 }),
+      r => r.body.projection?.replyStatus === 0
+        && r.body.projection.durableThroughSeq === r.body.projection.cursor
+        && r.body.projection.messages.some(message => message.role === 2 && message.status === 2), 30000)
+    // Arm only the explicit read under test: a retry caused by a later live
+    // version change must not be able to hide the tear.
+    writeFileSync(triggerPath, 'go\n')
+    const read = await request('/chat/read', alice.token, { sessionId, maxEvents: 256 })
+    assert.equal(read.status, 200, JSON.stringify(read))
+    const { dropped } = JSON.parse(readFileSync(reportPath, 'utf8'))
+    assert.ok(Number.isSafeInteger(dropped), 'the torn-read fault fired')
+    // A projection is one contiguous durable run. The torn read skipped a
+    // committed seq, so it must be reopened rather than published.
+    const projection = read.body.projection
+    assert.deepEqual(projection.events.map(event => event.seq),
+      Array.from({ length: projection.cursor - projection.fromSeq + 1 }, (_, index) => projection.fromSeq + index),
+      'the torn read reached the wire')
+    assert.ok(projection.events.some(event => event.seq === dropped),
+      'the fresh cut includes the event the torn read skipped')
+    const reply = projection.messages.find(message => message.role === 2 && message.status === 2)
+    assert.equal(reply.text, answer)
+    assert.deepEqual(projection.messages, settled.body.projection.messages,
+      'repairing the read does not change the settled transcript')
+  } finally {
+    await stop()
+    await start()
+  }
 })
