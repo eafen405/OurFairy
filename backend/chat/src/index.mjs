@@ -4,15 +4,17 @@ import { RemoteChat } from './service.mjs'
 import { SessionRuntime } from './runtime.mjs'
 import { installDelivery } from './delivery.mjs'
 import { installJobs } from './jobs.mjs'
+import { installSpillRead } from './spill-read.mjs'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 
 export const name = 'ourfairy-chat'
-export const inject = ['webServer', 'connection', 'ourfairySessions', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'identity', 'tools', 'sessionPersistence', 'jobs']
+export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairySpaces', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'identity', 'tools', 'sessionPersistence', 'jobs']
 export function apply(ctx) {
   const runtime = new SessionRuntime(ctx)
   const chat = new RemoteChat(ctx, runtime)
   installDelivery(ctx, runtime)
   const { jobOutput, jobStop } = installJobs(ctx, runtime)
+  installSpillRead(ctx)
   const register = (path, handle, respond) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,
     handler: postHandler({ fence: request => ctx.connection.fence(request), HttpError: SessionScopeError,
       codePrefix: 'chat', internalMessage: 'remote chat request failed',
