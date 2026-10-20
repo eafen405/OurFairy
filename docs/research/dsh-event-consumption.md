@@ -1,3 +1,5 @@
+> 2026-10-20 状态：已被 [dsh 事件消费研究的源码复核](dsh-event-consumption-audit.md) 取代。本文记录 2026-10-14 的判断，不描述当前实现。
+
 # dsh 事件消费 / jobs / 客户端补取事实层
 
 > **2026-10-14 复核纠正：本文为保留的旧研究，不能继续当作已验证事实底。** 单传输、throughSeq 增量补取、assistant 重连、一次性 token、原生客户端请求头及多用户授权的表述存在错误或过度推断；以[源码复核](dsh-event-consumption-audit.md)为准。本文末尾“schedule 纳入首版”与正式决议相反：首版纳入 jobs，排除定时任务。

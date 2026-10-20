@@ -1,3 +1,5 @@
+> 2026-10-20 状态：现行。本文记录 2026-10-14 的判断，不描述当前实现。
+
 # dsh 事件消费研究的源码复核
 
 复核日期：2026-10-14。被复核文件：[dsh-event-consumption.md](dsh-event-consumption.md)。主证据为本地 `/home/eafen405/projects/deepseek-harness`，commit `d743267388641bc76f17c45ce8b4c231aed1d32c`；复核时工作树干净。已阅读该仓库根目录、`packages/`、`packages/client/` 的 AGENTS.md。本次仅只读相关源码，未运行产品、测试或修改 dsh。

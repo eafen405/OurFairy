@@ -1,3 +1,5 @@
+> 2026-10-20 状态：现行。本文记录 2026-10-14 的判断，不描述当前实现。
+
 # RikkaHub Android 客户端架构图与模块说明
 
 调研日期：2026-10-14。调研对象：`/home/eafen405/projects/rikkahub` 本地 fork，提交 `0966502c feat(settings): 默认模型页改为 MD3 Expressive 风格`。研究仅基于该 fork 快照与 OurFairy 既有 `docs/research/*.md`，未运行构建或测试机验证。本文档不评价产品取舍，也不替 OurFairy 决定是否复用——这是事实层接线图。
