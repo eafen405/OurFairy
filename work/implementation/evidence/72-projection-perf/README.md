@@ -13,7 +13,7 @@
 | #90 | 观察者共享与 read/observe 切换 | [ticket-90-read-observe.md](ticket-90-read-observe.md) | 已合入 `integration/spec-72` |
 | #91 | 分页在固定截点取值 | [ticket-91-page-cut.md](ticket-91-page-cut.md) | 已合入 `integration/spec-72` |
 | #92 | 冷启动重建与 live 状态边界 | `ticket-92-cold-restart.md` | 待写 |
-| #93 | 多观察者共享与多会话隔离 | `ticket-93-isolation.md` | 待写 |
+| #93 | 多观察者共享与多会话隔离 | [ticket-93-isolation.md](ticket-93-isolation.md)（含 2 份基准 JSON） | 待合入 `integration/spec-72` |
 | #94 | 改造后基准与相对门槛 | `ticket-94-benchmark-after.md` | 待写 |
 | #95 | 契约文档、全量验证与子票收口 | `ticket-95-closeout.md` | 待写 |
 
