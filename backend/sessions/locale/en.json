@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OurFairy owned sessions",
+    "description": "Session ownership from the authenticated credential plus the identity's fixed primary session, served on the product's /sessions/* paths."
+  }
+}

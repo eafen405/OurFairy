@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OurFairy gateway",
+    "description": "Phaethon-only shared configuration: provider routes, the shared model selection and the ASR connection, persisted through dsh profile settings."
+  }
+}

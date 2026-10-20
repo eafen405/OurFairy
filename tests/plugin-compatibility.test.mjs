@@ -12,6 +12,11 @@
  *
  * The copies are not Git checkouts, so doctor's "combo combination" check fails
  * in them for an unrelated reason; only the compatibility check is read.
+ *
+ * The last test holds every product package to the minimal plugin metadata the
+ * dsh plugin page reads: a package description, an exported English locale with
+ * a title and description, and the locale declared in both `exports` and
+ * `files` so the installed copy publishes it.
  */
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -127,5 +132,57 @@ test('every product package declares an explicit semver peer range, not the work
     offenders,
     [],
     `every peer must be an explicit caret range on the version line it was built against; offenders:${'\n'}${offenders.join('\n')}`,
+  )
+})
+
+/**
+ * The metadata dsh's `readPluginMeta` reads for a plugin page: the package
+ * description is the fallback, and `locale/en.json` supplies the title and
+ * description that replace it. The locale must be exported and published, or
+ * the installed copy cannot answer the reader. `backend/probe` is test
+ * machinery, not a product package; the bundle already complies.
+ */
+test('every product package ships a description and an exported English locale', () => {
+  const packageDirs = readdirSync(join(repoRoot, 'backend'), { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name !== 'probe')
+    .map(entry => join('backend', entry.name))
+    .filter(dir => existsSync(join(repoRoot, dir, 'package.json')))
+  assert.ok(packageDirs.length > 0, 'backend/ must contain product packages with manifests')
+
+  const failures = []
+  for (const dir of packageDirs) {
+    const manifest = JSON.parse(readFileSync(join(repoRoot, dir, 'package.json'), 'utf8'))
+    const label = `${dir} (${manifest.name ?? 'unnamed'})`
+    if (typeof manifest.description !== 'string' || manifest.description.trim() === '') {
+      failures.push(`${label}: package.json needs a non-empty description fallback`)
+    }
+    if (manifest.exports?.['./locale/*.json'] !== './locale/*.json') {
+      failures.push(`${label}: exports must declare "./locale/*.json": "./locale/*.json"`)
+    }
+    if (!Array.isArray(manifest.files) || !manifest.files.includes('locale/*.json')) {
+      failures.push(`${label}: files must include "locale/*.json"`)
+    }
+    const localePath = join(repoRoot, dir, 'locale', 'en.json')
+    if (!existsSync(localePath)) {
+      failures.push(`${label}: locale/en.json is missing`)
+      continue
+    }
+    let meta
+    try {
+      meta = JSON.parse(readFileSync(localePath, 'utf8')).meta
+    } catch (error) {
+      failures.push(`${label}: locale/en.json is not valid JSON: ${error.message}`)
+      continue
+    }
+    for (const field of ['title', 'description']) {
+      if (typeof meta?.[field] !== 'string' || meta[field].trim() === '') {
+        failures.push(`${label}: locale/en.json needs a non-empty meta.${field}`)
+      }
+    }
+  }
+  assert.deepEqual(
+    failures,
+    [],
+    `product packages must ship the minimal plugin metadata the plugin page reads:${'\n'}${failures.join('\n')}`,
   )
 })

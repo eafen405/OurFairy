@@ -3,15 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "OurFairy attachment lifecycle: uploads, expiry and message-qualified access over the native attachment store.",
   "license": "UNLICENSED",
   "main": "./src/index.mjs",
   "exports": {
-    ".": "./src/index.mjs"
+    ".": "./src/index.mjs",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "src",
     "README.md",
-    "pdf"
+    "pdf",
+    "locale/*.json"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.5-alpha.1",

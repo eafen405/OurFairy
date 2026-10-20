@@ -8,11 +8,13 @@
   "main": "./src/index.mjs",
   "exports": {
     ".": "./src/index.mjs",
-    "./events": "./src/events.mjs"
+    "./events": "./src/events.mjs",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "src",
-    "README.md"
+    "README.md",
+    "locale/*.json"
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.5-alpha.1",
