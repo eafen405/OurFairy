@@ -721,7 +721,10 @@ function machineFacts(combo) {
     productHead: head,
     combination: {
       dsh: combo.repos.dsh.productCommit,
-      rikkahub: combo.androidSource.commit, // the client source commit; the key keeps baseline files comparable
+      // The client's source commit. Baselines recorded before the client was
+      // inlined keyed this as `rikkahub`, when it was a separate repository;
+      // those files keep their historical key.
+      androidSource: combo.androidSource.commit,
     },
     loadAverageAtStart: loadavg(),
   }
