@@ -4,7 +4,9 @@
 
 ## What to build
 
-把**根文档与客户端文档**里的拓扑改对，并删掉只会误导人的内容。
+把 `android/` 里与两仓事实矛盾的文档改对，并删掉只会误导人的内容。
+
+根文档（`README.md`、`AGENTS.md`）与词汇表已在 `0a40125` 处理完，**本票只剩下面三处 `android/` 文档**。
 
 本票的前提：只有两个仓库——OurFairy（含 `android/`）与 dsh fork。任何"第三个仓库""跨仓集成""配套 fork"的说法都是错的。
 
@@ -27,13 +29,14 @@
 
 （注意：`:43` 的 86/10 文件数与 `:59` 的 275 经核仍准确，不要误删。）
 
-### 4. 根 `GLOSSARY.md` 与 `GLOSSARY-MAP.md`
+`android/` 已经不是逐 blob 等于导入快照的纯拷贝（`android/GLOSSARY.md` 是新增文件），**不必**为了保住"快照纯净"而回避修改这里的文档。
 
-`GLOSSARY.md` 最后更新是 2026-10-14，之后实现增加了投递、活动投影、任务卡等概念。按"只留仍在使用且与实现一致的词"处理：
+### 4. 词汇表：已完成，不要重做
 
-- 删除已不再使用的词条；
-- 补上现在实际在用、但词表里没有的核心词（以代码与 README 的用词为准，不 invent）；
-- 检查 `GLOSSARY-MAP.md` 指向的两个词汇文件都真实存在且分类正确。
+`GLOSSARY.md`、`GLOSSARY-MAP.md`、`android/GLOSSARY.md` 已经在 `0a40125` 里定稿（分两上下文、
+共用词只定义一次、客户端差异写成 `_客户端：_` 一行）。**本票不再改这三个文件。**
+
+只有在改动 `android/` 文档时顺带发现的术语不一致，才在对应位置补一句，不要重排词汇表结构。
 
 ### 5. 根 `README.md` 与 `AGENTS.md`
 
@@ -45,9 +48,9 @@
 - [ ] `android/AGENTS.md` 不再指向 `../OurFairy/`，不再出现"跨仓"
 - [ ] `android/README.md` 的来源提交与 `android/ourfairy-source.json` 一致（`460109d1`），且不再用外链语气描述本仓库
 - [ ] `android/docs/references/fairy-client-runtime.md` 已删除，或不再含"本轮"与任何过期测试数
-- [ ] `GLOSSARY.md` 里没有已不存在的概念，`GLOSSARY-MAP.md` 的链接全部可解析
 - [ ] `android/` 的业务代码零改动（`git diff --stat` 只出现 Markdown）
 - [ ] `npm test` 全绿（`tests/android-source.test.mjs`、`tests/docs.test.mjs` 必须仍过）
+- [ ] `android/` 的文档改动不涉及业务代码，也不新增第 6 条之外的 Markdown
 - [ ] 交付"删除清单 + 保留理由"
 
 ## Blocked by
