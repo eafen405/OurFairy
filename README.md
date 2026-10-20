@@ -28,4 +28,4 @@ npm run hooks:install
 
 后端以 dsh profile 的插件组合运行。哪些原生接缝**没有**使用、哪些能力保留产品实现及理由，
 以及各自的重新评估条件，见[生态边界：并行传输与保留的产品实现](docs/architecture/dsh-ecosystem-boundary.md)。
-行与包的权威始终是 `backend/v1-bundle/cordis.patch.yml` 与 `backend/v1-bundle/package.json`。
+行与包的权威见 `backend/v1-bundle/cordis.patch.yml` 与 `backend/v1-bundle/package.json`。

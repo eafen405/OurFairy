@@ -20,8 +20,10 @@
  */
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { flattenEntries, readCombo, repoPath } from '../scripts/combo.mjs'
 import { repoRoot } from './helpers/backend.mjs'
 
 const docPath = join(repoRoot, 'docs', 'architecture', 'dsh-ecosystem-boundary.md')
@@ -40,31 +42,27 @@ function readDoc() {
 }
 
 /**
- * The rows the bundle mounts, read from the file the loader reads.
+ * The rows the bundle mounts, composed by dsh's own patch loader.
  *
- * Bundle rows sit at four-space indentation; deeper `- id:` lines belong to row
- * config (the model catalog). Parsing those as rows would make this check
- * disagree with the runtime it claims to follow.
+ * The doc must not copy the row set, so the expectation is derived from the
+ * file the loader reads using the same public app-boot functions a boot uses —
+ * `loadOverlayPatches` and `composeEntries` — instead of parsing the YAML here
+ * (CODING_STANDARDS forbids a structure check that re-implements the loader).
+ * Group-nested rows are flattened by the helper `scripts/combo.mjs` already
+ * uses for its package check, so both readers see the same row set.
  * @returns {{ id: string, package: string }[]}
  */
 function mountedRows() {
-  const rows = []
-  let current
-  for (const line of readFileSync(bundlePath, 'utf8').split('\n')) {
-    const id = /^ {4}- id: (\S+)\s*$/u.exec(line)
-    if (id !== null) {
-      current = id[1]
-      continue
-    }
-    const name = /^ {6}name: '([^']+)'\s*$/u.exec(line)
-    if (name !== null && current !== undefined) {
-      rows.push({ id: current, package: name[1] })
-      current = undefined
-    }
-  }
+  const { combo } = readCombo(repoRoot)
+  const installAnchor = join(repoPath(combo, 'dsh', repoRoot), 'apps', 'cli', 'package.json')
+  const boot = createRequire(installAnchor)('@deepseek-ai/dsh-app-boot')
+  const patches = boot.loadOverlayPatches('dsh', bundlePath)
+  const rows = flattenEntries(boot.composeEntries([patches]))
+    .filter(row => typeof row.name === 'string')
+    .map(row => ({ id: String(row.id), package: row.name }))
   assert.ok(
     rows.length > 5,
-    `backend/v1-bundle/cordis.patch.yml must still be parsed as a row list; found ${rows.length} row(s)`,
+    `backend/v1-bundle/cordis.patch.yml must compose as a row list; found ${rows.length} row(s)`,
   )
   return rows
 }
@@ -91,7 +89,7 @@ const CITED_CHECKS = [
   ['tests/identity-http.test.mjs',
     'the provisioned Phaethon signs in as short number 1'],
   ['tests/identity-http.test.mjs',
-    'a request for an untrusted Host is refused by the same fence the /api route uses'],
+    'every product module entry point rejects an untrusted Host before reading the body or credential'],
   ['tests/identity-http.test.mjs',
     'a session credential admits dsh /api while an anonymous request is refused at the door'],
   ['tests/owned-sessions.test.mjs',
@@ -225,6 +223,22 @@ test('the doc records the explicit non-goals', () => {
   }
 })
 
+/**
+ * Whether a source file declares a top-level test with exactly this title.
+ *
+ * A plain `includes(title)` would let a comment, a doc string, or a
+ * `test.skip(...)` mention satisfy the citation. Anchoring after optional
+ * whitespace requires a real `test('title'` / `test("title"` declaration line —
+ * the form Node's runner executes for every check the doc cites.
+ * @param {string} source
+ * @param {string} title
+ * @returns {boolean}
+ */
+function declaresTest(source, title) {
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+  return new RegExp(`^[ \\t]*test\\((['"])${escaped}\\1`, 'mu').test(source)
+}
+
 test('every limitation names a check whose test title still exists', () => {
   const doc = readDoc()
   for (const [path, title] of CITED_CHECKS) {
@@ -239,8 +253,8 @@ test('every limitation names a check whose test title still exists', () => {
     const sourcePath = join(repoRoot, path)
     assert.ok(existsSync(sourcePath), `${path} must exist to be cited`)
     assert.ok(
-      readFileSync(sourcePath, 'utf8').includes(title),
-      `${path} no longer runs the test "${title}" the boundary doc cites; update the doc or restore the check`,
+      declaresTest(readFileSync(sourcePath, 'utf8'), title),
+      `${path} no longer declares the test "${title}" the boundary doc cites; update the doc or restore the check`,
     )
   }
 })

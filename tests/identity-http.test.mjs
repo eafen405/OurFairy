@@ -186,6 +186,31 @@ describe('OurFairy identity over real HTTP', () => {
     assert.equal(typeof admitted.token, 'string', 'the loopback authority must still sign in')
   })
 
+  test('every product module entry point rejects an untrusted Host before reading the body or credential', async () => {
+    // One representative entry point per product module. No credential and an
+    // empty body: the 403 with a forbidden-authority code is only reachable
+    // through the fence, because each module's own authorization/body handling
+    // would answer 401 or 400 after a missing credential. `/speech` reports the
+    // bare code; the other modules prefix it with their own name.
+    const paths = [
+      '/identity/sign-in',
+      '/sessions/list',
+      '/chat/read',
+      '/gateway/read',
+      '/attachments/propose',
+      '/speech',
+    ]
+    for (const path of paths) {
+      const refused = await request(path, { host: 'attacker.invalid', body: {} })
+      assert.equal(refused.status, 403, `${path} must be fenced off: ${refused.text}`)
+      assert.match(refused.json?.error?.code ?? '', /forbidden-authority$/u,
+        `${path} must report a forbidden-authority code: ${refused.text}`)
+    }
+    // The backend still answers the loopback authority after all six refusals.
+    const admitted = await signIn('phaethon', PHAETHON_PASSWORD)
+    assert.equal(typeof admitted.token, 'string')
+  })
+
   test('a session credential admits dsh /api while an anonymous request is refused at the door', async () => {
     const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
     const agent = await register(await createInvite(phaethon.token), 'agent-api-admission')

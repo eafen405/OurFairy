@@ -68,7 +68,7 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | `/api` 在 handler 之前整体准入：匿名 401，已准入后无端点 404 | `tests/identity-http.test.mjs`：`a session credential admits dsh /api while an anonymous request is refused at the door` |
 | 产品流式面是自建 SSE，断开观察不停止后端回复 | `tests/remote-chat.test.mjs`：`SSE preserves every text prefix and disconnecting observation leaves the backend reply running` |
 | 产品路由拒绝匿名与越权（含法厄同），且早于冷恢复 | `tests/remote-chat.test.mjs`：`all remote paths reject anonymous and foreign owners, including administrator, before cold resume` |
-| 产品路由在业务处理前拒绝不受信的 Host（登录路由是该包装的可观察实例） | `tests/identity-http.test.mjs`：`a request for an untrusted Host is refused by the same fence the /api route uses` |
+| 每个产品模块的代表入口都在读取请求体或凭据之前拒绝不受信的 Host | `tests/identity-http.test.mjs`：`every product module entry point rejects an untrusted Host before reading the body or credential` |
 | 组合不挂载 Gateway、Remote/Typert 与 plugin manager 行 | `tests/ecosystem-boundary.test.mjs`（解析 bundle 行集合，任一包名出现即失败） |
 
 ## 2. 登录路径留在 `/api` 之外
@@ -171,7 +171,7 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | --- | --- | --- |
 | 挂载 plugin manager、提供运行时插件安装/启停 | 组合不挂载 plugin manager 行；插件装配由部署（bundle 与 profile）负责 | `tests/ecosystem-boundary.test.mjs`（bundle 行集合中不出现 plugin manager 包） |
 | npm 发布、registry 与版本发布流程 | 产品包全部 `private`，仓库里没有发布步骤；安装与启动只走本地 checkout 生成的 profile | `tests/ecosystem-boundary.test.mjs`（`backend/` 下任一产品包 `private` 不为 true 即失败） |
-| 把 Android API 迁到 `/api` | 本仓库的产品 API 仍是本文 1.1 的路由；`/api` 上没有产品端点（客户端代码不在本仓库） | `tests/owned-sessions.test.mjs`：`cold ownerless and foreign sessions are refused without changing durable artifacts`（断言 `/api/sessions/*` 为 404） |
+| 把 Android API 迁到 `/api` | 本仓库的产品路径都在 `/api` 之外（见 1.1）；已观察到 `/api/session.list` 与 `/api/sessions/*` 在准入后返回 404，没有产品端点认领它们（客户端代码不在本仓库） | `tests/identity-http.test.mjs`：`a session credential admits dsh /api while an anonymous request is refused at the door`（断言 `/api/session.list` 已准入后 404）；`tests/owned-sessions.test.mjs`：`cold ownerless and foreign sessions are refused without changing durable artifacts`（断言 `/api/sessions/*` 为 404） |
 | 把业务 SQLite 换成 storage-domain、把身份换成 authorization、把 fs/sandbox 换成更弱的原生实现 | 见 3 节；这些是产品能力差异，不是生态兼容缺口 | 见 3 节各表 |
 
 Android 客户端不在本仓库，本文不对其代码做检查声明；本仓库能固定的是它会调用的 HTTP/SSE

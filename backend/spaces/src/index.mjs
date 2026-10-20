@@ -11,11 +11,14 @@ export const Config = z.object({
 })
 
 /**
- * The spaces row owns the scope and the collaborators that read it: the
- * `ourfairySpaces` service, the tool-call scope wrapper, the group roots and the
- * system prompt. The four scoped providers are rows of their own
- * (`scoped-fs`, `scoped-sandbox`, `scoped-bash`, `scoped-directory`), so one can
- * be disabled or replaced without taking the scope away.
+ * The spaces row owns the scope and the contributor seam: the `ourfairySpaces`
+ * service, the tool-call scope wrapper, the system prompt, and the
+ * `contributeExtraRoots`/`contributeReadonlyFiles` registrations. The groups row
+ * contributes its member roots through `contributeExtraRoots`; the attachments
+ * row contributes its qualified files through `contributeReadonlyFiles`. The
+ * four scoped providers are rows of their own (`scoped-fs`, `scoped-sandbox`,
+ * `scoped-bash`, `scoped-directory`), so one can be disabled or replaced without
+ * taking the scope away.
  */
 export function apply(ctx, config) {
   const scope = new SpaceScope(ctx, config)

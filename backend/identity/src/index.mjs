@@ -21,8 +21,10 @@ export const inject = ['webServer', 'connection']
 
 /** The loader validates the row config before `apply`; `resolveConfig` fills the defaults. */
 export const Config = z.object({
-  path: z.string().required(),
+  path: z.string().min(1).required(),
   sessionTtlDays: z.number().min(1).step(1),
+  phaethonName: z.string(),
+  phaethonPassword: z.string(),
 })
 
 /** Principal key one short number speaks for; stable across that user's sessions. */
@@ -87,23 +89,14 @@ export class IdentityService extends Service {
   }
 }
 
-/** Validate the row config; the bundle writes it, so a mistake fails at load. */
+/** Fill the config defaults; the loader has already validated the declared fields. */
 function resolveConfig(config) {
   const source = config ?? {}
-  if (typeof source.path !== 'string' || source.path === '') {
-    throw new Error('ourfairy-identity: config.path must name the business SQLite file')
-  }
-  const sessionTtlDays = source.sessionTtlDays ?? 30
-  if (!Number.isSafeInteger(sessionTtlDays) || sessionTtlDays < 1) {
-    throw new Error('ourfairy-identity: config.sessionTtlDays must be a positive integer')
-  }
   return {
     path: source.path,
-    sessionTtlDays,
+    sessionTtlDays: source.sessionTtlDays ?? 30,
     phaethonName: source.phaethonName ?? 'phaethon',
-    phaethonPassword: typeof source.phaethonPassword === 'string' && source.phaethonPassword !== ''
-      ? source.phaethonPassword
-      : undefined,
+    phaethonPassword: source.phaethonPassword === '' ? undefined : source.phaethonPassword,
   }
 }
 

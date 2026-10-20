@@ -37,8 +37,9 @@ class LiveSession {
 
 /**
  * Owns every live chat session: opening it once, its ordered writes, its event
- * reads and its published projections. `delivery.mjs` and `jobs.mjs` receive
- * this runtime rather than reaching into `RemoteChat`'s private members.
+ * reads and its published projections. `jobs.mjs` receives this runtime
+ * directly; the delivery row reaches it only through the `ourfairyChatRuntime`
+ * service.
  */
 export class SessionRuntime {
   #live = new Map()

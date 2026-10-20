@@ -85,6 +85,13 @@ test('every installed product package is compatible with the pinned dsh', () => 
   for (const name of declaredPackages(root)) {
     assert.ok(check.detail.includes(name), `the check must report ${name} as checked: ${check.detail}`)
   }
+  // The judged set is what the profile installed, not what the bundle declared:
+  // the bundle and the test-only probe are installed product packages too.
+  const installed = readdirSync(join(home, 'dsh-home', 'profiles', 'ourfairy', 'node_modules', '@ourfairy'))
+    .map(name => `@ourfairy/${name}`)
+  for (const name of installed) {
+    assert.ok(check.detail.includes(name), `the check must judge ${name} because the profile installed it: ${check.detail}`)
+  }
 })
 
 test('a product package peer the pinned dsh does not satisfy fails naming the package, peer, and range', () => {

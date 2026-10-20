@@ -16,7 +16,7 @@
  */
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { readCombo, repoPath } from '../scripts/combo.mjs'
@@ -168,6 +168,24 @@ test('a row mounting an undeclared @ourfairy package fails and names the package
   for (const needle of ['@ourfairy/dsh-ghost', 'ghost']) {
     assert.ok(check.detail.includes(needle), `the failure must name ${needle}: ${check.detail}`)
   }
+})
+
+test('a product package installed without a bundle declaration fails and names it', () => {
+  const { root, home } = isolatedRun()
+  // The first doctor installs the profile and writes the source-hash stamp; a
+  // second doctor reuses it, so the extra directory below survives (pnpm would
+  // prune it on a reinstall).
+  const installed = doctor({ root, home })
+  assert.equal(installed.check.ok, true, `the shipped profile must install cleanly first: ${JSON.stringify(installed.check)}`)
+  const ghostDir = join(profileDir(home), 'node_modules', '@ourfairy', 'dsh-ghost')
+  mkdirSync(ghostDir, { recursive: true })
+  writeFileSync(join(ghostDir, 'package.json'), `${JSON.stringify({
+    name: '@ourfairy/dsh-ghost', version: '0.1.0', private: true,
+  }, undefined, 2)}\n`)
+
+  const { check } = doctor({ root, home })
+  assert.equal(check.ok, false, `an installed but undeclared product package must fail the check: ${JSON.stringify(check)}`)
+  assert.ok(check.detail.includes('@ourfairy/dsh-ghost'), `the failure must name @ourfairy/dsh-ghost: ${check.detail}`)
 })
 
 test('the installed bundle ships only its declared files, including the locale', () => {

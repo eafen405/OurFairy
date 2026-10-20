@@ -21,7 +21,7 @@
  *   node scripts/combo.mjs show [--json]
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -187,12 +187,35 @@ function scopeOf(name) {
  * @param {object[]} entries
  * @returns {object[]}
  */
-function flattenEntries(entries) {
+export function flattenEntries(entries) {
   return entries.flatMap(entry => [
     entry,
     // The loader treats any truthy `group` with a list `config` as nesting.
     ...(entry.group && Array.isArray(entry.config) ? flattenEntries(entry.config) : []),
   ])
+}
+
+/**
+ * The product packages actually installed in a profile, by the scope the bundle
+ * name belongs to.
+ *
+ * The launcher configures a hoisted linker, so the installed copies sit directly
+ * under `<profileDir>/node_modules/<scope>`. This is the installed set, not the
+ * declared set: a directory that no manifest declares still counts as installed
+ * and must be reported.
+ * @param {string} profileDir
+ * @param {string} bundlePackage
+ * @returns {string[]} package names, sorted.
+ */
+function installedProductPackages(profileDir, bundlePackage) {
+  const scope = scopeOf(bundlePackage)
+  if (scope === undefined) return []
+  const dir = join(profileDir, 'node_modules', scope)
+  if (!existsSync(dir)) return []
+  return readdirSync(dir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() || entry.isSymbolicLink())
+    .map(entry => `${scope}${entry.name}`)
+    .sort()
 }
 
 /**
@@ -236,18 +259,28 @@ function installedBundle({ binName, bundlePackage, installAnchor, profileDir }) 
  *
  * A row mounts one module specifier. Subpath exports (`@ourfairy/x/y`) are
  * distinct modules of one declared package, so a package may contribute
- * several rows, but the same specifier twice is a duplicate mount. Every
- * declared package must also resolve as installed in the profile, which is
- * what makes the bundle's declaration the set the launcher installs.
+ * several rows (the spaces package contributes six today), but the same
+ * specifier twice is a duplicate mount. This is #96's "one row per package"
+ * wording read after #101, which split one capability into several rows of the
+ * same package. Every declared package must also resolve as installed in the
+ * profile, which is what makes the bundle's declaration the set the launcher
+ * installs.
+ *
+ * The installed set is enumerated from the profile itself (the launcher uses a
+ * hoisted linker, so `<profileDir>/node_modules/<scope>/*`), not inferred from
+ * the declaration: a package present there but absent from the expected set
+ * (the bundle, the probe, or a declared dependency) is a package the profile
+ * boots with that no manifest owns, and it fails here by name.
  * @param {{
  *   binName: string,
  *   bundlePackage: string,
+ *   probePackage: string,
  *   installAnchor: string,
  *   profileDir: string,
  * }} options
  * @returns {{ok: boolean, declared: string[], mounted: {id: string, name: string, package: string}[], failures: string[]}}
  */
-export function verifyBundlePackages({ binName, bundlePackage, installAnchor, profileDir }) {
+export function verifyBundlePackages({ binName, bundlePackage, probePackage, installAnchor, profileDir }) {
   // Loaded the same way the launcher boots: the profile's bundle layer, the
   // patches it declares, and the rows composed from them.
   const { boot, layer, skipped } = installedBundle({ binName, bundlePackage, installAnchor, profileDir })
@@ -301,22 +334,35 @@ export function verifyBundlePackages({ binName, bundlePackage, installAnchor, pr
         + ` run 'ourfairy-backend start --reinstall': ${error.message}`)
     }
   }
+  // The expected set is what the launcher installs: the bundle itself, the
+  // test-only probe it never mounts, and the bundle manifest's dependencies.
+  const expected = new Set([bundlePackage, probePackage, ...declared])
+  for (const name of installedProductPackages(profileDir, bundlePackage)) {
+    if (!expected.has(name)) {
+      failures.push(`${name} is installed in ${profileDir}, but ${bundlePackage} does not declare it`)
+    }
+  }
 
   return { ok: failures.length === 0, declared, mounted, failures }
 }
 
 /**
- * Judge every installed product package's dsh peers against the runtime the
- * pinned CLI provides.
+ * Judge every product package installed in the profile, dsh peers against the
+ * runtime the pinned CLI provides.
  *
  * The judgement is dsh's own public `evaluatePluginCompatibility`, given the
  * runtime version `getDshRuntimeVersion` reads from the same app-boot module —
- * not a range comparison implemented here. The manifests are the installed
- * copies the dsh loader reads, resolved through the profile, so the answer is
- * about what would boot. `evaluatePluginCompatibility` judges only dsh peers
- * (`@deepseek-ai/dsh` and `@deepseek-ai/dsh-*`); a product package's other
- * peers are declarations for readers and pnpm, not inputs to this runtime
- * decision.
+ * not a range comparison implemented here. The set judged is the installed one
+ * (`<profileDir>/node_modules/<scope>/*`), not just the bundle's declaration: a
+ * package the profile installed without a declaration is still judged, and the
+ * declaration/installation comparison stays in the bundle-packages check. The
+ * manifests are the installed copies the dsh loader reads, resolved through the
+ * profile, so the answer is about what would boot.
+ * `evaluatePluginCompatibility` judges only dsh peers (`@deepseek-ai/dsh` and
+ * `@deepseek-ai/dsh-*`); a product package's other peers are declarations for
+ * readers and pnpm, not inputs to this runtime decision. The bundle and the
+ * probe are included: they declare no peers, so the judgement is a no-op for
+ * them, but a reader sees every installed product package accounted for.
  * @param {{
  *   binName: string,
  *   bundlePackage: string,
@@ -337,14 +383,13 @@ export function verifyPluginCompatibility({ binName, bundlePackage, installAncho
     return { ok: false, dshVersion, checked: [], failures }
   }
 
-  const manifest = boot.readProfileManifest(binName, layer.packageDir)
   const checked = []
-  for (const name of Object.keys(manifest.dependencies ?? {}).sort()) {
+  for (const name of installedProductPackages(profileDir, bundlePackage)) {
     let installed
     try {
       installed = boot.readProfileManifest(binName, boot.resolveBundleDir(binName, name, installAnchor, profileDir))
     } catch (error) {
-      failures.push(`${name} is declared by ${bundlePackage} but not readable from ${profileDir}: ${error.message}`)
+      failures.push(`${name} is installed in ${profileDir} but its manifest is not readable: ${error.message}`)
       continue
     }
     const issue = boot.evaluatePluginCompatibility(installed, {}, dshVersion)

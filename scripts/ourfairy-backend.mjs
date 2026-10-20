@@ -819,6 +819,9 @@ function commandDoctor(layout, options) {
     const result = verifyBundlePackages({
       binName: 'dsh',
       bundlePackage: BUNDLE_PACKAGE,
+      // The probe is the one installed product package the bundle never
+      // mounts; naming it keeps the installed-set comparison from reporting it.
+      probePackage: PROBE_PACKAGE,
       // dsh resolves a bundle against its own installation first, then the
       // profile; the app's package.json is the installation anchor both sides
       // name.

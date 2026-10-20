@@ -80,6 +80,7 @@
 | 目录 | 内容 |
 | --- | --- |
 | [96-bundle-authority](96-bundle-authority/README.md) | #96 bundle 成为产品包集合的唯一权威 |
+| [97-boundary-doc](97-boundary-doc/README.md) | #97 并行传输例外与保留产品实现的书面边界 |
 | [98-compat](98-compat/README.md) | #98 产品包声明明确 dsh 兼容范围并由 doctor 校验 |
 | [99-delivery](99-delivery/README.md) | #99 投递成为独立产品行，chat 只暴露窄运行时服务 |
 | [100-groups](100-groups/README.md) | #100 群组工具成为独立产品行 |
