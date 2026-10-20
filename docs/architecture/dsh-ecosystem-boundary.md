@@ -171,10 +171,10 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | --- | --- | --- |
 | 挂载 plugin manager、提供运行时插件安装/启停 | 组合不挂载 plugin manager 行；插件装配由部署（bundle 与 profile）负责 | `tests/ecosystem-boundary.test.mjs`（bundle 行集合中不出现 plugin manager 包） |
 | npm 发布、registry 与版本发布流程 | 产品包全部 `private`，仓库里没有发布步骤；安装与启动只走本地 checkout 生成的 profile | `tests/ecosystem-boundary.test.mjs`（`backend/` 下任一产品包 `private` 不为 true 即失败） |
-| 把 Android API 迁到 `/api` | 本仓库的产品路径都在 `/api` 之外（见 1.1）；已观察到 `/api/session.list` 与 `/api/sessions/*` 在准入后返回 404，没有产品端点认领它们（客户端代码不在本仓库） | `tests/identity-http.test.mjs`：`a session credential admits dsh /api while an anonymous request is refused at the door`（断言 `/api/session.list` 已准入后 404）；`tests/owned-sessions.test.mjs`：`cold ownerless and foreign sessions are refused without changing durable artifacts`（断言 `/api/sessions/*` 为 404） |
+| 把 Android API 迁到 `/api` | 本仓库的产品路径都在 `/api` 之外（见 1.1）；已观察到 `/api/session.list` 与 `/api/sessions/*` 在准入后返回 404，没有产品端点认领它们（客户端在 `android/`，但调用的是产品路径，不是 `/api`） | `tests/identity-http.test.mjs`：`a session credential admits dsh /api while an anonymous request is refused at the door`（断言 `/api/session.list` 已准入后 404）；`tests/owned-sessions.test.mjs`：`cold ownerless and foreign sessions are refused without changing durable artifacts`（断言 `/api/sessions/*` 为 404） |
 | 把业务 SQLite 换成 storage-domain、把身份换成 authorization、把 fs/sandbox 换成更弱的原生实现 | 见 3 节；这些是产品能力差异，不是生态兼容缺口 | 见 3 节各表 |
 
-Android 客户端不在本仓库，本文不对其代码做检查声明；本仓库能固定的是它会调用的 HTTP/SSE
+Android 客户端在本仓库 `android/`，本文不对其代码做检查声明；本仓库能固定的是它会调用的 HTTP/SSE
 形状与上述路由集合。
 
 ## 5. 维护规则
