@@ -1,3 +1,5 @@
+> 归档于 2026-10-20。原因：本文是早期讨论背景，其中「待定」已在地图议题中收敛，不描述当前状态。现行见 [首版总规格](../specs/ourfairy-v1.md)。
+
 # 架构讨论记录
 
 正式决策地图已建立：[后端骨架设计](https://github.com/eafen405/OurFairy/issues/1)、[前端改造与剪枝](https://github.com/eafen405/OurFairy/issues/2)。GitHub Issues 是决策与研究状态的权威记录，本文保留讨论背景。
@@ -23,8 +25,8 @@
 
 ## 已完成的首轮研究（不构成设计定案）
 
-- [rikkahub 的通知能力与 Android 通知接入、消息送达约束](research/android-notifications.md)。
-- [主动式 agent 的任务触发、推理与打扰决策相关一手论文](research/proactive-agents.md)。持久化任务调度和重启恢复机制尚待另行研究。
+- [rikkahub 的通知能力与 Android 通知接入、消息送达约束](../research/android-notifications.md)。
+- [主动式 agent 的任务触发、推理与打扰决策相关一手论文](../research/proactive-agents.md)。持久化任务调度和重启恢复机制尚待另行研究。
 
 ## 尚待收敛
 
