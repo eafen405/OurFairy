@@ -36,7 +36,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
-import { readCombo, repoPath, verifyCombination } from './combo.mjs'
+import { readCombo, repoPath, verifyCombination, verifyInstalledNativeCapabilities } from './combo.mjs'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -822,6 +822,19 @@ function commandDoctor(layout, options) {
   check('profile project linked', () => {
     const mode = installProfile(layout, options)
     return `${layout.profileDir} (${mode})`
+  })
+  check('native capabilities', () => {
+    // The installed profile, read through dsh's own loader: what a boot would
+    // mount, not a second parse of the bundle this launcher also reads.
+    const dsh = resolveDsh(options)
+    const result = verifyInstalledNativeCapabilities({
+      binName: 'dsh',
+      bundlePackage: BUNDLE_PACKAGE,
+      installAnchor: join(dsh.dir, 'apps', 'cli', 'package.json'),
+      profileDir: layout.profileDir,
+    })
+    must(result.failures.length === 0, result.failures.join('; '))
+    return result.checked.join(', ')
   })
   check('model double', () => {
     const base = process.env.OURFAIRY_MINIMAX_BASE_URL ?? process.env.DEEPSEEK_BASE_URL

@@ -42,6 +42,10 @@ payload into `128+signal`: 152 (SIGXCPU from `--cpu=5`) and 137 (SIGKILL
 escalation or OOM) map to `resource-limit`; any other nonzero exit is
 `worker-unavailable`.
 
+The service is a load-bearing dsh dependency: its row, the behavior relied on and
+the tests that fail if it changes are in the
+[native capability dependency record](../../../docs/decisions/native-capability-dependencies.md#pdf-worker-ctxsubprocess).
+
 These are product demo budgets, not a promise of perfect complex-layout or OCR
 extraction. Encrypted PDFs are rejected even when an empty password could open
 them. No-text pages request image reading through `pdf_render_pages` when needed.

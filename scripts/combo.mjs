@@ -22,6 +22,7 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -155,6 +156,98 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
     rows.push(row)
   }
   return { ok: failures.length === 0 || allowDrift, failures, rows }
+}
+
+/**
+ * The dsh rows and public export the product code depends on.
+ *
+ * This is a dependency list, not a row inventory: the mounted row set and its
+ * config live only in `backend/v1-bundle/cordis.patch.yml`. Each entry names
+ * the row the product reads and the package that must provide it.
+ */
+const REQUIRED_NATIVE_ROWS = [
+  { row: 'llm-retry', name: '@deepseek-ai/dsh-llm-retry' },
+  { row: 'spill-local', name: '@deepseek-ai/dsh-spill-local' },
+  { row: 'spill-policy', name: '@deepseek-ai/dsh-spill-policy' },
+  { row: 'subprocess', name: '@deepseek-ai/dsh-subprocess-local' },
+]
+const SESSION_HISTORY_EXPORT = '@deepseek-ai/dsh-agent/session-history'
+
+/**
+ * Every required native capability that is not mounted, plus the public
+ * history export when it does not resolve.
+ *
+ * @param {object[]} rows - the composed profile rows, as dsh's loader returns them.
+ * @param {(specifier: string) => string} resolveExport - resolves from the dsh installation.
+ * @returns {string[]} one message per missing, disabled, or drifted capability.
+ */
+export function nativeCapabilityFailures(rows, resolveExport) {
+  const failures = []
+  const mounted = new Map(rows.map(row => [row.id, row]))
+  for (const { row: id, name } of REQUIRED_NATIVE_ROWS) {
+    const entry = mounted.get(id)
+    if (entry === undefined) {
+      failures.push(`required native capability missing: the ${id} row is not mounted;`
+        + ` add ${name} to backend/v1-bundle/cordis.patch.yml and run 'ourfairy-backend start --reinstall'`)
+      continue
+    }
+    if (entry.disabled === true) {
+      failures.push(`required native capability missing: the ${id} row (${name}) is disabled in the installed profile;`
+        + ` enable it in the profile's cordis.patch.yml or remove the override, then run 'ourfairy-backend start --reinstall'`)
+      continue
+    }
+    if (entry.name !== name) {
+      failures.push(`required native capability drifted: the ${id} row mounts ${entry.name ?? '<no package>'},`
+        + ` but the product depends on ${name}; fix backend/v1-bundle/cordis.patch.yml and run`
+        + ` 'ourfairy-backend start --reinstall'`)
+    }
+  }
+  try {
+    resolveExport(SESSION_HISTORY_EXPORT)
+  } catch (error) {
+    failures.push(`required native capability missing: ${SESSION_HISTORY_EXPORT} does not resolve from the dsh installation`
+      + ` (${error.message}); check out the dsh commit combo.json locks and run 'build:lib:host' in that checkout`)
+  }
+  return failures
+}
+
+/**
+ * Check the required native capabilities in the *installed* profile.
+ *
+ * The profile is read through dsh's own loader (`dsh-app-boot`), so the rows
+ * checked are the rows a boot would mount, including the profile's user layer.
+ * @param {{binName: string, bundlePackage: string, installAnchor: string, profileDir: string}} options
+ * @returns {{ok: boolean, failures: string[], checked: string[]}}
+ */
+export function verifyInstalledNativeCapabilities({ binName, bundlePackage, installAnchor, profileDir }) {
+  let boot
+  try {
+    boot = createRequire(installAnchor)('@deepseek-ai/dsh-app-boot')
+  } catch (error) {
+    return { ok: false, checked: [], failures: [`the dsh profile loader @deepseek-ai/dsh-app-boot does not resolve from`
+      + ` ${installAnchor} (${error.message}); check out and build the dsh commit combo.json locks`] }
+  }
+  let profile
+  try {
+    profile = boot.loadProfileDirectory(binName, profileDir, installAnchor)
+  } catch (error) {
+    return { ok: false, checked: [], failures: [`the installed profile ${profileDir} could not be read through`
+      + ` @deepseek-ai/dsh-app-boot (${error.message}); run 'ourfairy-backend start --reinstall'`] }
+  }
+  const layer = profile.layers.find(entry => entry.packageName === bundlePackage)
+  if (layer === undefined) {
+    const skipped = profile.skippedBundles.find(entry => entry.packageName === bundlePackage)
+    const reason = skipped === undefined ? 'it is not listed in the profile' : skipped.reason
+    return { ok: false, checked: [], failures: [`${bundlePackage} was not loaded from ${profileDir}: ${reason};`
+      + ` run 'ourfairy-backend start --reinstall'`] }
+  }
+  const rows = boot.composeEntries([...profile.layers.map(entry => entry.patches), profile.patches])
+  const failures = nativeCapabilityFailures(rows, specifier => createRequire(installAnchor).resolve(specifier))
+  return {
+    ok: failures.length === 0,
+    failures,
+    checked: [...REQUIRED_NATIVE_ROWS.map(row => `${row.row}:${row.name}`), SESSION_HISTORY_EXPORT],
+  }
 }
 
 function printTable(rows) {

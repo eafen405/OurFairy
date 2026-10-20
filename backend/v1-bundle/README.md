@@ -71,7 +71,12 @@ budget is measured, not copied: a 5-page PDF read costs 5 004 estimated tokens a
 the shell's own 64 000-byte stream cap costs 16 004, so ordinary document results
 stay inline while a large shell result spills to a file the model can read or grep.
 [ticket #82's evidence](../../work/implementation/evidence/82-native-rows/README.md)
-records the measurements and the observed retry/spill behaviour.
+records the measurements and the observed retry/spill behaviour. The four native
+capabilities this composition depends on — PDF subprocess, retry, spill and the
+history seam — are recorded with their compatibility tests in the
+[native capability dependency record](../../docs/decisions/native-capability-dependencies.md).
+That record points at this bundle's patch for the row inventory; it does not
+repeat it.
 
 **Live configuration rows are mounted deliberately.** `config-editor` and
 `settings` persist the active profile, and `llm-pi-ai` supplies the multi-provider

@@ -83,6 +83,7 @@
 | [82-native-rows](82-native-rows/README.md) | #82 原生模型重试与大工具结果 spill |
 | [83-spill-read](83-spill-read/README.md) | #83 被 spill 的结果由本会话只读取回，其他会话与用户被拒绝 |
 | [85-history-adapter](85-history-adapter/README.md) | #85 断线重连/live 历史改用原生 assistant 基线与事件 cursor |
+| [86-upgrade-review](86-upgrade-review/README.md) | #86 原生能力升级依赖记录、保留实现理由与 doctor 缺项检查 |
 
 ## 阶段整合与评审
 
