@@ -168,9 +168,9 @@ rikkahub  product/ourfairy-v1      460109d1b89b824a  2d97ed143e7a6487  MISMATCH
   `the bundle declares @ourfairy/dsh-groups but no composed bundle row mounts it`；随即用
   `git checkout -- backend/v1-bundle/cordis.patch.yml` 恢复，复跑 2/2 绿，最终检查包含
   `git diff --exit-code -- backend/v1-bundle/cordis.patch.yml` 无输出。
-- 最终代码树（`fix/73-final`，代码 HEAD `90a64e9`；本文件随后提交）上执行：
+- 最终代码树（`fix/73-final`，最终代码提交 `0cb471a`；本文件随后提交）上执行：
   `node --test tests/bundle-only-profile.test.mjs` → 2/2 pass（~3.8s）；
-  `npm test` → **185 tests / 185 pass / 0 fail**（86.6s）；
+  `npm test` → **185 tests / 185 pass / 0 fail**（85.4s）；
   `npm run combo:verify` → ourfairy/dsh ok，rikkahub 为已知外部漂移
   （`2d97ed14` ≠ 锁定 `460109d1`），退出码 1；未改 `combo.json`、未动 rikkahub。
-- 该全量运行在最终代码 HEAD 上执行；本文件与其它证据随后以 Markdown 提交，不改变被测代码。
+- 该全量运行在最终代码提交 `0cb471a` 上执行；本文件与其它证据随后以 Markdown 提交，不改变被测代码。

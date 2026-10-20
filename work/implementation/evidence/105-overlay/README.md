@@ -5,7 +5,7 @@
 > `work/implementation/notes/73-boundary.md`、执行状态 `73-execution.md`、落点
 > `73-row-plan.md`。分支 `ticket/105-overlay`；基线 `integration/spec-73` 的
 > `b1878e7`；实现提交 `ae8ee49`；本证据目录随后一并提交。报告前 fast-forward 到 `integration/spec-73` 的
-> `ed782ca`。终审轮（#106）在 `fix/73-final` 上更新本文件，代码 HEAD 为 `90a64e9`
+> `ed782ca`。终审轮（#106）在 `fix/73-final` 上更新本文件，最终代码提交为 `0cb471a`
 > （文档提交随后）。#105 本身只新增测试与测试 fixture，不改产品代码、bundle 行 id、
 > launcher 或 `combo.json`；终审轮对 probe 的 disabled-row 规则与 identity TTL 的改动
 > 属于 #73 评审修复，见 `work/implementation/notes/73-review-findings.md`。
@@ -133,7 +133,7 @@ load 失败在探针里立即有结论，但 launcher 要等自己的 ready 轮�
 
 ## 实际执行的命令与输出摘要
 
-终审轮最终代码树（`fix/73-final`，代码 HEAD `90a64e9`；本文件随后提交）：
+终审轮最终代码树（`fix/73-final`，最终代码提交 `0cb471a`；本文件随后提交）：
 
 ```
 $ node --test tests/row-addressability.test.mjs
@@ -144,12 +144,12 @@ $ node --test tests/row-addressability.test.mjs
 ✔ an overlay can replace the shell provider and leave the other providers working
 ✔ an invalid identity config fails at load and names the row and $.path
 ✔ an invalid spaces config fails at load and names the row and $.root
-ℹ tests 7  suites 0  pass 7  fail 0  duration_ms 76001.713913
+ℹ tests 7  suites 0  pass 7  fail 0  duration_ms 82796.713174
 ```
 
 ```
 $ npm test
-ℹ tests 185  suites 7  pass 185  fail 0  duration_ms 86568.806557
+ℹ tests 185  suites 7  pass 185  fail 0  duration_ms 85444.539598
 ```
 
 ```

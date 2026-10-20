@@ -144,6 +144,7 @@ dsh `ok`（`5b8ec0f1`）；rikkahub 为已知外部漂移 `2d97ed14` ≠ `combo.
 | `6dd8516` | 八个产品包的 locale/en.json、缺失的 description、exports/files 声明与元数据测试 |
 | `39aa44b` | `httpJson` rawBody 与六条路径的畸形体 fence 顺序检查 |
 | `90a64e9` | identity `sessionTtlDays` 安全整数上限与配置契约用例 |
+| `0cb471a` | 删除 fixture/替换用例注释中两条无测试支撑的 overlay name-only 声称（仅注释，无行为变化） |
 
 文档与证据（本文件、101/102/104/105/98 证据、spaces README）随本文件所在提交更新。
 
@@ -176,7 +177,7 @@ dsh `ok`（`5b8ec0f1`）；rikkahub 为已知外部漂移 `2d97ed14` ≠ `combo.
 
 1. direct-boot 声明已改为「裸 dsh --profile + 仅调用方 overlay」，并写明无 probe overlay / readiness gate / probe 环境；bash/替换已不再用 direct boot。`f0284ab`
 2. fixture 的 inject 注释随继承产品类而真实：`static inject = [...ScopedBash.inject]`（含 `ourfairySpaces`），`super.execute` 保留作用域校验。`f0284ab`
-3. 未增加 name-only patch 的测试，也没有保留「同名不能换模块/警告后跳过」的声称；测试头与证据只说替换按 disable+insert 表达。`f0284ab`
+3. 未增加 name-only patch 的测试，也没有保留「同名不能换模块/警告后跳过」的声称；fixture 与替换用例注释只说替换按 disable+insert 表达（两处残留由 `0cb471a` 删除，仅注释）。`f0284ab`、`0cb471a`
 4. fs direct-boot 用例删除了未使用的模型替身，不再留下死 server；probe 断言 pending 行、direct boot 断言 `/chat/*` 404，两者都是同一条级联的可见面。`f0284ab`
 5. `assertNoNativeFallback` 现在同时按行 id 与 mounted package name（`dsh-fs-sandbox`/`dsh-working-directory`/`dsh-bash-sandbox`/`dsh-sandbox-local`）断言，换名同 id 也会失败。`f0284ab`
 6. 复用 `readReport`/`messageBlocks`；freePort 增加 error/timeout 处理；stopChild 的 SIGKILL 后有 5s 有界等待。`f0284ab`
@@ -208,9 +209,9 @@ doctor 的 `bundle packages` 检查同时执行这四条；`tests/bundle-package
 拆成独立包后原注释已过期。该改动没有行为变化，是一次刻意的注释-only 边界例外；#72 可以
 rebase 覆盖它，不需要协调。
 
-### 验证（最终代码 HEAD `90a64e9`）
+### 验证（最终代码提交 `0cb471a`）
 
-- `npm test`：**185 tests / 185 pass / 0 fail**（86.6s）。
+- `npm test`：**185 tests / 185 pass / 0 fail**（85.4s，在最终代码提交 `0cb471a` 上运行；本文件及其它证据随后仅以 Markdown 提交）。
 - `npm run combo:verify`：ourfairy `ok`（worktree based on integration tip `76461d0`）、
   dsh `ok`（`5b8ec0f1`）；rikkahub 为已知外部漂移 `2d97ed14` ≠ 锁定 `460109d1`，退出码 1；
   未改 `combo.json`、未动 rikkahub。
@@ -218,4 +219,3 @@ rebase 覆盖它，不需要协调。
 - 所有提交使用 `git commit --no-verify`：pre-commit 会跑 `npm test` + `combo:verify`，
   后者必然因 rikkahub 漂移退出 1；提交前已在最终代码树上手动跑完两项检查，结果与命令记录在
   本节与各证据 README。
-
