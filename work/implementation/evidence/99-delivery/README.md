@@ -166,6 +166,21 @@ combo: 1 drift/missing entry
 ourfairy / dsh 两项 ok；rikkahub 为 `73-execution.md` 已记录的**外部漂移**（分支 tip
 `2d97ed14` ≠ `combo.json` 锁定 `460109d1`）。本票不改 `combo.json`、不动 rikkahub，故记录不修。
 
+证据提交 `158ab53` 后在干净树上最终复跑：
+
+```
+$ npm test
+ℹ tests 161 / suites 7 / pass 161 / fail 0 / duration_ms 102121.7
+
+$ npm run combo:verify
+ourfairy  … 158ab53a7c4986c0  ok (worktree is based on the integration tip)
+dsh       …  ok
+rikkahub  …  MISMATCH
+combo: 1 drift/missing entry
+```
+
+（全量耗时从 72s 到 102s 的差异来自同机并行负载；两次都是 161/161。）
+
 包内容与窄接口的静态核对：
 
 ```
