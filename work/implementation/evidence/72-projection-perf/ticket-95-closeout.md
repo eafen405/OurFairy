@@ -18,11 +18,11 @@
 - transcript 的 `fromSeq` 窗口读取、`transitions` 与 `moves` 索引；原生 inbox 投影拥有 pending 消息，
   work 只保留历史重放需要的 id/kind。
 
-## 2. 全量验证（最终集成分支 @ `71c2c31`）
+## 2. 全量验证（最终集成分支 @ `9f002a4`）
 
 ```bash
 npm test
-# → tests 165 / suites 7 / pass 164 / fail 1，71.5 s
+# → tests 172 / suites 7 / pass 171 / fail 1，74.5 s
 #   唯一失败：tests/pdf-worker-cancel.test.mjs「temporary directory must be removed」
 #   —— #71 范围内已知的并发负载抖动。
 
@@ -30,7 +30,7 @@ node --test tests/pdf-worker-cancel.test.mjs
 # → tests 1 / pass 1 / fail 0，单独运行通过；复现「并发负载下偶发」。
 
 node --test --test-concurrency=1 "tests/**/*.test.mjs"
-# → tests 165 / suites 7 / pass 165 / fail 0，253.2 s
+# → tests 172 / suites 7 / pass 172 / fail 0，247.2 s
 #   串行全量通过，说明默认并发下的 PDF 失败不是本 spec 的确定性回归。
 
 npm run backend:doctor
@@ -63,10 +63,11 @@ PDF 取消用例失败同理，单独跑与串行全量均通过。
 | `node --test tests/bench-gate.test.mjs` | 4/4（门槛算术与失败方向） |
 | `node --test tests/docs.test.mjs` | 1/1（所有相对链接可解析） |
 
-#94 的相对门槛由 `npm run bench:gate -- --baseline ... --after ...` 判定（18 个检查全过）：历史斜率 0.95/0.94（门槛 ≤1.20）、160 轮每观察者
-成本 0.65× 基线（门槛 ≤0.85）、观察者放大 1.64（门槛 ≤1.80）、read p95 最差 1.18（门槛
-≤1.50）、峰值内存最差 1.08（门槛 ≤1.25）、payload 1.008（门槛 ≤1.05）。内存没有下降，
-payload 基本不变，均已在 #94 如实记录。
+#94 的相对门槛由 `npm run bench:gate -- --baseline ... --after work/tmp/after-94-final2.json work/tmp/after-94-final4.json`
+判定（18 个检查全过）：历史斜率 1.03/1.07（门槛 ≤1.20）、160 轮每观察者成本 0.64/0.69× 基线
+（门槛 ≤0.85）、观察者放大 1.76（门槛 ≤1.80）、read p95 最差 0.91（门槛 ≤1.50）、峰值内存
+最差 1.07（门槛 ≤1.25）、payload 1.008（门槛 ≤1.05）。内存没有下降，观察者放大接近门槛，
+均已在 #94 如实记录。
 
 ## 4. 证据索引与链接
 
