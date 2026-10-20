@@ -1,0 +1,89 @@
+# #95 契约文档、全量验证与子票收口
+
+## 1. 交付的契约
+
+`backend/chat/README.md`「投影单元」与「dsh 升级复核」现在写明：
+
+- key：`ourfairyTranscript` / `ourfairyWork`，均为 host-only（无 `wire`），只用公开
+  `register` / `stateOf`。
+- 每个单元声明 `stateVersion`、zod `stateSchema`、`init(header)`、`apply(state,event)`；
+  `apply` 同步纯函数，未解释事件返回同一 state 引用；state 可 JSON checkpoint。
+- 当前 `stateVersion` 均为 `2`：transcript 增加 `repositions` 窗口索引，work 把完整 pending
+  消息换成 id/来源 kind 的窄索引。
+- durable（transcript 行、receipts、任务/report、activity）与 live（`availability`、running、
+  attempt 文本、`replyStatus`、`stopping`、`error`、`settledAttempt`）的分界。
+- 任务与活动必须共享一次 fold 的原因：activity 读取每个事件后的任务/report 快照，拆开会
+  复制 report 状态机。
+- dsh 升级后要跑的行为测试与基准命令；接口/事件形状变化时应失败，不能加第二套 fold 绕过。
+- transcript 的 `fromSeq` 窗口读取与 `repositions` 索引；原生 inbox 投影拥有 pending 消息，
+  work 只保留历史重放需要的 id/kind。
+
+## 2. 全量验证（最终集成分支 @ `71c2c31`）
+
+```bash
+npm test
+# → tests 165 / suites 7 / pass 164 / fail 1，71.5 s
+#   唯一失败：tests/pdf-worker-cancel.test.mjs「temporary directory must be removed」
+#   —— #71 范围内已知的并发负载抖动。
+
+node --test tests/pdf-worker-cancel.test.mjs
+# → tests 1 / pass 1 / fail 0，单独运行通过；复现「并发负载下偶发」。
+
+node --test --test-concurrency=1 "tests/**/*.test.mjs"
+# → tests 165 / suites 7 / pass 165 / fail 0，253.2 s
+#   串行全量通过，说明默认并发下的 PDF 失败不是本 spec 的确定性回归。
+
+npm run backend:doctor
+# → 1 check failed: rikkahub product/ourfairy-v1 is 2d97ed14 but combo.json locks 460109d1。
+#   其余 node/pnpm/dsh build/product packages/profile/model double/bundle model 全 ok。
+
+npm run combo:verify
+# → ourfairy ok（worktree 基于集成分支 tip）；dsh ok（5b8ec0f）；rikkahub MISMATCH。
+#   1 drift/missing entry。
+```
+
+rikkahub 漂移属于客户端合仓（#123 / spec-123）的收敛范围：`combo.json` 锁 `460109d1`，
+本地检出是 `2d97ed14`。本 spec 按约定不改 `combo.json`、不切共享的 rikkahub 检出，因此
+`doctor`/`combo verify` 的这两条失败**不是本 spec 引入**，也不能在本 spec 内修复。#71 的
+PDF 取消用例失败同理，单独跑与串行全量均通过。
+
+## 3. #72 定向验证（同一 tip）
+
+| 命令 | 结果 |
+| --- | --- |
+| `node --test tests/projection-units.test.mjs` | 11/11 |
+| `node --test tests/projection-units-real.test.mjs` | 1/1（真实 launcher + 模型替身） |
+| `node --test tests/projection-fold.test.mjs` | 3/3 |
+| `node --test tests/chat-read-window.test.mjs` | 5/5 |
+| `node --test tests/chat-page-cut.test.mjs` | 4/4 |
+| `node --test tests/chat-multi-observer.test.mjs` | 2/2 |
+| `node --test tests/chat-cold-boundary.test.mjs` | 1/1（真实 launcher + SIGKILL + 多次重启） |
+| `node --test tests/remote-chat.test.mjs tests/reconnect.test.mjs` | 14/14 |
+| `node --test tests/jobs.test.mjs tests/chat-multi-observer.test.mjs` | 11/11 |
+| `node --test tests/docs.test.mjs` | 1/1（所有相对链接可解析） |
+
+#94 的相对门槛在两次静默运行上全部通过：历史斜率 0.95/0.94（门槛 ≤1.20）、160 轮每观察者
+成本 0.65× 基线（门槛 ≤0.85）、观察者放大 1.64（门槛 ≤1.80）、read p95 最差 1.18（门槛
+≤1.50）、峰值内存最差 1.08（门槛 ≤1.25）、payload 1.008（门槛 ≤1.05）。内存没有下降，
+payload 基本不变，均已在 #94 如实记录。
+
+## 4. 证据索引与链接
+
+本目录 `README.md` 已链接 #88–#94 的逐票证据；`work/implementation/evidence/README.md` 的
+目录入口指向本索引。`tests/docs.test.mjs` 在最终 tip 上通过，所有新增相对链接均可解析。
+
+## 5. 子票收口
+
+按 tracker 方式关闭 #89–#95；#88 已在基线合入时关闭；父票 #72 的标题、正文与状态不被修改。
+各票的关闭依据指向本目录对应 `ticket-*.md`，不在此重复结论。
+
+## 6. 未执行项与保留风险
+
+- 没有真实云模型、Android 设备或跨机比较；全部用模型替身，验收全在后端。
+- 没有 projection cache / compaction / token meter；冷启动仍从完整日志重建，事件窗口在
+  会话存活期间保留完整已提交前缀（ticket-90 已记录这一偏离与理由）。
+- 没有长时内存曲线；#94 只有单轮流式窗口的 RSS/VmHWM。
+- 组合漂移仍在：dsh `fe2bbc3 → 5b8ec0f`、rikkahub 本地 `2d97ed14` 对 `combo.json` 的
+  `460109d1`；#72 的门槛只在本组合的静默窗口上成立。
+- 已知外部失败：#71 的 PDF 取消并发抖动（单独/串行通过）、#123/spec-123 的 rikkahub 组合
+  漂移（`doctor`/`combo verify` 各报一条）。
