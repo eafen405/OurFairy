@@ -4,7 +4,9 @@
 > `work/tickets/73/09-bundle-only-acceptance.md`；协作边界
 > `work/implementation/notes/73-boundary.md`、执行状态 `73-execution.md`、落点
 > `73-row-plan.md`。分支 `ticket/104-bundle-only`；基线 `integration/spec-73` 的
-> `b1878e7`；实现提交 `11ae2b9`。本票只新增测试，不改产品代码、launcher 或 `combo.json`。
+> `b1878e7`；实现提交 `11ae2b9`、证据提交 `68c6f35`；报告前本票分支 fast-forward
+> 到 `integration/spec-73` 的 `206faee`（含 review-fix 合并 `3908618`），见文末
+> 「最终合入状态」。本票只新增测试，不改产品代码、launcher 或 `combo.json`。
 
 ## 改了什么
 
@@ -116,7 +118,37 @@ rikkahub 的 MISMATCH 是外部检出漂移（分支 tip `2d97ed14`，combo 锁�
   Messages 替身；真实服务需要操作者凭据，不在本票范围。
 - 未跑 Android/rikkahub 构建（不在票面范围）。
 - 未修 rikkahub 的外部漂移（按要求记录不修）。
-- 未合并 review-fix 分支或 #105 的工作：本票只合 `integration/spec-73`；完成前再次核对
-  tip 仍为 `b1878e7`，与本票分支基线相同，合并为 no-op，无冲突需要解决。
+- 未合并 #105 的工作：不在本票写范围。完成报告前 `integration/spec-73` 已推进到
+  `206faee`（含 review-fix 合并与本票分支合并），本票分支已 fast-forward 到该 tip，
+  无冲突；该最终树上的定向复跑见下节。
 - 未验证非锁定 dsh 提交：测试直接启动 `combo.json` 指向的 dsh `apps/cli/lib/bin.js`，
   与本仓库其它测试的版本组合前提一致。
+
+## 最终合入状态（报告前）
+
+在上节记录之后，Lead 把 review-fix 分支与本票分支合入 `integration/spec-73`，tip 从
+`b1878e7` 推进到 `206faee`。本票分支用 `git merge --ff-only integration/spec-73`
+到该 tip，无冲突。在该最终树上：
+
+```
+$ node --test tests/bundle-only-profile.test.mjs
+✔ a profile declaring only the bundle installs, boots every product row, and serves an authenticated chat turn (2197ms)
+✔ the same profile fails to boot and names a product package the bundle stops declaring (1731ms)
+ℹ tests 2  pass 2  fail 0  duration_ms 4031
+
+$ node --test tests/docs.test.mjs
+ℹ tests 1  pass 1  fail 0
+```
+
+按 Lead 指示，最终全量 `npm test` 由 Lead 在合并后统一执行，本票分支本轮未重跑；
+本票在 `68c6f35`（review-fix 合入前）上的全量结果为 172 pass / 0 fail。
+
+`206faee` 上的版本组合：
+
+```
+ourfairy  integration/ourfairy-v1  based on integra  206faeefa7595618  ok (worktree is based on the integration tip)
+dsh       product/ourfairy-v1      5b8ec0f175d3d7ba  5b8ec0f175d3d7ba  ok
+rikkahub  product/ourfairy-v1      460109d1b89b824a  2d97ed143e7a6487  MISMATCH
+```
+
+本证据追加提交后 HEAD 会再前进一个只改 Markdown 的提交；该提交不改变被测代码。
