@@ -1,4 +1,12 @@
-/** A delivery shares the native Session writer; SQLite only coordinates crash recovery. */
+/**
+ * Peer delivery as its own product row: the `deliver_message` tool, the durable
+ * delivery coordination rows behind it, and their recovery at boot.
+ *
+ * The only chat access is the narrow `ourfairyChatRuntime` service: one session
+ * queue, one delivery queue, the live session, an event read and a durability
+ * barrier. This package imports no chat module, so disabling this row removes
+ * delivery without touching chat's routes.
+ */
 import { createHash } from 'node:crypto'
 import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -6,7 +14,11 @@ import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES } from '@ourfairy/dsh-attachments'
 import { ownerOf, shortIdOf } from '@ourfairy/dsh-identity/owner'
 
-export function installDelivery(ctx, runtime) {
+export const name = 'ourfairy-delivery'
+export const inject = ['identity', 'ourfairySessions', 'ourfairyAttachments', 'ourfairyChatRuntime', 'sessions', 'sessionPersistence', 'tools', 'agents']
+
+export function apply(ctx) {
+  const runtime = ctx.ourfairyChatRuntime
   const { users, deliveries } = ctx.identity
   const receipt = row => ({ deliveryId: row.deliveryId, sessionId: row.sessionId,
     messageId: row.messageId, acceptedSeq: row.acceptedSeq })
