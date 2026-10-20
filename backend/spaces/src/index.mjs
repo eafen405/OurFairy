@@ -18,7 +18,7 @@ class ScopedSandbox extends SandboxProvider {
     scope.validatePolicy(policy, session)
     this.probe ??= probeBwrap('bwrap')
     if (!this.probe.ok) throw new SandboxUnavailableError(policy.mode, this.probe.detail)
-    return { argv: buildBwrapArgv('bwrap', { workspaceRoot: scope.privateRoot(session), writable: true,
+    return { argv: buildBwrapArgv('bwrap', { workspaceRoot: scope.privateRoot(session), writable: true, network: true,
       writableRoots: scope.writeRoots(session), readRoots: scope.readonlyFiles(session), envRoot: scope.envRoot }, argv),
       enforcement: 'full', denialSignatures: BWRAP_DENIAL_SIGNATURES, runnerFailureRules: BWRAP_RUNNER_FAILURE_RULES }
   }

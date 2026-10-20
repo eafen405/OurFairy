@@ -1,7 +1,6 @@
 /** Bounded PDF tools over existing admitted attachment qualification, with no derived store. */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { buildBwrapArgv } from '@ourfairy/dsh-spaces/bwrap'
-import { spawn } from 'node:child_process'
 import { mkdtemp, rm, chmod, readFile } from 'node:fs/promises'
 import { createWriteStream } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
@@ -14,30 +13,30 @@ const wheel = join(root, '../pdf/pypdf-6.21.0-py3-none-any.whl')
 const worker = join(root, 'pdf-worker.py')
 const failure = error => ({ status: 3, error }) // 1 成功，2 部分页失败，3 失败。
 
-function runWorker(directory, request, signal) {
-  const argv = buildBwrapArgv('bwrap', { workspaceRoot: directory, readRoots: [worker, wheel, ...(request.mode === 'render' ? ['/etc/fonts'] : [])], writable: request.mode === 'render' },
+async function runWorker(ctx, directory, request, callerSignal) {
+  const argv = buildBwrapArgv('bwrap', { workspaceRoot: directory, network: false, readRoots: [worker, wheel, ...(request.mode === 'render' ? ['/etc/fonts'] : [])], writable: request.mode === 'render' },
     ['/usr/bin/prlimit', '--as=536870912', '--cpu=5', request.mode === 'render' ? '--fsize=8388608' : '--fsize=1048576', '--nofile=64', '--',
       '/usr/bin/python3', '-B', worker, wheel, join(directory, 'input.pdf'), JSON.stringify(request)])
-  return new Promise((resolve, reject) => {
-    signal?.throwIfAborted()
-    const child = spawn(argv[0], argv.slice(1), { stdio: ['ignore', 'pipe', 'pipe'], signal })
-    let output = '', bytes = 0, limited = false
-    const timer = setTimeout(() => { limited = true; child.kill('SIGKILL') }, 10000)
-    child.stdout.on('data', chunk => {
-      bytes += chunk.length
-      if (bytes > 256 * 1024) { limited = true; child.kill('SIGKILL') }
-      else output += chunk
-    })
-    // Drain parser diagnostics without exposing host paths or unbounded logs to the model.
-    child.stderr.resume()
-    child.once('error', error => { clearTimeout(timer); reject(error) })
-    child.once('close', (code, killed) => {
-      clearTimeout(timer)
-      if (limited || killed === 'SIGXCPU' || killed === 'SIGKILL') return resolve(failure('resource-limit'))
-      if (code !== 0) return resolve(failure('worker-unavailable'))
-      try { resolve(JSON.parse(output)) } catch { resolve(failure('worker-unavailable')) }
-    })
-  })
+  callerSignal?.throwIfAborted()
+  // The wall deadline is the product's budget; the service owns killing the range.
+  const deadline = AbortSignal.timeout(10000)
+  const handle = ctx.subprocess.spawn({ argv, cwd: directory, graceMs: 1000, stdio: { stdin: 'ignore', stderr: 'ignore',
+    stdout: { maxBytes: 256 * 1024 } }, signal: callerSignal === undefined ? deadline : AbortSignal.any([callerSignal, deadline]) })
+  try {
+    const outcome = await handle.done
+    const output = handle.collected.stdout.readFrom(0)
+    // bwrap re-raises a killed payload as 128+signal and reports no signal of its
+    // own: prlimit's SIGXCPU is 152, the SIGKILL escalation and an OOM kill are 137.
+    const killed = outcome.signal === 'SIGKILL' || outcome.signal === 'SIGXCPU' || outcome.exitCode === 137 || outcome.exitCode === 152
+    if (deadline.aborted || output.lossy || killed) return failure('resource-limit')
+    if (outcome.exitCode !== 0) return failure('worker-unavailable')
+    try { return JSON.parse(output.text) } catch { return failure('worker-unavailable') }
+  } catch (error) {
+    if (deadline.aborted) return failure('resource-limit')
+    throw error
+  } finally {
+    await handle.waitForExit().catch(() => {})
+  }
 }
 
 export function installPdf(ctx, service) {
@@ -59,7 +58,7 @@ export function installPdf(ctx, service) {
       directory = await mkdtemp(join(tmpdir(), 'ourfairy-pdf-'))
       await chmod(directory, 0o700)
       await pipeline(ctx.attachments.readFileStream(input.original, signal), createWriteStream(join(directory, 'input.pdf'), { mode: 0o600 }), { signal })
-      const result = await runWorker(directory, { mode, ...(mode !== 'info' ? { pages: args.pages } : {}) }, signal)
+      const result = await runWorker(ctx, directory, { mode, ...(mode !== 'info' ? { pages: args.pages } : {}) }, signal)
       if (mode === 'render' && result.pages) {
         result.file_path = args.file_path
         result.name = input.name
