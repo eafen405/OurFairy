@@ -22,13 +22,13 @@
  * shape change; the registry then discards persisted rows of an older version
  * and refolds the log from `init`.
  *
- * This module replaces the per-read full folds in `projection.mjs`,
- * `history.mjs` and `activity.mjs`. Those stay in the tree until ticket #90
- * switches the read path and deletes them;
- * `tests/projection-units.test.mjs` pins field-for-field equality between the
- * two implementations for fixed logs, including shapes the old fold produced by
- * accident (an attempt row has no `attachments`; a consumed report carries the
- * `turn` and message facts it was consumed with).
+ * This module is the only fold of a chat session: the read path
+ * (`runtime.mjs`, `service.mjs`) takes durable values from these units and
+ * overlays the live facts, so the former per-read full folds are gone.
+ * `tests/projection-units.test.mjs` pins their output against expectations
+ * frozen from those folds for fixed logs, including shapes the old fold
+ * produced by accident (an attempt row has no `attachments`; a consumed report
+ * carries the `turn` and message facts it was consumed with).
  */
 
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
@@ -36,7 +36,7 @@ import { assembleAssistantStream } from '@deepseek-ai/dsh-llm/assistant-stream'
 import { z } from 'zod'
 
 /** Native job lifecycle status to the wire's numeric task status (README `任务状态`). */
-const TASK_STATUS = Object.freeze({ running: 1, stopping: 2, completed: 3, killed: 4, failed: 5 })
+export const TASK_STATUS = Object.freeze({ running: 1, stopping: 2, completed: 3, killed: 4, failed: 5 })
 const terminal = status => status >= 3
 const interruptedKind = kind => ['aborted', 'interrupted', 'forked'].includes(kind)
 const taskKey = (generation, id) => `${generation}/${id}`

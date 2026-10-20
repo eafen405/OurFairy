@@ -3,8 +3,7 @@ import { Service } from '@deepseek-ai/cordis'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { uploadIdsOf } from '@ourfairy/dsh-attachments'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { transcript } from './projection.mjs'
-import { receiptFrom, transcriptDefinition } from './units.mjs'
+import { receiptFrom, transcriptAt, transcriptDefinition } from './units.mjs'
 
 export class ChatError extends SessionScopeError {}
 function requestIdOf(requestId) {
@@ -79,7 +78,7 @@ export class RemoteChat extends Service {
   }
   async page(owner, { sessionId, throughSeq, beforeSeq, maxEvents }) {
     const limit = maxEventsOf(maxEvents)
-    await this.runtime.open(owner, sessionId)
+    const state = await this.runtime.open(owner, sessionId)
     const { events, cursor } = await this.runtime.events(sessionId)
     if (!Number.isSafeInteger(throughSeq) || throughSeq < -1 || throughSeq > cursor
       || !Number.isSafeInteger(beforeSeq) || beforeSeq < 0 || beforeSeq > throughSeq + 1) {
@@ -91,7 +90,7 @@ export class RemoteChat extends Service {
     // to this page. A page can validly contain no bubbles but still fills event coverage.
     return { sessionId, throughSeq, fromSeq, beforeSeq: fromSeq > 0 ? fromSeq : null,
       hasMore: fromSeq > 0, events: events.slice(fromSeq, end),
-      messages: transcript(events.slice(0, throughSeq + 1), sessionId)
+      messages: transcriptAt(this.transcriptState(state), throughSeq)
         .filter(message => message.seq >= fromSeq && message.seq < end) }
   }
   async checkpoint(owner, { sessionId }) {

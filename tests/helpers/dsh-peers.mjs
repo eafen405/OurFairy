@@ -33,6 +33,8 @@ const anchors = {
   '@deepseek-ai/dsh-session': join(dshRoot, 'packages', 'core', 'session', 'package.json'),
   '@deepseek-ai/dsh-session-projection': join(dshRoot, 'packages', 'session', 'session-projection', 'package.json'),
   '@deepseek-ai/dsh-llm': join(dshRoot, 'packages', 'llm', 'llm', 'package.json'),
+  '@deepseek-ai/dsh-agent': join(dshRoot, 'packages', 'core', 'agent', 'package.json'),
+  '@ourfairy/dsh-sessions': join(repoRoot, 'backend', 'sessions', 'package.json'),
   zod: join(dshRoot, 'package.json'),
 }
 

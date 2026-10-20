@@ -1,7 +1,7 @@
 /** Owned HTTP controls over the native job registry, authorized like model tools. */
 import { JobId } from '@deepseek-ai/dsh-jobs'
 import { SessionScopeError as ChatError } from '@ourfairy/dsh-sessions'
-import { TASK_STATUS } from './history.mjs'
+import { TASK_STATUS } from './units.mjs'
 
 export function installJobs(ctx, runtime) {
   ctx.jobs.events.subscribe({ owners: 'all' }, event => {
