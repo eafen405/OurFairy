@@ -31,11 +31,9 @@ export class RemoteChat extends Service {
     if (caller === undefined) throw new ChatError(401, 'chat/unauthorized', 'present a live session credential')
     return caller
   }
-  /** The transcript unit state for one live session; it must be registered to answer. */
+  /** The transcript unit state for one live session, through the runtime's one lookup. */
   transcriptState(state) {
-    const unit = this.ctx.sessionProjections.stateOf(state.session, transcriptDefinition.key)
-    if (unit === undefined) throw new ChatError(500, 'chat/internal', 'the transcript projection is not registered')
-    return unit
+    return this.runtime.unitState(state, transcriptDefinition)
   }
   async send(owner, { sessionId, requestId, text, uploadIds = [] }) {
     requestIdOf(requestId)
@@ -53,8 +51,7 @@ export class RemoteChat extends Service {
           ...(text ? [{ type: 'text', text }] : []),
           ...attachments.map(item => item.image ? { type: 'image', attachment: item.image } : { type: 'file', attachment: item.original }),
         ], source: { kind: 'user', rpcId: requestId, ...(attachments.length ? { attachments } : {}) } }))
-        // The follow-up splice is a committed native event, so the unit cell
-        // already holds the receipt the moment it returns.
+        // Answer from the unit state after the follow-up splice commits.
         found = receiptFrom(this.transcriptState(state), requestId)
       }
       await this.runtime.barrier(state)

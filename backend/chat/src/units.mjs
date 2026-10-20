@@ -25,9 +25,9 @@
  *
  * `stateVersion` increments whenever this module's fold semantics or state
  * shape change; the registry then discards persisted rows of an older version
- * and refolds the log from `init`. Both units are at version 2: the transcript
- * added its `repositions` window index, and the work unit replaced full pending
- * messages with the narrow id/kind index.
+ * and refolds the log from `init`. The transcript is at version 3 (immutable
+ * first appearance plus ordered transitions and a move index); the work unit is
+ * at version 2 (the narrow pending id/kind index).
  *
  * This module is the only fold of a chat session: the read path
  * (`runtime.mjs`, `service.mjs`) takes durable values from these units and
@@ -56,6 +56,7 @@ const attemptText = stream => assembleAssistantStream(stream).interruptedBlocks(
 
 const cutPointSchema = z.object({ seq: z.number().int(), status: z.number().int() })
 const attachmentSchema = z.object({ index: z.number().int(), type: z.number().int(), name: z.string(), mime: z.string(), bytes: z.number().int() })
+const transitionSchema = cutPointSchema.extend({ repositions: z.boolean() })
 const transcriptRowSchema = z.object({
   messageId: z.string(),
   requestId: z.string().nullable(),
@@ -63,15 +64,20 @@ const transcriptRowSchema = z.object({
   text: z.string(),
   /** `null` is the attempt shape, which carries no `attachments` field at all. */
   attachments: z.array(attachmentSchema).nullable(),
-  /** Where and how the row first appeared. */
+  /**
+   * Where the row first appeared. Immutable: it is the row's position in the
+   * first-appearance order and the anchor for a cut before any transition.
+   */
   first: cutPointSchema,
   /**
-   * The later event that changed the row's status, when one did.
-   * `repositions` separates the two cases the cut must tell apart: a surface
-   * append moves the row's page position to the append's seq, while a turn end
-   * settles only an attempt's status and leaves the attempt's own seq.
+   * Every later event that changed the row's seq/status, in event order.
+   * `repositions` separates the two cases a cut must tell apart: a surface
+   * append or a re-splice moves the row's page position to that event's seq,
+   * while a turn end settles only an attempt's status and leaves the attempt's
+   * own seq. Keeping the list (not just the latest) means a cut between two
+   * transitions still answers the row the way the old prefix fold did.
    */
-  settled: cutPointSchema.extend({ repositions: z.boolean() }).nullable(),
+  transitions: z.array(transitionSchema),
 })
 const receiptSchema = z.object({
   requestId: z.string(),
@@ -81,7 +87,7 @@ const receiptSchema = z.object({
   uploadIds: z.array(z.string()),
 })
 const turnEndSchema = z.object({ seq: z.number().int(), interrupted: z.boolean() })
-const repositionSchema = z.object({ index: z.number().int(), seq: z.number().int() })
+const moveSchema = z.object({ index: z.number().int(), seq: z.number().int() })
 export const transcriptStateSchema = z.object({
   sessionId: z.string(),
   rows: z.array(transcriptRowSchema),
@@ -90,22 +96,26 @@ export const transcriptStateSchema = z.object({
   turnEnds: z.record(z.string(), turnEndSchema),
   receipts: z.array(receiptSchema),
   /**
-   * Rows whose surface append moved them forward, in settle-seq order. This is
-   * the narrow side index that lets a read window start at `fromSeq` without
-   * scanning every earlier row; `rows` itself stays in first-appearance order.
+   * Transitions that moved a row forward, in event-seq order. This is the
+   * narrow side index that lets a read window start at `fromSeq` without
+   * scanning every earlier row; `rows` itself stays in immutable
+   * first-appearance order.
    */
-  repositions: z.array(repositionSchema),
+  moves: z.array(moveSchema),
 })
 
 /** One row's wire shape at the inclusive cut `cut`, in the old fold's field order. */
 function rowAtCut(row, cut) {
-  const settled = row.settled !== null && row.settled.seq <= cut ? row.settled : null
+  let transition = null
+  for (let offset = row.transitions.length - 1; offset >= 0; offset--) {
+    if (row.transitions[offset].seq <= cut) { transition = row.transitions[offset]; break }
+  }
   return {
     messageId: row.messageId,
-    seq: settled !== null && settled.repositions ? settled.seq : row.first.seq,
+    seq: transition !== null && transition.repositions ? transition.seq : row.first.seq,
     requestId: row.requestId,
     role: row.role,
-    status: settled === null ? row.first.status : settled.status,
+    status: transition === null ? row.first.status : transition.status,
     text: row.text,
     ...(row.attachments === null ? {} : { attachments: row.attachments }),
   }
@@ -118,9 +128,9 @@ function rowAtCut(row, cut) {
  */
 export const transcriptDefinition = {
   key: 'ourfairyTranscript',
-  stateVersion: 2,
+  stateVersion: 3,
   stateSchema: transcriptStateSchema,
-  init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], repositions: [] }),
+  init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], moves: [] }),
   apply(state, event) {
     if (event.type === 'agent/inbox/spliced') {
       const inserted = event.data.inserted.filter(message => message.source?.kind === 'user' && message.source.rpcId)
@@ -128,37 +138,53 @@ export const transcriptDefinition = {
       const rows = [...state.rows]
       const index = { ...state.index }
       const receipts = [...state.receipts]
+      const moves = [...state.moves]
       for (const message of inserted) {
-        const row = {
-          messageId: message.id, requestId: message.source.rpcId, role: 1,
-          text: messageText(message), attachments: attachmentsOf(message),
-          first: { seq: event.seq, status: 1 }, settled: null,
+        const requestId = message.source.rpcId
+        const text = messageText(message)
+        const attachments = attachmentsOf(message)
+        const existing = index[message.id]
+        if (existing === undefined) {
+          index[message.id] = rows.length
+          rows.push({ messageId: message.id, requestId, role: 1, text, attachments,
+            first: { seq: event.seq, status: 1 }, transitions: [] })
+        } else {
+          const row = rows[existing]
+          rows[existing] = { ...row, requestId, text, attachments,
+            transitions: [...row.transitions, { seq: event.seq, status: 1, repositions: true }] }
+          moves.push({ index: existing, seq: event.seq })
         }
-        if (index[message.id] === undefined) { index[message.id] = rows.length; rows.push(row) } else rows[index[message.id]] = row
         // The FIRST splice that carried this request id is the receipt, even if
         // the queued copy was later appended, replaced or discarded.
-        if (!receipts.some(receipt => receipt.requestId === row.requestId)) {
-          receipts.push({ requestId: row.requestId, messageId: message.id, acceptedSeq: event.seq, text: row.text,
+        if (!receipts.some(receipt => receipt.requestId === requestId)) {
+          receipts.push({ requestId, messageId: message.id, acceptedSeq: event.seq, text,
             uploadIds: (message.source.attachments ?? []).map(item => item.uploadId) })
         }
       }
-      return { ...state, rows, index, receipts }
+      return { ...state, rows, index, receipts, moves }
     }
     if (event.type === 'user/message' && isAppendSurfaceEvent(event) && event.data.source?.kind === 'user') {
       const message = event.data
-      const row = { messageId: message.id, requestId: message.source.rpcId ?? null, role: 1,
+      const fields = { requestId: message.source.rpcId ?? null, role: 1,
         text: messageText(message), attachments: attachmentsOf(message) }
-      // The queued copy (spliced earlier) keeps its first appearance and gains
-      // the settle point; a message that was only ever appended starts settled.
-      return state.index[message.id] === undefined
-        ? putRow(state, { ...row, first: { seq: event.seq, status: 2 }, settled: null })
-        : putRow(state, row, { seq: event.seq, status: 2, repositions: true })
+      const existing = state.index[message.id]
+      if (existing === undefined) {
+        return appendRow(state, { messageId: message.id, ...fields,
+          first: { seq: event.seq, status: 2 }, transitions: [] })
+      }
+      return recordTransition(state, existing, fields, { seq: event.seq, status: 2, repositions: true })
     }
     if ((event.type === 'assistant/message' || event.type === 'delivery/message') && isAppendSurfaceEvent(event)) {
       const message = event.data.message
-      return putRow(state, { messageId: message.id, requestId: null, role: 2,
-        text: messageText(message), attachments: attachmentsOf(message),
-        first: { seq: event.seq, status: event.data.interrupted ? 3 : 2 }, settled: null })
+      const fields = { requestId: null, role: 2,
+        text: messageText(message), attachments: attachmentsOf(message) }
+      const status = event.data.interrupted ? 3 : 2
+      const existing = state.index[message.id]
+      if (existing === undefined) {
+        return appendRow(state, { messageId: message.id, ...fields,
+          first: { seq: event.seq, status }, transitions: [] })
+      }
+      return recordTransition(state, existing, fields, { seq: event.seq, status, repositions: true })
     }
     if (event.type === 'assistant/attempt') {
       const messageId = `attempt:${state.sessionId}:${event.seq}`
@@ -168,8 +194,9 @@ export const transcriptDefinition = {
       return { ...state,
         rows: [...state.rows, {
           messageId, requestId: null, role: 2, text: attemptText(event.data.stream), attachments: null,
-          first: { seq: event.seq, status: 4 },
-          settled: ended === undefined ? null : { seq: ended.seq, status: ended.interrupted ? 3 : 4, repositions: false },
+          // A turn end that already exists in the prefix settles the attempt at
+          // its own seq (the old fold looked up the whole log's turn ends).
+          first: { seq: event.seq, status: ended !== undefined && ended.interrupted ? 3 : 4 }, transitions: [],
         }],
         index: { ...state.index, [messageId]: state.rows.length },
         attemptsByTurn: { ...state.attemptsByTurn, [turn]: [...attempts, state.rows.length] } }
@@ -180,31 +207,32 @@ export const transcriptDefinition = {
       const turnEnds = { ...state.turnEnds, [turn]: { seq: event.seq, interrupted } }
       const indices = state.attemptsByTurn[turn]
       if (indices === undefined || indices.length === 0) return { ...state, turnEnds }
-      // Backfill every attempt of this turn: the old fold judged all of them
-      // from the whole log's turn ends, not from the order they arrived in.
-      const settled = { seq: event.seq, status: interrupted ? 3 : 4, repositions: false }
+      // Backfill every attempt of this turn with a status-only transition; the
+      // attempt keeps its own seq.
       const rows = [...state.rows]
-      for (const index of indices) rows[index] = { ...rows[index], settled }
+      for (const index of indices) {
+        const row = rows[index]
+        rows[index] = { ...row, transitions: [...row.transitions,
+          { seq: event.seq, status: interrupted ? 3 : 4, repositions: false }] }
+      }
       return { ...state, rows, turnEnds }
     }
     return state
   },
 }
 
-/** Record one message row, keeping the Map fold's "a later event carries this id" rule. */
-function putRow(state, row, settled = null) {
-  const index = state.index[row.messageId]
-  if (index === undefined) {
-    return { ...state, rows: [...state.rows, row], index: { ...state.index, [row.messageId]: state.rows.length } }
-  }
+/** Append a brand-new row; its first appearance anchors the order. */
+function appendRow(state, row) {
+  return { ...state, rows: [...state.rows, row], index: { ...state.index, [row.messageId]: state.rows.length } }
+}
+
+/** Record one later event's transition for an existing row, keeping its first appearance. */
+function recordTransition(state, index, fields, transition) {
   const rows = [...state.rows]
-  // The row's first appearance (and therefore its page position before the
-  // settle cut) is the earlier event's fact.
-  rows[index] = { ...row, first: rows[index].first, settled }
-  const repositions = settled?.repositions === true && !state.repositions.some(item => item.index === index)
-    ? [...state.repositions, { index, seq: settled.seq }]
-    : state.repositions
-  return { ...state, rows, repositions }
+  const row = rows[index]
+  rows[index] = { ...row, ...fields, transitions: [...row.transitions, transition] }
+  const moves = transition.repositions ? [...state.moves, { index, seq: transition.seq }] : state.moves
+  return { ...state, rows, moves }
 }
 
 /** First index in ascending `items` whose extracted key is at least `target`. */
@@ -222,9 +250,9 @@ function firstAtLeast(items, keyOf, target) {
 /**
  * Every transcript row visible at the inclusive log cut `cut` whose wire `seq`
  * is at least `fromSeq`, in first-appearance order — the order the per-read Map
- * fold returned. `repositions` is the narrow index that makes a tail read
+ * fold returned. `moves` is the narrow index that makes a tail read
  * independent of the transcript's length: rows before `fromSeq` are considered
- * only when a surface append moved them into the window.
+ * only when a later transition moved them into the window.
  * @param state - the transcript unit state.
  * @param cut - inclusive `throughSeq`; the default reads the current end.
  * @param fromSeq - inclusive lower bound on the row's `seq` at `cut`.
@@ -232,21 +260,20 @@ function firstAtLeast(items, keyOf, target) {
 export function transcriptAt(state, cut = Infinity, fromSeq = 0) {
   const start = firstAtLeast(state.rows, row => row.first.seq, fromSeq)
   const end = firstAtLeast(state.rows, row => row.first.seq, cut === Infinity ? Infinity : cut + 1)
-  const movedIntoWindow = []
-  const firstReposition = firstAtLeast(state.repositions, item => item.seq, fromSeq)
-  for (let offset = firstReposition; offset < state.repositions.length; offset++) {
-    const reposition = state.repositions[offset]
-    if (reposition.seq > cut) break
-    const row = state.rows[reposition.index]
+  const movedIntoWindow = new Set()
+  const firstMove = firstAtLeast(state.moves, move => move.seq, fromSeq)
+  for (let offset = firstMove; offset < state.moves.length; offset++) {
+    const move = state.moves[offset]
+    if (move.seq > cut) break
+    const row = state.rows[move.index]
     // Rows whose first appearance is already in the window are emitted by the
     // slice below; only an earlier row moved forward needs this path.
     if (row.first.seq >= fromSeq) continue
-    if (row.settled === null || row.settled.seq !== reposition.seq || !row.settled.repositions) continue
-    movedIntoWindow.push(reposition.index)
+    if (rowAtCut(row, cut).seq >= fromSeq) movedIntoWindow.add(move.index)
   }
-  movedIntoWindow.sort((left, right) => left - right)
+  const moved = [...movedIntoWindow].sort((left, right) => left - right)
   const visible = start < end ? Array.from({ length: end - start }, (_, offset) => start + offset) : []
-  return [...movedIntoWindow, ...visible].map(index => rowAtCut(state.rows[index], cut))
+  return [...moved, ...visible].map(index => rowAtCut(state.rows[index], cut))
 }
 
 /**
@@ -268,7 +295,8 @@ const jobRowSchema = z.object({
   taskId: z.string(), generation: z.string(),
   /** The native job identity kept alongside the generation-qualified taskId. */
   id: z.string(),
-  owner: z.string().optional(), progress: z.unknown().optional(),
+  /** Legacy job shape; `tasksAt` still renders it when a persisted row has one. */
+  progress: z.unknown().optional(),
   kind: z.string(), label: z.string(), status: z.string(), startedAt: z.number(),
   finishedAt: z.number().optional(), detail: z.string().optional(),
   output: z.object({ earliest: z.number(), total: z.number() }),

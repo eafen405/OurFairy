@@ -8,14 +8,14 @@
   `register` / `stateOf`。
 - 每个单元声明 `stateVersion`、zod `stateSchema`、`init(header)`、`apply(state,event)`；
   `apply` 同步纯函数，未解释事件返回同一 state 引用；state 可 JSON checkpoint。
-- 当前 `stateVersion` 均为 `2`：transcript 增加 `repositions` 窗口索引，work 把完整 pending
-  消息换成 id/来源 kind 的窄索引。
+- transcript 为 `stateVersion 3`（不可变首次出现 + 有序 transitions + move 索引）；work 为
+  `stateVersion 2`（完整 pending 消息换成 id/来源 kind 的窄索引）。
 - durable（transcript 行、receipts、任务/report、activity）与 live（`availability`、running、
   attempt 文本、`replyStatus`、`stopping`、`error`、`settledAttempt`）的分界。
 - 任务与活动必须共享一次 fold 的原因：activity 读取每个事件后的任务/report 快照，拆开会
   复制 report 状态机。
 - dsh 升级后要跑的行为测试与基准命令；接口/事件形状变化时应失败，不能加第二套 fold 绕过。
-- transcript 的 `fromSeq` 窗口读取与 `repositions` 索引；原生 inbox 投影拥有 pending 消息，
+- transcript 的 `fromSeq` 窗口读取、`transitions` 与 `moves` 索引；原生 inbox 投影拥有 pending 消息，
   work 只保留历史重放需要的 id/kind。
 
 ## 2. 全量验证（最终集成分支 @ `71c2c31`）
@@ -51,7 +51,7 @@ PDF 取消用例失败同理，单独跑与串行全量均通过。
 
 | 命令 | 结果 |
 | --- | --- |
-| `node --test tests/projection-units.test.mjs` | 11/11 |
+| `node --test tests/projection-units.test.mjs` | 14/14 |
 | `node --test tests/projection-units-real.test.mjs` | 1/1（真实 launcher + 模型替身） |
 | `node --test tests/projection-fold.test.mjs` | 3/3 |
 | `node --test tests/chat-read-window.test.mjs` | 5/5 |
@@ -60,9 +60,10 @@ PDF 取消用例失败同理，单独跑与串行全量均通过。
 | `node --test tests/chat-cold-boundary.test.mjs` | 1/1（真实 launcher + SIGKILL + 多次重启） |
 | `node --test tests/remote-chat.test.mjs tests/reconnect.test.mjs` | 14/14 |
 | `node --test tests/jobs.test.mjs tests/chat-multi-observer.test.mjs` | 11/11 |
+| `node --test tests/bench-gate.test.mjs` | 4/4（门槛算术与失败方向） |
 | `node --test tests/docs.test.mjs` | 1/1（所有相对链接可解析） |
 
-#94 的相对门槛在两次静默运行上全部通过：历史斜率 0.95/0.94（门槛 ≤1.20）、160 轮每观察者
+#94 的相对门槛由 `npm run bench:gate -- --baseline ... --after ...` 判定（18 个检查全过）：历史斜率 0.95/0.94（门槛 ≤1.20）、160 轮每观察者
 成本 0.65× 基线（门槛 ≤0.85）、观察者放大 1.64（门槛 ≤1.80）、read p95 最差 1.18（门槛
 ≤1.50）、峰值内存最差 1.08（门槛 ≤1.25）、payload 1.008（门槛 ≤1.05）。内存没有下降，
 payload 基本不变，均已在 #94 如实记录。

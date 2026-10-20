@@ -17,13 +17,13 @@
 | 项 | 事实 |
 | --- | --- |
 | key | `ourfairyTranscript`、`ourfairyWork`（稳定，注册/读取都用它） |
-| stateVersion | #89 首版为 `1`；**当前为 `2`**（#90 给 transcript 加 `repositions` 窗口索引，work 的 pending 收窄为 id/kind），折叠语义或 state 形状变化时递增 |
+| stateVersion | #89 首版为 `1`；**当前 transcript 为 `3`**（不可变首次出现 + 有序 transitions + move 索引）、**work 为 `2`**（pending 收窄为 id/kind），折叠语义或 state 形状变化时递增 |
 | stateSchema | zod；state 为纯 JSON，可被 registry checkpoint |
 | apply | 同步纯函数；不关心的事件返回**同一 state 引用**（有测试断言 `Object.is`） |
 | wire | 两个单元都**没有** `wire`：只用 `register` / `stateOf`，避免每次变化都做 O(n) 的 `viewSchema.parse` |
 | durable | transcript 行、receipts、任务 roster/report、活动 episode/completed/delivery |
 | live | `availability`、Agent `running`、attempt 文本、`replyStatus`、`stopping`、`error`、`settledAttempt` 不进 state |
-| 截点 | 行记 `first`（首次出现 seq + status）与 `settled`（结算 seq + status + `repositions`），任意 `throughSeq` 可还原 |
+| 截点 | 行记不可变 `first`（首次出现 seq + status）与有序 `transitions`（seq + status + `repositions`），移动行的 transition 进入 `moves`；任意 `throughSeq` 可还原 |
 
 任务与活动共享一个单元的原因写进模块头与 README：活动判定读每个事件后的任务/report 状态，
 拆成两个单元会把 report 状态机复制一份，形成第二套权威（spec 明令禁止）。

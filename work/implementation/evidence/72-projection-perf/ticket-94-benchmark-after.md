@@ -29,7 +29,7 @@ load 5–19 下运行的读数**（160/1 的 p95 一度到 78 ms、每片段 CPU
 后面所有门槛都只适用于静默窗口。改造后可用内存为 19.5 GiB，基线机记录为 23.5 GiB；WSL
 内存配置变化会影响绝对内存值，因此内存只看同口径的相对比值。
 
-## 2. 对比表（每格是 2 次重复的中位数；改造后取 2 次静默运行、共 4 个重复）
+## 2. 对比表（基线每格 6 个重复 = 3 次运行×2；改造后 4 个重复 = 2 次静默运行×2，取中位数）
 
 | 历史 | 观察者 | 基线 read p95 (ms) | 改造后 read p95 (ms) | 基线 每片段 CPU 合计 (ms) | 改造后 每片段 CPU 合计 (ms) | 基线 每观察者 (ms) | 改造后 每观察者 (ms) | 基线 峰值内存 (MB) | 改造后 峰值内存 (MB) | 基线 payload (MB) | 改造后 payload (MB) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -60,6 +60,20 @@ load 5–19 下运行的读数**（160/1 的 p95 一度到 78 ms、每片段 CPU
 各自的格式化和 payload 序列化误判为回归；read p95/内存/payload 用 1.50/1.25/1.05，吸收本次
 静默窗口内仍存在的 p95 抖动（40 轮 p95 改造后略高 14–18%，但 p50 与基线同量级）。
 
+这些门槛不是手工比较，而是 `scripts/bench-gate.mjs` 的可执行判定：
+
+```bash
+npm run bench:gate -- \
+  --baseline work/implementation/evidence/72-projection-perf/baseline-run1.json \
+             work/implementation/evidence/72-projection-perf/baseline-run2.json \
+             work/implementation/evidence/72-projection-perf/baseline-run3-final-tip.json \
+  --after /tmp/after-94-run1.json /tmp/after-94-run2.json
+# → 18 checks, bench-gate: all gates pass（本机本次运行）
+```
+
+`tests/bench-gate.test.mjs` 固定了门槛算术与失败方向：160 轮 CPU 回归会同时让
+`historySlope`/`cost160` 变红，缺 cell 会让整体失败，而不是静默跳过。
+
 ## 4. 改善与未改善（实测口径）
 
 **改善：**
@@ -85,7 +99,8 @@ load 5–19 下运行的读数**（160/1 的 p95 一度到 78 ms、每片段 CPU
 - **组合漂移**：dsh `fe2bbc3 → 5b8ec0f`，差值包含上游/并行 spec 的变化；本表只证明
   「本组合上达到相对门槛」，不证明全部差值是投影改造带来的。
 - **没有分页基准**：`/chat/page` 的「只读本页区间、消息只格式窗口行」由
-  `tests/chat-page-cut.test.mjs` 与 `tests/projection-units.test.mjs` 固定，未在本基准里
+  `tests/chat-page-cut.test.mjs` 的事件区间断言与 `tests/projection-units.test.mjs` 的
+  窗口扫描测试固定（5000 行状态上，窗口读取的行访问数 <100；全量扫描会变红），未在本基准里
   另设分页负载。
 
 ## 5. 未执行项

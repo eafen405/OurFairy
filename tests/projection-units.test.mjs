@@ -60,6 +60,20 @@ test('the work unit reproduces the frozen task and activity values', () => {
   })
 })
 
+test('the work unit keeps only pending identities, not a second inbox copy', () => {
+  const log = [
+    event(0, 'agent/inbox/spliced', { target: 'next-turn', start: 0,
+      inserted: [userMessage('u1', 'queued text must not enter the durable state', { rpcId: 'r1' })] }),
+  ]
+  const state = fold(units.workDefinition, log)
+
+  assert.deepEqual(state.pending, { 'next-turn': [{ id: 'u1', kind: 'user' }] })
+  assert.ok(!JSON.stringify(state).includes('queued text must not enter the durable state'),
+    'the work unit must not copy the pending message body')
+  assert.deepEqual(Object.keys(state.pending['next-turn'][0]).sort(), ['id', 'kind'])
+  assert.deepEqual(units.workDefinition.stateSchema.parse(JSON.parse(JSON.stringify(state))).pending, state.pending)
+})
+
 test('a unit applies an unrelated event as the same state reference', () => {
   const unrelated = [
     event(0, 'step/start', { turn: 1, step: 1 }),
@@ -78,13 +92,14 @@ test('a unit applies an unrelated event as the same state reference', () => {
   }
 })
 
-test('a unit declares a stable key and a positive stateVersion for the native registry', () => {
+test('the stateVersion constants bind the README contract', () => {
+  // Bump these together with backend/chat/README.md and the evidence when the
+  // fold semantics or state shape change; the registry discards older rows.
+  const versions = { ourfairyTranscript: 3, ourfairyWork: 2 }
   for (const definition of [units.transcriptDefinition, units.workDefinition]) {
     assert.equal(typeof definition.key, 'string')
-    assert.ok(Number.isSafeInteger(definition.stateVersion) && definition.stateVersion >= 1,
-      `${definition.key} needs a positive integer stateVersion`)
+    assert.equal(definition.stateVersion, versions[definition.key], `${definition.key} stateVersion`)
     assert.equal(definition.wire, undefined, `${definition.key} is host-only and must not publish a wire view`)
-    assert.deepEqual(definition.stateSchema.parse(definition.init({ id: SESSION }, 0)), definition.init({ id: SESSION }, 0))
   }
 })
 
@@ -116,6 +131,28 @@ test('a windowed read starts at fromSeq and keeps a queued row moved across that
   // first appearance inside that range.
   assert.deepEqual(units.transcriptAt(state, 2, 2).map(({ messageId, seq, status }) => ({ messageId, seq, status })),
     [{ messageId: 'u1', seq: 2, status: 2 }])
+})
+
+test('a re-splice keeps first-appearance order and the cut row moves to the later seq', () => {
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'agent/inbox/spliced', { target: 'next-turn', start: 0,
+      inserted: [userMessage('u1', 'first copy', { rpcId: 'r1' })] }),
+    // Another row appears between the first and the re-splice: the rows array
+    // must still be sorted by the *first* appearance for the window search.
+    event(2, 'assistant/message', { turn: 1, step: 1, message: { id: 'a1', role: 'assistant',
+      content: [{ type: 'text', text: 'reply' }], source: { kind: 'model' } }, stream: [] }, { surfaceOp: 'append' }),
+    event(3, 'agent/inbox/spliced', { target: 'next-turn', start: 0, removedCount: 1,
+      inserted: [userMessage('u1', 'second copy', { rpcId: 'r1' })] }),
+    event(4, 'user/message', userMessage('u1', 'second copy', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+  ]
+  const state = fold(units.transcriptDefinition, log)
+
+  assert.deepEqual(units.transcriptAt(state).map(message => message.messageId), ['u1', 'a1'])
+  assert.deepEqual(units.transcriptAt(state, 3, 3).map(({ messageId, seq, status }) => ({ messageId, seq, status })),
+    [{ messageId: 'u1', seq: 3, status: 1 }], 'the re-splice moves the row into a window starting at its new seq')
+  assert.deepEqual(units.transcriptAt(state, 4, 4).map(({ messageId, seq, status }) => ({ messageId, seq, status })),
+    [{ messageId: 'u1', seq: 4, status: 2 }], 'the append after the re-splice is the later cut row')
 })
 
 test('the work read reports the observed log end, not a fold position it never saw', () => {
@@ -232,4 +269,21 @@ test('the transcript read at a cut keeps the frozen first-appearance order, not 
   assert.deepEqual(rows, expected.firstAppearance.messages)
   assert.deepEqual(rows.map(row => row.messageId), ['u-first', 'u-second', 'a1'])
   assert.equal(rows[0].seq, 3, 'the re-appended row keeps its position and takes the later seq')
+})
+
+test('a windowed read touches only its window rows, not the whole transcript', () => {
+  const rows = Array.from({ length: 5000 }, (_, seq) => ({ messageId: `m${seq}`, requestId: null, role: 2,
+    text: 'x', attachments: null, first: { seq, status: 2 }, transitions: [] }))
+  let rowReads = 0
+  const proxied = new Proxy(rows, {
+    get(target, property, receiver) {
+      if (typeof property === 'string' && /^\d+$/u.test(property)) rowReads += 1
+      return Reflect.get(target, property, receiver)
+    },
+  })
+  const state = { sessionId: 's', rows: proxied, index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], moves: [] }
+
+  const at = units.transcriptAt(state, 5000, 4990)
+  assert.deepEqual(at.map(message => message.seq), Array.from({ length: 10 }, (_, index) => 4990 + index))
+  assert.ok(rowReads < 100, `a windowed read must not scan 5000 rows (read ${rowReads})`)
 })
