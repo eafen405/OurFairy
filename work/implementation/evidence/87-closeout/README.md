@@ -1,8 +1,8 @@
 # 87-closeout — 票 #87 证据
 
 票面：OurFairy#87（父规格 #71）。集成分支 `integration/spec-71`，收口时被测
-HEAD `8821da3`（#86 合入后的 tip）；本文、索引与边界实测记录随后由一个只改
-文档的提交加入。固定组合（`combo.json`）：dsh
+HEAD `600c96d`（#86 与评审修复合入后的 tip）；本文与索引随后由只改文档的
+收口提交加入。固定组合（`combo.json`）：dsh
 `5b8ec0f175d3d7ba0fc7f120165d5cad6fd81aaf`，rikkahub
 `2d97ed143e7a6487515e4aa784d937c785e76b3c`。
 
@@ -23,18 +23,18 @@ HEAD `8821da3`（#86 合入后的 tip）；本文、索引与边界实测记录�
 ## 最终集成状态与命令
 
 在 `/home/eafen405/projects/OurFairy/.worktrees/spec71-integration`（HEAD
-`8821da3`，工作树上只多了本证据提交）执行：
+`600c96d`，工作树上只多了本证据提交）执行：
 
 ```
 $ npm test
-ℹ tests 150
+ℹ tests 151
 ℹ suites 7
-ℹ pass 150
+ℹ pass 151
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 77570.804446
+ℹ duration_ms 64239.067817
 ```
 
 ```
@@ -47,7 +47,7 @@ doctor: all checks passed
 
 ```
 $ npm run combo:verify
-ourfairy  integration/ourfairy-v1  based on integra  8821da3dc9f7e68a  ok (worktree is based on the integration tip)
+ourfairy  integration/ourfairy-v1  based on integra  600c96d04a16194b  ok (worktree is based on the integration tip)
 dsh       product/ourfairy-v1      5b8ec0f175d3d7ba  5b8ec0f175d3d7ba  ok
 rikkahub  product/ourfairy-v1      2d97ed143e7a6487  2d97ed143e7a6487  ok
 combo: combination verified
@@ -94,6 +94,14 @@ Standards/Spec 两轴评审。逐项处理如下。
 - #82 两处注释把上游行为说过头；`tests/gateway.test.mjs` 的 `repeatLast`
   注释已过时；按固定版本改写（`f87585b`）。
 - #86 测试的未使用 `after` 导入已删除（`18164fa`）。
+- 评审第二轮：#81 的 stderr 有界修复缺回归断言（改回 `'ignore'` 仍能全绿）；
+  新增 seam 用例捕获 spawn 请求断言正数上限，并修掉测试把未设置 `TMPDIR`
+  恢复成字符串 `"undefined"` 的污染（`600c96d`）。
+- 评审第二轮：`waitForExit()` “证明进程已空”说法过头；改为等待退出确认，
+  由取消用例断言无残留进程（`600c96d`）。
+- 评审第二轮：doctor 与错误信息里的 `ourfairy-backend ...` 不是可执行命令；
+  改为 `npm run backend:doctor` / `npm run backend:start -- --reinstall`
+  （`600c96d`）。
 
 **记录为已知限制 / 不本轮修改**
 

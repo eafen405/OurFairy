@@ -19,7 +19,7 @@ Product repo only; no dsh, rikkahub or `combo.json` change.
 | `tests/sandbox-network-profile.test.mjs` | New. Asserts the script profile contains `--share-net`, the PDF profile does not, and a silent profile is refused. |
 | `tests/pdf-worker-cancel.test.mjs` | Two cases. Runs the shipped `installPdf` against the real local subprocess provider, cancels a live worker, and asserts status 3 / `resource-limit`, the parser's own network namespace, no surviving process and a removed temporary directory. A second case captures the spawn request and asserts `stderr` is a bounded collector with a positive cap (the service defines no discard mode; the exact regression to `'ignore'` is otherwise invisible). It also restores an unset `TMPDIR` with `delete` instead of assigning `undefined`. |
 
-Commits: `21767b2` (bwrap network choice), `3408489` (PDF on the subprocess service), `7161be1` (cancellation test pins the failure code).
+Commits: `21767b2` (bwrap network choice), `3408489` (PDF on the subprocess service), `7161be1` (cancellation test pins the failure code); review passes `f87585b` (bounded stderr, numeric cancellation mapping) and `600c96d` (stderr regression case, `waitForExit` wording, runnable remedies).
 
 ## Signal classification (unchanged behaviour, new evidence)
 
@@ -58,7 +58,7 @@ OURFAIRY_DSH_DIR=/home/eafen405/projects/deepseek-harness \
   partial/page-limit/resource-limit/invalid-pages/image-unsupported, original
   download, cross-user denial, and real image blocks with pixel checks.
 
-Review-fix pass (2026-10-20, the PDF cancellation mapping and bounded stderr):
+Review-fix pass (2026-10-20, `f87585b` and `600c96d`: bounded stderr, the numeric cancellation mapping, and the stderr regression case):
 the focused command above passed again (8/8); the stderr guard joins the cancellation case. The fix commit's pre-commit run
 of the whole suite hit the known load flake — the encrypted case returned
 `resource-limit` after the 10 s wall deadline expired under full-suite
