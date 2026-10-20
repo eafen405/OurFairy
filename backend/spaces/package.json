@@ -22,6 +22,10 @@
   "exports": {
     ".": "./src/index.mjs",
     "./policy": "./src/policy.mjs",
-    "./bwrap": "./src/bwrap.mjs"
+    "./bwrap": "./src/bwrap.mjs",
+    "./fs": "./src/fs.mjs",
+    "./sandbox": "./src/sandbox.mjs",
+    "./bash": "./src/bash.mjs",
+    "./directory": "./src/directory.mjs"
   }
 }

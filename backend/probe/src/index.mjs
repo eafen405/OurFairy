@@ -45,7 +45,11 @@ const SERVICE_ROWS = [
   ['ourfairyGateway', 'gateway', '@ourfairy/dsh-gateway'],
   ['jobs', 'jobs-local', '@deepseek-ai/dsh-jobs-local'],
   ['attachments', 'attachment-local', '@deepseek-ai/dsh-attachment-local'],
-  ...['ourfairySpaces', 'fs', 'shell', 'sandbox', 'workingDirectory'].map(service => [service, 'spaces', '@ourfairy/dsh-spaces']),
+  ['ourfairySpaces', 'spaces', '@ourfairy/dsh-spaces'],
+  ['fs', 'scoped-fs', '@ourfairy/dsh-spaces'],
+  ['shell', 'scoped-bash', '@ourfairy/dsh-spaces'],
+  ['sandbox', 'scoped-sandbox', '@ourfairy/dsh-spaces'],
+  ['workingDirectory', 'scoped-directory', '@ourfairy/dsh-spaces'],
   ['sandboxPolicy', 'sandbox-policy', '@ourfairy/dsh-spaces/policy'],
 ]
 
