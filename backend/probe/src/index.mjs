@@ -40,11 +40,13 @@ const SERVICE_ROWS = [
   ['sessionQuery', 'session-query-sqlite', '@deepseek-ai/dsh-session-query-sqlite'],
   ['settings', 'settings', '@deepseek-ai/dsh-settings'],
   ['configEditor', 'config-editor', '@deepseek-ai/dsh-config-editor'],
+  ['identity', 'identity', '@ourfairy/dsh-identity'],
   ['agentDefaultModel', 'agent-default-model', '@deepseek-ai/dsh-agent-default-model'],
   ['ourfairyChat', 'chat', '@ourfairy/dsh-chat'],
   ['ourfairyGateway', 'gateway', '@ourfairy/dsh-gateway'],
   ['jobs', 'jobs-local', '@deepseek-ai/dsh-jobs-local'],
   ['attachments', 'attachment-local', '@deepseek-ai/dsh-attachment-local'],
+  ['ourfairyAttachments', 'attachments', '@ourfairy/dsh-attachments'],
   ['ourfairySpaces', 'spaces', '@ourfairy/dsh-spaces'],
   ['fs', 'scoped-fs', '@ourfairy/dsh-spaces'],
   ['shell', 'scoped-bash', '@ourfairy/dsh-spaces'],
@@ -86,6 +88,37 @@ function collectRows(ctx) {
     })
   }
   return rows
+}
+
+/** The probe's own row: test machinery mounted above the bundle, not a product row. */
+const PROBE_ROW_ID = 'ourfairy-baseline-probe'
+const PROBE_PACKAGE = '@ourfairy/dsh-baseline-probe'
+
+/**
+ * Every product row the bundle mounts must be active.
+ *
+ * A row whose config the loader rejects (or whose `apply` throws) leaves its
+ * fiber failed or waiting; reporting ready in that state would let a later
+ * request discover the missing capability. Naming the row and package here is
+ * what makes the configuration failure act on the boot instead. A row an
+ * operator disabled through an overlay is a deliberate absence, not an
+ * activation failure, so it is skipped.
+ */
+function collectInactiveProductRows(ctx) {
+  const loader = ctx.get('loader')
+  if (loader === undefined) return []
+  const failures = []
+  for (const entry of loader.entries()) {
+    const name = entry.options?.name
+    if (typeof name !== 'string' || !name.startsWith('@ourfairy/')) continue
+    if (name === PROBE_PACKAGE || entry.options?.id === PROBE_ROW_ID) continue
+    if (entry.disabled === true) continue
+    const state = fiberStateName(entry)
+    if (state !== 'active') {
+      failures.push(`bundle product row "${entry.options?.id}" (${name}) is not active (fiber ${state})`)
+    }
+  }
+  return failures
 }
 
 /** Service liveness and the row/package that owns it; every miss names the row. */
@@ -282,6 +315,7 @@ async function runProbe(ctx) {
     await loader.await()
 
     report.rows = collectRows(ctx)
+    report.failures.push(...collectInactiveProductRows(ctx))
     const services = collectServices(ctx, report.rows)
     report.services = services.services
     report.failures.push(...services.failures)

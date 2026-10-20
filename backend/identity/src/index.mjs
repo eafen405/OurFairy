@@ -10,6 +10,7 @@
  * @module @ourfairy/dsh-identity
  */
 import { Service } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { IdentityError, IdentityStore, PHAETHON_SHORT_ID } from './store.mjs'
 import { bearerToken, identityHandlers, IDENTITY_PATHS } from './http.mjs'
 import { identityInterfaces } from './interfaces.mjs'
@@ -17,6 +18,12 @@ import { ownerOf } from './owner.mjs'
 
 export const name = 'ourfairy-identity'
 export const inject = ['webServer', 'connection']
+
+/** The loader validates the row config before `apply`; `resolveConfig` fills the defaults. */
+export const Config = z.object({
+  path: z.string().required(),
+  sessionTtlDays: z.number().min(1).step(1),
+})
 
 /** Principal key one short number speaks for; stable across that user's sessions. */
 export function principalIdOf(shortId) {

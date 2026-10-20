@@ -1,4 +1,5 @@
 /** Authenticated upload/download routes and session-scoped native model/file integration. */
+import z from '@deepseek-ai/schemastery'
 import { postHandler, sendJson } from '@ourfairy/dsh-identity/http'
 import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.mjs'
 import { installPdf } from './pdf.mjs'
@@ -8,6 +9,12 @@ export { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES, uploadIdsOf } from './service.mjs'
 export { createDownloadResponder } from './download.mjs'
 export const name = 'ourfairy-attachments'
 export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory', 'agents', 'tools', 'subprocess']
+
+/** The loader validates the row config before `apply`; the service only reads the root. */
+export const Config = z.object({
+  root: z.string().required(),
+})
+
 export function apply(ctx, config) {
   const service = new AttachmentService(ctx, config)
   installPdf(ctx, service)

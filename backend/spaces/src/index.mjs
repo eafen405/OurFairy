@@ -1,8 +1,15 @@
 /** Product providers over native dsh file, directory and sandbox Interfaces. */
+import z from '@deepseek-ai/schemastery'
 import { SpaceScope } from './scope.mjs'
 
 export const name = 'ourfairy-spaces'
 export const inject = ['sessions', 'tools']
+
+/** The loader validates the row config before `apply`; `SpaceScope` receives the checked value. */
+export const Config = z.object({
+  root: z.string().required(),
+})
+
 /**
  * The spaces row owns the scope and the collaborators that read it: the
  * `ourfairySpaces` service, the tool-call scope wrapper, the group roots and the
