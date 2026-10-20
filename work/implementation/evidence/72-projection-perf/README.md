@@ -15,7 +15,7 @@
 | #92 | 冷启动重建与 live 状态边界 | [ticket-92-cold-restart.md](ticket-92-cold-restart.md) | 已合入 `integration/spec-72` @ `470624b` |
 | #93 | 多观察者共享与多会话隔离 | [ticket-93-isolation.md](ticket-93-isolation.md) | 已合入 `integration/spec-72` @ `c674e6f` |
 | #94 | 改造后基准与相对门槛 | [ticket-94-benchmark-after.md](ticket-94-benchmark-after.md) | 已合入 `integration/spec-72` @ `3fba2ca` |
-| #95 | 契约文档、全量验证与子票收口 | [ticket-95-closeout.md](ticket-95-closeout.md) | 已合入 `integration/spec-72` @ `3fba2ca`；父票 #72 保持 open |
+| #95 | 契约文档、全量验证与子票收口 | [ticket-95-closeout.md](ticket-95-closeout.md) | 已合入 `integration/spec-72` @ `9b0a3e8`；父票 #72 保持 open |
 
 ## 重放
 
