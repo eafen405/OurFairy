@@ -1,6 +1,8 @@
+> 2026-10-20 状态：已被 #26、#28、#29、#38 取代。本文记录 2026-10-14 的判断，不描述当前实现。
+
 # 客户端接入、认证与 HTTP/WS 载体接缝地图（#26 / #28 / #29 / #38）
 
-基线：dsh `d743267388641bc76f17c45ce8b4c231aed1d32c`（分支 `product/ourfairy-v1`，工作区干净，只读核实后未改动任何文件）；rikkahub `0966502c4d65c1ee4b2a3e49a19703bb1978016c`（分支 `product/ourfairy-v1`）。
+基线：dsh 与 rikkahub 的上游提交见[研究基线](README.md)；测量时两者的检出分支均为 `product/ourfairy-v1`，工作区干净，只读核实后未改动任何文件。
 产出票：#26（邀请码注册/登录/单 APK 身份入口）、#28（远程对话/完整回复/显式停止）、#29（断线继续与历史补齐）、#38（后台通知）。
 方法：只读源码实读 + 4 条定向测试实跑（§7 有原始输出）。
 证据等级：**实读**＝本人在该检出上打开并引用了原文；**实测**＝本回合实际执行的命令与输出；**未验证**＝未确认，不得当结论使用。
@@ -390,7 +392,7 @@ EXIT=1
 
 ## 8. rikkahub 客户端侧
 
-固定提交 `0966502c4d65c1ee4b2a3e49a19703bb1978016c`（分支 `product/ourfairy-v1`，工作区干净）。
+固定提交见[研究基线](README.md)（分支 `product/ourfairy-v1`，工作区干净）。
 
 ### 8.1 网络层现状：三套 HTTP 栈并存
 
@@ -579,8 +581,8 @@ Koin 模块声明：`di/AppModule.kt:24`、`di/DataSourceModule.kt:51`、`di/Rep
 | 项 | 值 |
 | --- | --- |
 | 工作目录 | `/home/eafen405/projects/OurFairy` |
-| dsh 检出 | `/home/eafen405/projects/deepseek-harness`，`d743267388641bc76f17c45ce8b4c231aed1d32c`，分支 `product/ourfairy-v1`，`git status --porcelain` 空 |
-| rikkahub 检出 | `/home/eafen405/projects/rikkahub`，`0966502c4d65c1ee4b2a3e49a19703bb1978016c`，分支 `product/ourfairy-v1` |
+| dsh 检出 | `/home/eafen405/projects/deepseek-harness`，提交见[研究基线](README.md)，分支 `product/ourfairy-v1`，`git status --porcelain` 空 |
+| rikkahub 检出 | `/home/eafen405/projects/rikkahub`，提交见[研究基线](README.md)，分支 `product/ourfairy-v1` |
 | 包管理器 | `corepack pnpm@11.28.5`（PATH 上的 pnpm 12 未使用） |
 | vitest | `v4.1.11`（无 `--reporter=basic`） |
 | 本回合改动 | **仅本文件**；dsh 与 rikkahub 均未改动 |

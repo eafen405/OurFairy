@@ -1,6 +1,8 @@
+> 2026-10-20 状态：已被 #25、#27 取代。本文记录 2026-10-14 的判断，不描述当前实现。
+
 # dsh 原生改动地图：会话归属与正式投递（#25 / #27）
 
-基线：`d743267388641bc76f17c45ce8b4c231aed1d32c`（dsh fork，分支 `product/ourfairy-v1`，工作区干净，逐条核实后未改动任何文件）。
+基线：dsh fork 的上游提交见[研究基线](README.md)（分支 `product/ourfairy-v1`，工作区干净，逐条核实后未改动任何文件）。
 产出票：#25（扩展会话归属与投递的正式记录格式）、#27（本人多会话与固定主会话）。
 方法：只读源码实读 + 定向 vitest。每条结论附 `路径:行号`。
 证据等级标记：**实读**＝本人在该检出上打开并引用了原文；**派查**＝只读子侦察实读后回报、未二次打开（本文均给出 `路径:行号`，实施前可就地复核）；**未验证**＝未确认。
@@ -358,7 +360,7 @@ $ corepack pnpm@11.28.5 exec vitest run \
 
 ## 13. 证据与环境（本次实际执行）
 
-- 检出：`/home/eafen405/projects/deepseek-harness`，`git log -1` = `d743267388 Merge pull request #5946 from deepseek-harness/release-0.2.1-alpha.2`，`git status --porcelain` 为空，分支 `product/ourfairy-v1`。**除本 notes 文件外未改动任何文件**（notes 写在 OurFairy 仓库，不触碰 dsh）。
+- 检出：`/home/eafen405/projects/deepseek-harness`，`git log -1` 见[研究基线](README.md)，`git status --porcelain` 为空，分支 `product/ourfairy-v1`。**除本文件外未改动任何文件**（本文写在 OurFairy 仓库，不触碰 dsh）。
 - 工具链：`corepack pnpm@11.28.5`（未使用 PATH 上的 pnpm 12）。
 - 测试：见第 9 节两条实测命令与原始输出（92 passed / 185 collected、1 passed）。
 - 反例记录：`--reporter=basic` 在 vitest 4 不存在；`| tail` 会掩盖退出码——两者都会伪造「通过」假象，实施者勿重蹈。
