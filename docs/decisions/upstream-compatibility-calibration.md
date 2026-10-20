@@ -90,7 +90,7 @@ git merge-tree --write-tree --messages \
 
 官方 rc.2 的 [`job/registered`、`job/settled`](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/jobs/jobs/src/types.ts) 已记录任务归属、种类、时间、创建工具调用及终态；[jobs-local](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/jobs/jobs-local/src/index.ts) 采用 UUID 任务标识，并在通知实时订阅者前记录生命周期。这为复用官方任务事实、收缩产品 generation 接线提供了依据。
 
-[tool-jobs 的完成路径](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/jobs/tool-jobs/src/index.ts) 仍未记录实际 followup/inject/不报告/失败决定，也缺少 jobId 与入队 messageId 的关联。产品 [history](../../backend/chat/src/history.mjs) 和 [activity](../../backend/chat/src/activity.mjs) 依赖这些事实衔接任务结束、报告消费和取消，避免提前静默。升级应优先复用官方生命周期，仅在现有报告交付职责处保留缺少的决定及消息关联；具体删除项须验证旧会话读取、未知状态和实际失败恢复。
+[tool-jobs 的完成路径](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/jobs/tool-jobs/src/index.ts) 仍未记录实际 followup/inject/不报告/失败决定，也缺少 jobId 与入队 messageId 的关联。产品 [投影单元](../../backend/chat/src/units.mjs) 依赖这些事实衔接任务结束、报告消费和取消，避免提前静默。升级应优先复用官方生命周期，仅在现有报告交付职责处保留缺少的决定及消息关联；具体删除项须验证旧会话读取、未知状态和实际失败恢复。
 
 本轮还执行了仓库要求的检查：
 

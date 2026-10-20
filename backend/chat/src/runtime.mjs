@@ -3,9 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
-import { transcript } from './projection.mjs'
+import { tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.mjs'
 import { FAIRY_PERSONA } from './persona.mjs'
-import { projectSession } from './history.mjs'
 import { SessionQueues } from './queues.mjs'
 
 /**
@@ -23,6 +22,14 @@ class LiveSession {
   listeners = new Set()
   scheduled = false
   agent = null
+  /**
+   * The observed event window: `events` is null until the first read seeds it
+   * with one log read; `nextSeq` is the seq its append accepts next; `buffer`
+   * holds committed events that arrived before the seed resolved. A `null`
+   * window means no read has needed the log yet, so a session that is only
+   * written never pays for one.
+   */
+  window = null
   /** Per-turn shared selection: refreshed at each turn start, never mid-turn. */
   selection = null
   /** Route this session's running turn is pinned to; undefined between turns. */
@@ -88,6 +95,7 @@ export class SessionRuntime {
         // A turn pins the shared selection read at its start: a running reply,
         // including its tool-continuation steps, never switches mid-turn.
         agentCtx.on('session/event', (session, event) => {
+          this.#observe(state, event)
           if (event.type === 'turn/start') {
             selection.current = this.ctx.agentDefaultModel.currentSelection()
             state.route = { provider: selection.current.provider, model: selection.current.model }
@@ -192,6 +200,23 @@ export class SessionRuntime {
   /** One safe one-shot read of a session's event stream, shared with attachments. */
   events(sessionId) { return readSessionEvents(this.ctx, sessionId) }
 
+  /**
+   * One page's event slice only. A seeded window already holds the log, so this
+   * is an array slice; otherwise the native read handle returns exactly the
+   * requested range. Paging never reads the whole log.
+   */
+  async pageEvents(state, fromSeq, end) {
+    const seeded = state.window?.events
+    if (seeded != null) return seeded.slice(fromSeq, end)
+    const handle = await this.ctx.sessionPersistence.open(state.sessionId, 'read')
+    try {
+      const { events } = await handle.read(fromSeq, end - fromSeq)
+      return [...events]
+    } finally {
+      await handle.close()
+    }
+  }
+
   async barrier(state) {
     // Capture BEFORE await: later appended events are not claimed durable by this barrier.
     const through = state.session.seq - 1
@@ -224,24 +249,99 @@ export class SessionRuntime {
     })
   }
 
+  /**
+   * Keep the observed window current from committed events. The listener runs
+   * on every commit, so appending here is the only per-event window work; a
+   * commit before the seed resolved waits in the buffer for the merge.
+   */
+  #observe(state, event) {
+    const window = state.window
+    if (window === null) return
+    if (window.events === null) {
+      window.buffer.push(event)
+      return
+    }
+    // Committed seqs are contiguous, so this appends. The guard drops the
+    // duplicate the seed race can produce (an event already in the seed).
+    if (event.seq < window.nextSeq) return
+    window.events.push(event)
+    window.nextSeq = event.seq + 1
+  }
+
+  /**
+   * The one observed window for this session, seeding it on first use. Every
+   * observer formats its own slice of this window; the log is read once.
+   */
+  async #windowOf(state) {
+    let window = state.window
+    if (window === null) {
+      window = state.window = { events: null, nextSeq: 0, buffer: [], seeding: null }
+    }
+    if (window.events !== null) return window
+    window.seeding ??= this.#seedWindow(state, window).catch(error => {
+      // Drop the half-seeded window so a later read retries from the log.
+      state.window = null
+      throw error
+    })
+    await window.seeding
+    return window
+  }
+
+  /** One log read, merged with the commits that arrived while it was in flight. */
+  async #seedWindow(state, window) {
+    const { events } = await this.events(state.sessionId)
+    const seeded = [...events]
+    let nextSeq = (seeded.at(-1)?.seq ?? -1) + 1
+    for (const event of window.buffer) {
+      if (event.seq < nextSeq) continue
+      seeded.push(event)
+      nextSeq = event.seq + 1
+    }
+    window.events = seeded
+    window.nextSeq = nextSeq
+    window.buffer = []
+  }
+
+  /** One durable unit's current state; the units are registered by `index.mjs`. */
+  unitState(state, definition) {
+    const unit = this.ctx.sessionProjections.stateOf(state.session, definition.key)
+    if (unit === undefined) throw new Error(`chat projection "${definition.key}" is not registered`)
+    return unit
+  }
+
+  /**
+   * The committed cut this live session can serve. A seeded window is the
+   * observed authority; before the first read the session's own sequence is.
+   */
+  cursorOf(state) {
+    const events = state.window?.events
+    if (events != null) return events.at(-1)?.seq ?? -1
+    return state.session.seq - 1
+  }
+
+  /**
+   * One observer's view: the durable unit state plus the live overlay. The
+   * opening observer freezes `throughSeq`/`fromSeq`; later snapshots keep that
+   * cut and include its `fromSeq` through the current cursor.
+   */
   async projection(state, range) {
-    const version = state.version
-    const { events, cursor } = await this.events(state.sessionId)
-    if (state.version !== version) return this.projection(state, range)
+    const window = await this.#windowOf(state)
     const attempt = state.attempt
+    const cursor = this.cursorOf(state)
     const throughSeq = range.throughSeq ?? cursor
     const fromSeq = range.fromSeq ?? Math.max(0, throughSeq - range.maxEvents + 1)
     // One observer retains only its opening tail plus all later formal events.
     // Older history is explicitly paged against throughSeq, never replaced by a full-history follow.
     range.throughSeq = throughSeq
     range.fromSeq = fromSeq
-    const included = events.slice(fromSeq)
-    const { tasks, activity } = projectSession(this.ctx, events, state.sessionId, state.status !== 'idle')
+    const transcriptState = this.unitState(state, transcriptDefinition)
+    const workState = this.unitState(state, workDefinition)
+    const { tasks, activity } = tasksAndActivityAt(workState, this.ctx, state.sessionId, state.status !== 'idle', cursor)
     return { sessionId: state.sessionId, generation: state.generation, version: state.version, cursor,
       durableThroughSeq: Math.min(cursor, state.durableThroughSeq),
-      throughSeq, fromSeq, events: included, hasMore: fromSeq > 0, beforeSeq: fromSeq > 0 ? fromSeq : null,
+      throughSeq, fromSeq, events: window.events.slice(fromSeq), hasMore: fromSeq > 0, beforeSeq: fromSeq > 0 ? fromSeq : null,
       tasks, activity,
-      messages: transcript(events, state.sessionId).filter(message => message.seq >= fromSeq),
+      messages: transcriptAt(transcriptState, Infinity, fromSeq),
       attempt: attempt === null ? null : { attemptId: attempt.attemptId, revision: attempt.revision,
         text: attempt.assembler.interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('') },
       settledAttempt: state.settledAttempt,

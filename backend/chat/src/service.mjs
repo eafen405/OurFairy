@@ -3,7 +3,7 @@ import { Service } from '@deepseek-ai/cordis'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { uploadIdsOf } from '@ourfairy/dsh-attachments'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { receiptIn, transcript } from './projection.mjs'
+import { receiptFrom, transcriptAt, transcriptDefinition } from './units.mjs'
 
 export class ChatError extends SessionScopeError {}
 function requestIdOf(requestId) {
@@ -31,13 +31,18 @@ export class RemoteChat extends Service {
     if (caller === undefined) throw new ChatError(401, 'chat/unauthorized', 'present a live session credential')
     return caller
   }
+  /** The transcript unit state for one live session, through the runtime's one lookup. */
+  transcriptState(state) {
+    return this.runtime.unitState(state, transcriptDefinition)
+  }
   async send(owner, { sessionId, requestId, text, uploadIds = [] }) {
     requestIdOf(requestId)
     uploadIds = uploadIdsOf(uploadIds)
     if (typeof text !== 'string' || (!text.trim() && uploadIds.length === 0)) throw new ChatError(400, 'chat/invalid-request', 'provide text or an attachment')
     const state = await this.runtime.open(owner, sessionId)
     return this.runtime.runSession(sessionId, async () => {
-      let found = receiptIn((await this.runtime.events(sessionId)).events, sessionId, requestId)
+      // Receipts live in the transcript unit; a retry answers from its state.
+      let found = receiptFrom(this.transcriptState(state), requestId)
       if (found !== null && (found.text !== text || JSON.stringify(found.uploadIds) !== JSON.stringify(uploadIds))) throw new ChatError(409, 'chat/request-conflict', 'this requestId already accepted different text')
       if (found === null) {
         state.error = null
@@ -46,7 +51,8 @@ export class RemoteChat extends Service {
           ...(text ? [{ type: 'text', text }] : []),
           ...attachments.map(item => item.image ? { type: 'image', attachment: item.image } : { type: 'file', attachment: item.original }),
         ], source: { kind: 'user', rpcId: requestId, ...(attachments.length ? { attachments } : {}) } }))
-        found = receiptIn((await this.runtime.events(sessionId)).events, sessionId, requestId)
+        // Answer from the unit state after the follow-up splice commits.
+        found = receiptFrom(this.transcriptState(state), requestId)
       }
       await this.runtime.barrier(state)
       this.runtime.publish(state)
@@ -58,7 +64,7 @@ export class RemoteChat extends Service {
     const state = await this.runtime.open(owner, sessionId)
     return this.runtime.runSession(sessionId, async () => {
       await this.runtime.barrier(state)
-      return receiptIn((await this.runtime.events(sessionId)).events, sessionId, requestId)?.receipt ?? null
+      return receiptFrom(this.transcriptState(state), requestId)?.receipt ?? null
     })
   }
   async read(owner, { sessionId, maxEvents }) {
@@ -69,8 +75,10 @@ export class RemoteChat extends Service {
   }
   async page(owner, { sessionId, throughSeq, beforeSeq, maxEvents }) {
     const limit = maxEventsOf(maxEvents)
-    await this.runtime.open(owner, sessionId)
-    const { events, cursor } = await this.runtime.events(sessionId)
+    const state = await this.runtime.open(owner, sessionId)
+    // The live session already knows its observed cut; a page never re-reads
+    // the log to learn it.
+    const cursor = this.runtime.cursorOf(state)
     if (!Number.isSafeInteger(throughSeq) || throughSeq < -1 || throughSeq > cursor
       || !Number.isSafeInteger(beforeSeq) || beforeSeq < 0 || beforeSeq > throughSeq + 1) {
       throw new ChatError(400, 'chat/invalid-page', 'name a fixed inclusive throughSeq and exclusive beforeSeq within that cut')
@@ -80,9 +88,9 @@ export class RemoteChat extends Service {
     // Project at the fixed cut, then select rows whose authoritative seq belongs
     // to this page. A page can validly contain no bubbles but still fills event coverage.
     return { sessionId, throughSeq, fromSeq, beforeSeq: fromSeq > 0 ? fromSeq : null,
-      hasMore: fromSeq > 0, events: events.slice(fromSeq, end),
-      messages: transcript(events.slice(0, throughSeq + 1), sessionId)
-        .filter(message => message.seq >= fromSeq && message.seq < end) }
+      hasMore: fromSeq > 0, events: await this.runtime.pageEvents(state, fromSeq, end),
+      messages: transcriptAt(this.transcriptState(state), throughSeq, fromSeq)
+        .filter(message => message.seq < end) }
   }
   async checkpoint(owner, { sessionId }) {
     const state = await this.runtime.open(owner, sessionId)

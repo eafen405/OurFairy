@@ -24,7 +24,7 @@
  * and progress to stderr. It is not part of `npm test`.
  *
  * Usage:
- *   node scripts/bench-projection.mjs [--out <path>]
+ *   node scripts/bench-projection.mjs [--out <path>] [--label <text>]
  */
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -73,22 +73,26 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const backendScript = join(repoRoot, 'scripts', 'ourfairy-backend.mjs')
 const PASSWORD = 'bench-projection-password'
 const scriptStartedAt = performance.now()
-const outputPath = parseArgs(process.argv.slice(2))
+const options = parseArgs(process.argv.slice(2))
+const outputPath = options.out
+const runLabel = options.label ?? 'unspecified'
 
 function parseArgs(argv) {
   let out
+  let label
   for (let index = 0; index < argv.length; index += 1) {
-    if (argv[index] === '--out') {
+    if (argv[index] === '--out' || argv[index] === '--label') {
       const next = argv[index + 1]
-      if (next === undefined || next.startsWith('--')) fail('--out requires a path')
-      out = next
+      if (next === undefined || next.startsWith('--')) fail(`${argv[index]} requires a value`)
+      if (argv[index] === '--out') out = next
+      else label = next
       index += 1
     } else if (argv[index] === '--help') {
-      process.stderr.write('usage: node scripts/bench-projection.mjs [--out <path>]\n')
+      process.stderr.write('usage: node scripts/bench-projection.mjs [--out <path>] [--label <text>]\n')
       process.exit(0)
     } else fail(`unknown argument ${argv[index]}`)
   }
-  return out
+  return { out, label }
 }
 
 function fail(message) {
@@ -359,8 +363,9 @@ async function main() {
   let backend
   const document = {
     schemaVersion: 1,
-    ticket: 88,
-    benchmark: 'chat projection read/observe baseline (pre-change)',
+    ticket: 72,
+    benchmark: 'chat projection read/observe benchmark',
+    label: runLabel,
     startedAt: new Date().toISOString(),
     params: PARAMS,
     machine: machineFacts(combo),
