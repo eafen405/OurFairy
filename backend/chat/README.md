@@ -39,6 +39,8 @@
 - transcript 行记首次出现位置与结算位置（`first` / `settled`），因此任意 `throughSeq`
   都能还原该行的 `seq` 与 `status`，无需重折前缀。行顺序是首次出现顺序，不是 seq 顺序。
 - receipt 由 transcript 单元的 `receipts` 回答（`receiptFrom`），`/chat/send` 的幂等与冲突检测不再扫描事件日志。
+- `/chat/read` 与 `/chat/observe` 从这两个单元读 durable 值；同一会话的所有观察者共享同一份单元状态。
+  事件窗口在会话恢复后只读一次日志，之后由提交事件增量维护，流式片段不读日志、不折叠。
 
 ## 投影
 

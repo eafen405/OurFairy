@@ -1,18 +1,19 @@
 /**
- * Field-for-field differential between the projection units and the full folds,
- * over a REAL session log (ticket #89).
+ * The projection units over a REAL session log (tickets #89/#90).
  *
  * The unit-level suite (`projection-units.test.mjs`) pins the folds against
- * hand-written logs covering each event shape. This suite proves the same
- * equality on events the product actually wrote: it boots the real backend
- * against the model double, drives a conversation containing a tool call, a
- * settled reply and an attempt that ends without a visible message, pages the
- * whole log back through `/chat/page`, and folds that log with both
- * implementations.
+ * frozen values for hand-written logs covering each event shape. This suite
+ * proves the same values on events the product actually wrote: it boots the
+ * real backend against the model double, drives a conversation containing a
+ * tool call, a settled reply and an attempt that ends without a visible
+ * message, pages the whole log back through `/chat/page`, and folds that log
+ * with the units.
  *
- * The page endpoint still reads the log itself in this ticket (that switch is
- * #90/#91); it is used here only as the public way to obtain the committed
- * events, so the comparison never reaches into a private event reader.
+ * Ticket #90 deleted the full folds, so the expected transcript, tasks and
+ * activity are frozen in `fixtures/projection-real-expected.json`, captured
+ * from those folds at `integration/spec-72` commit `9092e52` over this same
+ * scenario. Native message and session ids are generated per run, so the
+ * frozen rows omit `messageId`; every other field is the captured value.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -25,9 +26,8 @@ import './helpers/dsh-peers.mjs'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
 const { startMockLlmServer } = await import(join(combo.repos.dsh.localPath, 'packages/test-support/llm-mock-server/lib/index.js'))
-const { transcript } = await import('../backend/chat/src/projection.mjs')
-const { projectSession } = await import('../backend/chat/src/history.mjs')
 const units = await import('../backend/chat/src/units.mjs')
+const expected = JSON.parse(readFileSync(new URL('./fixtures/projection-real-expected.json', import.meta.url), 'utf8'))
 
 const home = makeHome('ourfairy-projection-units-')
 const password = 'projection-units-password'
@@ -83,14 +83,15 @@ async function readLog(token, sessionId) {
   return events
 }
 
-/** Fold one log both ways and assert the wire projections agree. */
+/** Compare the unit read against the frozen values, ignoring per-run generated ids. */
 function assertSameProjection(events, sessionId, running = false) {
+  const stable = messages => messages.map(({ messageId, ...row }) => row)
   const ctx = { jobs: { generation: 'no-live-registry', list: () => [] } }
   const transcriptState = events.reduce(units.transcriptDefinition.apply, units.transcriptDefinition.init({ id: sessionId }, 0))
   const workState = events.reduce(units.workDefinition.apply, units.workDefinition.init({ id: sessionId }, 0))
   const work = units.tasksAndActivityAt(workState, ctx, sessionId, running, events.at(-1)?.seq ?? -1)
-  assert.deepEqual(units.transcriptAt(transcriptState), transcript(events, sessionId), 'transcript must match the full fold')
-  assert.deepEqual(work, projectSession(ctx, events, sessionId, running), 'tasks and activity must match the full fold')
+  assert.deepEqual(stable(units.transcriptAt(transcriptState)), expected.transcript, 'transcript must match the frozen rows')
+  assert.deepEqual(work, expected.work, 'tasks and activity must match the frozen values')
   return { transcriptState, workState, work }
 }
 
@@ -109,7 +110,7 @@ after(async () => {
   try { await stop() } finally { await model?.close(); removeHome(home) }
 })
 
-test('the units reproduce the full folds over a real session log', async () => {
+test('the units reproduce the frozen values over a real session log', async () => {
   const sessionId = (await post('/sessions/create', alice.token)).session.id
   await send(alice.token, sessionId, 'real-tool', '请先更新待办再回答。')
   await until(() => post('/chat/read', alice.token, { sessionId }), r => r.projection.replyStatus === 0
@@ -135,19 +136,20 @@ test('the units reproduce the full folds over a real session log', async () => {
     `the folded transcript must carry the failed attempt text; rows: ${JSON.stringify(units.transcriptAt(folded))}`)
   assert.ok(failed.every(message => message.requestId === null), 'an attempt row has no request id')
 
-  // The same equality must hold at every cut the transcript claims to answer.
-  const transcriptState = events.reduce(units.transcriptDefinition.apply, units.transcriptDefinition.init({ id: sessionId }, 0))
-  for (const event of events.filter(item => ['user/message', 'assistant/message', 'delivery/message', 'assistant/attempt', 'turn/end'].includes(item.type))) {
-    assert.deepEqual(units.transcriptAt(transcriptState, event.seq), transcript(events.slice(0, event.seq + 1), sessionId),
-      `transcript at cut ${event.seq} (${event.type}) must equal the prefix fold`)
+  // The same frozen value must hold at every cut the transcript claims to answer.
+  const stable = messages => messages.map(({ messageId, ...row }) => row)
+  for (const [cut, rows] of Object.entries(expected.cuts)) {
+    assert.deepEqual(stable(units.transcriptAt(folded, Number(cut))), rows,
+      `transcript at cut ${cut} must match the frozen prefix`)
   }
 
-  // The read face the runtime will use keeps the same activity at the cursor.
+  // The read face serves the same folded facts; the frozen fixture is the
+  // independent expectation, and this asserts the endpoint is on that path.
   const read = await post('/chat/read', alice.token, { sessionId })
   const logDerived = ({ availability, ...task }) => task
-  assert.deepEqual(work.tasks.filter(task => task.availability === 0).map(logDerived),
-    read.projection.tasks.filter(task => task.availability === 0).map(logDerived),
-    'the folded roster must carry the same log-derived fields the live projection serves')
-  assert.equal(work.activity.status, read.projection.activity.status)
-  assert.deepEqual(work.activity.reasons, read.projection.activity.reasons)
+  assert.deepEqual(read.projection.tasks.filter(task => task.availability === 0).map(logDerived),
+    work.tasks.filter(task => task.availability === 0).map(logDerived),
+    'the endpoint must serve the folded roster')
+  assert.equal(read.projection.activity.status, work.activity.status)
+  assert.deepEqual(read.projection.activity.reasons, work.activity.reasons)
 })

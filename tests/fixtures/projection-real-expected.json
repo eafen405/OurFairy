@@ -1,0 +1,536 @@
+{
+  "note": "Captured from the folds deleted in #90 over the real product log. Native message ids and session ids are generated per run, so rows are frozen without messageId; seq, requestId, role, status, text and attachments are the frozen values.",
+  "transcript": [
+    {
+      "seq": 7,
+      "requestId": "real-tool",
+      "role": 1,
+      "status": 2,
+      "text": "请先更新待办再回答。",
+      "attachments": []
+    },
+    {
+      "seq": 11,
+      "requestId": null,
+      "role": 2,
+      "status": 2,
+      "text": "",
+      "attachments": []
+    },
+    {
+      "seq": 17,
+      "requestId": null,
+      "role": 2,
+      "status": 2,
+      "text": "工具之后回复。",
+      "attachments": []
+    },
+    {
+      "seq": 24,
+      "requestId": "real-plain",
+      "role": 1,
+      "status": 2,
+      "text": "再说一次。",
+      "attachments": []
+    },
+    {
+      "seq": 25,
+      "requestId": null,
+      "role": 2,
+      "status": 4,
+      "text": "失败前原文\n**不能丢**。"
+    },
+    {
+      "seq": 28,
+      "requestId": null,
+      "role": 2,
+      "status": 2,
+      "text": "工具之后回复。",
+      "attachments": []
+    },
+    {
+      "seq": 35,
+      "requestId": "real-failed",
+      "role": 1,
+      "status": 2,
+      "text": "这次允许失败。",
+      "attachments": []
+    },
+    {
+      "seq": 36,
+      "requestId": null,
+      "role": 2,
+      "status": 2,
+      "text": "工具之后回复。",
+      "attachments": []
+    }
+  ],
+  "work": {
+    "tasks": [],
+    "activity": {
+      "status": 1,
+      "reasons": [],
+      "episodeId": "ourfairy-user-2-primary/31",
+      "startedSeq": 31,
+      "throughSeq": 38,
+      "completed": {
+        "episodeId": "ourfairy-user-2-primary/31",
+        "startedSeq": 31,
+        "outputSeq": 36,
+        "finishedSeq": 38
+      }
+    }
+  },
+  "cuts": {
+    "7": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      }
+    ],
+    "8": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      }
+    ],
+    "11": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 11,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": []
+      }
+    ],
+    "17": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 11,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": []
+      },
+      {
+        "seq": 17,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      }
+    ],
+    "19": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 11,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": []
+      },
+      {
+        "seq": 17,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      }
+    ],
+    "24": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 11,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": []
+      },
+      {
+        "seq": 17,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 24,
+        "requestId": "real-plain",
+        "role": 1,
+        "status": 2,
+        "text": "再说一次。",
+        "attachments": []
+      }
+    ],
+    "25": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 11,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": []
+      },
+      {
+        "seq": 17,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 24,
+        "requestId": "real-plain",
+        "role": 1,
+        "status": 2,
+        "text": "再说一次。",
+        "attachments": []
+      },
+      {
+        "seq": 25,
+        "requestId": null,
+        "role": 2,
+        "status": 4,
+        "text": "失败前原文\n**不能丢**。"
+      }
+    ],
+    "28": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 11,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": []
+      },
+      {
+        "seq": 17,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 24,
+        "requestId": "real-plain",
+        "role": 1,
+        "status": 2,
+        "text": "再说一次。",
+        "attachments": []
+      },
+      {
+        "seq": 25,
+        "requestId": null,
+        "role": 2,
+        "status": 4,
+        "text": "失败前原文\n**不能丢**。"
+      },
+      {
+        "seq": 28,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      }
+    ],
+    "30": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 11,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": []
+      },
+      {
+        "seq": 17,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 24,
+        "requestId": "real-plain",
+        "role": 1,
+        "status": 2,
+        "text": "再说一次。",
+        "attachments": []
+      },
+      {
+        "seq": 25,
+        "requestId": null,
+        "role": 2,
+        "status": 4,
+        "text": "失败前原文\n**不能丢**。"
+      },
+      {
+        "seq": 28,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      }
+    ],
+    "35": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 11,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": []
+      },
+      {
+        "seq": 17,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 24,
+        "requestId": "real-plain",
+        "role": 1,
+        "status": 2,
+        "text": "再说一次。",
+        "attachments": []
+      },
+      {
+        "seq": 25,
+        "requestId": null,
+        "role": 2,
+        "status": 4,
+        "text": "失败前原文\n**不能丢**。"
+      },
+      {
+        "seq": 28,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 35,
+        "requestId": "real-failed",
+        "role": 1,
+        "status": 2,
+        "text": "这次允许失败。",
+        "attachments": []
+      }
+    ],
+    "36": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 11,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": []
+      },
+      {
+        "seq": 17,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 24,
+        "requestId": "real-plain",
+        "role": 1,
+        "status": 2,
+        "text": "再说一次。",
+        "attachments": []
+      },
+      {
+        "seq": 25,
+        "requestId": null,
+        "role": 2,
+        "status": 4,
+        "text": "失败前原文\n**不能丢**。"
+      },
+      {
+        "seq": 28,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 35,
+        "requestId": "real-failed",
+        "role": 1,
+        "status": 2,
+        "text": "这次允许失败。",
+        "attachments": []
+      },
+      {
+        "seq": 36,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      }
+    ],
+    "38": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 11,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": []
+      },
+      {
+        "seq": 17,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 24,
+        "requestId": "real-plain",
+        "role": 1,
+        "status": 2,
+        "text": "再说一次。",
+        "attachments": []
+      },
+      {
+        "seq": 25,
+        "requestId": null,
+        "role": 2,
+        "status": 4,
+        "text": "失败前原文\n**不能丢**。"
+      },
+      {
+        "seq": 28,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 35,
+        "requestId": "real-failed",
+        "role": 1,
+        "status": 2,
+        "text": "这次允许失败。",
+        "attachments": []
+      },
+      {
+        "seq": 36,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      }
+    ]
+  }
+}

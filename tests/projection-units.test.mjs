@@ -1,132 +1,30 @@
 /**
- * Projection units (ticket #89): the incremental folds registered on the native
- * sessionProjections registry must reproduce, field for field, what the
- * per-read full folds derive today.
+ * Projection units (tickets #89/#90): the incremental folds registered on the
+ * native sessionProjections registry must produce the values the per-read full
+ * folds produced, including shapes those folds returned by accident.
  *
- * The old folds (`projection.mjs`, `history.mjs`) stay in the tree for this
- * comparison and are the independent side of every assertion here: expected
- * values are what today's code returns for the same log, not a re-derivation of
- * the new implementation. `/chat/read`, `/chat/page` and `/chat/observe` are
- * unchanged in this ticket, so their HTTP-level tests keep covering the old
- * path.
+ * Ticket #90 deleted the folds, so the expected values are frozen in
+ * `fixtures/projection-expected.json`: they were captured from the folds at
+ * `integration/spec-72` commit `9092e52`, before deletion. The logs and live
+ * cases they were captured from stay in `fixtures/projection-logs.mjs`, so a
+ * change to either side breaks this comparison instead of silently drifting.
  *
  * The unit interfaces under test are the ones the native registry uses —
- * `init`/`apply`/`stateVersion`/`stateSchema` — plus the pure read functions the
- * later tickets call to turn unit state back into the wire shape.
+ * `init`/`apply`/`stateVersion`/`stateSchema` — plus the pure read functions
+ * the runtime and service call to turn unit state back into the wire shape.
  */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 // Registers Node resolution for the pinned dsh checkout before any product
 // module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
+import {
+  SESSION, attachment, event, transcriptLog, userMessage, workCases, workLog,
+} from './fixtures/projection-logs.mjs'
 
-const { receiptIn, transcript } = await import('../backend/chat/src/projection.mjs')
-const { projectSession } = await import('../backend/chat/src/history.mjs')
 const units = await import('../backend/chat/src/units.mjs')
-
-const SESSION = 'session-1'
-
-/** One committed native event, at the seq the fixture names. */
-function event(seq, type, data, extra = {}) {
-  return { seq, type, time: 1_700_000_000_000 + seq, data, ...extra }
-}
-
-const userMessage = (id, text, { rpcId, attachments } = {}) => ({
-  id, role: 'user', content: [{ type: 'text', text }],
-  source: { kind: 'user', ...(rpcId === undefined ? {} : { rpcId }), ...(attachments === undefined ? {} : { attachments }) },
-})
-const assistantMessage = (id, text) => ({ id, role: 'assistant', content: [{ type: 'text', text }], source: { kind: 'model' } })
-const noticeMessage = (id, text) => ({ id, role: 'user', content: [{ type: 'text', text }], source: { kind: 'tool-jobs' } })
-const attachment = (uploadId, bytes) => ({ uploadId, name: `${uploadId}.png`, mime: 'image/png', original: { name: `${uploadId}.png`, mime: 'image/png', bytes }, image: { width: 4, height: 4 } })
-
-/** A compact assistant stream carrying only visible text, as the log stores it. */
-const textStream = text => [{ type: 'text-chunks', time0: 1, index: 0, dt: [0], texts: [text] }]
-
-const job = (overrides = {}) => ({ id: 'job-1', kind: 'task', label: 'work', status: 'running', startedAt: 10,
-  output: { earliest: 0, total: 0 }, ...overrides })
-
-/**
- * One transcript-focused log: a queued message spliced then appended, an
- * assistant message, a settled attempt, a delivery, an interrupted assistant
- * message, and two ignored shapes (a replacement surface copy and a
- * non-user-authored user message).
- */
-function transcriptLog() {
-  return [
-    event(0, 'turn/start', { turn: 1 }),
-    event(1, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [userMessage('u1', 'hello', { rpcId: 'r1', attachments: [attachment('up-1', 12)] })] }),
-    event(2, 'user/message', userMessage('u1', 'hello', { rpcId: 'r1', attachments: [attachment('up-1', 12)] }), { surfaceOp: 'append' }),
-    event(3, 'step/start', { turn: 1, step: 1 }),
-    event(4, 'assistant/message', { turn: 1, step: 1, message: assistantMessage('a1', 'hi there'), stream: textStream('hi there') }, { surfaceOp: 'append' }),
-    event(5, 'assistant/attempt', { turn: 1, step: 1, stream: textStream('half') }),
-    event(6, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
-    event(7, 'assistant/attempt', { turn: 2, step: 1, stream: textStream('orphan') }),
-    event(8, 'user/message', userMessage('u-replacement', 'replaced copy'), { surfaceOp: { op: 'replace', startSeq: 2, endSeq: 2 } }),
-    event(9, 'user/message', noticeMessage('n1', 'notice'), { surfaceOp: 'append' }),
-    event(10, 'delivery/message', { deliveryId: 'd1', origin: { sessionId: 'sender-1' }, message: assistantMessage('dmsg', 'delivered') }, { surfaceOp: 'append' }),
-    event(11, 'assistant/message', { turn: 2, step: 1, message: assistantMessage('a2', 'cut off'), stream: textStream('cut off'), interrupted: true }, { surfaceOp: 'append' }),
-  ]
-}
-
-/**
- * One task/activity-focused log: a background task settles, its completion is
- * queued, a turn consumes the notice, another turn is aborted, and a restored
- * process-local task closes the log.
- */
-function workLog() {
-  return [
-    event(0, 'turn/start', { turn: 1 }),
-    event(1, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [userMessage('u1', 'start a job', { rpcId: 'r1' })] }),
-    event(2, 'user/message', userMessage('u1', 'start a job', { rpcId: 'r1' }), { surfaceOp: 'append' }),
-    event(3, 'jobs/lifecycle', { generation: 'g1', phase: 'registered', job: job() }),
-    event(4, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
-    event(5, 'jobs/lifecycle', { generation: 'g1', phase: 'settled', job: job({ status: 'completed', finishedAt: 20 }) }),
-    event(6, 'jobs/report', { generation: 'g1', jobId: 'job-1', delivery: 'wakeup', messageId: 'n1' }),
-    event(7, 'agent/inbox/spliced', { target: 'next-turn', start: 0, removedCount: 0, inserted: [noticeMessage('n1', 'job done')] }),
-    event(8, 'turn/start', { turn: 2 }),
-    event(9, 'user/message', noticeMessage('n1', 'job done'), { surfaceOp: 'append' }),
-    event(10, 'assistant/message', { turn: 2, step: 1, message: assistantMessage('a2', 'done'), stream: textStream('done') }, { surfaceOp: 'append' }),
-    event(11, 'turn/end', { turn: 2, reason: { kind: 'aborted' } }),
-    event(12, 'jobs/lifecycle', { generation: 'g1', phase: 'registered', job: job({ id: 'job-2', status: 'stopping', startedAt: 30 }) }),
-    event(13, 'session/end-seed', {}),
-  ]
-}
-
-/** A log whose queued task notice is discarded from the inbox rather than delivered. */
-function canceledNoticeLog() {
-  return [
-    event(0, 'jobs/lifecycle', { generation: 'g1', phase: 'registered', job: job() }),
-    event(1, 'jobs/lifecycle', { generation: 'g1', phase: 'settled', job: job({ status: 'failed', finishedAt: 20, detail: 'exit code: 3' }) }),
-    event(2, 'jobs/report', { generation: 'g1', jobId: 'job-1', delivery: 'failed', messageId: 'n1', reason: 'no delivery' }),
-    event(3, 'agent/inbox/spliced', { target: 'next-step', start: 0, removedCount: 0, inserted: [noticeMessage('n1', 'job failed')] }),
-    event(4, 'agent/inbox/spliced', { target: 'next-step', start: 0, removedCount: 1, inserted: [], outcome: 'canceled' }),
-    event(5, 'turn/start', { turn: 1 }),
-    event(6, 'turn/end', { turn: 1, reason: { kind: 'error' } }),
-  ]
-}
-
-/** A restored log: real work ran before a restart, then the seed marker closes it. */
-function restoredLog() {
-  return [
-    event(0, 'turn/start', { turn: 1 }),
-    event(1, 'jobs/lifecycle', { generation: 'g1', phase: 'registered', job: job({ status: 'running' }) }),
-    event(2, 'jobs/report', { generation: 'g1', jobId: 'job-1', delivery: 'quiet-context', messageId: 'q1' }),
-    event(3, 'session/end-seed', { inherited: true }),
-  ]
-}
-
-/** One delivery and one removed job inside a single episode, for its own summary fields. */
-function deliveryLog() {
-  return [
-    event(0, 'turn/start', { turn: 1 }),
-    event(1, 'delivery/message', { deliveryId: 'd1', origin: { sessionId: 'sender-1' }, message: assistantMessage('dmsg', 'delivered') }, { surfaceOp: 'append' }),
-    event(2, 'jobs/lifecycle', { generation: 'g1', phase: 'registered', job: job() }),
-    event(3, 'jobs/lifecycle', { generation: 'g1', phase: 'settled', job: job({ status: 'completed', finishedAt: 20 }) }),
-    event(4, 'jobs/report', { generation: 'g1', jobId: 'job-1', delivery: 'none' }),
-    event(5, 'jobs/lifecycle', { generation: 'g1', phase: 'removed', job: job({ status: 'completed', finishedAt: 20 }) }),
-    event(6, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
-  ]
-}
+const expected = JSON.parse(readFileSync(new URL('./fixtures/projection-expected.json', import.meta.url), 'utf8'))
 
 /** Fold one log with one unit definition, asserting the intermediate states stay plain JSON. */
 function fold(definition, log, header = { id: SESSION, version: 4, createdAt: 1, isSeeded: false }) {
@@ -148,39 +46,18 @@ function unitProjection(log, { running = false, liveJobs = [] } = {}) {
   return { ...work1, messages }
 }
 
-test('the transcript unit reproduces the full transcript fold, including ignored shapes', () => {
-  const log = transcriptLog()
-
-  assert.deepEqual(unitProjection(log).messages, transcript(log, SESSION))
+test('the transcript unit reproduces the frozen transcript, including ignored shapes', () => {
+  assert.deepEqual(unitProjection(transcriptLog()).messages, expected.transcriptLog.messages)
 })
 
-test('the work unit reproduces the task and activity fold', () => {
-  const cases = [
-    { log: workLog(), running: false, liveJobs: [] },
-    { log: workLog(), running: false, liveJobs: [job({ status: 'running' })] },
-    { log: workLog(), running: false, liveJobs: [job({ status: 'running' }), job({ id: 'job-2', status: 'running' })] },
-    { log: workLog(), running: true, liveJobs: [job({ status: 'running' })] },
-    // A live job whose id belongs to an older registry generation never matches.
-    { log: workLog(), running: false, liveJobs: [job({ status: 'running', owner: 'session-1' })] },
-    { log: workLog(), running: false, liveJobs: [job({ status: 'running', owner: 'session-2' })] },
-    { log: canceledNoticeLog(), running: false, liveJobs: [] },
-    { log: canceledNoticeLog(), running: true, liveJobs: [job({ status: 'failed', finishedAt: 20, detail: 'exit code: 3' })] },
-    { log: restoredLog(), running: false, liveJobs: [job({ status: 'running' })] },
-    { log: restoredLog(), running: true, liveJobs: [] },
-    { log: deliveryLog(), running: false, liveJobs: [] },
-    { log: deliveryLog(), running: false, liveJobs: [job({ status: 'completed', finishedAt: 20 })] },
-    { log: deliveryLog(), running: true, liveJobs: [] },
-    { log: [], running: false, liveJobs: [] },
-    { log: [], running: true, liveJobs: [] },
-  ]
-  for (const { log, running, liveJobs } of cases) {
-    const ctx = { jobs: { generation: 'g1', list: () => liveJobs } }
-    assert.deepEqual(
-      unitProjection(log, { running, liveJobs }),
-      { ...projectSession(ctx, log, SESSION, running), messages: unitProjection(log).messages },
-      `work unit must match the full fold for running=${running}, ${liveJobs.length} live jobs, ${log.length} events`,
-    )
-  }
+test('the work unit reproduces the frozen task and activity values', () => {
+  const cases = workCases()
+  assert.equal(cases.length, expected.workCases.length, 'every frozen case needs its log')
+  cases.forEach(({ log, running, liveJobs }, index) => {
+    const { tasks, activity } = unitProjection(log, { running, liveJobs })
+    assert.deepEqual({ tasks, activity }, expected.workCases[index],
+      `work unit must match the frozen values for running=${running}, ${liveJobs.length} live jobs, ${log.length} events`)
+  })
 })
 
 test('a unit applies an unrelated event as the same state reference', () => {
@@ -211,16 +88,16 @@ test('a unit declares a stable key and a positive stateVersion for the native re
   }
 })
 
-test('every cut of the transcript matches the full fold of the same prefix', () => {
+test('every cut of the transcript matches the frozen value for that prefix', () => {
   const log = transcriptLog()
   const state = fold(units.transcriptDefinition, log)
-  // Cuts on both sides of the splice/append pair, of an attempt and its turn
-  // end, and of the last event.
-  const cuts = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, log.length]
-  for (const cut of cuts) {
-    const expected = cut < 0 ? [] : transcript(log.slice(0, cut + 1), SESSION)
-    assert.deepEqual(units.transcriptAt(state, cut), expected, `transcript at cut ${cut} must equal the fold of that prefix`)
+  for (const [key, messages] of Object.entries(expected.transcriptCuts)) {
+    const cut = Number(key)
+    assert.deepEqual(units.transcriptAt(state, cut), messages, `transcript at cut ${cut} must match the frozen prefix`)
   }
+  // Cuts on both sides of the splice/append pair, of an attempt and its turn end, and beyond the end.
+  assert.deepEqual(Object.keys(expected.transcriptCuts).map(Number).sort((a, b) => a - b),
+    [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, log.length])
 })
 
 test('the work read reports the observed log end, not a fold position it never saw', () => {
@@ -232,8 +109,7 @@ test('the work read reports the observed log end, not a fold position it never s
   // must not create state just to remember where the log ended. The caller's
   // observed cursor is therefore the read's `throughSeq`.
   const atEnd = units.tasksAndActivityAt(state, ctx, SESSION, false, log.at(-1).seq)
-  const folded = projectSession(ctx, log, SESSION, false)
-  assert.deepEqual(atEnd, folded)
+  assert.deepEqual(atEnd, expected.workCases[0])
 
   const empty = fold(units.workDefinition, [])
   assert.equal(units.tasksAndActivityAt(empty, ctx, SESSION, false, -1).activity.throughSeq, -1)
@@ -248,13 +124,8 @@ test('the transcript unit answers receipts without reading the log', () => {
   ]
   const state = fold(units.transcriptDefinition, log)
 
-  assert.deepEqual(units.receiptFrom(state, SESSION, 'r1'), {
-    receipt: { sessionId: SESSION, requestId: 'r1', messageId: 'u1', acceptedSeq: 0 },
-    text: 'hello', uploadIds: ['up-1'],
-  })
+  assert.deepEqual(units.receiptFrom(state, SESSION, 'r1'), expected.receipt.expected)
   assert.equal(units.receiptFrom(state, SESSION, 'missing'), null)
-  // The receipt query must agree with the log-scanning implementation it replaces.
-  assert.deepEqual(units.receiptFrom(state, SESSION, 'r1'), receiptIn(log, SESSION, 'r1'))
 })
 
 test('the two units fold the same log identically whether it starts cold or warm', () => {
@@ -287,26 +158,26 @@ test('both units register on the native registry and serve their state through s
   const workState = restored.checkpoint.ourfairyWork
   assert.equal(transcriptState.ver, units.transcriptDefinition.stateVersion)
   assert.equal(workState.ver, units.workDefinition.stateVersion)
-  assert.deepEqual(units.transcriptAt(transcriptState.val), transcript(log, SESSION))
+  assert.deepEqual(units.transcriptAt(transcriptState.val), expected.transcriptLog.messages)
   assert.equal(typeof registry.stateOf, 'function')
   assert.equal(disposers.length, 2)
   for (const dispose of disposers) dispose()
 })
 
-test('the transcript read at a cut keeps the old first-appearance order, not seq order', () => {
-  // A message appended before the message spliced later: the old Map fold keeps
+test('the transcript read at a cut keeps the frozen first-appearance order, not seq order', () => {
+  // A message appended before the message spliced later: the old Map fold kept
   // each key's first insertion position, so the array order is not seq order.
   const log = [
     event(0, 'user/message', userMessage('u-first', 'appended first'), { surfaceOp: 'append' }),
     event(1, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [userMessage('u-second', 'queued later', { rpcId: 'r2' })] }),
-    event(2, 'assistant/message', { turn: 1, step: 1, message: assistantMessage('a1', 'reply'), stream: textStream('reply') }, { surfaceOp: 'append' }),
+    event(2, 'assistant/message', { turn: 1, step: 1, message: { id: 'a1', role: 'assistant', content: [{ type: 'text', text: 'reply' }], source: { kind: 'model' } }, stream: [] }, { surfaceOp: 'append' }),
     // Re-appending an existing id keeps its original position.
     event(3, 'user/message', userMessage('u-first', 'appended first'), { surfaceOp: 'append' }),
   ]
   const state = fold(units.transcriptDefinition, log)
   const rows = units.transcriptAt(state, Infinity)
 
-  assert.deepEqual(rows.map(row => row.messageId), transcript(log, SESSION).map(row => row.messageId))
+  assert.deepEqual(rows, expected.firstAppearance.messages)
   assert.deepEqual(rows.map(row => row.messageId), ['u-first', 'u-second', 'a1'])
   assert.equal(rows[0].seq, 3, 'the re-appended row keeps its position and takes the later seq')
 })

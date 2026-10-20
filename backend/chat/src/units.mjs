@@ -281,8 +281,9 @@ function reportState(taskId, state) {
 
 /**
  * One activity transition over the task snapshot after `event` — the state
- * machine from `activity.mjs`, carried as data rather than closure variables so
- * the registry can checkpoint it. Mutates the copy it is handed.
+ * machine the replaced per-read activity fold implemented, carried as data
+ * rather than closure variables so the registry can checkpoint it. Mutates the
+ * copy it is handed.
  */
 function visitActivity(activity, sessionId, event, state) {
   const data = event.data
