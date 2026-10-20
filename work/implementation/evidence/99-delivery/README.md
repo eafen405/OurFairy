@@ -6,7 +6,8 @@
 > 分支 `ticket/99-delivery`；开工时 `integration/spec-73` tip `d73f88f`。实现提交
 > `13a75f2`（投递行与窄运行时），随后合入 `integration/spec-73` tip `0a8f2de`
 > （#98 的 peer 范围），合并提交 `9da8211`；`6ad72b4` 跟随文件移动修正决策文档链接；
-> 本证据与索引在随后一个提交。
+> `158ab53`、`be3813f` 记录证据。收尾时 tip 又前进到 `b6086e0`（#100 群组行），合并提交
+> `827a022`，bundle 两文件与身份消费者测试按语义保留双方（见下「与并行票的合并」）。
 
 ## 改了什么
 
@@ -166,20 +167,26 @@ combo: 1 drift/missing entry
 ourfairy / dsh 两项 ok；rikkahub 为 `73-execution.md` 已记录的**外部漂移**（分支 tip
 `2d97ed14` ≠ `combo.json` 锁定 `460109d1`）。本票不改 `combo.json`、不动 rikkahub，故记录不修。
 
-证据提交 `158ab53` 后在干净树上最终复跑：
+合入 #100 之后（merge `827a022`，最终树）复跑：
 
 ```
 $ npm test
-ℹ tests 161 / suites 7 / pass 161 / fail 0 / duration_ms 102121.7
+（第一次）ℹ tests 162 / pass 161 / fail 1 —— 唯一失败是
+  tests/pdf-worker-cancel.test.mjs:123「临时目录未删除」，687ms
+$ node --test tests/pdf-worker-cancel.test.mjs
+✔ … 241ms   ℹ tests 1 / pass 1 / fail 0
+$ npm test
+ℹ tests 162 / suites 7 / pass 162 / fail 0 / duration_ms 111539.7
 
 $ npm run combo:verify
-ourfairy  … 158ab53a7c4986c0  ok (worktree is based on the integration tip)
+ourfairy  … 827a0227179ed8e7  ok (worktree is based on the integration tip)
 dsh       …  ok
 rikkahub  …  MISMATCH
 combo: 1 drift/missing entry
 ```
 
-（全量耗时从 72s 到 102s 的差异来自同机并行负载；两次都是 161/161。）
+> 唯一失败是 `73-execution.md` 已记录的 `pdf-worker-cancel` 负载抖动：单独重跑 1/1 通过
+> （241ms），全量复跑 162/162。与投递行、群组行无关。
 
 包内容与窄接口的静态核对：
 
