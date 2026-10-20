@@ -76,13 +76,20 @@ test('the shipped composition activates the configured product rows and their se
 const INVALID_CONFIGS = [
   { row: 'spaces', config: { root: 42 }, field: '$.root', why: 'root is a number instead of a string' },
   { row: 'identity', config: { sessionTtlDays: 30 }, field: '$.path', why: 'path is missing' },
+  {
+    row: 'identity',
+    config: home => ({ path: join(home, 'identity-override.sqlite'), phaethonName: 42 }),
+    field: '$.phaethonName',
+    why: 'phaethonName is a number instead of a string',
+  },
   { row: 'attachments', config: {}, field: '$.root', why: 'root is missing' },
 ]
 
 for (const scenario of INVALID_CONFIGS) {
   test(`an invalid ${scenario.row} config fails at load and names the row and ${scenario.field}`, async () => {
     const home = freshHome()
-    const overlay = writeOverlay(home, [{ id: scenario.row, config: scenario.config }], `${scenario.row}.patch.yml`)
+    const config = typeof scenario.config === 'function' ? scenario.config(home) : scenario.config
+    const overlay = writeOverlay(home, [{ id: scenario.row, config }], `${scenario.row}.patch.yml`)
     const { run, report } = await probe(home, { overlays: [overlay], report: `${scenario.row}.json` })
 
     // The boot exits non-zero before readiness: no request is ever served.
