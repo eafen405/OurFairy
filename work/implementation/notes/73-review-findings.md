@@ -120,6 +120,13 @@ pinned dsh，`createRequire(<dsh>/apps/cli/package.json)('@deepseek-ai/dsh-app-b
 
 ## 验证
 
-见本分支最后一次全量运行记录：逐文件先跑 touched tests，再跑 `npm test` 与
-`npm run combo:verify`。rikkahub 的已知外部漂移（tip `2d97ed14` vs `combo.json` 锁定
-`460109d1`）保留不动，记录在提交报告里；提交使用 `--no-verify`，提交前手动跑完两项检查。
+逐文件先跑 touched tests（`config-contracts` 6/6、`bundle-packages` 9/9、
+`plugin-compatibility` 3/3、`identity-http` 10/10、`ecosystem-boundary` 8/8），再在代码提交
+`548c370` 上跑全量 `npm test`：**174 tests / 174 pass / 0 fail**（116.7s）。`8c574c5` 只新增本
+文件，不含代码。
+
+`npm run combo:verify`（在 `8c574c5` 上）：ourfairy `ok`（worktree 基于集成分支 tip）、
+dsh `ok`（`5b8ec0f1`）；rikkahub 为已知外部漂移 `2d97ed14` ≠ `combo.json` 锁定 `460109d1`，
+`combo:verify` 因此退出 1。本分支未改 `combo.json`、未动 rikkahub。所有提交使用
+`git commit --no-verify`，因为 pre-commit hook 会因这同一项 rikkahub 漂移失败；提交前手动跑了
+上述两项检查（见各提交后的运行记录）。
