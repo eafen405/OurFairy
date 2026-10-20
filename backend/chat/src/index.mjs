@@ -2,7 +2,7 @@
 import { postHandler } from '@ourfairy/dsh-identity/http'
 import { RemoteChat } from './service.mjs'
 import { SessionRuntime } from './runtime.mjs'
-import { installDelivery } from './delivery.mjs'
+import { ChatRuntimeFacade } from './runtime-facade.mjs'
 import { installJobs } from './jobs.mjs'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 
@@ -10,8 +10,8 @@ export const name = 'ourfairy-chat'
 export const inject = ['webServer', 'connection', 'ourfairySessions', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'identity', 'tools', 'sessionPersistence', 'jobs']
 export function apply(ctx) {
   const runtime = new SessionRuntime(ctx)
+  new ChatRuntimeFacade(ctx, runtime)
   const chat = new RemoteChat(ctx, runtime)
-  installDelivery(ctx, runtime)
   const { jobOutput, jobStop } = installJobs(ctx, runtime)
   const register = (path, handle, respond) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,
     handler: postHandler({ fence: request => ctx.connection.fence(request), HttpError: SessionScopeError,

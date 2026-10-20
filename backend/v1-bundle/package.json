@@ -18,7 +18,8 @@
     "@ourfairy/dsh-speech": "file:../speech",
     "@ourfairy/dsh-search": "file:../search",
     "@ourfairy/dsh-attachments": "file:../attachments",
-    "@ourfairy/dsh-spaces": "file:../spaces"
+    "@ourfairy/dsh-spaces": "file:../spaces",
+    "@ourfairy/dsh-delivery": "file:../delivery"
   },
   "exports": {
     "./package.json": "./package.json",

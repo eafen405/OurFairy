@@ -228,6 +228,11 @@
     - id: chat
       name: '@ourfairy/dsh-chat'
 
+    # Peer delivery as its own row: the deliver_message tool and durable
+    # delivery coordination/recovery over the chat runtime's narrow service.
+    - id: delivery
+      name: '@ourfairy/dsh-delivery'
+
     # Phaethon's shared-configuration gateway: provider routes, the shared model
     # selection and the ASR connection, persisted through the row settings above.
     - id: gateway

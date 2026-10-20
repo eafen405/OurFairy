@@ -1,0 +1,26 @@
+{
+  "name": "@ourfairy/dsh-delivery",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OurFairy peer delivery as its own row: the deliver_message tool, its durable coordination rows and restart recovery over the chat runtime's narrow service.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "locale/*.json"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-tools": "^0.2.1-alpha.2",
+    "@ourfairy/dsh-attachments": "^0.1.0",
+    "@ourfairy/dsh-identity": "^0.1.0",
+    "@ourfairy/dsh-sessions": "^0.1.0"
+  }
+}
