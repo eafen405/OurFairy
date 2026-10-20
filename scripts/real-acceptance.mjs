@@ -6,7 +6,7 @@
  * the smallest calls the acceptance matrix requires of external services:
  *
  *   1. one real MiniMax text turn through the product chat route, on the
- *      combination's shared selection (`minimax-cn` / `MiniMax-M3.1-Flash-Preview`);
+ *      combination's shared selection (`minimax-cn` / `MiniMax-M3.1-Flash`);
  *   2. the PDF scan-page path, where the model asks for a page render and the
  *      resulting tool result carries a real image (`scripts/pdf-flash-smoke.mjs`);
  *   3. one real SiliconFlow ASR transcription, on speech synthesized with the

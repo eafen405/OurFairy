@@ -378,7 +378,7 @@ test('a profile declaring only the bundle installs, boots every product row, and
     assert.ok(report.model !== null && report.model !== undefined,
       `the boot report must carry the composed model selection: ${JSON.stringify(report.model)}`)
     assert.equal(report.model.provider, 'minimax-cn')
-    assert.equal(report.model.model, 'MiniMax-M3.1-Flash-Preview')
+    assert.equal(report.model.model, 'MiniMax-M3.1-Flash')
     assert.equal(report.model.reasoningEffort, 'max')
     assert.equal(report.model.selection, 'agentDefaultModel.currentSelection()')
 

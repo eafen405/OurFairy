@@ -33,6 +33,11 @@ proposal, while admitted inputs stay downloadable. New sends recheck complete
 status, owner/session, expiry and the shared model's image capability. A retry of
 an admitted request resolves its native request identity first.
 
+The upload protocol is deliberately product-owned: resumable chunks, expiry and
+original-byte download are not offered by native `fileUploads`. The rationale and
+the tests that would reveal a change are in the
+[native capability dependency record](../../docs/decisions/native-capability-dependencies.md#attachment-upload).
+
 `/chat/send` accepts ordered `uploadIds` (default empty). Request conflict compares both text and ordered IDs; pending client storage must retain both. Empty text is valid with an attachment. Public transcript attachment rows are `{index,type,name,mime,bytes}` (type 1 file, 2 image).
 
 Generic files project through the native text-handle path; images use provider

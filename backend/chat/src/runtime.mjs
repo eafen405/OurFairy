@@ -1,9 +1,9 @@
 /** The live chat session: the resumed native Agent plus the state a projection publishes. */
 import { randomUUID } from 'node:crypto'
-import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
+import { SessionHistoryGapError, createSessionHistorySeam } from '@deepseek-ai/dsh-agent/session-history'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
-import { tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.mjs'
+import { attemptText, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.mjs'
 import { FAIRY_PERSONA } from './persona.mjs'
 import { SessionQueues } from './queues.mjs'
 
@@ -15,7 +15,6 @@ class LiveSession {
   generation = randomUUID()
   version = 0
   durableThroughSeq = -1
-  attempt = null
   settledAttempt = null
   stopping = false
   error = null
@@ -54,7 +53,13 @@ export class SessionRuntime {
   #queues = new SessionQueues()
   /** Non-null while one shared-configuration write is in flight (admission barrier). */
   #configWrite = null
-  constructor(ctx) { this.ctx = ctx }
+  /** Native Assistant fold and durable event cursor; one seam per runtime. */
+  #history
+  constructor(ctx) {
+    this.ctx = ctx
+    this.#history = createSessionHistorySeam(ctx)
+    ctx.effect(() => () => this.#history[Symbol.dispose](), 'ourfairy-chat: native session history seam')
+  }
 
   live(sessionId) { return this.#live.get(sessionId) }
 
@@ -140,16 +145,12 @@ export class SessionRuntime {
         agentCtx.on('agent/assistant-stream', ({ frame }) => {
           if (frame.type === 'start') {
             state.error = null
-            state.attempt = { attemptId: frame.attemptId, revision: frame.revision, assembler: new BlockAssembler() }
-          } else if (frame.type === 'chunk' && state.attempt?.attemptId === frame.attemptId) {
-            state.attempt.assembler.push(frame.chunk)
-            state.attempt.revision = frame.revision
           } else if (frame.type === 'end') {
             // Native settlement is the exact formal seq; no text/content identity inference.
             state.settledAttempt = frame.outcome.kind === 'committed'
               ? { attemptId: frame.attemptId, seq: frame.outcome.seq } : null
-            state.attempt = null
           }
+          // The attempt's text comes from the native history seam, not a second fold here.
           changed()
         })
         agentCtx.on('agent/error', ({ error }) => { state.error = error?.message ?? String(error); changed() })
@@ -199,6 +200,42 @@ export class SessionRuntime {
 
   /** One safe one-shot read of a session's event stream, shared with attachments. */
   events(sessionId) { return readSessionEvents(this.ctx, sessionId) }
+
+  /**
+   * Read the native Assistant baseline once: the live attempt's authoritative
+   * text, or null once the fold lost continuity (a withdrawn attempt is correct,
+   * a concatenation of two attempts is not).
+   */
+  attemptOf(state) {
+    const { baseline, needsResync } = this.#history.assistantStream(state.sessionId)
+    const attempt = needsResync ? undefined : baseline.activeAttempt
+    if (attempt === undefined) return null
+    return { attemptId: attempt.attemptId, revision: baseline.revision, text: attemptText(attempt.stream) }
+  }
+
+  /**
+   * One contiguous read of this session's durable events.
+   *
+   * `readSessionEvents` observes an exact append-only prefix, so its seqs are
+   * dense. The native cursor still owns the judgement: a read that skips a seq
+   * is reopened once from a fresh observation rather than folded as continuous
+   * history. A second gap is a defect in the read, not a recoverable cut.
+   */
+  async contiguousEvents(sessionId) {
+    for (let reopen = 0; reopen < 2; reopen++) {
+      const read = await this.events(sessionId)
+      const cursor = this.#history.eventCursor(-1)
+      try {
+        for (const event of read.events) cursor.accept(event.seq)
+      } catch (error) {
+        if (error instanceof SessionHistoryGapError) continue
+        throw error
+      }
+      if (cursor.cursor !== read.cursor) continue
+      return read
+    }
+    throw new Error(`chat: session "${sessionId}" could not be read as one contiguous event run`)
+  }
 
   /**
    * One page's event slice only. A seeded window already holds the log, so this
@@ -289,7 +326,7 @@ export class SessionRuntime {
 
   /** One log read, merged with the commits that arrived while it was in flight. */
   async #seedWindow(state, window) {
-    const { events } = await this.events(state.sessionId)
+    const { events } = await this.contiguousEvents(state.sessionId)
     const seeded = [...events]
     let nextSeq = (seeded.at(-1)?.seq ?? -1) + 1
     for (const event of window.buffer) {
@@ -326,7 +363,7 @@ export class SessionRuntime {
    */
   async projection(state, range) {
     const window = await this.#windowOf(state)
-    const attempt = state.attempt
+    const attempt = this.attemptOf(state)
     const cursor = this.cursorOf(state)
     const throughSeq = range.throughSeq ?? cursor
     const fromSeq = range.fromSeq ?? Math.max(0, throughSeq - range.maxEvents + 1)
@@ -342,8 +379,7 @@ export class SessionRuntime {
       throughSeq, fromSeq, events: window.events.slice(fromSeq), hasMore: fromSeq > 0, beforeSeq: fromSeq > 0 ? fromSeq : null,
       tasks, activity,
       messages: transcriptAt(transcriptState, Infinity, fromSeq),
-      attempt: attempt === null ? null : { attemptId: attempt.attemptId, revision: attempt.revision,
-        text: attempt.assembler.interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('') },
+      attempt,
       settledAttempt: state.settledAttempt,
       replyStatus: state.status === 'idle' ? 0 : state.stopping ? 2 : 1, error: state.error }
   }

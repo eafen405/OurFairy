@@ -90,7 +90,7 @@ function minimaxRoute(baseURL, extra = {}) {
     api: 'anthropic-messages',
     baseURL,
     apiKeyEnv: 'MINIMAX_API_KEY',
-    models: [{ id: 'MiniMax-M3.1-Flash-Preview', name: 'MiniMax M3.1 Flash Preview', contextWindow: 200000, input: ['text', 'image'] }],
+    models: [{ id: 'MiniMax-M3.1-Flash', name: 'MiniMax M3.1 Flash', contextWindow: 200000, input: ['text', 'image'] }],
     ...extra,
   }
 }
@@ -144,7 +144,7 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     }
 
     const initial = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
-    assert.deepEqual(initial.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview', reasoningEffort: 'max' })
+    assert.deepEqual(initial.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'max' })
     assert.equal(initial.selectionApplies, 'next-turn')
     assert.deepEqual(initial.saved, { selection: false, routes: false, asr: false })
     assert.deepEqual(initial.editable, { selection: true, routes: true, asr: true })
@@ -156,7 +156,7 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     assert.equal(deployment.editable, true, 'the deployment MiniMax route is editable')
     assert.equal(deployment.credential.ref, 'MINIMAX_CN_API_KEY')
     assert.equal(deployment.credential.configured, true, 'the launching environment supplies the reference')
-    assert.equal(deployment.models[0].id, 'MiniMax-M3.1-Flash-Preview')
+    assert.equal(deployment.models[0].id, 'MiniMax-M3.1-Flash')
     assert.equal(initial.asr.credential.ref, 'VOICE_API_KEY')
 
     const saved = await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute('https://api.minimax.cn/anthropic') })
@@ -164,25 +164,25 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     assert.equal(saved.route.declared, true)
     assert.equal(saved.route.credential.ref, 'MINIMAX_API_KEY')
     assert.equal(saved.route.credential.configured, false, 'an unset reference reports unconfigured instead of inventing a key')
-    assert.deepEqual(saved.route.models.map(model => model.id), ['MiniMax-M3.1-Flash-Preview'])
+    assert.deepEqual(saved.route.models.map(model => model.id), ['MiniMax-M3.1-Flash'])
     assert.deepEqual(saved.route.models[0].input, ['text', 'image'])
     assert.equal(saved.route.api, 'anthropic-messages')
     assert.equal(saved.route.baseURL, 'https://api.minimax.cn/anthropic')
 
     // Omitting the effort clears the profile override, which reveals the
     // composition's own `max` default; the echo reports the effective value.
-    const selected = await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
-    assert.deepEqual(selected.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview', reasoningEffort: 'max' })
+    const selected = await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash' } })
+    assert.deepEqual(selected.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'max' })
     assert.equal(selected.applies, 'next-turn')
     const lowered = await httpJson(port, '/gateway/selection', { token: admin,
-      body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview', reasoningEffort: 'low' } })
+      body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'low' } })
     assert.equal(lowered.selection.reasoningEffort, 'low', 'an explicit effort is saved as given')
-    const restored = await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
+    const restored = await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash' } })
     assert.equal(restored.selection.reasoningEffort, 'max', 'clearing the override falls back to the composition default')
     // Persist a non-default effort so the restart assertion proves the saved
     // row survives, rather than the composition default being re-read.
     await httpJson(port, '/gateway/selection', { token: admin,
-      body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview', reasoningEffort: 'low' } })
+      body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'low' } })
 
     const selectedRoute = await httpJson(port, '/gateway/route/delete', { token: admin, body: { provider: 'minimax-cn' }, expect: false })
     assert.equal(selectedRoute.status, 409)
@@ -202,7 +202,7 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
   try {
     const admin = await signIn(restarted.port)
     const after = (await httpJson(restarted.port, '/gateway/read', { token: admin, body: {} })).gateway
-    assert.deepEqual(after.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview', reasoningEffort: 'low' },
+    assert.deepEqual(after.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'low' },
       'the saved selection survives a restart')
     assert.deepEqual(after.saved, { selection: true, routes: true, asr: true })
     assert.ok(after.routes.some(route => route.provider === 'minimax-cn'), 'the saved route survives a restart')
@@ -262,7 +262,7 @@ test('the shared selection applies from the next turn, and a running reply keeps
       text: 'first request' } })
     await waitForRunning(port, admin, session.id)
 
-    const switched = await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
+    const switched = await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash' } })
     assert.equal(switched.applies, 'next-turn')
 
     const projection = await settle(port, admin, session.id)
@@ -272,7 +272,7 @@ test('the shared selection applies from the next turn, and a running reply keeps
     // continuation after the tool pause; the durable header records the same.
     const models = double.server.requests.map(request => request.body?.model)
     assert.ok(models.length >= 2, `each model step names its model; got ${JSON.stringify(models)}`)
-    assert.deepEqual([...new Set(models)], ['MiniMax-M3.1-Flash-Preview'],
+    assert.deepEqual([...new Set(models)], ['MiniMax-M3.1-Flash'],
       `a turn that began before the switch keeps its original model, including after the tool pause; got ${JSON.stringify(models)}`)
 
     const inUse = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
@@ -282,7 +282,7 @@ test('the shared selection applies from the next turn, and a running reply keeps
     // behavior is a plain success, so this turn makes exactly one request.
     await httpJson(port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'turn-two', text: 'second request' } })
     await settle(port, admin, session.id)
-    assert.equal(double.server.requests.at(-1).body?.model, 'MiniMax-M3.1-Flash-Preview',
+    assert.equal(double.server.requests.at(-1).body?.model, 'MiniMax-M3.1-Flash',
       `the next turn must adopt the saved selection; got ${JSON.stringify(double.server.requests.map(request => request.body?.model))}`)
 
     // A second session and a session that only exists on disk (never resumed in
@@ -290,7 +290,7 @@ test('the shared selection applies from the next turn, and a running reply keeps
     const { session: second } = await httpJson(port, '/sessions/create', { token: admin, body: {} })
     await httpJson(port, '/chat/send', { token: admin, body: { sessionId: second.id, requestId: 'second-session', text: 'another session' } })
     await settle(port, admin, second.id)
-    assert.equal(double.server.requests.at(-1).body?.model, 'MiniMax-M3.1-Flash-Preview',
+    assert.equal(double.server.requests.at(-1).body?.model, 'MiniMax-M3.1-Flash',
       'a session opened after the switch adopts the saved selection')
 
     // Queued input: accepted while a reply runs, executed by a later turn, which
@@ -301,7 +301,7 @@ test('the shared selection applies from the next turn, and a running reply keeps
       const adminAgain = await signIn(cold.port)
       await httpJson(cold.port, '/chat/send', { token: adminAgain, body: { sessionId: second.id, requestId: 'cold-turn', text: 'after restart' } })
       await settle(cold.port, adminAgain, second.id)
-      assert.equal(double.server.requests.at(-1).body?.model, 'MiniMax-M3.1-Flash-Preview',
+      assert.equal(double.server.requests.at(-1).body?.model, 'MiniMax-M3.1-Flash',
         'a session recovered from disk after a restart adopts the saved selection')
     } finally {
       await stop(home)
@@ -335,7 +335,7 @@ test('the attachment capability check follows the selection the next turn will e
     // 2. An image accepted under an image-capable selection, but queued past a
     // switch to text-only, must fail its turn loudly rather than be silently
     // projected to text by the native adapter.
-    await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
+    await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash' } })
     const queuedUpload = await uploadImage(port, admin, session.id)
     await httpJson(port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'running', text: 'hold' } })
     await waitForRunning(port, admin, session.id)
@@ -365,7 +365,7 @@ test('a route a running reply uses refuses the change, and the retry succeeds on
   try {
     const admin = await signIn(port)
     await httpJson(port, '/gateway/route', { token: admin, body: minimaxRoute(`${double.server.baseURL}/v1`) })
-    await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
+    await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash' } })
     const { session } = await httpJson(port, '/sessions/create', { token: admin, body: {} })
     await httpJson(port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'running', text: 'first request' } })
     await waitForRunning(port, admin, session.id)
@@ -391,8 +391,8 @@ test('a route a running reply uses refuses the change, and the retry succeeds on
 test('a route saved from the phone keeps the deployment retry policy the draft does not own', async () => {
   const home = freshHome()
   // The double answers one rate limit then succeeds: only a route that still
-  // carries the deployment's `retryPolicy` recovers within the turn.
-  // `repeatLast` lets the second boot of this case reuse the same double.
+  // carries the deployment's `retryPolicy` recovers within the turn. The
+  // sequence covers the two boots of this case, so no replay option is needed.
   const double = await modelDouble({ sequence: ['rate_limit', 'success', 'rate_limit', 'success'], successText: 'recovered after the save' })
   const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
   try {
@@ -442,7 +442,7 @@ test('a model-scoped edit is refused only while a reply still uses that model', 
     const twoModels = minimaxRoute(`${double.server.baseURL}/v1`)
     twoModels.models = [...twoModels.models, { id: 'MiniMax-other', name: 'Other', input: ['text'] }]
     await httpJson(port, '/gateway/route', { token: admin, body: twoModels })
-    await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash-Preview' } })
+    await httpJson(port, '/gateway/selection', { token: admin, body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash' } })
     const { session } = await httpJson(port, '/sessions/create', { token: admin, body: {} })
     await httpJson(port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'scoped', text: 'first request' } })
     await waitForRunning(port, admin, session.id)

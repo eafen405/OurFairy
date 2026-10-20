@@ -144,6 +144,10 @@ splice 与 turn 结束事件；注册表仍在时补充输出、进度与可用�
 0 不可用、1 可用。`report.status`：0 无计划报告、1 待处理、2 执行中、3 完成、4 取消、
 5 失败、6 未知。
 
+`/chat/jobs/output` 与 `/chat/jobs/stop` 保留为产品适配层：原生 `jobController` 是
+进程内的 Typert 传输，不提供本投影的耐久任务折叠；保留理由与漂移信号见
+[原生能力依赖记录](../../docs/decisions/native-capability-dependencies.md#job-output-and-stop)。
+
 ## 活动
 
 投影的 `activity` 是呈现与通知共用的唯一后端摘要。`status`：0 未知、1 静默、2 活跃。

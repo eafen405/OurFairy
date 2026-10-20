@@ -50,7 +50,8 @@ const taskKey = (generation, id) => `${generation}/${id}`
 
 const messageText = message => (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
 const attachmentsOf = message => (message.source?.attachments ?? []).map((item, index) => ({ index, type: item.image ? 2 : 1, name: item.name, mime: item.mime, bytes: item.original.bytes }))
-const attemptText = stream => assembleAssistantStream(stream).interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('')
+/** The interrupted text blocks of one native Assistant stream, shared with the live attempt read. */
+export const attemptText = stream => assembleAssistantStream(stream).interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('')
 
 /* ------------------------------------------------------------- transcript */
 

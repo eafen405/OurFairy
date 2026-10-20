@@ -13,8 +13,8 @@ import { test } from 'node:test'
 import { createRequire, registerHooks } from 'node:module'
 import { deflateSync } from 'node:zlib'
 import { mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { repoRoot } from './helpers/backend.mjs'
 
@@ -122,7 +122,7 @@ test('a cancelled PDF worker reports the numeric failure, removes its directory,
       controller.abort(new Error('user stopped the reply'))
       const result = await running
       assert.equal(result.status, 3, `a cancelled worker is a numeric failure: ${JSON.stringify(result)}`)
-      assert.equal(result.error, 'worker-unavailable', `cancellation keeps the pre-service error code: ${JSON.stringify(result)}`)
+      assert.equal(result.error, 'resource-limit', `a service-terminated worker is a resource limit: ${JSON.stringify(result)}`)
       assert.ok(Date.now() - started < 8000, 'cancellation must not wait for the worker deadline')
       assert.deepEqual(processesMentioning(path), [], 'the cancelled worker must not survive its call')
     } finally {
@@ -137,4 +137,26 @@ test('a cancelled PDF worker reports the numeric failure, removes its directory,
     else process.env.TMPDIR = previousTmp
     rmSync(scratch, { recursive: true, force: true })
   }
+})
+
+test('the PDF worker asks the service for a bounded stderr collector', async () => {
+  // The service has no discard mode: an unsupported string is collected with no
+  // cap. Memory growth is not observable from outside, so the request itself is
+  // the seam under test — the same kind of narrow seam as the network profile.
+  const { installPdf } = await import(pathToFileURL(join(repoRoot, 'backend/attachments/src/pdf.mjs')).href)
+  const agent = { session: {}, options: {} }
+  let registered
+  let spec
+  installPdf({
+    subprocess: { spawn: value => { spec = value; throw new Error('spawn captured') } },
+    llm: {}, on() {},
+    agents: { list: () => [{ ...agent, ctx: { tools: { register: definition => { registered = definition } } } }] },
+    attachments: { readFileStream: async function* () { yield costlyPdf() } },
+  }, { qualifiedFile: async () => ({ mime: 'application/pdf', name: 'spec.pdf', original: {} }) })
+  assert.equal(registered?.name, 'pdf_read_pages')
+  await assert.rejects(registered.execute({ file_path: 'qualified.pdf', pages: [1] }, { agent }), /spawn captured/)
+  assert.equal(typeof spec.stdio.stderr, 'object',
+    `stderr must be a bounded collector, not ${JSON.stringify(spec.stdio.stderr)}`)
+  assert.ok(Number.isSafeInteger(spec.stdio.stderr.maxBytes) && spec.stdio.stderr.maxBytes > 0,
+    `stderr needs a positive in-memory cap; got ${JSON.stringify(spec.stdio.stderr)}`)
 })

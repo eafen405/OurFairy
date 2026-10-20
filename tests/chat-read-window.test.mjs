@@ -87,7 +87,19 @@ function makeWorld() {
     return session
   }
 
+  const listeners = new Map()
+  const emitGlobal = (name, payload) => {
+    for (const handler of listeners.get(name) ?? []) handler(payload)
+  }
   const ctx = {
+    // The native history seam observes agent frames through the host context.
+    on(name, handler) {
+      const list = listeners.get(name) ?? []
+      list.push(handler)
+      listeners.set(name, list)
+      return () => listeners.set(name, list.filter(item => item !== handler))
+    },
+    effect(execute) { return execute() },
     ourfairySessions: { async read() {} },
     agentDefaultModel: { currentSelection: () => ({ provider: 'mock', model: 'mock' }) },
     agents: {
@@ -98,6 +110,12 @@ function makeWorld() {
           followup(message) { this.followups.push(message) },
           cancel() { this.cancelled = true } }
         setup(channel.api, agent)
+        const emit = channel.api.emit.bind(channel.api)
+        channel.api.emit = (name, ...args) => {
+          emit(name, ...args)
+          if (name === 'agent/assistant-stream') emitGlobal(name, { agent, frame: args[0].frame })
+          if (name === 'agent/disposed') emitGlobal(name, { agent })
+        }
         channels.set(resumeSessionId, channel)
         return agent
       },
@@ -137,15 +155,24 @@ async function openWorld(world, sessionId = SESSION) {
   return { runtime, state }
 }
 
+/** Dense revision/index counters per attempt: the native fold rejects a repeat. */
+const streamCursors = new Map()
 function startStream(world, attemptId = 'attempt-1') {
+  streamCursors.set(attemptId, { revision: 1, nextIndex: 0 })
   world.channel(SESSION).api.emit('agent/assistant-stream', { frame: { type: 'start', attemptId, revision: 1, turn: 1, step: 1 } })
 }
 function chunkStream(world, text, attemptId = 'attempt-1') {
-  world.channel(SESSION).api.emit('agent/assistant-stream', { frame: { type: 'chunk', attemptId, revision: 2, index: 0, time: 0,
-    chunk: { type: 'text-delta', index: 0, text } } })
+  const cursor = streamCursors.get(attemptId) ?? { revision: 1, nextIndex: 0 }
+  cursor.revision += 1
+  const index = cursor.nextIndex
+  cursor.nextIndex += 1
+  streamCursors.set(attemptId, cursor)
+  world.channel(SESSION).api.emit('agent/assistant-stream', { frame: { type: 'chunk', attemptId, revision: cursor.revision, index, time: 0,
+    chunk: { type: 'text-delta', index, text } } })
 }
 function endStream(world, seq, attemptId = 'attempt-1') {
-  world.channel(SESSION).api.emit('agent/assistant-stream', { frame: { type: 'end', attemptId, revision: 3, index: 0,
+  const cursor = streamCursors.get(attemptId) ?? { revision: 1, nextIndex: 0 }
+  world.channel(SESSION).api.emit('agent/assistant-stream', { frame: { type: 'end', attemptId, revision: cursor.revision + 1, index: 0,
     outcome: { kind: 'committed', eventType: 'assistant/message', seq } } })
 }
 

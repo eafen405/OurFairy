@@ -5,10 +5,11 @@ import { SessionRuntime } from './runtime.mjs'
 import { ChatRuntimeFacade } from './runtime-facade.mjs'
 import { installJobs } from './jobs.mjs'
 import { registerProjectionUnits } from './units.mjs'
+import { installSpillRead } from './spill-read.mjs'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 
 export const name = 'ourfairy-chat'
-export const inject = ['webServer', 'connection', 'ourfairySessions', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'identity', 'tools', 'sessionPersistence', 'jobs', 'sessionProjections']
+export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairySpaces', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'identity', 'tools', 'sessionPersistence', 'jobs', 'sessionProjections']
 export function apply(ctx) {
   // Every registered unit folds on the native event drive, once per session and
   // shared by every observer; `register` installs its own effect on this fiber.
@@ -17,6 +18,7 @@ export function apply(ctx) {
   new ChatRuntimeFacade(ctx, runtime)
   const chat = new RemoteChat(ctx, runtime)
   const { jobOutput, jobStop } = installJobs(ctx, runtime)
+  installSpillRead(ctx)
   const register = (path, handle, respond) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,
     handler: postHandler({ fence: request => ctx.connection.fence(request), HttpError: SessionScopeError,
       codePrefix: 'chat', internalMessage: 'remote chat request failed',

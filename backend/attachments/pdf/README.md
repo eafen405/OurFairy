@@ -33,14 +33,20 @@ reads at most five selected pages and returns at most 4,000 characters per page.
 The library's own decompression limits also report `resource-limit`.
 
 The worker runs under the native `ctx.subprocess` service: the module passes the
-bwrap/prlimit argv, the 10-second wall deadline as the spawn `signal`, `graceMs`
-and the 256 KiB stdout collect cap, and the service kills the whole range and
-proves it empty (`waitForExit`) before the module removes its temporary directory.
-The module keeps only its own budgets and the numeric result mapping. `done`
-reports exit facts rather than the killing signal, and `bwrap` turns a killed
-payload into `128+signal`: 152 (SIGXCPU from `--cpu=5`) and 137 (SIGKILL
-escalation or OOM) map to `resource-limit`; any other nonzero exit is
+bwrap/prlimit argv, the 10-second wall deadline as the spawn `signal`, `graceMs`,
+the 256 KiB stdout collect cap and a small bounded, discarded stderr collector.
+The service kills the whole range; the module awaits `waitForExit()` before
+removing its temporary directory, and the cancellation test asserts that no
+worker survives. The module keeps only its own budgets
+and the numeric result mapping: a worker the service terminates (deadline or
+caller stop, reported as SIGTERM) is `resource-limit`; `bwrap` turns a killed
+payload into `128+signal`, so 152 (SIGXCPU from `--cpu=5`) and 137 (SIGKILL
+escalation or OOM) also map to `resource-limit`; any other nonzero exit is
 `worker-unavailable`.
+
+The service is a load-bearing dsh dependency: its row, the behavior relied on and
+the tests that fail if it changes are in the
+[native capability dependency record](../../../docs/decisions/native-capability-dependencies.md#pdf-worker-ctxsubprocess).
 
 These are product demo budgets, not a promise of perfect complex-layout or OCR
 extraction. Encrypted PDFs are rejected even when an empty password could open

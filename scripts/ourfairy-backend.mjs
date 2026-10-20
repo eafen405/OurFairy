@@ -36,7 +36,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
-import { readCombo, repoPath, verifyBundlePackages, verifyCombination, verifyPluginCompatibility } from './combo.mjs'
+import { readCombo, repoPath, verifyBundlePackages, verifyCombination, verifyInstalledNativeCapabilities, verifyPluginCompatibility } from './combo.mjs'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -846,6 +846,19 @@ function commandDoctor(layout, options) {
     must(result.failures.length === 0, result.failures.join('; '))
     return `${result.checked.length} installed product package(s) compatible with dsh ${result.dshVersion}: `
       + result.checked.join(', ')
+  })
+  check('native capabilities', () => {
+    // The installed profile, read through dsh's own loader: what a boot would
+    // mount, not a second parse of the bundle this launcher also reads.
+    const dsh = resolveDsh(options)
+    const result = verifyInstalledNativeCapabilities({
+      binName: 'dsh',
+      bundlePackage: BUNDLE_PACKAGE,
+      installAnchor: join(dsh.dir, 'apps', 'cli', 'package.json'),
+      profileDir: layout.profileDir,
+    })
+    must(result.failures.length === 0, result.failures.join('; '))
+    return result.checked.join(', ')
   })
   check('model double', () => {
     const base = process.env.OURFAIRY_MINIMAX_BASE_URL ?? process.env.DEEPSEEK_BASE_URL

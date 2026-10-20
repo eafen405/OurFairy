@@ -43,10 +43,12 @@ function persistenceOf(events) {
 }
 
 const stateOf = (overrides = {}) => ({ sessionId: 'session-1', window: null, ...overrides })
+/** Paging touches only the persistence seam; the native history seam is constructed, never read. */
+const contextOf = persistence => ({ sessionPersistence: persistence, on: () => () => {}, effect: execute => execute() })
 
 test('a page asks the native handle for exactly its own range', async () => {
   const persistence = persistenceOf(log(100))
-  const runtime = new SessionRuntime({ sessionPersistence: persistence })
+  const runtime = new SessionRuntime(contextOf(persistence))
   const events = await runtime.pageEvents(stateOf(), 40, 64)
 
   assert.deepEqual(events.map(event => event.seq), Array.from({ length: 24 }, (_, index) => 40 + index))
@@ -55,7 +57,7 @@ test('a page asks the native handle for exactly its own range', async () => {
 })
 
 test('the page cut comes from the seeded window or the live session end', () => {
-  const runtime = new SessionRuntime({ sessionPersistence: persistenceOf(log(100)) })
+  const runtime = new SessionRuntime(contextOf(persistenceOf(log(100))))
 
   assert.equal(runtime.cursorOf({ session: { seq: 12 }, window: null }), 11,
     'before a seed the live session knows the observed end')
@@ -66,7 +68,7 @@ test('the page cut comes from the seeded window or the live session end', () => 
 
 test('a page slices a seeded window instead of reading the log again', async () => {
   const persistence = persistenceOf(log(100))
-  const runtime = new SessionRuntime({ sessionPersistence: persistence })
+  const runtime = new SessionRuntime(contextOf(persistence))
   const state = stateOf({ window: { events: log(100), nextSeq: 100, buffer: [] } })
   const events = await runtime.pageEvents(state, 10, 12)
 
@@ -76,7 +78,7 @@ test('a page slices a seeded window instead of reading the log again', async () 
 
 test('an empty page range reads nothing and returns no events', async () => {
   const persistence = persistenceOf(log(10))
-  const runtime = new SessionRuntime({ sessionPersistence: persistence })
+  const runtime = new SessionRuntime(contextOf(persistence))
   const events = await runtime.pageEvents(stateOf(), 0, 0)
 
   assert.deepEqual(events, [])
