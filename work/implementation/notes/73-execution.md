@@ -17,15 +17,28 @@
 | --- | --- |
 | #96 bundle 包集合权威 | 已完成并合入，已关闭 |
 | #97 并行传输边界文档 | 已完成并合入，已关闭 |
-| #98 产品包 dsh 兼容范围 | 本轮并行 |
-| #99 投递独立行 | 本轮并行 |
-| #100 群组独立行 | 本轮并行 |
-| #101 scoped provider 各自成行 | 本轮并行 |
-| #102 Config 与行 liveness | 待 #101 |
-| #103 单一模型权威 | 待 #102 |
-| #104 只声明 bundle 的 profile 验收 | 待 #98–#103 |
-| #105 overlay 行可寻址验收 | 待 #99–#102 |
-| #106 收口 | 待 #104/#105 |
+| #98 产品包 dsh 兼容范围 | 已完成并合入，已关闭 |
+| #99 投递独立行 | 已完成并合入，已关闭 |
+| #100 群组独立行 | 已完成并合入，已关闭 |
+| #101 scoped provider 各自成行 | 已完成并合入，已关闭 |
+| #102 Config 与行 liveness | 已完成并合入，已关闭 |
+| #103 单一模型权威 | 已完成并合入，已关闭 |
+| #104 只声明 bundle 的 profile 验收 | 已完成并合入，已关闭 |
+| #105 overlay 行可寻址验收 | 已完成并合入，已关闭 |
+| #106 收口 | 本轮完成 |
+
+## 收口状态（2026-10-20）
+
+- 代码合并 tip：`5d0a74f`（`fix/73-review` + #104 + #105 + `fix/73-final` 全部合入
+  `integration/spec-73`）；本文件的收口提交随后只改文档/证据。
+- 最终验证（`5d0a74f` 的合并树）：`npm test` 185 pass / 0 fail；`npm run combo:verify`
+  的 ourfairy/dsh 两项 ok，rikkahub 为外部漂移 `2d97ed14` ≠ 锁定 `460109d1`（未改
+  `combo.json`、未动 rikkahub）；`git diff --check 88c27b0...HEAD` 无输出。
+- 评审与修复记录：`work/implementation/notes/73-review-findings.md`；最终两轴评审与
+  收口证据：`work/implementation/evidence/106-closeout/README.md`。
+- 已知限制：真实模型/云服务、Android 构建与真机未执行（测试使用模型替身）；spaces
+  subpath 行（`@ourfairy/dsh-spaces/fs` 等）的 `readPluginMeta` 不读包根 locale，插件页
+  若需每行独立元数据再补 subpath locale exports；本 spec 的 locale 仅为最小元数据。
 
 ## 并行纪律
 

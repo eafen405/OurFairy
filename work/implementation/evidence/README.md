@@ -89,6 +89,7 @@
 | [103-model](103-model/README.md) | #103 共享模型初始声明只保留在 bundle，探针读取 `agentDefaultModel` |
 | [104-bundle-only](104-bundle-only/README.md) | #104 只声明 bundle 的 profile 可安装、启动并服务认证后的产品请求 |
 | [105-overlay](105-overlay/README.md) | #105 经 profile overlay 证明投递/群组/scoped provider 行可寻址、可替换，以及非法 config 的加载期失败 |
+| [106-closeout](106-closeout/README.md) | #106 版本组合、最终两轴评审、证据索引与子票收口 |
 
 ## 原生能力收敛（规格 #71）
 

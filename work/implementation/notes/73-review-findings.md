@@ -160,7 +160,7 @@ dsh `ok`（`5b8ec0f1`）；rikkahub 为已知外部漂移 `2d97ed14` ≠ `combo.
 | 6 | 探针注释称检查域是 bundle 贡献的产品行 | 改为组合树（bundle 与 overlay 行），仍排除探针自身与刻意 disabled 行 | `f0284ab` |
 | 7 | spaces README 声称任一 provider 可禁用而不影响 scope/其他 provider | 改写为实际依赖形状：各自成行、scope 保留，但禁用 fs/sandbox 会让依赖行等待，探针点名缺失服务/行，不挂原生 fallback | 本文件所在提交 |
 | 8 | 98-compat 证据仍写 bundle `dependencies` 判定与 8 个包 | 增加 2026-10-20 补记：现在判定已安装的 12 个产品包（10 声明 + bundle + probe），10 个 manifest 有 peers；旧 8/8 输出标为历史快照；本文件 F 项 8→10 | 本文件所在提交 |
-| 9 | #96「一包一行」措辞与 #101 冲突 | 见下「#96 措辞对齐」，评论文字待 Lead 发布；不改 #96 正文 | 本文件所在提交 |
+| 9 | #96「一包一行」措辞与 #101 冲突 | 见下「#96 措辞对齐」；评论已发布在 https://github.com/eafen405/OurFairy/issues/96#issuecomment-6290193596 ；不改 #96 正文 | 本文件所在提交 |
 | 10 | review-fix 轮改了 #72 的 `chat/src/runtime.mjs`（注释） | 见下「边界例外」，记录为注释-only 例外 | 本文件所在提交 |
 | 11 | 缺少最终评审轮记录；102 证据未提服务表 disabled 规则 | 本文件新增本节；102 证据补记服务表规则与 TTL 上限 | 本文件所在提交 |
 
@@ -184,7 +184,7 @@ dsh `ok`（`5b8ec0f1`）；rikkahub 为已知外部漂移 `2d97ed14` ≠ `combo.
 7. 非法 config 用例除字段路径外还断言 boot 日志含 loader 的 `invalid config`。`f0284ab`
 8. 105 证据的 SHA、用例数、全量数字与 direct-boot/fixture 措辞已按最终运行更新。文档提交
 
-### #96 措辞对齐（不修改 #96 正文，供 Lead 发布 tracker 评论）
+### #96 措辞对齐（不修改 #96 正文；评论已发布）
 
 ```text
 #96 的「每个已安装产品包至多被一行挂载」在 #101 之后需要按可执行事实收窄：#101 让一个包

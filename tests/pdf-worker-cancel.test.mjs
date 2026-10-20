@@ -12,7 +12,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createRequire, registerHooks } from 'node:module'
 import { deflateSync } from 'node:zlib'
-import { readdirSync, readFileSync, readlinkSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { repoRoot } from './helpers/backend.mjs'
@@ -90,38 +91,50 @@ async function waitFor(predicate, timeoutMs = 5000) {
 }
 
 test('a cancelled PDF worker reports the numeric failure, removes its directory, and leaves no process or shared network', async () => {
-  const { ctx, installPdf } = await load()
-  const pdf = costlyPdf()
-  const before = new Set(readdirSync('/tmp').filter(name => name.startsWith('ourfairy-pdf-')))
-  let registered
-  const agent = { session: {}, options: {} }
-  installPdf({ subprocess: ctx.subprocess, llm: {}, on() {}, agents: { list: () => [{ ...agent, ctx: { tools: { register: definition => { registered = definition } } } }] },
-    attachments: { readFileStream: async function* () { yield pdf } } }, { qualifiedFile: async () => ({ mime: 'application/pdf', name: 'costly.pdf', original: {} }) })
-  assert.equal(registered?.name, 'pdf_read_pages')
-
-  const controller = new AbortController()
-  const started = Date.now()
-  const running = registered.execute({ file_path: 'qualified.pdf', pages: [1] }, { agent, signal: controller.signal })
-  const directory = await waitFor(() => readdirSync('/tmp').filter(name => name.startsWith('ourfairy-pdf-') && !before.has(name)))
+  // The worker directory comes from `os.tmpdir()`. Give this test its own TMPDIR
+  // so a PDF test running in a parallel file cannot put an unrelated
+  // `ourfairy-pdf-*` directory in the set this call is judged by.
+  const scratch = mkdtempSync(join(tmpdir(), 'ourfairy-pdf-cancel-'))
+  const previousTmp = process.env.TMPDIR
+  process.env.TMPDIR = scratch
   try {
-    assert.ok(directory?.length, 'the PDF call must start a worker in its own temporary directory')
-    const path = join('/tmp', directory[0])
-    const workers = await waitFor(() => processesMentioning(path, '/usr/bin/python3'))
-    assert.ok(workers?.length, `the running parser must be observable under ${path}`)
-    // The parser is untrusted input handling: its own network namespace, not the host's.
-    assert.ok(workers.every(worker => worker.netns !== readlinkSync('/proc/self/ns/net')),
-      `the PDF parser must not share the host network: ${JSON.stringify(workers)}`)
-    controller.abort(new Error('user stopped the reply'))
-    const result = await running
-    assert.equal(result.status, 3, `a cancelled worker is a numeric failure: ${JSON.stringify(result)}`)
-    assert.equal(result.error, 'worker-unavailable', `cancellation keeps the pre-service error code: ${JSON.stringify(result)}`)
-    assert.ok(Date.now() - started < 8000, 'cancellation must not wait for the worker deadline')
-    assert.deepEqual(processesMentioning(path), [], 'the cancelled worker must not survive its call')
+    const { ctx, installPdf } = await load()
+    const pdf = costlyPdf()
+    const before = new Set(readdirSync(scratch).filter(name => name.startsWith('ourfairy-pdf-')))
+    let registered
+    const agent = { session: {}, options: {} }
+    installPdf({ subprocess: ctx.subprocess, llm: {}, on() {}, agents: { list: () => [{ ...agent, ctx: { tools: { register: definition => { registered = definition } } } }] },
+      attachments: { readFileStream: async function* () { yield pdf } } }, { qualifiedFile: async () => ({ mime: 'application/pdf', name: 'costly.pdf', original: {} }) })
+    assert.equal(registered?.name, 'pdf_read_pages')
+
+    const controller = new AbortController()
+    const started = Date.now()
+    const running = registered.execute({ file_path: 'qualified.pdf', pages: [1] }, { agent, signal: controller.signal })
+    const directory = await waitFor(() => readdirSync(scratch).filter(name => name.startsWith('ourfairy-pdf-') && !before.has(name)))
+    try {
+      assert.ok(directory?.length, 'the PDF call must start a worker in its own temporary directory')
+      const path = join(scratch, directory[0])
+      const workers = await waitFor(() => processesMentioning(path, '/usr/bin/python3'))
+      assert.ok(workers?.length, `the running parser must be observable under ${path}`)
+      // The parser is untrusted input handling: its own network namespace, not the host's.
+      assert.ok(workers.every(worker => worker.netns !== readlinkSync('/proc/self/ns/net')),
+        `the PDF parser must not share the host network: ${JSON.stringify(workers)}`)
+      controller.abort(new Error('user stopped the reply'))
+      const result = await running
+      assert.equal(result.status, 3, `a cancelled worker is a numeric failure: ${JSON.stringify(result)}`)
+      assert.equal(result.error, 'worker-unavailable', `cancellation keeps the pre-service error code: ${JSON.stringify(result)}`)
+      assert.ok(Date.now() - started < 8000, 'cancellation must not wait for the worker deadline')
+      assert.deepEqual(processesMentioning(path), [], 'the cancelled worker must not survive its call')
+    } finally {
+      controller.abort()
+      await running.catch(() => {})
+      assert.ok(!readdirSync(scratch).some(name => name.startsWith('ourfairy-pdf-') && !before.has(name)),
+        'the temporary directory must be removed after the call')
+      await ctx.dispose?.()
+    }
   } finally {
-    controller.abort()
-    await running.catch(() => {})
-    assert.ok(!readdirSync('/tmp').some(name => name.startsWith('ourfairy-pdf-') && !before.has(name)),
-      'the temporary directory must be removed after the call')
-    await ctx.dispose?.()
+    if (previousTmp === undefined) delete process.env.TMPDIR
+    else process.env.TMPDIR = previousTmp
+    rmSync(scratch, { recursive: true, force: true })
   }
 })

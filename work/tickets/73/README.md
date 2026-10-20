@@ -2,7 +2,8 @@
 
 父规格：[#73 dsh 插件生态兼容：bundle 自描述、行级寻址与插件契约](https://github.com/eafen405/OurFairy/issues/73)。
 
-状态：已拆分并发布为 11 张原生子议题（#96–#106），阻塞关系为原生 blocked-by。列表序号是阅读顺序，实际身份见各票链接。
+状态：已完成。11 张原生子议题（#96–#106）全部关闭，实现与证据已合入 `integration/spec-73`；
+收口记录见 `work/implementation/evidence/106-closeout/README.md`。列表序号是阅读顺序，实际身份见各票链接。
 
 ## 拆分原则
 
