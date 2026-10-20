@@ -19,7 +19,8 @@
     "@ourfairy/dsh-search": "file:../search",
     "@ourfairy/dsh-attachments": "file:../attachments",
     "@ourfairy/dsh-spaces": "file:../spaces",
-    "@ourfairy/dsh-delivery": "file:../delivery"
+    "@ourfairy/dsh-delivery": "file:../delivery",
+    "@ourfairy/dsh-groups": "file:../groups"
   },
   "exports": {
     "./package.json": "./package.json",

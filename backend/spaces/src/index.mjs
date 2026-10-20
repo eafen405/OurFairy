@@ -1,5 +1,4 @@
 /** Product providers over native dsh file, directory and sandbox Interfaces. */
-import { installGroups } from './groups.mjs'
 import { SpaceScope, pathInside } from './scope.mjs'
 import { ScopedFileSystem } from './fs.mjs'
 import { SandboxProvider, SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
@@ -64,7 +63,6 @@ class ScopedDirectory extends WorkingDirectoryService {
 }
 export function apply(ctx, config) {
   const scope = new SpaceScope(ctx, config)
-  ctx.inject(['identity', 'agents'], context => installGroups(context))
   ctx.on('tools/execute', (exec, next) => scope.calls.run(exec.agent?.session, () => next()), { global: true, prepend: true })
   ctx.plugin(ScopedFileSystem, { cwd: config.root, diffBasisMaxBytes: 10 * 1024 * 1024 })
   ctx.plugin(ScopedSandbox)

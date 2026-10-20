@@ -285,3 +285,9 @@
         timeoutMs: !!js Number(process.env.OURFAIRY_ASR_TIMEOUT_MS ?? 45000)
         maxGlobalInFlight: !!js Number(process.env.OURFAIRY_ASR_MAX_GLOBAL_IN_FLIGHT ?? 2)
         maxUserInFlight: !!js Number(process.env.OURFAIRY_ASR_MAX_USER_IN_FLIGHT ?? 1)
+
+    # The group row: group membership tools, plus the member group roots it
+    # contributes to the spaces row. It owns no scope calculation and can be
+    # disabled alone without taking the private/public spaces away.
+    - id: groups
+      name: '@ourfairy/dsh-groups'
