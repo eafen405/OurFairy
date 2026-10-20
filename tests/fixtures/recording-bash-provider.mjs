@@ -1,10 +1,9 @@
 /**
  * Test-only replacement for the `scoped-bash` row.
  *
- * An overlay cannot rename an existing row's module: a patch carrying both
- * `id` and `name` only checks the name and skips the patch on a mismatch.
- * Replacing a provider therefore means disabling its row and inserting another
- * row that provides the same `shell` service. This module is that replacement:
+ * Replacing a provider is expressed as disable-plus-insert: the overlay disables
+ * the original row and inserts another row that provides the same `shell`
+ * service. This module is that replacement:
  * it extends the product's own ScopedBash class and prefixes the command's
  * stdout, so a caller can tell which module actually ran while the replacement
  * keeps the product's scope validation and confined execution.

@@ -582,8 +582,8 @@ test('disabling the fs provider leaves its dependants waiting, not a fallback', 
 test('an overlay can replace the shell provider and leave the other providers working', async () => {
   const home = freshHome('ourfairy-row-address-replace-')
 
-  // A name-only patch is a guard, not a module replacement; the working
-  // replacement disables the row and inserts a row that provides `shell`.
+  // The working replacement disables the row and inserts a row that provides
+  // the same `shell` service.
   const overlay = writeOverlay(home, [
     { id: 'scoped-bash', disabled: true },
     { insert: [{ id: 'scoped-bash-recording', name: recordingFixture }] },
