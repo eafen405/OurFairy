@@ -55,9 +55,10 @@ $ npm test
 ## 评审修复补记（2026-10-20，分支 `fix/73-review`）
 
 - identity 的 `Config` 补上 bundle 实际写入、`resolveConfig` 读取的 `phaethonName`/`phaethonPassword`
-  两个可选字符串；`resolveConfig` 只保留默认值（`sessionTtlDays` 30、`phaethonName` `phaethon`、
-  空/缺失密码为 `undefined`）。`tests/config-contracts.test.mjs` 增加一条 `$.phaethonName` 类型
-  用例，现为 5 条。详见 `work/implementation/notes/73-review-findings.md`。
+  两个可选字符串，并给 `path` 加 `.min(1)`（旧 `resolveConfig` 拒绝空 path，校验搬进 schema 后
+  必须保留）；`resolveConfig` 只保留默认值（`sessionTtlDays` 30、`phaethonName` `phaethon`、
+  空/缺失密码为 `undefined`）。`tests/config-contracts.test.mjs` 增加 `$.phaethonName` 类型与空
+  `path` 两条用例，现为 6 条。详见 `work/implementation/notes/73-review-findings.md`。
 - 行 liveness 的保证范围明确为「每个**未被刻意禁用**的 bundle 产品行」：经 overlay
   `disabled` 的行是操作者的明确缺席，不在该保证内——#105 要求禁用任一行后仍能启动，不能把它
   记成激活失败。探针自身的包名改为从 `backend/probe/package.json` 读取。

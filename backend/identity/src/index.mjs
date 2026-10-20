@@ -21,7 +21,7 @@ export const inject = ['webServer', 'connection']
 
 /** The loader validates the row config before `apply`; `resolveConfig` fills the defaults. */
 export const Config = z.object({
-  path: z.string().required(),
+  path: z.string().min(1).required(),
   sessionTtlDays: z.number().min(1).step(1),
   phaethonName: z.string(),
   phaethonPassword: z.string(),

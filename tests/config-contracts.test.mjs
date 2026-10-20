@@ -78,6 +78,13 @@ const INVALID_CONFIGS = [
   { row: 'identity', config: { sessionTtlDays: 30 }, field: '$.path', why: 'path is missing' },
   {
     row: 'identity',
+    config: { path: '', sessionTtlDays: 30 },
+    field: '$.path',
+    case: 'empty path',
+    why: 'path is an empty string',
+  },
+  {
+    row: 'identity',
     config: home => ({ path: join(home, 'identity-override.sqlite'), phaethonName: 42 }),
     field: '$.phaethonName',
     why: 'phaethonName is a number instead of a string',
@@ -86,7 +93,7 @@ const INVALID_CONFIGS = [
 ]
 
 for (const scenario of INVALID_CONFIGS) {
-  test(`an invalid ${scenario.row} config fails at load and names the row and ${scenario.field}`, async () => {
+  test(`an invalid ${scenario.row} config${scenario.case === undefined ? '' : ` (${scenario.case})`} fails at load and names the row and ${scenario.field}`, async () => {
     const home = freshHome()
     const config = typeof scenario.config === 'function' ? scenario.config(home) : scenario.config
     const overlay = writeOverlay(home, [{ id: scenario.row, config }], `${scenario.row}.patch.yml`)
