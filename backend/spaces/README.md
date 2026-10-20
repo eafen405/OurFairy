@@ -1,6 +1,12 @@
 # Owned file spaces and execution
 
-The spaces module mounts the existing dsh file, directory and shell tools over product providers. Authority is the native `SessionHeader.owner`; cwd, a caller-supplied user number and sandbox escalation do not grant access. Durable groups extend the same space capability from the existing business SQLite; formal Session formats are unchanged.
+The spaces module mounts the existing dsh file, directory and shell tools over product providers.
+It owns the scope and the contributor seam; the scoped providers are independent rows of the bundle
+listed in `backend/v1-bundle/cordis.patch.yml`. Each provider is its own row and the scope stays when
+one is disabled or replaced, but disabling a provider its dependants need leaves those rows waiting —
+the probe names the missing service and row — and no native fallback is mounted. In particular, `fs`
+is required by the scoped directory and attachments rows, and `sandbox` by the shell row, so their
+absence cascades instead of degrading silently. Authority is the native `SessionHeader.owner`; cwd, a caller-supplied user number and sandbox escalation do not grant access. Durable groups extend the same space capability from the existing business SQLite; formal Session formats are unchanged.
 
 Disk layout under `DSH_HOME`:
 

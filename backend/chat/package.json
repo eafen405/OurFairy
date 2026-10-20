@@ -3,19 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "OurFairy remote chat: authenticated send, read, page and SSE observe routes over dsh Agent sessions.",
   "license": "UNLICENSED",
   "main": "./src/index.mjs",
-  "exports": { ".": "./src/index.mjs" },
-  "files": ["src", "README.md"],
+  "exports": {
+    ".": "./src/index.mjs",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": ["src", "README.md", "locale/*.json"],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:~",
-    "@deepseek-ai/dsh-llm": "workspace:~",
-    "@deepseek-ai/dsh-agent": "workspace:~",
-    "@deepseek-ai/dsh-tools": "workspace:~",
-    "@deepseek-ai/dsh-session": "workspace:~",
-    "@deepseek-ai/dsh-jobs": "workspace:~",
-    "@ourfairy/dsh-identity": "workspace:~",
-    "@ourfairy/dsh-attachments": "workspace:~",
-    "@ourfairy/dsh-sessions": "workspace:~"
+    "@deepseek-ai/cordis": "^4.0.5-alpha.1",
+    "@deepseek-ai/dsh-llm": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-agent": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-tools": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-session": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-jobs": "^0.2.1-alpha.2",
+    "@ourfairy/dsh-identity": "^0.1.0",
+    "@ourfairy/dsh-attachments": "^0.1.0",
+    "@ourfairy/dsh-sessions": "^0.1.0"
   }
 }

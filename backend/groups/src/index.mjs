@@ -1,9 +1,20 @@
-/** Chat-owned group membership, sharing the existing business store and file scope. */
+/**
+ * The group capability as its own product row.
+ *
+ * Group membership and its tools belong to identity's business store, and the
+ * extra roots are contributed through the spaces row's public contributor
+ * seam — this row computes no scope of its own. Unloading it therefore removes
+ * the group tools and group roots without touching the private/public spaces
+ * or confined scripts, which the spaces row owns.
+ */
 import { mkdirSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 
-export function installGroups(ctx) {
+export const name = 'ourfairy-groups'
+export const inject = ['ourfairySpaces', 'identity', 'agents']
+
+export function apply(ctx) {
   const scope = ctx.ourfairySpaces
   const { users, groups } = ctx.identity
   const userOf = agent => {
@@ -22,7 +33,7 @@ export function installGroups(ctx) {
     const shortId = scope.owner(session)
     if (!users.byShortId(shortId)) throw new Error('groups/unknown-user: file operation requires an active session owner')
     return groups.forMember(shortId).map(group => rootFor(group.id))
-  }), 'ourfairy-spaces: group roots')
+  }), 'ourfairy-groups: group roots')
   const output = { schema: { type: 'object', additionalProperties: true },
     render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] }
   const registrations = new Map()

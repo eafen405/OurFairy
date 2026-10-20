@@ -10,7 +10,7 @@ mounts capabilities v1 excludes (skill, goal, subagent, telemetry, web tools) an
 default file/shell/sandbox rows with host-wide access. The scoped
 `@ourfairy/dsh-spaces` adapters replace those defaults.
 
-## Row set
+## Row set and package set
 
 `cordis.patch.yml` is the row set: it is the file the profile loads. Its section
 comments group the rows — session/model/prompt core, model-request recovery and
@@ -21,6 +21,21 @@ adapters, and attachments/speech.
 Read that file for the inventory. The row ids and their packages have one
 authority, and it is the file the loader reads; a hand-kept table here listed
 only some of the mounted rows and went stale while the loader mounted the rest.
+
+The product package set is this manifest's `dependencies`: every `@ourfairy/*`
+module a row mounts is declared here as a `file:` dependency on its directory in
+this repository. Read `package.json` for the list — it is not repeated in this
+README. The launcher derives the generated profile's product dependencies from
+that field (plus the test-only probe that combo.json names), and `doctor`'s
+`bundle packages` check compares the composed rows, this manifest, and the
+installed profile, naming the package and row id when they disagree. Adding a
+product package therefore means adding its directory, declaring it here, and
+mounting it in the patch; no launcher file changes.
+
+The published `files` list is the installed copy's contents: the patch, this
+README, and `locale/*.json` — dsh reads `locale/<language>.json` for a bundle's
+display metadata. A boot reads nothing from this checkout that the manifest does
+not publish.
 
 ## Absent rows
 
@@ -36,7 +51,10 @@ and sandbox defaults the scoped adapters replace.
 
 The launcher (`scripts/ourfairy-backend.mjs`) generates a profile under the
 isolated `OURFAIRY_HOME` that declares this package through a `file:` dependency
-and lists it in `dsh.profile.bundles`, then boots the real dsh CLI.
+and lists it in `dsh.profile.bundles`, then boots the real dsh CLI. pnpm installs
+this package's own `file:` dependencies from this checkout, so the profile
+receives one copy of every declared product package without the launcher naming
+any of them.
 
 ## Two choices a reviewer will ask about
 
@@ -46,20 +64,20 @@ Chinese substring matching, and the `@ourfairy/dsh-search` tools restrict native
 SQL results to ids from the caller's own session headers. See
 [`backend/search/README.md`](../search/README.md) for interval semantics and rebuild.
 
-**The model route starts from a declared pair, then belongs to Phaethon.** The
-`agent-default-model` row states the combination's initial shared selection
-(`minimax-cn`/`MiniMax-M3.1-Flash-Preview` at `max` thinking effort), and the
-product chat runtime reads that service at every turn start — so a selection
-Phaethon saves through the gateway (`/gateway/selection`) takes effect from each
-conversation's next reply without editing this file. The MiniMax route reuses
-dsh's installed `minimax-cn` provider: this bundle only narrows it to the model
-the deployment uses, declares its 1M context, image input and adaptive thinking,
-and names `MINIMAX_CN_API_KEY`. The official DeepSeek route stays mounted as a
-switchable alternative and is not selected. The probe creates its own Agent outside that runtime, so the
-launcher passes the same pair to it as explicit `agentOptions`. `doctor`'s
-`bundle agent model` check reads this file and asserts both values match
-`combo.json`; that check covers the *initial* declaration only, never the saved
-runtime selection.
+**The model route starts from the bundle's declared pair, then belongs to Phaethon.** The
+`agent-default-model` row is the sole declaration of the combination's initial
+shared selection (`minimax-cn`/`MiniMax-M3.1-Flash-Preview` at `max` thinking
+effort): `combo.json` carries no provider/model copy and `doctor` has no
+comparison check. The product chat runtime and the probe both read
+`agentDefaultModel.currentSelection()` at the start of a turn; the probe also
+writes that selection into its boot report (`report.model`), so changing this row
+changes what the probe observes. A selection Phaethon saves through the gateway
+(`/gateway/selection`) takes effect from each conversation's next reply without
+editing this file. The MiniMax route reuses dsh's installed `minimax-cn` provider:
+this bundle only narrows it to the model the deployment uses, declares its 1M
+context, image input and adaptive thinking, and names `MINIMAX_CN_API_KEY`. The
+official DeepSeek route stays mounted as a switchable alternative and is not
+selected.
 
 **Model recovery and tool-result retention are native rows.** `llm-retry` re-runs a
 failed model step inside the same open turn, and each provider profile owns the

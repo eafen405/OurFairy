@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OurFairy file spaces",
+    "description": "Private, public and group file spaces with scoped filesystem, sandbox, shell and working-directory providers derived from the authenticated session owner."
+  }
+}

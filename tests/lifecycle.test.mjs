@@ -97,7 +97,7 @@ test('doctor reports its checks on a clean isolated home', () => {
   // step. A worktree sits on moveable integration tips, so doctor's answer about
   // the other repositories is a fact to report, not a regression of this code.
   const local = ['node version', 'corepack pnpm pin available', 'product packages', 'isolated home',
-    'profile project linked', 'model double', 'bundle agent model']
+    'profile project linked', 'model double']
   const failed = local.filter(name => checks.get(name)?.ok !== true)
   assert.deepEqual(failed, [], `worktree-local doctor checks failed: ${JSON.stringify(failed.map(name => checks.get(name)))}`)
   assert.equal(run.code, report.ok ? 0 : 1, `doctor must exit 0 only when every check passed:\n${describeRun('doctor', run)}`)

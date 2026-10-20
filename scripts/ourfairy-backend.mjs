@@ -31,12 +31,12 @@
  * and the command that fixes it.
  */
 import { createHash } from 'node:crypto'
-import { openSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { globSync, openSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
-import { readCombo, repoPath, verifyCombination } from './combo.mjs'
+import { readCombo, repoPath, verifyBundlePackages, verifyCombination, verifyPluginCompatibility } from './combo.mjs'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -56,12 +56,6 @@ function readCombination() {
       fail(`${path} backend.${field} must be a non-empty string; the launcher reads its pins from combo.json`)
     }
   }
-  const agentModel = backend.agentModel
-  if (agentModel === undefined || typeof agentModel.provider !== 'string' || typeof agentModel.model !== 'string'
-    || agentModel.provider === '' || agentModel.model === '') {
-    fail(`${path} backend.agentModel must declare non-empty provider and model strings;`
-      + ' the probe refuses to run a turn without an explicit selection')
-  }
   return backend
 }
 
@@ -69,29 +63,7 @@ const COMBINATION = readCombination()
 const PROFILE_NAME = COMBINATION.profileName
 const BUNDLE_PACKAGE = COMBINATION.bundlePackage
 const PROBE_PACKAGE = COMBINATION.probePackage
-/**
- * The packages the profile links out of this worktree, as package name plus
- * repo-relative directory.
- *
- * combo.json records the bundle and the probe; the product modules the bundle
- * mounts by name are launcher constants. Both the profile manifest and the
- * staleness hash below read this single list, so a package cannot be installed
- * without its sources also being hashed.
- */
-const LINKED_PACKAGES = [
-  { name: BUNDLE_PACKAGE, dir: COMBINATION.bundlePathInRepo },
-  { name: PROBE_PACKAGE, dir: COMBINATION.probePathInRepo },
-  // A linked package only resolves its dsh peers when it is a profile
-  // dependency too.
-  { name: '@ourfairy/dsh-identity', dir: 'backend/identity' },
-  { name: '@ourfairy/dsh-sessions', dir: 'backend/sessions' },
-  { name: '@ourfairy/dsh-chat', dir: 'backend/chat' },
-  { name: '@ourfairy/dsh-gateway', dir: 'backend/gateway' },
-  { name: '@ourfairy/dsh-speech', dir: 'backend/speech' },
-  { name: '@ourfairy/dsh-search', dir: 'backend/search' },
-  { name: '@ourfairy/dsh-attachments', dir: 'backend/attachments' },
-  { name: '@ourfairy/dsh-spaces', dir: 'backend/spaces' },
-]
+const BUNDLE_DIR = COMBINATION.bundlePathInRepo
 const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
 const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
 
@@ -180,38 +152,87 @@ function resolveDsh(options) {
 }
 
 /**
- * Every file a profile install copies out of the worktree, repo-relative.
+ * The product packages the profile installs, derived from the bundle manifest.
+ *
+ * The bundle's `dependencies` are the product package inventory: every entry is
+ * a product package the bundle mounts, declared as `file:<path relative to the
+ * bundle directory>`. The launcher resolves each specifier from the bundle's
+ * own directory — exactly how pnpm resolves it when the bundle is installed —
+ * so adding a product package is one manifest edit and no launcher change. The
+ * probe is the one package the bundle never mounts: combo.json names it
+ * separately.
+ * @returns {{name: string, dir: string}[]} package name plus repo-relative directory.
+ */
+function productPackages() {
+  const bundleDir = join(repoRoot, BUNDLE_DIR)
+  const manifest = readPackageManifest(BUNDLE_DIR, join(bundleDir, 'package.json'))
+  const packages = [{ name: BUNDLE_PACKAGE, dir: BUNDLE_DIR }, { name: PROBE_PACKAGE, dir: COMBINATION.probePathInRepo }]
+  for (const [name, specifier] of Object.entries(manifest.dependencies ?? {})) {
+    if (typeof specifier !== 'string' || !specifier.startsWith('file:')) {
+      fail(`${BUNDLE_DIR}/package.json declares ${name} as ${JSON.stringify(specifier)};`
+        + ' the launcher links product packages from this checkout, so the bundle must declare each one as file:<path>')
+    }
+    const dir = relative(repoRoot, resolve(bundleDir, specifier.slice('file:'.length)))
+    // The staleness hash lists repo-relative sources; a package outside the
+    // repository could change without the hash noticing, which is the stale
+    // install the hash exists to prevent.
+    if (dir === '' || dir.startsWith('..') || isAbsolute(dir)) {
+      fail(`${BUNDLE_DIR}/package.json declares ${name} at ${resolve(bundleDir, specifier.slice('file:'.length))},`
+        + ' which is outside this repository; product packages live under backend/')
+    }
+    if (packages.some(entry => entry.name === name)) {
+      fail(`${BUNDLE_DIR}/package.json declares ${name} twice: once as a bundle/probe entry and once in dependencies`)
+    }
+    packages.push({ name, dir })
+  }
+  return packages
+}
+
+/**
+ * Every file the profile install copies out of the worktree, repo-relative.
  *
  * pnpm copies a `file:` package into the profile by its `files` declaration,
  * so that declaration — not a list kept here — is what decides the install's
  * contents. Deriving the set from it is what makes adding a source file safe:
- * a new file under `src/` is published, so it reaches the hash by itself. A
- * hand-maintained list of the same files is what let a new file change the
- * worktree while the profile kept booting the previous copy.
+ * a new file under `src/` is published, so it reaches the hash by itself. The
+ * packages walked are the ones the profile installs, themselves read from the
+ * bundle manifest.
  */
 function productSources() {
   const sources = new Set()
-  for (const { dir } of LINKED_PACKAGES) {
+  for (const { dir } of productPackages()) {
     const manifestPath = join(repoRoot, dir, 'package.json')
     // npm always ships package.json, whether `files` names it or not.
     sources.add(join(dir, 'package.json'))
     for (const entry of readPackageManifest(dir, manifestPath).files) {
-      const path = join(repoRoot, dir, entry)
-      // A `files` entry that names nothing publishes nothing, so it contributes
-      // nothing to the corpus either; npm silently skips it the same way.
-      if (!existsSync(path)) continue
-      if (statSync(path).isDirectory()) {
-        // Recursive listing yields directory names too; only files carry content.
-        for (const file of readdirSync(path, { recursive: true })) {
-          const published = join(repoRoot, dir, entry, file)
-          if (statSync(published).isFile()) sources.add(join(dir, entry, file))
-        }
-      } else {
-        sources.add(join(dir, entry))
-      }
+      for (const published of publishedEntries(dir, entry)) sources.add(published)
     }
   }
   return [...sources].sort()
+}
+
+/**
+ * Expand one `files` entry to the repo-relative files it publishes.
+ *
+ * The entry is a path or an npm-style glob (`locale/*.json`); a directory
+ * publishes every file beneath it. Node's own resolver reads the glob, so the
+ * launcher carries no wildcard logic of its own. An entry matching nothing
+ * publishes nothing, so it contributes nothing — npm silently skips it the
+ * same way.
+ * @param {string} dir - repo-relative package directory.
+ * @param {string} entry - one `files` entry.
+ * @returns {string[]}
+ */
+function publishedEntries(dir, entry) {
+  const base = join(repoRoot, dir)
+  return globSync(entry, { cwd: base }).flatMap((match) => {
+    const absolute = join(base, match)
+    if (!statSync(absolute).isDirectory()) return [join(dir, match)]
+    // Recursive listing yields directory names too; only files carry content.
+    return readdirSync(absolute, { recursive: true })
+      .map(file => join(dir, match, file))
+      .filter(file => statSync(join(repoRoot, file)).isFile())
+  })
 }
 
 /** Read a linked package's manifest, refusing one that names no published files. */
@@ -242,7 +263,7 @@ function productSourceHash() {
 const profileManifest = () => ({
   name: `dsh-profile-${PROFILE_NAME}`,
   private: true,
-  dependencies: Object.fromEntries(LINKED_PACKAGES.map(({ name, dir }) => [name, `file:${join(repoRoot, dir)}`])),
+  dependencies: Object.fromEntries(productPackages().map(({ name, dir }) => [name, `file:${join(repoRoot, dir)}`])),
   dsh: { profile: { bundles: [BUNDLE_PACKAGE] } },
 })
 
@@ -318,43 +339,10 @@ function isolatedEnv(layout, extra = {}) {
   }
 }
 
-/**
- * The provider/model pair the bundle's `agent-default-model` row declares.
- *
- * Read from that row rather than searched for in the whole patch: the old
- * `includes('model: deepseek-flash')` test also matched `model:
- * deepseek-flash-drifted`, so a drifted bundle kept the doctor check green
- * while `combo.json backend.agentModel` and the README promised it could not.
- * @returns {{provider?: string, model?: string}}
- */
-function bundleAgentModel() {
-  const patchPath = join(repoRoot, COMBINATION.bundlePathInRepo, 'cordis.patch.yml')
-  const lines = readFileSync(patchPath, 'utf8').split('\n')
-  const start = lines.findIndex(line => /^\s*- id: agent-default-model\s*$/.test(line))
-  if (start < 0) return {}
-  const row = {}
-  for (const line of lines.slice(start + 1)) {
-    if (/^\s*- id: /.test(line)) break
-    const field = /^\s*(provider|model): (.+?)\s*$/.exec(line)
-    if (field !== null) row[field[1]] = field[2]
-  }
-  return row
-}
-
-/** Whether the bundle's row declares exactly the model pair combo.json locks. */
-function bundleDeclaresAgentModel(selection) {
-  const row = bundleAgentModel()
-  return row.provider === selection.provider && row.model === selection.model
-}
-
 function childEnv(layout, { reportPath, mode, holdMs }) {
-  const selection = COMBINATION.agentModel
   const env = isolatedEnv(layout, {
     OURFAIRY_PROBE_REPORT: reportPath,
     OURFAIRY_PROBE_MODE: mode,
-    OURFAIRY_PROBE_PROVIDER: selection.provider,
-    OURFAIRY_PROBE_MODEL: selection.model,
-    ...selection.reasoningEffort === undefined ? {} : { OURFAIRY_PROBE_REASONING_EFFORT: selection.reasoningEffort },
   })
   if (holdMs !== undefined) env.OURFAIRY_PROBE_HOLD_MS = String(holdMs)
   return env
@@ -811,8 +799,9 @@ function commandDoctor(layout, options) {
   })
   check('product packages', () => {
     // Nothing is verified by hand here: the set comes from the same `files`
-    // declarations the profile install copies, so a package added to the
-    // install without a published-file list fails while deriving it.
+    // declarations the profile install copies, read from the packages the
+    // bundle declares, so a package added to the install without a
+    // published-file list fails while deriving it.
     return productSources().join(', ')
   })
   check('isolated home', () => {
@@ -823,21 +812,46 @@ function commandDoctor(layout, options) {
     const mode = installProfile(layout, options)
     return `${layout.profileDir} (${mode})`
   })
+  check('bundle packages', () => {
+    // The bundle manifest is the product package inventory. This compares it
+    // with the rows the bundle's patch mounts and the packages the generated
+    // profile installed, reading the rows through dsh's own patch loader.
+    const result = verifyBundlePackages({
+      binName: 'dsh',
+      bundlePackage: BUNDLE_PACKAGE,
+      // The probe is the one installed product package the bundle never
+      // mounts; naming it keeps the installed-set comparison from reporting it.
+      probePackage: PROBE_PACKAGE,
+      // dsh resolves a bundle against its own installation first, then the
+      // profile; the app's package.json is the installation anchor both sides
+      // name.
+      installAnchor: join(resolveDsh(options).dir, 'apps', 'cli', 'package.json'),
+      profileDir: layout.profileDir,
+    })
+    must(result.failures.length === 0, result.failures.join('; '))
+    return `${result.declared.length} declared package(s) mounted by ${result.mounted.length} row(s): `
+      + result.mounted.map(row => `${row.id}:${row.name}`).join(', ')
+  })
+  check('plugin compatibility', () => {
+    // The same installed copies the boot loads, judged by dsh's own public
+    // compatibility function against the version this pinned CLI publishes —
+    // no range comparison lives here. The detail names the version judged
+    // against, so a green result says what it was green against.
+    const result = verifyPluginCompatibility({
+      binName: 'dsh',
+      bundlePackage: BUNDLE_PACKAGE,
+      installAnchor: join(resolveDsh(options).dir, 'apps', 'cli', 'package.json'),
+      profileDir: layout.profileDir,
+    })
+    must(result.failures.length === 0, result.failures.join('; '))
+    return `${result.checked.length} installed product package(s) compatible with dsh ${result.dshVersion}: `
+      + result.checked.join(', ')
+  })
   check('model double', () => {
     const base = process.env.OURFAIRY_MINIMAX_BASE_URL ?? process.env.DEEPSEEK_BASE_URL
     if (base === undefined || base === '') return 'not configured (keyless startup only)'
     return process.env.OURFAIRY_MINIMAX_BASE_URL === undefined
       ? `DEEPSEEK_BASE_URL=${base}` : `OURFAIRY_MINIMAX_BASE_URL=${base}`
-  })
-  check('bundle agent model', () => {
-    const selection = COMBINATION.agentModel
-    const declared = bundleAgentModel()
-    must(bundleDeclaresAgentModel(selection),
-      `${COMBINATION.bundlePathInRepo}/cordis.patch.yml declares`
-      + ` ${declared.provider ?? '<missing provider>'}/${declared.model ?? '<missing model>'} in its agent-default-model row,`
-      + ` but combo.json backend.agentModel locks ${selection.provider}/${selection.model};`
-      + ' the two declarations have drifted apart')
-    return `${selection.provider}/${selection.model} declared in both combo.json and the bundle`
   })
 
   const failed = checks.filter(entry => !entry.ok)

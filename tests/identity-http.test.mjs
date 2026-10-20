@@ -170,6 +170,57 @@ describe('OurFairy identity over real HTTP', () => {
     assert.equal(restored.status, 200, `a fresh credential must work: ${restored.text}`)
   })
 
+  test('a request for an untrusted Host is refused by the same fence the /api route uses', async () => {
+    // The boundary doc records that every product route runs the native fence
+    // before it reads a body or a credential. A rebound browser sends the
+    // attacker's domain in Host, so an unconfigured authority must be refused
+    // at the door — while the same sign-in succeeds on the loopback authority.
+    const refused = await request('/identity/sign-in', {
+      host: 'attacker.invalid',
+      body: { name: 'phaethon', password: PHAETHON_PASSWORD },
+    })
+    assert.equal(refused.status, 403, `an untrusted Host must be fenced off: ${refused.text}`)
+    assert.equal(refused.json?.error?.code, 'identity/forbidden-authority', refused.text)
+
+    const admitted = await signIn('phaethon', PHAETHON_PASSWORD)
+    assert.equal(typeof admitted.token, 'string', 'the loopback authority must still sign in')
+  })
+
+  test('every product module entry point rejects an untrusted Host before parsing the body or reading the credential', async () => {
+    // One representative entry point per product module. No credential and no
+    // body: the 403 with a forbidden-authority code is only reachable through
+    // the fence, because each module's own authorization/body handling would
+    // answer 401 or 400 after a missing credential. `/speech` reports the bare
+    // code; the other modules prefix it with their own name.
+    const paths = [
+      '/identity/sign-in',
+      '/sessions/list',
+      '/chat/read',
+      '/gateway/read',
+      '/attachments/propose',
+      '/speech',
+    ]
+    for (const path of paths) {
+      const refused = await request(path, { host: 'attacker.invalid', body: {} })
+      assert.equal(refused.status, 403, `${path} must be fenced off: ${refused.text}`)
+      assert.match(refused.json?.error?.code ?? '', /forbidden-authority$/u,
+        `${path} must report a forbidden-authority code: ${refused.text}`)
+    }
+    // A malformed body pins the order: a fence that ran after JSON parsing would
+    // answer 400 before judging the authority. 403 with the forbidden-authority
+    // code is reachable only when the fence runs before the body is parsed.
+    for (const path of paths) {
+      const refused = await request(path, { host: 'attacker.invalid', rawBody: '{' })
+      assert.equal(refused.status, 403,
+        `${path} must be fenced off before its malformed body is parsed: ${refused.text}`)
+      assert.match(refused.json?.error?.code ?? '', /forbidden-authority$/u,
+        `${path} must report a forbidden-authority code for a malformed body: ${refused.text}`)
+    }
+    // The backend still answers the loopback authority after all refusals.
+    const admitted = await signIn('phaethon', PHAETHON_PASSWORD)
+    assert.equal(typeof admitted.token, 'string')
+  })
+
   test('a session credential admits dsh /api while an anonymous request is refused at the door', async () => {
     const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
     const agent = await register(await createInvite(phaethon.token), 'agent-api-admission')

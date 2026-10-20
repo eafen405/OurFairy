@@ -1,0 +1,57 @@
+{
+  "01-bundle-package-authority.md": {
+    "number": 96,
+    "id": 5923321162,
+    "url": "https://github.com/eafen405/OurFairy/issues/96"
+  },
+  "08-ecosystem-boundary-doc.md": {
+    "number": 97,
+    "id": 5923321766,
+    "url": "https://github.com/eafen405/OurFairy/issues/97"
+  },
+  "02-upstream-compatibility.md": {
+    "number": 98,
+    "id": 5923322376,
+    "url": "https://github.com/eafen405/OurFairy/issues/98"
+  },
+  "03-delivery-row.md": {
+    "number": 99,
+    "id": 5923323031,
+    "url": "https://github.com/eafen405/OurFairy/issues/99"
+  },
+  "04-groups-row.md": {
+    "number": 100,
+    "id": 5923323695,
+    "url": "https://github.com/eafen405/OurFairy/issues/100"
+  },
+  "05-scoped-provider-rows.md": {
+    "number": 101,
+    "id": 5923324365,
+    "url": "https://github.com/eafen405/OurFairy/issues/101"
+  },
+  "06-config-contracts-and-row-liveness.md": {
+    "number": 102,
+    "id": 5923324979,
+    "url": "https://github.com/eafen405/OurFairy/issues/102"
+  },
+  "07-single-model-authority.md": {
+    "number": 103,
+    "id": 5923325639,
+    "url": "https://github.com/eafen405/OurFairy/issues/103"
+  },
+  "09-bundle-only-acceptance.md": {
+    "number": 104,
+    "id": 5923326614,
+    "url": "https://github.com/eafen405/OurFairy/issues/104"
+  },
+  "10-row-addressability-tests.md": {
+    "number": 105,
+    "id": 5923327385,
+    "url": "https://github.com/eafen405/OurFairy/issues/105"
+  },
+  "11-closeout.md": {
+    "number": 106,
+    "id": 5923328013,
+    "url": "https://github.com/eafen405/OurFairy/issues/106"
+  }
+}

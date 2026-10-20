@@ -2,26 +2,34 @@
   "name": "@ourfairy/dsh-spaces",
   "version": "0.1.0",
   "private": true,
+  "description": "OurFairy owned file spaces and the scoped filesystem, sandbox, shell and working-directory providers.",
   "type": "module",
   "main": "./src/index.mjs",
   "files": [
     "src",
-    "README.md"
+    "README.md",
+    "locale/*.json"
   ],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:~",
-    "@deepseek-ai/dsh-tools": "workspace:~",
-    "@deepseek-ai/dsh-fs": "workspace:~",
-    "@deepseek-ai/dsh-fs-local": "workspace:~",
-    "@deepseek-ai/dsh-sandbox": "workspace:~",
-    "@deepseek-ai/dsh-bash-sandbox": "workspace:~",
-    "@deepseek-ai/dsh-working-directory": "workspace:~",
-    "@deepseek-ai/dsh-sandbox-policy": "workspace:~",
-    "@ourfairy/dsh-identity": "workspace:~"
+    "@deepseek-ai/cordis": "^4.0.5-alpha.1",
+    "@deepseek-ai/dsh-tools": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-fs": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-fs-local": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-sandbox": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-bash-sandbox": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-working-directory": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-sandbox-policy": "^0.2.1-alpha.2",
+    "@ourfairy/dsh-identity": "^0.1.0",
+    "@deepseek-ai/schemastery": "^3.18.5-alpha.1"
   },
   "exports": {
     ".": "./src/index.mjs",
+    "./locale/*.json": "./locale/*.json",
     "./policy": "./src/policy.mjs",
-    "./bwrap": "./src/bwrap.mjs"
+    "./bwrap": "./src/bwrap.mjs",
+    "./fs": "./src/fs.mjs",
+    "./sandbox": "./src/sandbox.mjs",
+    "./bash": "./src/bash.mjs",
+    "./directory": "./src/directory.mjs"
   }
 }

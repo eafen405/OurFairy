@@ -10,6 +10,7 @@
  * @module @ourfairy/dsh-identity
  */
 import { Service } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { IdentityError, IdentityStore, PHAETHON_SHORT_ID } from './store.mjs'
 import { bearerToken, identityHandlers, IDENTITY_PATHS } from './http.mjs'
 import { identityInterfaces } from './interfaces.mjs'
@@ -17,6 +18,16 @@ import { ownerOf } from './owner.mjs'
 
 export const name = 'ourfairy-identity'
 export const inject = ['webServer', 'connection']
+
+/** The loader validates the row config before `apply`; `resolveConfig` fills the defaults. */
+export const Config = z.object({
+  path: z.string().min(1).required(),
+  // A day count is arithmetic on Date values: above the safe-integer bound the
+  // session expiry silently loses precision, so reject it at load time.
+  sessionTtlDays: z.number().min(1).step(1).max(Number.MAX_SAFE_INTEGER),
+  phaethonName: z.string(),
+  phaethonPassword: z.string(),
+})
 
 /** Principal key one short number speaks for; stable across that user's sessions. */
 export function principalIdOf(shortId) {
@@ -80,23 +91,14 @@ export class IdentityService extends Service {
   }
 }
 
-/** Validate the row config; the bundle writes it, so a mistake fails at load. */
+/** Fill the config defaults; the loader has already validated the declared fields. */
 function resolveConfig(config) {
   const source = config ?? {}
-  if (typeof source.path !== 'string' || source.path === '') {
-    throw new Error('ourfairy-identity: config.path must name the business SQLite file')
-  }
-  const sessionTtlDays = source.sessionTtlDays ?? 30
-  if (!Number.isSafeInteger(sessionTtlDays) || sessionTtlDays < 1) {
-    throw new Error('ourfairy-identity: config.sessionTtlDays must be a positive integer')
-  }
   return {
     path: source.path,
-    sessionTtlDays,
+    sessionTtlDays: source.sessionTtlDays ?? 30,
     phaethonName: source.phaethonName ?? 'phaethon',
-    phaethonPassword: typeof source.phaethonPassword === 'string' && source.phaethonPassword !== ''
-      ? source.phaethonPassword
-      : undefined,
+    phaethonPassword: source.phaethonPassword === '' ? undefined : source.phaethonPassword,
   }
 }
 

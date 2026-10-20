@@ -34,8 +34,6 @@ import http from 'node:http'
 import { repoRoot } from './combo.mjs'
 
 const PHAETHON_PASSWORD = 'real-acceptance-password'
-/** The initial shared selection this combination declares; the run reports it rather than restating it. */
-const AGENT_MODEL = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8')).backend.agentModel
 const options = parse(process.argv.slice(2))
 
 function parse(argv) {
@@ -208,6 +206,10 @@ async function main() {
     const signed = await request(backend.port, '/identity/sign-in', { body: { name: 'phaethon', password: PHAETHON_PASSWORD } })
     if (signed.status !== 200) throw new Error(`Phaethon sign-in failed: ${signed.status} ${signed.bytes.toString('utf8')}`)
     const admin = signed.json.token
+    // The bundle's agent-default-model row is the only initial declaration; read
+    // the effective selection back from the gateway rather than repeating it.
+    const gateway = (await request(backend.port, '/gateway/read', { token: admin, body: {} })).json.gateway
+    const agentModel = gateway.selection
     const invite = await request(backend.port, '/identity/invite', { token: admin })
     const registered = await request(backend.port, '/identity/register', {
       body: { inviteCode: invite.json.invite.code, name: 'real-agent', password: 'real-agent-password' },
@@ -225,11 +227,11 @@ async function main() {
       const projection = await waitForReply(backend.port, admin, sessionId)
       const text = projection.messages.filter(message => message.role === 2 && message.status === 2)
         .map(message => message.text).join('\n')
-      report.steps.text = { requestedModel: `${AGENT_MODEL.provider}/${AGENT_MODEL.model}`, sessionId, reply: text, error: projection.error ?? null }
+      report.steps.text = { requestedModel: `${agentModel.provider}/${agentModel.model}`, sessionId, reply: text, error: projection.error ?? null }
       if (projection.error !== null) report.failures.push(`text turn reported an error: ${JSON.stringify(projection.error)}`)
       else if (text.trim() === '') report.failures.push('the shared model turn produced no final text')
     } catch (error) {
-      report.steps.text = { requestedModel: `${AGENT_MODEL.provider}/${AGENT_MODEL.model}`, error: error?.message ?? String(error) }
+      report.steps.text = { requestedModel: `${agentModel.provider}/${agentModel.model}`, error: error?.message ?? String(error) }
       report.failures.push(`text step could not run: ${error?.message ?? String(error)}`)
     }
 

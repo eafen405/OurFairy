@@ -16,7 +16,7 @@ settle and then reports, as machine-readable JSON:
 | --- | --- |
 | `services` | Every promised service is live, its row is present, enabled, and its fiber is `active` |
 | `rows` | The exact composed row ids/names and their fiber states — the fact callers assert exclusions against |
-| `model` | One real turn's outcome: session id, event count, assistant text, flush result |
+| `model` | The selection read from `agentDefaultModel.currentSelection()`; in `turn` mode it adds that turn's session id, event count, assistant text and flush result |
 | `sessions` | The durable session logs under the isolated `DSH_HOME` (`.jsonl`, or `.jsonl.zstd` when the writer compresses) |
 | `failures` | Every failure as a sentence naming the service, row, or missing configuration |
 
@@ -27,7 +27,6 @@ Environment: `OURFAIRY_PROBE_REPORT` (report path), `OURFAIRY_PROBE_MODE`
 (`boot` | `turn` | `hold`), `OURFAIRY_PROBE_HOLD_MS` (bounded hold in `hold` mode;
 `0` holds until a signal — the launcher's `start` relies on it to keep the booted
 composition alive, because the dsh CLI returns from `runProfile` as soon as
-readiness commits), `OURFAIRY_PROBE_PROVIDER` / `OURFAIRY_PROBE_MODEL` (the
-explicit model selection a `turn` must carry, filled by the launcher from
-`combo.json`), `DSH_HOME` (isolated home). A requested turn without a model
-selection fails loudly with exit code 3 and names the missing variable.
+readiness commits), `DSH_HOME` (isolated home). A boot and a turn read the model
+selection from the composed `agentDefaultModel` service; without that service
+they fail loudly with exit code 3 and name it.

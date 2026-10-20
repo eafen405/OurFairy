@@ -100,3 +100,9 @@ Fairy 视觉实现包含 Fairybot 的 MIT 许可代码，原声明随客户端�
 [合仓证据](work/implementation/evidence/123-client-merge/README.md)。
 
 客户端在 2026-10-20 之前的提交历史只存在于归档仓库；本仓库不重写它，也不复制它。
+
+## 架构
+
+后端以 dsh profile 的插件组合运行。哪些原生接缝**没有**使用、哪些能力保留产品实现及理由，
+以及各自的重新评估条件，见[生态边界：并行传输与保留的产品实现](docs/architecture/dsh-ecosystem-boundary.md)。
+行与包的权威见 `backend/v1-bundle/cordis.patch.yml` 与 `backend/v1-bundle/package.json`。

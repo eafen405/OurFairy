@@ -7,8 +7,10 @@ import { LocalFileSystem } from '@deepseek-ai/dsh-fs-local'
 import { FsError, FsVersion } from '@deepseek-ai/dsh-fs'
 import { pathInside } from './scope.mjs'
 const O_PATH = 0o10000000, O_CLOEXEC = 0o2000000
-export class ScopedFileSystem extends LocalFileSystem {
+export default class ScopedFileSystem extends LocalFileSystem {
   static inject = ['ourfairySpaces']
+  // The row's own config is the native local filesystem config: cwd and the diff basis bound.
+  static Config = LocalFileSystem.Config
   grants = new Map()
   writeLocks = new Map()
   procFdDir = process.platform === 'linux' ? '/proc/self/fd' : undefined

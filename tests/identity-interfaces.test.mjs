@@ -88,7 +88,7 @@ test('the service and its consumers reach identity through the domain faces, nev
   assert.doesNotMatch(service, /this\.store\s*=/u, 'IdentityService must not republish the store')
   assert.match(service, /identityInterfaces\(/u, 'IdentityService must build the domain faces')
 
-  for (const consumer of ['chat/src/delivery.mjs', 'spaces/src/groups.mjs', 'attachments/src/service.mjs', 'search/src/index.mjs']) {
+  for (const consumer of ['delivery/src/index.mjs', 'groups/src/index.mjs', 'attachments/src/service.mjs', 'search/src/index.mjs']) {
     assert.doesNotMatch(read(consumer), /identity\s*\.\s*store\b/u, `${consumer} must not read the bare store`)
   }
 })

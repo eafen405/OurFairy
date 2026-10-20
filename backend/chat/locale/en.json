@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OurFairy remote chat",
+    "description": "Authenticated remote chat over dsh Agent sessions: send, read, page and observe turns through the product's own HTTP and SSE routes."
+  }
+}

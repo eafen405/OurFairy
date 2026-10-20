@@ -75,6 +75,22 @@
 | [arch-66-session-events](arch-66-session-events/README.md) | #66 会话事件单次安全读取 |
 | [arch-67-projection-exports](arch-67-projection-exports/README.md) | #67 projection 多余导出 |
 
+## 插件生态（规格 #73）
+
+| 目录 | 内容 |
+| --- | --- |
+| [96-bundle-authority](96-bundle-authority/README.md) | #96 bundle 成为产品包集合的唯一权威 |
+| [97-boundary-doc](97-boundary-doc/README.md) | #97 并行传输例外与保留产品实现的书面边界 |
+| [98-compat](98-compat/README.md) | #98 产品包声明明确 dsh 兼容范围并由 doctor 校验 |
+| [99-delivery](99-delivery/README.md) | #99 投递成为独立产品行，chat 只暴露窄运行时服务 |
+| [100-groups](100-groups/README.md) | #100 群组工具成为独立产品行 |
+| [101-scoped-rows](101-scoped-rows/README.md) | #101 文件系统、sandbox、bash、工作目录 provider 各自成行 |
+| [102-config](102-config/README.md) | #102 产品行声明 Config 并在加载期以行名和字段失败 |
+| [103-model](103-model/README.md) | #103 共享模型初始声明只保留在 bundle，探针读取 `agentDefaultModel` |
+| [104-bundle-only](104-bundle-only/README.md) | #104 只声明 bundle 的 profile 可安装、启动并服务认证后的产品请求 |
+| [105-overlay](105-overlay/README.md) | #105 经 profile overlay 证明投递/群组/scoped provider 行可寻址、可替换，以及非法 config 的加载期失败 |
+| [106-closeout](106-closeout/README.md) | #106 版本组合、最终两轴评审、证据索引与子票收口 |
+
 ## 原生能力收敛（规格 #71）
 
 | 目录 | 内容 |

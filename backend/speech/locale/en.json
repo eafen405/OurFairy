@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OurFairy speech",
+    "description": "Speech-to-text transcription of the product's audio uploads through the ASR route configured in the gateway."
+  }
+}

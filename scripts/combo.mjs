@@ -24,7 +24,8 @@
  *   node scripts/combo.mjs show [--json]
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { readdirSync, existsSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -214,6 +215,251 @@ function resultLabel(row) {
   }
   return `ok${row.researchUpstreamSha !== null && !row.productHasOwnCommits
     ? ' (research upstream only; no product commits yet)' : ''}`
+}
+
+/**
+ * The package a module specifier belongs to: `@scope/name` for both
+ * `@scope/name` and `@scope/name/subpath`.
+ * @param {string} specifier
+ * @returns {string}
+ */
+export function packageOf(specifier) {
+  return specifier.split('/').slice(0, 2).join('/')
+}
+
+/**
+ * The npm scope a package name belongs to (`@scope/`), or undefined for an
+ * unscoped name. Product rows are recognized by scope rather than by an
+ * enumerated package list.
+ * @param {string} name
+ * @returns {string|undefined}
+ */
+function scopeOf(name) {
+  return name.startsWith('@') ? `${name.split('/')[0]}/` : undefined
+}
+
+/**
+ * Every entry of a composed tree, including the rows nested in a group's
+ * `config` list. The loader mounts group children the same way it mounts
+ * top-level rows, so a package set comparison that walked only the top level
+ * would miss them.
+ * @param {object[]} entries
+ * @returns {object[]}
+ */
+export function flattenEntries(entries) {
+  return entries.flatMap(entry => [
+    entry,
+    // The loader treats any truthy `group` with a list `config` as nesting.
+    ...(entry.group && Array.isArray(entry.config) ? flattenEntries(entry.config) : []),
+  ])
+}
+
+/**
+ * The product packages actually installed in a profile, by the scope the bundle
+ * name belongs to.
+ *
+ * The launcher configures a hoisted linker, so the installed copies sit directly
+ * under `<profileDir>/node_modules/<scope>`. This is the installed set, not the
+ * declared set: a directory that no manifest declares still counts as installed
+ * and must be reported.
+ * @param {string} profileDir
+ * @param {string} bundlePackage
+ * @returns {string[]} package names, sorted.
+ */
+function installedProductPackages(profileDir, bundlePackage) {
+  const scope = scopeOf(bundlePackage)
+  if (scope === undefined) return []
+  const dir = join(profileDir, 'node_modules', scope)
+  if (!existsSync(dir)) return []
+  return readdirSync(dir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() || entry.isSymbolicLink())
+    .map(entry => `${scope}${entry.name}`)
+    .sort()
+}
+
+/**
+ * Load the installed bundle layer through dsh's own profile reader.
+ *
+ * Both checks read the installation the launcher generated: the bundle layer
+ * dsh selected, its skip reason when it selected none, and the app-boot module
+ * whose public exports read manifests and judge compatibility. Loading it in
+ * one place keeps the package set and the compatibility judgement from reading
+ * two different installations.
+ * @param {{
+ *   binName: string,
+ *   bundlePackage: string,
+ *   installAnchor: string,
+ *   profileDir: string,
+ * }} options
+ * @returns {{boot: any, layer: object|undefined, skipped: object|undefined}}
+ */
+function installedBundle({ binName, bundlePackage, installAnchor, profileDir }) {
+  const boot = createRequire(installAnchor)('@deepseek-ai/dsh-app-boot')
+  const profile = boot.loadProfileDirectory(binName, profileDir, installAnchor)
+  return {
+    boot,
+    layer: profile.layers.find(entry => entry.packageName === bundlePackage),
+    skipped: profile.skippedBundles.find(entry => entry.packageName === bundlePackage),
+  }
+}
+
+/**
+ * Compare the bundle's patch rows with the product packages it declares and
+ * with the packages the generated profile installs.
+ *
+ * The bundle's `dependencies` are the product package inventory: the profile
+ * derives its product dependencies from them (plus the probe, which the bundle
+ * never mounts). This reads the composed rows through dsh's own patch loader
+ * (never a YAML parse of our own), the declared set from the installed bundle
+ * manifest, and the installed set through dsh's own bundle resolution — so the
+ * answer cannot disagree with what a boot reads. Which rows count as product
+ * rows follows from the scopes of those same names, so adding a package to the
+ * manifest cannot make a mounted row invisible to the comparison.
+ *
+ * A row mounts one module specifier. Subpath exports (`@ourfairy/x/y`) are
+ * distinct modules of one declared package, so a package may contribute
+ * several rows (the spaces package contributes six today), but the same
+ * specifier twice is a duplicate mount. This is #96's "one row per package"
+ * wording read after #101, which split one capability into several rows of the
+ * same package. Every declared package must also resolve as installed in the
+ * profile, which is what makes the bundle's declaration the set the launcher
+ * installs.
+ *
+ * The installed set is enumerated from the profile itself (the launcher uses a
+ * hoisted linker, so `<profileDir>/node_modules/<scope>/*`), not inferred from
+ * the declaration: a package present there but absent from the expected set
+ * (the bundle, the probe, or a declared dependency) is a package the profile
+ * boots with that no manifest owns, and it fails here by name.
+ * @param {{
+ *   binName: string,
+ *   bundlePackage: string,
+ *   probePackage: string,
+ *   installAnchor: string,
+ *   profileDir: string,
+ * }} options
+ * @returns {{ok: boolean, declared: string[], mounted: {id: string, name: string, package: string}[], failures: string[]}}
+ */
+export function verifyBundlePackages({ binName, bundlePackage, probePackage, installAnchor, profileDir }) {
+  // Loaded the same way the launcher boots: the profile's bundle layer, the
+  // patches it declares, and the rows composed from them.
+  const { boot, layer, skipped } = installedBundle({ binName, bundlePackage, installAnchor, profileDir })
+  const failures = []
+  if (skipped !== undefined) {
+    failures.push(`${bundlePackage} was not loaded from ${profileDir}: ${skipped.reason}`)
+  }
+  if (layer === undefined) {
+    if (skipped === undefined) failures.push(`${bundlePackage} is not a loaded bundle of ${profileDir}`)
+    return { ok: false, declared: [], mounted: [], failures }
+  }
+
+  const manifest = boot.readProfileManifest(binName, layer.packageDir)
+  const declared = Object.keys(manifest.dependencies ?? {}).sort()
+  const rows = flattenEntries(boot.composeEntries([layer.patches]))
+  // Product rows share a scope with the bundle's own package or with a declared
+  // package. Taking that scope from the data, not from a package list, is what
+  // lets a row mounting an undeclared product package be reported rather than
+  // silently ignored.
+  const productScopes = new Set([bundlePackage, ...declared].map(scopeOf).filter(scope => scope !== undefined))
+
+  const mounted = rows
+    .filter(row => typeof row.name === 'string' && [...productScopes].some(scope => row.name.startsWith(scope)))
+    .map(row => ({ id: String(row.id), name: row.name, package: packageOf(row.name) }))
+
+  const declaredSet = new Set(declared)
+  const mountedPackages = new Set()
+  const seen = new Map()
+  for (const row of mounted) {
+    if (!declaredSet.has(row.package)) {
+      failures.push(`bundle row "${row.id}" mounts ${row.name}, but ${bundlePackage} does not declare ${row.package}`)
+    }
+    mountedPackages.add(row.package)
+    const ids = seen.get(row.name) ?? []
+    ids.push(row.id)
+    seen.set(row.name, ids)
+  }
+  for (const [name, ids] of seen) {
+    if (ids.length > 1) {
+      failures.push(`bundle rows ${ids.map(id => `"${id}"`).join(' and ')} both mount ${name} (${packageOf(name)}); a module specifier may be mounted once`)
+    }
+  }
+  for (const name of declared) {
+    if (!mountedPackages.has(name)) {
+      failures.push(`${bundlePackage} declares ${name}, but no bundle row mounts it`)
+    }
+    try {
+      boot.resolveBundleDir(binName, name, installAnchor, profileDir)
+    } catch (error) {
+      failures.push(`${bundlePackage} declares ${name}, but it is not installed in ${profileDir};`
+        + ` run 'ourfairy-backend start --reinstall': ${error.message}`)
+    }
+  }
+  // The expected set is what the launcher installs: the bundle itself, the
+  // test-only probe it never mounts, and the bundle manifest's dependencies.
+  const expected = new Set([bundlePackage, probePackage, ...declared])
+  for (const name of installedProductPackages(profileDir, bundlePackage)) {
+    if (!expected.has(name)) {
+      failures.push(`${name} is installed in ${profileDir}, but ${bundlePackage} does not declare it`)
+    }
+  }
+
+  return { ok: failures.length === 0, declared, mounted, failures }
+}
+
+/**
+ * Judge every product package installed in the profile, dsh peers against the
+ * runtime the pinned CLI provides.
+ *
+ * The judgement is dsh's own public `evaluatePluginCompatibility`, given the
+ * runtime version `getDshRuntimeVersion` reads from the same app-boot module —
+ * not a range comparison implemented here. The set judged is the installed one
+ * (`<profileDir>/node_modules/<scope>/*`), not just the bundle's declaration: a
+ * package the profile installed without a declaration is still judged, and the
+ * declaration/installation comparison stays in the bundle-packages check. The
+ * manifests are the installed copies the dsh loader reads, resolved through the
+ * profile, so the answer is about what would boot.
+ * `evaluatePluginCompatibility` judges only dsh peers (`@deepseek-ai/dsh` and
+ * `@deepseek-ai/dsh-*`); a product package's other peers are declarations for
+ * readers and pnpm, not inputs to this runtime decision. The bundle and the
+ * probe are included: they declare no peers, so the judgement is a no-op for
+ * them, but a reader sees every installed product package accounted for.
+ * @param {{
+ *   binName: string,
+ *   bundlePackage: string,
+ *   installAnchor: string,
+ *   profileDir: string,
+ * }} options
+ * @returns {{ok: boolean, dshVersion: string, checked: string[], failures: string[]}}
+ */
+export function verifyPluginCompatibility({ binName, bundlePackage, installAnchor, profileDir }) {
+  const { boot, layer, skipped } = installedBundle({ binName, bundlePackage, installAnchor, profileDir })
+  const dshVersion = boot.getDshRuntimeVersion()
+  const failures = []
+  if (skipped !== undefined) {
+    failures.push(`${bundlePackage} was not loaded from ${profileDir}: ${skipped.reason}`)
+  }
+  if (layer === undefined) {
+    if (skipped === undefined) failures.push(`${bundlePackage} is not a loaded bundle of ${profileDir}`)
+    return { ok: false, dshVersion, checked: [], failures }
+  }
+
+  const checked = []
+  for (const name of installedProductPackages(profileDir, bundlePackage)) {
+    let installed
+    try {
+      installed = boot.readProfileManifest(binName, boot.resolveBundleDir(binName, name, installAnchor, profileDir))
+    } catch (error) {
+      failures.push(`${name} is installed in ${profileDir} but its manifest is not readable: ${error.message}`)
+      continue
+    }
+    const issue = boot.evaluatePluginCompatibility(installed, {}, dshVersion)
+    if (issue !== undefined) {
+      const peers = Object.entries(issue.peers).map(([peer, range]) => `${peer} ${range}`).join(', ')
+      failures.push(`${name}@${issue.version} is incompatible with dsh ${dshVersion}: peerDependencies ${peers}`)
+      continue
+    }
+    checked.push(`${name}@${installed.version}`)
+  }
+  return { ok: failures.length === 0, dshVersion, checked, failures }
 }
 
 function printTable(rows) {
