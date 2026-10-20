@@ -1,8 +1,5 @@
-本仓库是 OurFairy 产品仓库，包含后端与 `android/` 下的 Android 客户端；只有 dsh fork 是外部依赖。
-两者的本地路径、集成分支与锁定提交只以 `combo.json` 为准。
-
-客户端已内联，不再跟随上游：它的来源提交声明在 `android/ourfairy-source.json`，由组合校验比对。
-取上游修复走手工挑选，不走过例行合并。产品版本、来源与旧证据路径的说明见 `README.md`。
+本仓库是 OurFairy 产品仓库，包含后端与 `android/` 下的 Android 客户端；deepseek-harness 是外部 fork。
+两者的本地路径、集成分支与锁定提交以 `combo.json` 为准。
 
 ## 研发与审查
 
@@ -15,6 +12,7 @@
 - **限制范围。** 局部需求不默认改造全局；超出原方案先说明必要性和更小替代方案，不静默扩展，也不对已授权的常规细节反复请示。
 - **精简不减保障。** 保留必要的权限、隔离、事务、幂等、并发控制、失败恢复及操作溯源。设计与交付均检查影响范围和维护成本；测试通过或文档已确认不代表架构必要。
 - **规模校准。** 本项目是个人项目、面向少量受邀用户：抽象与防御只在当下明确需求或已观测到的失败面前加入，并指名它服务哪一个需求或故障。必需的保障按「精简不减保障」完整保留。
+- **插件理念。** 一切皆插件，符合 dsh 的理念，同时尽可能兼容其插件生态，让模块更灵活；深模块、窄接口是被推崇的。
 
 ### 数据库
 
@@ -38,4 +36,4 @@ The five canonical roles map to `needs-triage`, `needs-info`, `ready-for-agent`,
 
 ### Domain docs
 
-Single-context: `GLOSSARY.md` and `docs/adr/`（若存在）at the repo root. See `docs/agents/domain.md`.
+Multi-context: `GLOSSARY-MAP.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.

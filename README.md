@@ -1,79 +1,125 @@
 # OurFairy
 
-OurFairy 是面向受邀小群体、配有 Android 客户端的 Fairy 产品仓库：后端与客户端在同一个检出里，
-产品版本由本仓库的一个提交表达。
+面向受邀小群体、以 Android 为首个客户端的 Fairy 产品仓库。后端与客户端在同一个检出里，产品版本由
+本仓库的一个提交表达。
+
+产品由三部分咬合而成：`android/` 是一个前端壳，只做呈现与提交；`backend/` 是产品的业务插件，
+以 dsh 插件（深模块、窄接口）的形式挂进后端；真正执行 agent 的是外部 fork 的 deepseek-harness。
+凡是能靠原生接缝做到的就不自己写，刻意不采用的那几处连同理由与重新评估条件都写在
+[生态边界：并行传输与保留的产品实现](docs/architecture/dsh-ecosystem-boundary.md)。
 
 ## 目录
 
 | 目录 | 内容 |
 | --- | --- |
 | `backend/` | 产品模块与显式后端装配（dsh profile 的 bundle 与各产品包） |
-| `scripts/` | 后端入口 `ourfairy-backend.mjs`、版本组合 `combo.mjs` 与测量/基准脚本 |
 | `android/` | Android 客户端。正常的 Gradle 工程，内部结构与上游 RikkaHub 保持原相对位置 |
-| `tests/` | 产品测试与仓库结构检查：行为测试经 launcher 驱动真实后端，模型与网络使用替身 |
+| `scripts/` | 后端入口 `ourfairy-backend.mjs`、版本组合 `combo.mjs`、验收与基准脚本 |
+| `tests/` | 产品测试与仓库结构检查：行为测试经启动器驱动真实后端，模型与网络使用替身 |
+| `docs/` | 规格、架构边界、决策与调查 |
+| `work/` | 实施期的工作区：票面副本与交付证据 |
 
-外部依赖只剩一个：dsh fork 按提交锁定，因为它的上游仍在演进。客户端的来源是 `android/` 内的
-声明文件，不再跟随上游（见[来源与许可证](#来源与许可证)）。
+## 先决条件
 
-## 两个入口
+| 需要 | 版本 / 位置 |
+| --- | --- |
+| Node | `^22.19.0 \|\| >=24` |
+| pnpm | 用 corepack 固定：`corepack pnpm@11.28.5` |
+| deepseek-harness 检出 | 路径与锁定提交见 [combo.json](combo.json) 的 `repos.dsh` |
+| JDK / Android SDK | 只在构建客户端时需要，见下文 |
 
-后端与客户端各有入口，根 `package.json` **不**包装 Gradle——一条命令不应同时做两件耗时的事。
+后端测试驱动的是**真实的** dsh 启动链路，所以那个检出必须先按 `combo.json` 的 `repos.dsh.requiredBuild`
+四条命令构建过（`build:lib:host`、`build:lib:client`、`build:native-system` 各管一段，少跑一条会在
+运行期以缺模块的形式失败）。`npm run backend:doctor` 的 `dsh CLI build` 一项会先替你确认。
+
+## 跑测试
 
 ```sh
-# 后端
-npm test                  # 产品测试
-npm run combo:verify      # 版本组合校验
-node scripts/ourfairy-backend.mjs start|stop|status|doctor
-
-# 客户端（在 android/ 内，入口仍是 wrapper）
-cd android
-./gradlew :app:assembleDebug
-./gradlew :app:testDebugUnitTest
-./gradlew :app:assembleRelease -Pourfairy.identityEndpoint=https://your-backend.example
+npm test            # 全量：node --test "tests/**/*.test.mjs"
+npm run combo:verify   # 版本组合：本仓库、dsh、客户端来源三条
+npm run backend:doctor # 环境自检：工具链、profile 装配、包与行、插件兼容、原生能力
 ```
 
-客户端自己的构建与模块说明见 [android/README.md](android/README.md)。
+`npm test` 不联网、不调用真实模型：它经启动器起真实后端，模型与网络走替身。约 1 分 40 秒。
 
-### 客户端构建前置条件
+单独跑一个文件：
 
-以下都是本地文件，**不入库**；`tests/android-source.test.mjs` 会对这些路径的忽略结果与已跟踪文件断言：
+```sh
+node --test tests/chat-read-window.test.mjs
+```
 
-- JDK 21 与 Android SDK；SDK 版本由 Gradle 配置指定。
-- `android/local.properties`：`sdk.dir=/path/to/Android/Sdk`；release 签名另需 `storeFile`、
-  `storePassword`、`keyAlias`、`keyPassword`。
-- `android/app/google-services.json`：Google Services 插件在缺失时会硬失败，需要自备**桩文件**。
-  桩里的 key 是假的，Firebase/Crashlytics 运行时不可用，任何崩溃上报或真机结论都必须声明这一点。
+几个常看的入口：`tests/owned-sessions.test.mjs`（会话归属与管理身份不越权）、
+`tests/bundle-packages.test.mjs`（bundle 行与包集合一致）、`tests/native-capabilities.test.mjs`
+（四项原生能力在位）、`tests/android-source.test.mjs`（客户端来源声明与组合一致）。
+
+### 提交前钩子
+
+```sh
+npm run hooks:install   # git config core.hooksPath .githooks
+```
+
+之后每次提交先跑 `npm test` 再跑 `npm run combo:verify`，任一失败即阻止提交。检查针对当前工作树，
+未暂存的改动同样会影响结果。
+
+## 跑后端
+
+```sh
+npm run backend:start    # 起在隔离 home 里，profile 由 bundle 生成
+npm run backend:status
+npm run backend:stop
+npm run backend:doctor
+```
+
+隔离 home 默认落在 `<worktree>/.ourfairy`，可用 `OURFAIRY_HOME` 覆盖；引擎自己的 home 在其下的
+`dsh-home`（`DSH_HOME`）。改了产品包内容后启动器会按内容哈希自动重装 profile；要强制重装加
+`-- --reinstall`；要看机器可读的自检结果用 `-- --json`。
+
+## 构建客户端
+
+客户端是独立的 Gradle 工程，根 `package.json` **不**包装它——一条命令不该同时做两件耗时的事。
+所有命令都在 `android/` 里发起。
+
+```sh
+cd android
+
+# 单测与静态检查
+./gradlew test lintDebug
+
+# 调试包
+./gradlew assembleDebug
+
+# 发布包（必须给出后端身份入口）
+./gradlew assembleRelease -Pourfairy.identityEndpoint=https://your-backend.example
+```
+
+需要 `ANDROID_HOME` 指到 SDK 根目录，并准备好下列**本地文件**（都不入库）：
+
+- `android/local.properties`：`sdk.dir=/path/to/Android/Sdk`；发布签名另需 `storeFile`、`storePassword`、
+  `keyAlias`、`keyPassword`。
+- `android/app/google-services.json`：Google Services 插件缺它会硬失败，需要一个**桩文件**。桩里的 key
+  是假的，Firebase/Crashlytics 运行时不可用——任何崩溃上报或真机结论都必须声明这一点。
+
+测试通过、APK 构建成功、真机验收是三件不同的事，分别报告。
 
 ## 版本组合
 
-`combo.json` 记录当前组合：本仓库锁集成分支，dsh 锁提交，客户端记来源提交。
-`npm run combo:verify` 打印三行——两行仓库、一行 `android source`；最后一行把
-`combo.json` 里记录的来源提交与 `android/ourfairy-source.json` 的声明比对，不一致即失败。
-`doctor` 的 `combo combination` 报告里也出现同一行与同一个提交，由 `tests/lifecycle.test.mjs` 断言；
+[combo.json](combo.json) 记录当前产品组合：本仓库锁集成分支，dsh 锁提交，客户端记来源提交。
+`npm run combo:verify` 打印三行——两行仓库、一行 `android source`，最后一行把 `combo.json` 记录的
+来源提交与 `android/ourfairy-source.json` 的声明比对，不一致即失败。
+
+`doctor` 的 `combo combination` 报告里也出现同一行同一个提交，由 `tests/lifecycle.test.mjs` 断言；
 这两个文件是唯一的两处来源记录，改一处而另一处不动，校验会失败。
 
 研究用上游 SHA 是调研基线，不等于产品提交；任何报告不得把它当作已含产品改动。
 
-## 提交前检查
+## 基准
 
 ```sh
-npm run hooks:install
+npm run bench:projection -- --label after --out /tmp/after.json   # 真实启动器 + 模型替身，约一分钟
+npm run bench:gate -- --baseline <before...> --after /tmp/after.json
 ```
 
-该命令设置仓库的 `core.hooksPath=.githooks`，提交前依次执行：
-
-- `npm test`：运行现有测试，包括外部模型替身测试。
-- `npm run combo:verify`：核对 dsh 锁定提交、集成分支基线与客户端来源声明。
-
-任一命令失败都会阻止提交，并保留原退出码。
-
-检查依赖本地 `deepseek-harness` companion 目录；默认路径见 `combo.json` 的
-`repos.*.localPath`。测试也使用 dsh 的模型替身服务。路径覆盖变量 `OURFAIRY_DSH_DIR`
-与 `OURFAIRY_REPO_DIR` 及其解析规则见 `scripts/combo.mjs`。
-
-仓库当前未启用 `extensions.worktreeConfig`，安装命令会修改 worktree
-共享的 Git config；各 worktree 从自己的 `.githooks` 运行检查。
-检查针对当前工作树，未暂存的修改也会影响结果，并非仅验证暂存快照。
+`bench:gate` 只看相对比值，不设绝对毫秒门槛。
 
 ## 来源与许可证
 
@@ -100,9 +146,3 @@ Fairy 视觉实现包含 Fairybot 的 MIT 许可代码，原声明随客户端�
 [合仓证据](work/implementation/evidence/123-client-merge/README.md)。
 
 客户端在 2026-10-20 之前的提交历史只存在于归档仓库；本仓库不重写它，也不复制它。
-
-## 架构
-
-后端以 dsh profile 的插件组合运行。哪些原生接缝**没有**使用、哪些能力保留产品实现及理由，
-以及各自的重新评估条件，见[生态边界：并行传输与保留的产品实现](docs/architecture/dsh-ecosystem-boundary.md)。
-行与包的权威见 `backend/v1-bundle/cordis.patch.yml` 与 `backend/v1-bundle/package.json`。
