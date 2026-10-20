@@ -113,6 +113,7 @@
 
 | 目录 | 内容 |
 | --- | --- |
+| [stage-71-73](stage-71-73/README.md) | #71/#72/#73 与 #123 的集成合并：冲突取舍、全量、doctor 与组合校验 |
 | [stage-t5-t6](stage-t5-t6/README.md) · [review-t5-t6](review-t5-t6/README.md) | T5–T6 整合与两轴评审 |
 | [stage-t7-t9](stage-t7-t9/README.md) · [review-t7-t9](review-t7-t9/README.md) | T7–T9 整合与两轴评审 |
 | [stage-t10-t12](stage-t10-t12/README.md) · [review-t10-t12](review-t10-t12/README.md) | T10–T12 整合与两轴评审 |
