@@ -91,7 +91,7 @@ const CITED_CHECKS = [
   ['tests/identity-http.test.mjs',
     'the provisioned Phaethon signs in as short number 1'],
   ['tests/identity-http.test.mjs',
-    'a request for an untrusted Host is refused by the same fence the /api route uses'],
+    'every product module entry point rejects an untrusted Host before reading the body or credential'],
   ['tests/identity-http.test.mjs',
     'a session credential admits dsh /api while an anonymous request is refused at the door'],
   ['tests/owned-sessions.test.mjs',
