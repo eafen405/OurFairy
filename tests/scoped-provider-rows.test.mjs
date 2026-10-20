@@ -3,11 +3,14 @@
  *
  * The spaces row keeps the scope; each provider is a row with a stable id, so a
  * profile overlay can address it. Disabling one must leave the depending
- * capability waiting — never a quieter, unscoped native provider — and the
- * probe must name the row and service that missed. The shell row is also
- * observed through a real model turn: with it disabled, the model is offered no
- * `bash` tool and a call fails with an explicit unknown-tool error while `read`
- * stays available.
+ * capability waiting — never a quieter, unscoped native provider. A disabled
+ * expected row is an intentional absence: the probe records the row's disabled
+ * flag and does not fail readiness for its own missing service. Dependants that
+ * still need it keep failing and are named (fs and working-directory cascade
+ * through attachments/chat), while disabling the shell alone leaves the
+ * composition ready. The shell row is also observed through a real model turn:
+ * with it disabled, the model is offered no `bash` tool and a call fails with an
+ * explicit unknown-tool error while `read` stays available.
  */
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
@@ -78,27 +81,55 @@ test('the four scoped providers are active bundle rows with their own services',
   assert.equal(report.services.ourfairySpaces?.expectedRow, 'spaces')
 })
 
-test('disabling one provider row leaves its capability waiting with no native fallback', async () => {
+test('disabling one provider row leaves its capability absent or waiting with no native fallback', async () => {
   const home = freshHome()
   // One installation serves every case; the first probe creates it.
   const installed = await probe(home, { report: 'install.json' })
   assert.equal(installed.run.code, 0, `the baseline probe must install cleanly: ${describeRun('probe', installed.run)}`)
+
+  // A disabled expected row is an intentional absence: the probe skips its own
+  // missing service instead of failing readiness. The capability's dependants
+  // still show the consequence, and for `scoped-bash` nothing else needs the
+  // shell, so the whole composition stays healthy (#105: start succeeds while a
+  // scoped provider is disabled). `fs` and `workingDirectory` are deeper cuts:
+  // attachments (and therefore chat) wait on them, so their compositions fail.
+  const DEPENDANT_FAILURES = {
+    'scoped-fs': ['service "ourfairyAttachments" is not live'],
+    'scoped-sandbox': ['service "shell" is not live'],
+    'scoped-directory': ['service "ourfairyAttachments" is not live'],
+  }
 
   for (const provider of PROVIDERS) {
     const overlay = writeOverlay(home, [{ id: provider.row, disabled: true }], `disable-${provider.row}.patch.yml`)
     const { run, report } = await probe(home, { overlays: [overlay], report: `report-${provider.row}.json` })
     const failures = report.failures.join('\n')
 
-    assert.notEqual(run.code, 0, `probe must fail with "${provider.row}" disabled: ${describeRun('probe', run)}`)
-    assert.equal(report.ok, false, `probe must report failure for "${provider.row}"`)
     assert.equal(report.services[provider.service]?.live, false,
       `service "${provider.service}" must be absent when row "${provider.row}" is disabled, not supplied natively`)
-    assert.ok(failures.includes(`service "${provider.service}" is not live`),
-      `the failure must name service "${provider.service}"; got:\n${failures}`)
-    assert.ok(failures.includes(`expected row "${provider.row}"`),
-      `the failure must name row "${provider.row}"; got:\n${failures}`)
+    assert.equal(report.services[provider.service]?.disabled, true,
+      `the report must record the disabled expected row for service "${provider.service}"`)
+    // The disabled row's own absence is deliberate, not a readiness failure.
+    assert.equal(failures.includes(`service "${provider.service}" is not live`), false,
+      `a disabled expected row must not fail the probe as an absent service; got:\n${failures}`)
+    assert.equal(failures.includes(`bundle product row "${provider.row}"`), false,
+      `a disabled row must not be reported as an inactive product row; got:\n${failures}`)
+
+    if (provider.row === 'scoped-bash') {
+      assert.equal(run.code, 0, `probe must succeed with only "${provider.row}" disabled: ${describeRun('probe', run)}`)
+      assert.equal(report.ok, true, `probe must report ready: ${JSON.stringify(report.failures)}`)
+    } else {
+      assert.notEqual(run.code, 0,
+        `probe must still fail while "${provider.row}" leaves its dependants waiting: ${describeRun('probe', run)}`)
+      assert.equal(report.ok, false, `probe must report the waiting dependants of "${provider.row}"`)
+      for (const failure of DEPENDANT_FAILURES[provider.row]) {
+        assert.ok(failures.includes(failure),
+          `the failure must name the waiting dependant (${failure}); got:\n${failures}`)
+      }
+    }
 
     const rows = new Map(report.rows.map(row => [row.id, row]))
+    assert.equal(rows.get(provider.row)?.disabled, true,
+      `the overlay must disable the addressed row "${provider.row}"`)
     assert.notEqual(rows.get(provider.toolRow)?.fiberState, 'active',
       `tool row "${provider.toolRow}" must wait while row "${provider.row}" is disabled`)
     for (const native of NATIVE_PROVIDER_ROWS) {
@@ -118,11 +149,16 @@ test('a bash call under a disabled shell row fails clearly while read stays offe
   })
   servers.push(model)
   const overlay = writeOverlay(home, [{ id: 'scoped-bash', disabled: true }], 'disable-shell.patch.yml')
-  const { run } = await probe(home, {
+  const { run, report } = await probe(home, {
     overlays: [overlay], report: 'report-shell.json', turn: true,
     env: { MINIMAX_CN_API_KEY: 'mock-key', OURFAIRY_MINIMAX_BASE_URL: `${model.baseURL}` },
   })
-  assert.notEqual(run.code, 0, `probe must fail with the shell row disabled: ${describeRun('probe', run)}`)
+  // The disabled row's expected service is an intentional absence, so the probe
+  // still reports ready and the turn runs to completion; the capability itself
+  // is gone from the catalog.
+  assert.equal(run.code, 0, `probe must succeed with the shell row deliberately disabled: ${describeRun('probe', run)}`)
+  assert.equal(report.ok, true, `probe failures: ${JSON.stringify(report.failures)}`)
+  assert.equal(report.services.shell?.disabled, true, 'the shell row must be recorded as disabled')
   assert.ok(model.requests.length >= 2, 'the turn must reach the model twice: the tool call and its result')
 
   const offered = (model.requests[0].body.tools ?? []).map(tool => tool.name)

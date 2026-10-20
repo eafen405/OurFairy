@@ -93,16 +93,16 @@ function collectRows(ctx) {
 const PROBE_PACKAGE = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).name
 
 /**
- * Every non-disabled product row the bundle mounts must be active.
+ * Every non-disabled `@ourfairy/*` row in the composed tree must be active.
  *
- * The check's domain is exactly the product rows the bundle contributes that an
- * overlay did not disable; a disabled row is not judged here at all. A row whose
- * config the loader rejects (or whose `apply` throws) leaves its fiber failed or
- * waiting; reporting ready in that state would let a later request discover the
- * missing capability. Naming the row and package here is what makes the
- * configuration failure act on the boot instead. A row an operator disabled
- * through an overlay is a deliberate absence, not an activation failure, so it
- * is skipped.
+ * The check's domain is the composed tree itself — rows the bundle contributes
+ * and rows an overlay inserts — except the probe's own row and rows an operator
+ * disabled. A row whose config the loader rejects (or whose `apply` throws)
+ * leaves its fiber failed or waiting; reporting ready in that state would let a
+ * later request discover the missing capability. Naming the row and package
+ * here is what makes the configuration failure act on the boot instead. A row
+ * an operator disabled through an overlay is a deliberate absence, not an
+ * activation failure, so it is skipped.
  */
 function collectInactiveProductRows(ctx) {
   const loader = ctx.get('loader')
@@ -121,7 +121,19 @@ function collectInactiveProductRows(ctx) {
   return failures
 }
 
-/** Service liveness and the row/package that owns it; every miss names the row. */
+/**
+ * Service liveness and the row/package that owns it; every miss names the row.
+ *
+ * A disabled expected row changes the meaning of the service: absent is the
+ * operator's intentional absence (the capability is off), and live is a
+ * replacement row supplying the same service through the overlay's
+ * disable-plus-insert path. Neither fails readiness — #105 requires a start to
+ * succeed while a scoped provider is disabled or replaced. The failures that
+ * remain are real composition
+ * mismatches: an expected row that is present and enabled but whose service is
+ * absent, a live service whose expected row is missing from the tree, and a
+ * live service whose enabled expected row did not activate.
+ */
 function collectServices(ctx, rows) {
   const byId = new Map(rows.map(row => [row.id, row]))
   const services = {}
@@ -139,11 +151,13 @@ function collectServices(ctx, rows) {
       ...(row?.disabled === true ? { disabled: true } : {}),
     }
     if (!live) {
+      if (row?.disabled === true) continue
       failures.push(`service "${service}" is not live (expected row "${rowId}" = ${packageName})`)
     } else if (row === undefined) {
       failures.push(`service "${service}" is live but its row "${rowId}" (${packageName}) is not in the composed tree`)
     } else if (row.disabled) {
-      failures.push(`service "${service}" is live but its row "${rowId}" is disabled`)
+      // A replacement: the disabled row's service is provided by another line.
+      continue
     } else if (row.fiberState !== 'active') {
       failures.push(`service "${service}" is registered but row "${rowId}" fiber is ${row.fiberState}, not active`)
     }
