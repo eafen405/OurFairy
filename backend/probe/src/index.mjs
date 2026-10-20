@@ -11,10 +11,6 @@
  *   OURFAIRY_PROBE_REPORT  absolute path of the JSON report to write
  *   OURFAIRY_PROBE_MODE    `boot` (default), `turn`, or `hold`
  *   OURFAIRY_PROBE_HOLD_MS bounded hold in `hold` mode (0 = until a signal)
- *   OURFAIRY_PROBE_PROVIDER / OURFAIRY_PROBE_MODEL
- *                          the explicit model selection a `turn` must carry
- *                          (the launcher passes them from combo.json; a turn
- *                          without them fails rather than using a default)
  *   DSH_HOME               the isolated harness home the launcher pinned
  *
  * `hold` keeps the real composition alive after a successful check so the
@@ -181,6 +177,46 @@ function assistantTextOf(event) {
   return text === '' ? undefined : text
 }
 
+/** Where a reported selection came from, so a reader can tell it from a saved override. */
+const MODEL_SELECTION_SOURCE = 'agentDefaultModel.currentSelection()'
+
+/**
+ * The shared model selection the composed `agentDefaultModel` row exposes.
+ *
+ * Read from the live service rather than parsed from the bundle patch or passed
+ * in by the launcher: that row is the only initial declaration. The product
+ * chat runtime reads the same service at each turn start, so a selection saved
+ * through the gateway is what this returns once the running composition has
+ * adopted it.
+ */
+function readAgentDefaultModel(ctx) {
+  const service = ctx.get('agentDefaultModel')
+  if (service === undefined || typeof service.currentSelection !== 'function') {
+    throw new ProbeConfigError(
+      'the "agentDefaultModel" service is not live: the probe reads the model selection from the'
+      + ' composed agent-default-model row and cannot report or run a turn without it',
+    )
+  }
+  const selection = service.currentSelection()
+  if (typeof selection?.provider !== 'string' || selection.provider === ''
+    || typeof selection?.model !== 'string' || selection.model === '') {
+    throw new ProbeConfigError(
+      `the "agentDefaultModel" service returned no usable selection: ${JSON.stringify(selection)}`,
+    )
+  }
+  return selection
+}
+
+/** The selection fields every report carries, before any turn outcome is added. */
+function selectionReport(selection) {
+  return {
+    provider: selection.provider,
+    model: selection.model,
+    ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }),
+    selection: MODEL_SELECTION_SOURCE,
+  }
+}
+
 /**
  * Drive one real model turn: create a session through the agent factory, send
  * one user message, wait for idle, and flush the durable log.
@@ -190,19 +226,12 @@ async function runTurn(ctx, report) {
   if (agents === undefined) throw new Error('cannot run a turn: the "agents" service is not live')
   const sessions = ctx.get('sessions')
   if (sessions === undefined) throw new Error('cannot run a turn: the "sessions" service is not live')
-  // The model selection arrives from the launcher (combo.json backend.agentModel).
-  // It is passed explicitly because this probe creates its own Agent outside the
-  // product chat runtime: the product reads agentDefaultModel per turn, while the
-  // probe's turn has no product runtime to read it for it.
-  const provider = process.env.OURFAIRY_PROBE_PROVIDER
-  const model = process.env.OURFAIRY_PROBE_MODEL
-  if (provider === undefined || provider === '' || model === undefined || model === '') {
-    throw new ProbeConfigError(
-      'missing required configuration OURFAIRY_PROBE_PROVIDER / OURFAIRY_PROBE_MODEL:'
-      + ' the requested turn must carry an explicit model selection (the launcher supplies it from'
-      + ' combo.json backend.agentModel). Refusing to fall back to an implicit default.',
-    )
-  }
+  // The composed selection is the authority, read at the start of this turn the
+  // same way the product chat runtime reads it. Passing it explicitly is what
+  // this probe needs because it creates its own Agent; there is no second
+  // declaration to fall back to.
+  const selection = readAgentDefaultModel(ctx)
+  const { provider, model } = selection
   // The route's credential reference is the authority, not a hardcoded name:
   // resolve the live settings row and let the seam answer presence.
   const settings = ctx.get('settings')
@@ -226,8 +255,7 @@ async function runTurn(ctx, report) {
     sessionId,
     meta: { owner: ownerOf(1) },
     agentOptions: { provider, model,
-      ...process.env.OURFAIRY_PROBE_REASONING_EFFORT === undefined || process.env.OURFAIRY_PROBE_REASONING_EFFORT === ''
-        ? {} : { reasoningEffort: process.env.OURFAIRY_PROBE_REASONING_EFFORT } },
+      ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }) },
   })
   const agent = handle.agent
   let output
@@ -250,9 +278,7 @@ async function runTurn(ctx, report) {
   }
   const flushed = await sessions.flush(agent.session)
   report.model = {
-    provider,
-    model,
-    selection: 'explicit agentOptions (the probe creates its own Agent; the product chat runtime reads agentDefaultModel per turn)',
+    ...selectionReport(selection),
     sessionId: String(agent.session.id),
     events,
     output: output ?? null,
@@ -319,6 +345,9 @@ async function runProbe(ctx) {
     const services = collectServices(ctx, report.rows)
     report.services = services.services
     report.failures.push(...services.failures)
+    // Boot reports the composed selection too, so an external caller can assert
+    // which initial model the bundle's row put into effect without running a turn.
+    report.model = selectionReport(readAgentDefaultModel(ctx))
     // Direct provider calls have no authenticated session; cwd must never supply one.
     report.agentless = {}
     for (const [name, operation] of [
