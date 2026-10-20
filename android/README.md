@@ -31,8 +31,8 @@ CI 的后端地址来自仓库变量 `OURFAIRY_IDENTITY_ENDPOINT`，签名来自
 
 应用启动装配在 `RikkaHubApp.kt` 和 `di/`，导航在 `RouteActivity.kt`。`data/remote/` 维护会话归属、发送确认、同步水位和通知记账；`ui/identity/RemoteTranscript.kt` 承接消息呈现与阅读位置。
 
-产品规格、术语和版本组合由 [OurFairy](https://github.com/eafen405/OurFairy) 管理。本轮客户端运行组成说明见 [fairy-client-runtime.md](docs/references/fairy-client-runtime.md)。
+产品规格、术语和版本组合由本仓库根文档管理，见 [README.md](../README.md)。客户端运行组成见 [fairy-client-runtime.md](docs/references/fairy-client-runtime.md)。
 
 ## 来源与许可证
 
-客户端派生自 [RikkaHub](https://github.com/rikkahub/rikkahub)，研究基线提交为 `0966502c4d65c1ee4b2a3e49a19703bb1978016c`，遵循仓库中的 [AGPL-3.0 许可证](LICENSE)。Fairy 视觉实现包含 Fairybot 的 MIT 许可代码，声明位于 [FAIRYBOT_MIT.txt](app/src/main/assets/licenses/FAIRYBOT_MIT.txt)。各依赖保留其原许可证。
+客户端派生自 [RikkaHub](https://github.com/rikkahub/rikkahub)，以快照方式并入本仓库，来源提交 `460109d1b89b824a2ddb7f3201d8d3f7af7e02ce` 记录在 [ourfairy-source.json](ourfairy-source.json) 与根 [combo.json](../combo.json) 的 `androidSource`，由 `npm run combo:verify` 比对。`0966502c4d65c1ee4b2a3e49a19703bb1978016c` 只是更早的调研基线，不描述来源。遵循仓库中的 [AGPL-3.0 许可证](LICENSE)。Fairy 视觉实现包含 Fairybot 的 MIT 许可代码，声明位于 [FAIRYBOT_MIT.txt](app/src/main/assets/licenses/FAIRYBOT_MIT.txt)。各依赖保留其原许可证。来源与取上游修复的规则见根 [README.md](../README.md) 的「来源与许可证」。
