@@ -9,9 +9,9 @@
   "exports": { ".": "./src/index.mjs" },
   "files": ["src", "README.md"],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:~",
-    "@deepseek-ai/dsh-llm": "workspace:~",
-    "@ourfairy/dsh-identity": "workspace:~",
-    "@ourfairy/dsh-chat": "workspace:~"
+    "@deepseek-ai/cordis": "^4.0.5-alpha.1",
+    "@deepseek-ai/dsh-llm": "^0.2.1-alpha.2",
+    "@ourfairy/dsh-identity": "^0.1.0",
+    "@ourfairy/dsh-chat": "^0.1.0"
   }
 }
