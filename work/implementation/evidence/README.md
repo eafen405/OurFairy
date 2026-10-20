@@ -52,7 +52,7 @@
 
 | 目录 | 内容 |
 | --- | --- |
-| [72-projection-perf](72-projection-perf/README.md) | #88 固定负载投影基准与改造前同机基线（脚本与两次基线 JSON 入库） |
+| [72-projection-perf](72-projection-perf/README.md) | spec #72 证据索引：逐票记录（#88 基线与 3 份基线 JSON、#89 投影单元……），含重放命令与未执行项 |
 
 ## 架构收敛票
 
