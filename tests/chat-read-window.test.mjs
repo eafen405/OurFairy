@@ -4,12 +4,12 @@
  * per-observer slice plus a live overlay.
  *
  * This drives `SessionRuntime` directly over a fake native Agent context. The
- * fake records every `observeSession` read and every unit `apply`, so the
- * behavior under test is observable at the seam the endpoints use: a streaming
- * fragment must not read the log or run a fold, and a second observer must not
- * pay for its own seed. The unit definitions are the real ones from
- * `units.mjs`; the fake registry applies them eagerly on append, exactly where
- * the native registry drives them.
+ * fake records every `observeSession` read, so the behavior under test is
+ * observable at the seam the endpoints use: a streaming fragment must not read
+ * the log, and a second observer must not pay for its own seed. The unit
+ * definitions are the real ones from `units.mjs`; the fake registry applies
+ * them eagerly on append, exactly where the native registry drives them. The
+ * end-to-end wire behavior is asserted separately by the real-launcher suites.
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -61,7 +61,6 @@ function makeWorld() {
   const sessions = new Map()
   const channels = new Map()
   const reads = []
-  const counters = { applies: 0 }
   let liveJobs = []
   let gate = null
 
@@ -75,7 +74,6 @@ function makeWorld() {
           this.seq += 1
           this.events.push(event)
           for (const definition of [units.transcriptDefinition, units.workDefinition]) {
-            counters.applies += 1
             this.states[definition.key] = definition.apply(this.states[definition.key], event)
           }
           channels.get(this.id)?.api.emit('session/event', this, event)
@@ -108,10 +106,12 @@ function makeWorld() {
       async observeSession(id) {
         reads.push(id)
         const session = sessionOf(id)
-        const cut = session.seq
-        const events = session.events.slice(0, cut)
+        // Snapshot after a delayed gate so the seed can see an event that also
+        // reached the buffer; the merge must drop that duplicate.
         if (gate !== null) await gate.promise
         gate = null
+        const cut = session.seq
+        const events = session.events.slice(0, cut)
         return { events, cursor: cut - 1, [Symbol.dispose]() {} }
       },
     },
@@ -121,7 +121,7 @@ function makeWorld() {
   }
 
   return {
-    ctx, session: sessionOf, reads, counters,
+    ctx, session: sessionOf, reads,
     channel: id => channels.get(id),
     setLiveJobs(jobs) { liveJobs = jobs },
     /** Make the next observation read wait until `releaseRead`, exposing the seed race. */
@@ -176,13 +176,11 @@ test('one seed serves every observer and streaming fragments never reread the lo
     assert.equal(large[0].hasMore, false)
 
     world.reads.length = 0
-    world.counters.applies = 0
     startStream(world)
     for (const text of ['你', '好', '世界']) {
       chunkStream(world, text)
       await tick()
       assert.equal(world.reads.length, 0, 'a streaming fragment must not read the log')
-      assert.equal(world.counters.applies, 0, 'a streaming fragment must not fold the log')
     }
     assert.equal(small.at(-1).attempt.text, '你好世界')
     assert.equal(small.at(-1).cursor, 3, 'a transient fragment does not advance the native cursor')
@@ -261,7 +259,7 @@ test('an event committed while the seed read was in flight is neither lost nor d
   world.releaseRead()
   const frame = await pending
   assert.equal(world.reads.length, 1)
-  assert.deepEqual(frame.events.map(event => event.seq), [0, 1])
+  assert.deepEqual(frame.events.map(event => event.seq), [0, 1], 'the buffered event is appended once, not duplicated')
   assert.equal(frame.cursor, 1)
 })
 

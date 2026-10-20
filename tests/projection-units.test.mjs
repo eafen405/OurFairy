@@ -100,6 +100,24 @@ test('every cut of the transcript matches the frozen value for that prefix', () 
     [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, log.length])
 })
 
+test('a windowed read starts at fromSeq and keeps a queued row moved across that boundary', () => {
+  const log = transcriptLog()
+  const state = fold(units.transcriptDefinition, log)
+  const cuts = [-1, 0, 1, 2, 3, 4, 5, 6, 10, 12]
+  for (const cut of cuts) {
+    const all = units.transcriptAt(state, cut)
+    for (const fromSeq of [0, 1, 2, 4, 5, 10, 12, 13]) {
+      assert.deepEqual(units.transcriptAt(state, cut, fromSeq), all.filter(message => message.seq >= fromSeq),
+        `windowed read at cut ${cut} from seq ${fromSeq} must equal the full cut view filtered to the window`)
+    }
+  }
+  // The queued copy first appeared at seq 1 and was appended at seq 2; a page
+  // whose window starts at 2 must still carry it even though no row has a
+  // first appearance inside that range.
+  assert.deepEqual(units.transcriptAt(state, 2, 2).map(({ messageId, seq, status }) => ({ messageId, seq, status })),
+    [{ messageId: 'u1', seq: 2, status: 2 }])
+})
+
 test('the work read reports the observed log end, not a fold position it never saw', () => {
   const log = workLog()
   const state = fold(units.workDefinition, log)
@@ -124,16 +142,30 @@ test('the transcript unit answers receipts without reading the log', () => {
   ]
   const state = fold(units.transcriptDefinition, log)
 
-  assert.deepEqual(units.receiptFrom(state, SESSION, 'r1'), expected.receipt.expected)
-  assert.equal(units.receiptFrom(state, SESSION, 'missing'), null)
+  assert.deepEqual(units.receiptFrom(state, 'r1'), expected.receipt.expected)
+  assert.equal(units.receiptFrom(state, 'missing'), null)
 })
 
-test('the two units fold the same log identically whether it starts cold or warm', () => {
-  const log = [...workLog(), ...transcriptLog().map(item => ({ ...item, seq: item.seq + workLog().length }))]
+test('a checkpointed state continues the same fold as a cold replay', () => {
   const header = { id: SESSION, version: 4, createdAt: 1, isSeeded: false }
-  const cold = units.workDefinition.apply(units.workDefinition.init(header, 0), log[0])
-  const warm = fold(units.workDefinition, log.slice(0, 1))
-  assert.deepEqual(cold, warm, 'the first event must produce the same state either way')
+  const work = workLog()
+  const transcript = transcriptLog()
+  const foldFrom = (definition, log, checkpointAt) => {
+    let state = definition.init(header, 0)
+    for (const item of log.slice(0, checkpointAt)) state = definition.apply(state, item)
+    // A persisted row is a JSON document validated by `stateSchema` before it
+    // seeds a fold; the continuation must equal a replay from `init`.
+    let persisted = definition.stateSchema.parse(JSON.parse(JSON.stringify(state)))
+    for (const item of log.slice(checkpointAt)) persisted = definition.apply(persisted, item)
+    return JSON.parse(JSON.stringify(persisted))
+  }
+  for (const [definition, log] of [[units.workDefinition, work], [units.transcriptDefinition, transcript]]) {
+    const cold = JSON.parse(JSON.stringify(fold(definition, log)))
+    for (const checkpointAt of [0, 1, Math.floor(log.length / 2), log.length]) {
+      assert.deepEqual(foldFrom(definition, log, checkpointAt), cold,
+        `${definition.key} must continue from a checkpoint at ${checkpointAt} like a cold replay`)
+    }
+  }
 
   // `init`'s immutable header is the only input beyond the events: a session id
   // is the only field the fold uses, and it must not leak into fold semantics.
@@ -153,15 +185,35 @@ test('both units register on the native registry and serve their state through s
   const log = [...transcriptLog()]
   // The registry's cold-read recipe is the public one: refold the stored events
   // from each unit's `init` and hand back the checkpointed states.
-  const restored = registry.restore({}, log.map((item, index) => ({ ...item, seq: index })), 0, header, 0)
+  const events = log.map((item, index) => ({ ...item, seq: index }))
+  const restored = registry.restore({}, events, 0, header, 0)
   const transcriptState = restored.checkpoint.ourfairyTranscript
   const workState = restored.checkpoint.ourfairyWork
   assert.equal(transcriptState.ver, units.transcriptDefinition.stateVersion)
   assert.equal(workState.ver, units.workDefinition.stateVersion)
   assert.deepEqual(units.transcriptAt(transcriptState.val), expected.transcriptLog.messages)
-  assert.equal(typeof registry.stateOf, 'function')
+
+  // A row from an older stateVersion is discarded and the log is refolded,
+  // which is what makes a stateVersion bump safe for a persisted cache.
+  const stale = {
+    ourfairyTranscript: { ver: units.transcriptDefinition.stateVersion - 1, seq: -1, val: {} },
+    ourfairyWork: { ver: units.workDefinition.stateVersion - 1, seq: -1, val: {} },
+  }
+  const refolded = registry.restore(stale, events, 0, header, 0)
+  assert.equal(refolded.checkpoint.ourfairyTranscript.ver, units.transcriptDefinition.stateVersion)
+  assert.deepEqual(refolded.checkpoint.ourfairyTranscript.val, transcriptState.val)
+  assert.deepEqual(refolded.checkpoint.ourfairyWork.val, workState.val)
+
+  // `stateOf` is the read face the runtime and service use; disposing the
+  // registration must remove the key, and the test must observe both states.
+  const session = { header, inheritedEventCount: 0, seq: events.length,
+    snapshotEvents: () => events }
+  assert.deepEqual(registry.stateOf(session, units.transcriptDefinition.key), transcriptState.val)
+  assert.deepEqual(registry.stateOf(session, units.workDefinition.key), workState.val)
   assert.equal(disposers.length, 2)
   for (const dispose of disposers) dispose()
+  assert.equal(registry.stateOf(session, units.transcriptDefinition.key), undefined)
+  assert.equal(registry.stateOf(session, units.workDefinition.key), undefined)
 })
 
 test('the transcript read at a cut keeps the frozen first-appearance order, not seq order', () => {

@@ -32,15 +32,19 @@
 （key `ourfairyTranscript` / `ourfairyWork`，均无 `wire`，只用公开的 `register` / `stateOf`）。
 两个单元都是同步纯 fold，state 为纯 JSON；不关心的事件返回同一 state 引用。
 每个单元的 `stateVersion` 在折叠语义或 state 形状变化时递增，旧版本的持久化行会被丢弃并从 `init` 重折。
+当前两者均为 `2`（transcript 增加 `repositions` 窗口索引；work 把完整 pending 消息换成窄的 id/来源索引）。
 
 - 任务与活动是同一次 fold：activity 依赖每个事件后的任务/report 快照，拆开会形成第二套 report 状态机。
 - durable state 只含日志派生事实。`availability`、Agent running、`replyStatus`、`stopping`、`error`、
   attempt 累计文本不进 state，读取时叠加。
+- 原生 `inbox` 投影是 pending 消息的权威；work 单元只保留每条 pending 的 id 与来源 kind，
+  用于重放 report 消费和活动 episode 边界，不复制消息内容。
 - transcript 行记首次出现位置与结算位置（`first` / `settled`），因此任意 `throughSeq`
   都能还原该行的 `seq` 与 `status`，无需重折前缀。行顺序是首次出现顺序，不是 seq 顺序。
-- receipt 由 transcript 单元的 `receipts` 回答（`receiptFrom`），`/chat/send` 的幂等与冲突检测不再扫描事件日志。
+  `repositions` 按结算 seq 排序，read/page 从 `fromSeq` 开始只取窗口行，不再遍历整份历史。
+- receipt 由 transcript 单元的 `receipts` 回答（`receiptFrom`），`/chat/send` 的幂等与冲突检测从该映射取值。
 - `/chat/read` 与 `/chat/observe` 从这两个单元读 durable 值；同一会话的所有观察者共享同一份单元状态。
-  事件窗口在会话恢复后只读一次日志，之后由提交事件增量维护，流式片段不读日志、不折叠。
+  事件窗口在会话恢复后只读一次日志，之后由提交事件增量维护；流式片段不读日志，单元只在提交事件上推进。
 
 ## 投影
 

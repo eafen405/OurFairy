@@ -54,6 +54,16 @@ test('a page asks the native handle for exactly its own range', async () => {
   assert.deepEqual(persistence.opened, [{ sessionId: 'session-1', access: 'read' }])
 })
 
+test('the page cut comes from the seeded window or the live session end', () => {
+  const runtime = new SessionRuntime({ sessionPersistence: persistenceOf(log(100)) })
+
+  assert.equal(runtime.cursorOf({ session: { seq: 12 }, window: null }), 11,
+    'before a seed the live session knows the observed end')
+  assert.equal(runtime.cursorOf({ session: { seq: 12 }, window: { events: log(5) } }), 4,
+    'a seeded window is the observed authority')
+  assert.equal(runtime.cursorOf({ session: { seq: 0 }, window: null }), -1)
+})
+
 test('a page slices a seeded window instead of reading the log again', async () => {
   const persistence = persistenceOf(log(100))
   const runtime = new SessionRuntime({ sessionPersistence: persistence })

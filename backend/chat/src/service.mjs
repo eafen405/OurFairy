@@ -34,7 +34,7 @@ export class RemoteChat extends Service {
   /** The transcript unit state for one live session; it must be registered to answer. */
   transcriptState(state) {
     const unit = this.ctx.sessionProjections.stateOf(state.session, transcriptDefinition.key)
-    if (unit === undefined) throw new ChatError(500, 'chat/projection-unavailable', 'the transcript projection is not registered')
+    if (unit === undefined) throw new ChatError(500, 'chat/internal', 'the transcript projection is not registered')
     return unit
   }
   async send(owner, { sessionId, requestId, text, uploadIds = [] }) {
@@ -43,8 +43,8 @@ export class RemoteChat extends Service {
     if (typeof text !== 'string' || (!text.trim() && uploadIds.length === 0)) throw new ChatError(400, 'chat/invalid-request', 'provide text or an attachment')
     const state = await this.runtime.open(owner, sessionId)
     return this.runtime.runSession(sessionId, async () => {
-      // Receipts live in the transcript unit, so a retry never reads the log.
-      let found = receiptFrom(this.transcriptState(state), sessionId, requestId)
+      // Receipts live in the transcript unit; a retry answers from its state.
+      let found = receiptFrom(this.transcriptState(state), requestId)
       if (found !== null && (found.text !== text || JSON.stringify(found.uploadIds) !== JSON.stringify(uploadIds))) throw new ChatError(409, 'chat/request-conflict', 'this requestId already accepted different text')
       if (found === null) {
         state.error = null
@@ -55,7 +55,7 @@ export class RemoteChat extends Service {
         ], source: { kind: 'user', rpcId: requestId, ...(attachments.length ? { attachments } : {}) } }))
         // The follow-up splice is a committed native event, so the unit cell
         // already holds the receipt the moment it returns.
-        found = receiptFrom(this.transcriptState(state), sessionId, requestId)
+        found = receiptFrom(this.transcriptState(state), requestId)
       }
       await this.runtime.barrier(state)
       this.runtime.publish(state)
@@ -67,7 +67,7 @@ export class RemoteChat extends Service {
     const state = await this.runtime.open(owner, sessionId)
     return this.runtime.runSession(sessionId, async () => {
       await this.runtime.barrier(state)
-      return receiptFrom(this.transcriptState(state), sessionId, requestId)?.receipt ?? null
+      return receiptFrom(this.transcriptState(state), requestId)?.receipt ?? null
     })
   }
   async read(owner, { sessionId, maxEvents }) {
@@ -79,9 +79,9 @@ export class RemoteChat extends Service {
   async page(owner, { sessionId, throughSeq, beforeSeq, maxEvents }) {
     const limit = maxEventsOf(maxEvents)
     const state = await this.runtime.open(owner, sessionId)
-    // The live session already knows the committed end; a page never re-reads
+    // The live session already knows its observed cut; a page never re-reads
     // the log to learn it.
-    const cursor = state.session.seq - 1
+    const cursor = this.runtime.cursorOf(state)
     if (!Number.isSafeInteger(throughSeq) || throughSeq < -1 || throughSeq > cursor
       || !Number.isSafeInteger(beforeSeq) || beforeSeq < 0 || beforeSeq > throughSeq + 1) {
       throw new ChatError(400, 'chat/invalid-page', 'name a fixed inclusive throughSeq and exclusive beforeSeq within that cut')
@@ -92,8 +92,8 @@ export class RemoteChat extends Service {
     // to this page. A page can validly contain no bubbles but still fills event coverage.
     return { sessionId, throughSeq, fromSeq, beforeSeq: fromSeq > 0 ? fromSeq : null,
       hasMore: fromSeq > 0, events: await this.runtime.pageEvents(state, fromSeq, end),
-      messages: transcriptAt(this.transcriptState(state), throughSeq)
-        .filter(message => message.seq >= fromSeq && message.seq < end) }
+      messages: transcriptAt(this.transcriptState(state), throughSeq, fromSeq)
+        .filter(message => message.seq < end) }
   }
   async checkpoint(owner, { sessionId }) {
     const state = await this.runtime.open(owner, sessionId)
