@@ -2,10 +2,35 @@
   "parent": 124,
   "title": "文档收口：以「两个仓库」为准的事实纠偏与减法整理",
   "children": [
-    { "file": "01-topology.md", "issue": 125, "title": "两仓事实的拓扑纠偏：根文档与 android 快照文档" },
-    { "file": "02-docs-navigation.md", "issue": 126, "title": "docs/ 导航：索引页与归档迁移" },
-    { "file": "03-specs-and-boundary.md", "issue": 127, "title": "规格与边界收口：消除冲突条款、逐条核验声称" },
-    { "file": "04-dated-records.md", "issue": 128, "title": "日期化记录的状态标注与研究基线收敛" },
-    { "file": "05-conventions-and-notes.md", "issue": 129, "title": "CONVENTIONS 瘦身与 work/ 失效入口清理" }
+    {
+      "file": "01-topology.md",
+      "issue": 125,
+      "title": "两仓事实的拓扑纠偏：根文档与 android 快照文档"
+    },
+    {
+      "file": "02-docs-navigation.md",
+      "issue": 126,
+      "title": "docs/ 导航：索引页与归档迁移"
+    },
+    {
+      "file": "03-specs-and-boundary.md",
+      "issue": 127,
+      "title": "规格与边界收口：消除冲突条款、逐条核验声称"
+    },
+    {
+      "file": "04-dated-records.md",
+      "issue": 128,
+      "title": "日期化记录的状态标注与研究基线收敛"
+    },
+    {
+      "file": "05-conventions-and-notes.md",
+      "issue": 129,
+      "title": "CONVENTIONS 瘦身与 work/ 失效入口清理"
+    },
+    {
+      "file": "06-combo-json.md",
+      "issue": 130,
+      "title": "combo.json 收窄：只留被消费的组合锁"
+    }
   ]
 }

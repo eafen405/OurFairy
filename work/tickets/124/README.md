@@ -12,6 +12,7 @@
 | `03-specs-and-boundary.md` | #127 | 规格与边界收口：消除冲突条款、逐条核验声称 |
 | `04-dated-records.md` | #128 | 日期化记录的状态标注与研究基线收敛 |
 | `05-conventions-and-notes.md` | #129 | CONVENTIONS 瘦身与 work/ 失效入口清理 |
+| `06-combo-json.md` | #130 | combo.json 收窄：只留被消费的组合锁 |
 
 ---
 
@@ -124,13 +125,14 @@
 
 ### 子票切分
 
-按文件归属切，五张，互不阻塞、可并行：
+按文件归属切，六张，互不阻塞、可并行：
 
 1. [#125 两仓事实的拓扑纠偏：根文档与 android 快照文档](https://github.com/eafen405/OurFairy/issues/125)
 2. [#126 docs/ 导航：索引页与归档迁移](https://github.com/eafen405/OurFairy/issues/126)
 3. [#127 规格与边界收口：消除冲突条款、逐条核验声称](https://github.com/eafen405/OurFairy/issues/127)
 4. [#128 日期化记录的状态标注与研究基线收敛](https://github.com/eafen405/OurFairy/issues/128)
 5. [#129 CONVENTIONS 瘦身与 work/ 失效入口清理](https://github.com/eafen405/OurFairy/issues/129)
+6. [#130 combo.json 收窄：只留被消费的组合锁](https://github.com/eafen405/OurFairy/issues/130)
 
 ### 完成判据
 
