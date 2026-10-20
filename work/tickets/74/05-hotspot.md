@@ -15,8 +15,4 @@
 
 ## Blocked by
 
-<<<<<<< HEAD
-- [固定配置模拟器五档三轮基线（方向性参考）](https://github.com/eafen405/OurFairy/issues/78)
-=======
 - 模拟器三轮基线票
->>>>>>> integration/ourfairy-v1

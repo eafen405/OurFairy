@@ -15,8 +15,4 @@
 
 ## Blocked by
 
-<<<<<<< HEAD
-- [测量入口入库并可干净构建](https://github.com/eafen405/OurFairy/issues/75)
-=======
 - #74 的测量入口入库票
->>>>>>> integration/ourfairy-v1
