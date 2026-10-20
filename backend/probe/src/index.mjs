@@ -17,7 +17,7 @@
  * launcher's start/stop supervision can be exercised; it still exits non-zero
  * when a check fails, so a supervisor never mistakes a broken boot for ready.
  */
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { ownerOf } from '@ourfairy/dsh-identity/owner'
 
@@ -86,19 +86,23 @@ function collectRows(ctx) {
   return rows
 }
 
-/** The probe's own row: test machinery mounted above the bundle, not a product row. */
-const PROBE_ROW_ID = 'ourfairy-baseline-probe'
-const PROBE_PACKAGE = '@ourfairy/dsh-baseline-probe'
+/**
+ * The probe's own package, read from its manifest: a hardcoded copy could drift
+ * from the name the overlay mounts and make this test machinery a "product row".
+ */
+const PROBE_PACKAGE = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).name
 
 /**
- * Every product row the bundle mounts must be active.
+ * Every non-disabled product row the bundle mounts must be active.
  *
- * A row whose config the loader rejects (or whose `apply` throws) leaves its
- * fiber failed or waiting; reporting ready in that state would let a later
- * request discover the missing capability. Naming the row and package here is
- * what makes the configuration failure act on the boot instead. A row an
- * operator disabled through an overlay is a deliberate absence, not an
- * activation failure, so it is skipped.
+ * The check's domain is exactly the product rows the bundle contributes that an
+ * overlay did not disable; a disabled row is not judged here at all. A row whose
+ * config the loader rejects (or whose `apply` throws) leaves its fiber failed or
+ * waiting; reporting ready in that state would let a later request discover the
+ * missing capability. Naming the row and package here is what makes the
+ * configuration failure act on the boot instead. A row an operator disabled
+ * through an overlay is a deliberate absence, not an activation failure, so it
+ * is skipped.
  */
 function collectInactiveProductRows(ctx) {
   const loader = ctx.get('loader')
@@ -107,7 +111,7 @@ function collectInactiveProductRows(ctx) {
   for (const entry of loader.entries()) {
     const name = entry.options?.name
     if (typeof name !== 'string' || !name.startsWith('@ourfairy/')) continue
-    if (name === PROBE_PACKAGE || entry.options?.id === PROBE_ROW_ID) continue
+    if (name === PROBE_PACKAGE) continue
     if (entry.disabled === true) continue
     const state = fiberStateName(entry)
     if (state !== 'active') {

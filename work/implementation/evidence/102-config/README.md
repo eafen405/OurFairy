@@ -52,6 +52,16 @@ $ npm test
 `npm run combo:verify`：ourfairy 项 ok；rikkahub 项按 `73-execution.md` 预期 MISMATCH
 （外部归档提交 `2d97ed14` ≠ `combo.json` 锁定 `460109d1`）。本票未改 `combo.json`。
 
+## 评审修复补记（2026-10-20，分支 `fix/73-review`）
+
+- identity 的 `Config` 补上 bundle 实际写入、`resolveConfig` 读取的 `phaethonName`/`phaethonPassword`
+  两个可选字符串；`resolveConfig` 只保留默认值（`sessionTtlDays` 30、`phaethonName` `phaethon`、
+  空/缺失密码为 `undefined`）。`tests/config-contracts.test.mjs` 增加一条 `$.phaethonName` 类型
+  用例，现为 5 条。详见 `work/implementation/notes/73-review-findings.md`。
+- 行 liveness 的保证范围明确为「每个**未被刻意禁用**的 bundle 产品行」：经 overlay
+  `disabled` 的行是操作者的明确缺席，不在该保证内——#105 要求禁用任一行后仍能启动，不能把它
+  记成激活失败。探针自身的包名改为从 `backend/probe/package.json` 读取。
+
 ## 未执行项与原因
 
 - 未在真实模型服务/真机上验证；本票只改配置契约与加载期检查，测试走真实 launcher/CLI。
