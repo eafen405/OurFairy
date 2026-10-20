@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "product": "OurFairy v1",
-  "description": "The version combination the OurFairy v1 backend is built and tested against: the OurFairy integration branch plus exact commits of the dsh and rikkahub forks. A worktree obtains the same combination by branching from each repo integrationBranch tip and running scripts/combo.mjs verify.",
+  "description": "The version combination the OurFairy v1 backend is built and tested against: the OurFairy integration branch, the exact commit of the dsh fork, and the imported Android client's source declaration. A worktree obtains the same combination by branching from the OurFairy integrationBranch tip and running scripts/combo.mjs verify.",
   "repos": {
     "ourfairy": {
       "role": "product",
@@ -30,19 +30,16 @@
         "corepack pnpm@11.28.5 run build:native-system"
       ],
       "note": "productCommit is the fork integration branch tip. It carries durable session ownership, first-class delivery of a peer Session message, and the admission generalization for a registered second credential. All four requiredBuild commands must run: build:lib:host builds the CLI and host libraries, build:lib:client emits the client-face Node loader entries that the connection row imports, and build:native-system builds the flock addon the durable JSONL writer requires."
-    },
-    "rikkahub": {
-      "role": "android-client",
-      "lock": "commit",
-      "localPath": "/home/eafen405/projects/rikkahub",
-      "remoteName": "fork",
-      "remoteUrl": "https://github.com/eafen405/rikkahub.git",
-      "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "460109d1b89b824a2ddb7f3201d8d3f7af7e02ce",
-      "researchUpstreamSha": "0966502c4d65c1ee4b2a3e49a19703bb1978016c",
-      "researchUpstreamRef": "origin/master",
-      "note": "productCommit is the Android fork integration branch tip. The client carries only the OurFairy surface: identity, owned sessions, the remote conversation projection, attachments, backend ASR and notifications. The presentation measurement stays its own perf variant - the offline workloads run through the production RemoteChatState and RemoteTranscript, and a result reports whether the newest snapshot was applied and presented; it does not ship in release."
     }
+  },
+  "androidSource": {
+    "role": "android-client",
+    "repository": "eafen405/rikkahub",
+    "remoteUrl": "https://github.com/eafen405/rikkahub.git",
+    "branch": "product/ourfairy-v1",
+    "commit": "460109d1b89b824a2ddb7f3201d8d3f7af7e02ce",
+    "declaration": "android/ourfairy-source.json",
+    "note": "The Android client was imported as a snapshot at this commit and no longer follows upstream. The in-repo declaration android/ourfairy-source.json is what verify compares against this record."
   },
   "backend": {
     "profileName": "ourfairy",
@@ -78,10 +75,10 @@
     "cmake": true,
     "java": "Temurin 21 (/home/eafen405/.local/bin/java)",
     "gradle": "wrapper (cache /home/eafen405/.gradle)",
-    "localProperties": "sdk.dir=/home/eafen405/Android/Sdk (not committed; written in the rikkahub checkout)",
+    "localProperties": "sdk.dir=/home/eafen405/Android/Sdk (not committed; written in android/)",
     "firstApkBuildTicket": 26,
     "measuredNotes": [
-      "A rikkahub Gradle build auto-installs platform android-37.2 (compileSdk 37 resolves to 37.2), not android-37.0; recorded from the measured build output.",
+      "An android/ Gradle build auto-installs platform android-37.2 (compileSdk 37 resolves to 37.2), not android-37.0; recorded from the measured build output.",
       "build-tools 37.0.0 and NDK 28.2.13676358 are the installed versions."
     ]
   }

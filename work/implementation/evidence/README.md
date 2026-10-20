@@ -82,6 +82,12 @@
 | [81-pdf-subprocess](81-pdf-subprocess/README.md) | #81 PDF worker 经原生 subprocess 服务，bwrap 网络显式化 |
 | [82-native-rows](82-native-rows/README.md) | #82 原生模型重试与大工具结果 spill |
 
+## 客户端合仓（规格 #123）
+
+| 目录 | 内容 |
+| --- | --- |
+| [123-client-merge](123-client-merge/README.md) | #123 客户端合仓：快照导入、来源校验、构建与测试证据 |
+
 ## 阶段整合与评审
 
 | 目录 | 内容 |

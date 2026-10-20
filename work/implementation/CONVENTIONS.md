@@ -19,38 +19,43 @@
 
 ## 1. 仓库拓扑与固定版本
 
-本产品跨三个仓库；三者各自有集成分支，跨仓库不共享 Git 历史，集成结果由**版本组合**锁定。
+本产品由本仓库（后端 + `android/` 客户端）与 dsh fork 组成；外部依赖只有 dsh，它按集成分支与提交锁定。
+客户端已内联为快照，不再跟随上游，因此不再有第三个仓库参与组合。
 
 | 仓库 | 本地路径 | 集成分支 | fork 远端 |
 | --- | --- | --- | --- |
-| OurFairy（产品） | `/home/eafen405/projects/OurFairy` | `integration/ourfairy-v1` | origin（本仓库） |
+| OurFairy（产品，含 `android/`） | `/home/eafen405/projects/OurFairy` | `integration/ourfairy-v1` | origin（本仓库） |
 | dsh fork | `/home/eafen405/projects/deepseek-harness` | `product/ourfairy-v1` | `fork` = `eafen405/deepseek-harness` |
-| rikkahub fork | `/home/eafen405/projects/rikkahub` | `product/ourfairy-v1` | `fork` = `eafen405/rikkahub` |
 
 **固定基线提交（研究用上游 SHA，产品改动从其之上开始）：**
 
 - dsh 上游基线：`d743267388641bc76f17c45ce8b4c231aed1d32c`（master）
-- rikkahub 上游基线：`0966502c4d65c1ee4b2a3e49a19703bb1978016c`（master）
+- rikkahub 上游研究基线：`0966502c4d65c1ee4b2a3e49a19703bb1978016c`（master）——客户端的调研基线，不是产品提交
 - Fairybot 参考实现（只读参考，不改）：`095efdd84fd7ab2215a0b5b03369aac4f1303108`，本地 `/home/eafen405/projects/Fairybot`
 
-`combo.json`（在 OurFairy 集成分支根目录）记录**当前产品组合**：三个仓库的 fork URL / 分支 / 提交。每张票合并后更新它。研究用上游 SHA ≠ 产品提交，任何报告不得把上游 SHA 当作已含产品改动。
+`combo.json`（在 OurFairy 集成分支根目录）记录**当前产品组合**：本仓库锁集成分支，dsh 锁提交，
+客户端记来源提交（`androidSource`，由 `android/ourfairy-source.json` 声明，`combo.mjs verify` 的
+`android source` 行比对两者）。每张票合并后更新它。研究用上游 SHA ≠ 产品提交，任何报告不得把上游 SHA
+当作已含产品改动。
+
+客户端的快照基线只写在两处：`combo.json` 的 `androidSource.commit` 与
+`android/ourfairy-source.json` 的 `commit`；校验比对这两处，本节不另抄一份。
+2026-10-20 之前的证据用 `/home/eafen405/projects/rikkahub` 这样的绝对路径与那里的提交号指代客户端；
+那些记录按原样保留，旧提交保存在归档仓库 `eafen405/rikkahub` 中。
 
 ## 2. 分支与 worktree 协议
 
-每票在**自己仓库**的独立 worktree 中工作，分支名 `ticket/<NN>-<slug>`（NN 为票序号 1–22）：
+每票在**自己仓库**的独立 worktree 中工作，分支名 `ticket/<NN>-<slug>`（NN 为票序号 1–22）。
+客户端票也在这里开 worktree：客户端就在 `integration/ourfairy-v1` 的 `android/` 下，不再有独立的客户端检出。
 
 ```bash
-# OurFairy 侧（本仓库）
+# OurFairy 侧（本仓库，含 android/ 客户端）
 git -C /home/eafen405/projects/OurFairy worktree add \
   /home/eafen405/projects/OurFairy/.worktrees/<NN>-<slug> -b ticket/<NN>-<slug> integration/ourfairy-v1
 
 # dsh 侧（仅当该票要改 dsh）
 git -C /home/eafen405/projects/deepseek-harness worktree add \
   /home/eafen405/projects/deepseek-harness/.worktrees/<NN>-<slug> -b ticket/<NN>-<slug> product/ourfairy-v1
-
-# rikkahub 侧（仅当该票要改客户端）
-git -C /home/eafen405/projects/rikkahub worktree add \
-  /home/eafen405/projects/rikkahub/.worktrees/<NN>-<slug> -b ticket/<NN>-<slug> product/ourfairy-v1
 ```
 
 规则：
@@ -72,7 +77,7 @@ git -C /home/eafen405/projects/rikkahub worktree add \
 | Gradle | wrapper 会下载 9.6.0；缓存 `/home/eafen405/.gradle`（已有 3.7G） |
 | gh CLI | 已登录 `eafen405`，token 有 `repo` scope；git 走 HTTPS（已配置 credential helper） |
 
-**Android 构建必须显式设置**：`export ANDROID_HOME=/home/eafen405/Android/Sdk`，并在 rikkahub 检出目录写 `local.properties` 指向 `sdk.dir=/home/eafen405/Android/Sdk`（该文件不入库）。
+**Android 构建必须显式设置**：`export ANDROID_HOME=/home/eafen405/Android/Sdk`，并在 `android/` 写 `local.properties` 指向 `sdk.dir=/home/eafen405/Android/Sdk`（该文件不入库）。
 
 ### 3.1 Android 构建实测踩坑（2026-10-14 由侦察票实测，勿重复踩）
 
@@ -83,10 +88,8 @@ git -C /home/eafen405/projects/rikkahub worktree add \
 | `./gradlew` 下载 Gradle 发行版超时 | 本机 HTTP 代理只以**环境变量**形式存在（`http_proxy/https_proxy=http://127.0.0.1:7890`），**Java/Gradle 不读环境变量代理**。对策：用 `curl` 走代理把 `gradle-9.6.0-bin.zip` 下到 `~/.gradle/wrapper/dists/gradle-9.6.0-bin/<base36(md5(url))>/`，用 python3 `zipfile` 解压（本机**没有 `unzip`**），`chmod +x gradle-9.6.0/bin/*`，再 `touch gradle-9.6.0-bin.zip.ok`。 |
 | 依赖解析长时间无输出 | Gradle 只在任务完成时打印 `> Task`，大量依赖元数据下载期间日志会长时间静止——**这是正常推进，不是卡死**。判据：`~/.gradle/caches/modules-2/metadata-*/descriptors/` 有新文件写入。 |
 | 构建极慢／单 worker | 用户级 `~/.gradle/gradle.properties` 含 `-Xmx2560m`、`org.gradle.workers.max=1`、`org.gradle.parallel=false`、`kotlin.compiler.execution.strategy=in-process`。**不要改这个共享文件**（其他队友也在用）；用命令行覆盖：`-Dorg.gradle.jvmargs="-Xmx10g -Dfile.encoding=UTF-8" --max-workers=8 --parallel`。 |
-| `compileSdk` 与已装平台不符 | rikkahub 用 `compileSdk { version = release(37) { minorApiLevel = 2 } }`，实际解析到 **`android-37.2`**（不是 `android-37.0`）。AGP 会自动装（license 已接受），但首次会拖长构建。 |
-| 缺 `app/google-services.json` | `:app:processDebugGoogleServices` 会硬失败（`File google-services.json is missing`）。该文件被 `app/.gitignore` 忽略，需要自备桩文件；**桩里的 key 是假的，Firebase/Crashlytics 运行时不可用**，任何真机/崩溃上报结论都必须声明这一点。 |
-| 子模块未初始化 | `material3/material-color-utilities` 未 init 时 `:material3` 编译会失败；需 `git submodule update --init --recursive`。 |
-| `web` 模块 preBuild 跑 pnpm | `web/build.gradle.kts` 的 `buildWebUi` 只跑 `pnpm run build`，**不跑 install**；必须在 `web-ui/` 先 `pnpm install --frozen-lockfile`。pnpm 必须是 `corepack pnpm@11.28.5`（PATH 上的 12 是 Windows 版）。 |
+| `compileSdk` 与已装平台不符 | 客户端（`android/`）用 `compileSdk { version = release(37) { minorApiLevel = 2 } }`，实际解析到 **`android-37.2`**（不是 `android-37.0`）。AGP 会自动装（license 已接受），但首次会拖长构建。 |
+| 缺 `app/google-services.json` | `:app:processDebugGoogleServices` 会硬失败（`File google-services.json is missing`）。该文件被 `android/app/.gitignore` 忽略，需要自备桩文件；**桩里的 key 是假的，Firebase/Crashlytics 运行时不可用**，任何真机/崩溃上报结论都必须声明这一点。 |
 
 **长构建请用 `setsid nohup ... &` 脱离 agent turn 运行**：队友 turn 结束时其后台任务会被回收，构建日志要落到 `work/implementation/evidence/<票>/` 下供任何人轮询。
 

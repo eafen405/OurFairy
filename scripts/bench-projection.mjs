@@ -716,7 +716,7 @@ function machineFacts(combo) {
     productHead: head,
     combination: {
       dsh: combo.repos.dsh.productCommit,
-      rikkahub: combo.repos.rikkahub.productCommit,
+      rikkahub: combo.androidSource.commit, // the client source commit; the key keeps baseline files comparable
     },
     loadAverageAtStart: loadavg(),
   }

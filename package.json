@@ -4,7 +4,7 @@
   "private": true,
   "description": "OurFairy v1: an invited multi-user Fairy backend with an Android client. This repository holds the product modules, the explicit backend composition, and the version combination that binds the companion fork commits.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0",
   "engines": {
     "node": "^22.19.0 || >=24"
   },

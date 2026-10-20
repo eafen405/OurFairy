@@ -1,5 +1,8 @@
-本仓库是 OurFairy 产品仓库，与 dsh fork、rikkahub fork 共同构成同一个产品；三者的本地路径、
-集成分支与锁定提交只以 `combo.json` 为准。
+本仓库是 OurFairy 产品仓库，包含后端与 `android/` 下的 Android 客户端；只有 dsh fork 是外部依赖。
+两者的本地路径、集成分支与锁定提交只以 `combo.json` 为准。
+
+客户端已内联，不再跟随上游：它的来源提交声明在 `android/ourfairy-source.json`，由组合校验比对。
+取上游修复走手工挑选，不走过例行合并。产品版本、来源与旧证据路径的说明见 `README.md`。
 
 ## 研发与审查
 

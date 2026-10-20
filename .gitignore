@@ -5,3 +5,18 @@
 .ourfairy/
 .corepack/
 .cleanup-logs/
+
+# Client build output and local-only build inputs. The android/ directory keeps its
+# own rules in android/.gitignore and the module .gitignore files; these lines are
+# the repository-level backstop, and tests/android-source.test.mjs fails if any of
+# these paths stops being ignored.
+/android/build/
+/android/app/build/
+/android/build-logic/build/
+/android/.gradle/
+/android/.kotlin/
+/android/captures/
+/android/local.properties
+/android/app/google-services.json
+/android/**/*.apk
+/android/**/*.aab

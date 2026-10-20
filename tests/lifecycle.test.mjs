@@ -7,9 +7,10 @@
  * leaks neither ports nor child processes.
  */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
+import { describeRun, makeHome, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-lifecycle-')
 // The v1 composition mounts the product's web carrier, so it binds a port by
@@ -81,6 +82,17 @@ test('doctor reports its checks on a clean isolated home', () => {
   for (const required of ['node version', 'combo combination', 'dsh CLI build', 'product packages', 'isolated home']) {
     assert.ok(checks.has(required), `doctor must check ${required}; it ran ${JSON.stringify([...checks.keys()])}`)
   }
+
+  // The combination's third row is the client's provenance, and doctor reports it
+  // with the commit the in-repo declaration holds. Asserting the value keeps
+  // doctor's answer tied to what `combo.mjs verify` reads, not to combo.json alone.
+  const sourceCommit = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8')).androidSource.commit
+  assert.match(
+    checks.get('combo combination').detail,
+    new RegExp(`android source@${sourceCommit.slice(0, 12)}`, 'u'),
+    `doctor's combination check must name the client source commit it read; it reported`
+    + ` ${JSON.stringify(checks.get('combo combination').detail)}`,
+  )
   // Companion checkouts are pinned by `npm run combo:verify`, the hook's other
   // step. A worktree sits on moveable integration tips, so doctor's answer about
   // the other repositories is a fact to report, not a regression of this code.

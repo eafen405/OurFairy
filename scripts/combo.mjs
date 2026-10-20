@@ -5,8 +5,11 @@
  * `verify` asserts that the combination this worktree builds against is the one
  * combo.json locks:
  *
- *   - `dsh` and `rikkahub` are external dependencies and are pinned to exact
- *     commits; a drifted checkout is a hard failure with the named remedy.
+ *   - `dsh` is an external dependency pinned to an exact commit; a drifted
+ *     checkout is a hard failure with the named remedy.
+ *   - the Android client is inlined under `android/` and is not a repository in
+ *     the combination. Its provenance is the in-repo declaration named by
+ *     combo.json `androidSource`, checked against the recorded source commit.
  *   - `ourfairy` is the repository holding this file. Locking it to a fixed
  *     commit would be self-referential and would fail after every merge, so the
  *     locked object is the INTEGRATION BRANCH: verify asserts this worktree's
@@ -32,7 +35,6 @@ export const repoRoot = resolve(scriptDir, '..')
 const PATH_OVERRIDES = {
   ourfairy: 'OURFAIRY_REPO_DIR',
   dsh: 'OURFAIRY_DSH_DIR',
-  rikkahub: 'OURFAIRY_RIKKAHUB_DIR',
 }
 
 /** Read combo.json. */
@@ -154,21 +156,74 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
     }
     rows.push(row)
   }
+  const android = androidSourceRow(root, combo.androidSource)
+  rows.push(android)
+  if (android.failure !== undefined) failures.push(android.failure)
   return { ok: failures.length === 0 || allowDrift, failures, rows }
 }
 
+/**
+ * The android source row. The inlined client is not a repository in the cycle,
+ * so its lock is the source commit combo.json records; the declaration under
+ * `android/` restates it, and this check is what keeps the two equal.
+ *
+ * The copy case is why a missing declaration is a row rather than a throw:
+ * doctor runs against copies that carry combo.json but not android/.
+ */
+function androidSourceRow(root, source) {
+  const path = typeof source?.declaration === 'string' && source.declaration !== ''
+    ? resolve(root, source.declaration)
+    : null
+  const expected = typeof source?.commit === 'string' ? source.commit : null
+  const base = {
+    key: 'android source',
+    role: source?.role ?? null,
+    path,
+    branch: source?.branch ?? null,
+    lock: 'declaration',
+    expected,
+  }
+  const fail = (failure, actual = null) => ({ ...base, actual, ok: false, failure })
+  const remedy = expected === null ? '' : `; set "commit" in ${path ?? 'the declaration'} to ${expected},`
+    + ' or update combo.json androidSource.commit when the snapshot intentionally moves'
+
+  if (path === null || expected === null) {
+    return fail('android source: combo.json must declare androidSource.declaration and androidSource.commit')
+  }
+  if (!existsSync(path)) {
+    return fail(`android source: declaration missing at ${path}; add it with "commit": "${expected}"`)
+  }
+  let declared
+  try {
+    declared = JSON.parse(readFileSync(path, 'utf8')).commit
+  } catch (error) {
+    return fail(`android source: ${path} must be JSON with a "commit" field: ${error.message}`)
+  }
+  if (declared === expected) return { ...base, actual: declared, ok: true }
+  const actual = typeof declared === 'string' ? declared : null
+  return fail(`android source: ${path} declares ${actual ?? JSON.stringify(declared)}`
+    + ` but combo.json androidSource.commit is ${expected}${remedy}`, actual)
+}
+
+/** What the table's result column says for one row. */
+function resultLabel(row) {
+  if (!row.ok) return 'MISMATCH'
+  if (row.lock === 'declaration') return 'ok (declaration matches)'
+  if (row.lock === 'integration-branch') {
+    return `ok (worktree ${row.headIsTip ? 'is the integration tip' : 'is based on the integration tip'})`
+  }
+  return `ok${row.researchUpstreamSha !== null && !row.productHasOwnCommits
+    ? ' (research upstream only; no product commits yet)' : ''}`
+}
+
 function printTable(rows) {
-  const header = ['repo', 'branch', 'expected', 'actual', 'result']
+  const header = ['row', 'branch', 'expected', 'actual', 'result']
   const cells = rows.map((row) => [
     row.key,
     row.branch,
     row.expected === null || row.expected === undefined ? '-' : String(row.expected).slice(0, 16),
     row.actual === null || row.actual === undefined ? 'MISSING' : String(row.actual).slice(0, 16),
-    row.ok
-      ? (row.lock === 'integration-branch'
-        ? `ok (worktree ${row.headIsTip ? 'is the integration tip' : 'is based on the integration tip'})`
-        : `ok${row.researchUpstreamSha !== null && !row.productHasOwnCommits ? ' (research upstream only; no product commits yet)' : ''}`)
-      : 'MISMATCH',
+    resultLabel(row),
   ])
   const widths = header.map((cell, index) => Math.max(cell.length, ...cells.map(row => row[index].length)))
   const line = row => row.map((cell, index) => cell.padEnd(widths[index])).join('  ')
@@ -187,6 +242,16 @@ function printShow(combo) {
       : `  productCommit         ${entry.productCommit}`)
     lines.push(`  researchUpstreamSha   ${entry.researchUpstreamSha ?? '(not applicable)'}`
       + `${entry.researchUpstreamRef === undefined ? '' : ` @ ${entry.researchUpstreamRef}`}`)
+  }
+  if (combo.androidSource !== undefined) {
+    const source = combo.androidSource
+    lines.push(`android source (${source.role}, lock: declaration)`)
+    lines.push(`  repository            ${source.repository}`)
+    lines.push(`  remote                ${source.remoteUrl}`)
+    lines.push(`  branch                ${source.branch}`)
+    lines.push(`  commit                ${source.commit}`)
+    lines.push(`  declaration           ${resolve(repoRoot, source.declaration)}`)
+    lines.push(`  note                  ${source.note}`)
   }
   lines.push(`backend                 profile ${combo.backend.profileName}; bundle ${combo.backend.bundlePackage} (${combo.backend.bundlePathInRepo})`)
   lines.push(`launcher                ${combo.backend.launcher}; ${combo.backend.pnpmInvocation}`)

@@ -2,6 +2,8 @@
 
 2026-10-18，方向确认完成。本文保留用户取舍、调查依据及后续验证项。产品行为已纳入[父规格](../specs/ourfairy-v1.md)，对应的网关与集成票面已修订。
 
+2026-10-20 拓扑说明：客户端已并入本仓库 `android/`，产品组合只剩本仓库与 dsh 的锁定提交；本文以下章节记录的是并入之前「三个仓库」时期的调查与结果，按原样保留。
+
 ## 方向与推进顺序
 
 保留现有产品模块及已验证的投递实现，按 [ADR-0001](../adr/0001-upstream-extension-policy.md) 评估具体上游升级的成本。现有证据支持在认证连接和任务事件上复用新版能力；自定义供应商与模型沿 dsh 原生适配器、配置和凭据接缝实现。
@@ -92,13 +94,13 @@ git merge-tree --write-tree --messages \
 
 本轮还执行了仓库要求的检查：
 
-- `npm run combo:verify`：三个仓库组合通过。
+- `npm run combo:verify`：版本组合通过（当时的三个仓库形态）。
 - `node --test tests/docs.test.mjs`：文档相对链接检查通过。
 - `npm test`：**115/122 通过，7 个失败**。PDF 套件 5 个失败，其中前两项返回 `worker-unavailable`，后续页结果断言失败；远程对话的停止/待处理输入场景 1 个失败；语音替身成功请求返回 `speech/timeout`，1 个失败。原始输出位于本机 `/tmp/ourfairy-calibration-full-test.log`。这些失败尚未归因，本轮未修改相关业务代码；全量运行中的 6 个投递测试全部通过。
 
 后续串行复查执行：`node --test --test-concurrency=1 tests/pdf.test.mjs tests/remote-chat.test.mjs tests/speech.test.mjs`，**15/15 通过**，先前 7 项失败未复现。当前环境可运行实际 PDF worker、隔离进程和页面渲染。上轮原始 `/tmp` 日志已随环境清理，保留其已记录的结果；不能仅由此次串行通过断言先前失败的原因。复跑未修改业务代码、测试或依赖。
 
-本轮最终再次执行 `npm test`，**122/122 通过**（26.62 秒），日志 `/tmp/ourfairy-calibration-final-npm-test.log`；`npm run combo:verify` 三仓通过。先前失败在此次全量运行也未复现，未据此修改业务代码或放宽测试。
+本轮最终再次执行 `npm test`，**122/122 通过**（26.62 秒），日志 `/tmp/ourfairy-calibration-final-npm-test.log`；`npm run combo:verify` 当时的三仓组合通过。先前失败在此次全量运行也未复现，未据此修改业务代码或放宽测试。
 
 ## 后续实施与验证项
 
