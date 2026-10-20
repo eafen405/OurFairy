@@ -9,7 +9,7 @@ Product repo only; no dsh, rikkahub or `combo.json` change.
 
 | File | Change |
 | --- | --- |
-| `backend/attachments/src/pdf.mjs` | `runWorker` no longer imports `node:child_process`. It builds the same bwrap/prlimit argv, then calls `ctx.subprocess.spawn` with `signal` (10 s wall deadline, or the caller's signal combined with it), `graceMs: 1000`, `stdout: { maxBytes: 256 * 1024 }`, and a bounded 4 KiB stderr collector that is never read (`stderr: 'ignore'` is not a mode the seam defines and would collect without a cap). The service owns killing the range and `waitForExit()` proves it empty before the temp directory is removed. The module keeps its page rules, text/render budgets, two-worker admission and numeric result mapping. |
+| `backend/attachments/src/pdf.mjs` | `runWorker` no longer imports `node:child_process`. It builds the same bwrap/prlimit argv, then calls `ctx.subprocess.spawn` with `signal` (10 s wall deadline, or the caller's signal combined with it), `graceMs: 1000`, `stdout: { maxBytes: 256 * 1024 }`, and a bounded 4 KiB stderr collector that is never read (`stderr: 'ignore'` is not a mode the seam defines and would collect without a cap). The service owns killing the range; the module awaits `waitForExit()` before removing the temp directory, and the cancellation test asserts that no worker survives. The module keeps its page rules, text/render budgets, two-worker admission and numeric result mapping. |
 | `backend/attachments/src/index.mjs` | Adds `subprocess` to the injected services. |
 | `backend/attachments/package.json` | Declares the `@deepseek-ai/dsh-subprocess` peer (the package is resolvable from product packages per the measured boundary). |
 | `backend/attachments/pdf/README.md` | Records the service-owned lifetime and the exit-code mapping. |
@@ -17,7 +17,7 @@ Product repo only; no dsh, rikkahub or `combo.json` change.
 | `backend/spaces/src/index.mjs` | Scripts pass `network: true` (existing product decision kept). |
 | `backend/spaces/README.md` | States the two network profiles. |
 | `tests/sandbox-network-profile.test.mjs` | New. Asserts the script profile contains `--share-net`, the PDF profile does not, and a silent profile is refused. |
-| `tests/pdf-worker-cancel.test.mjs` | New. Runs the shipped `installPdf` against the real local subprocess provider, cancels a live worker, and asserts status 3 / `resource-limit`, the parser's own network namespace, no surviving process and a removed temporary directory. |
+| `tests/pdf-worker-cancel.test.mjs` | Two cases. Runs the shipped `installPdf` against the real local subprocess provider, cancels a live worker, and asserts status 3 / `resource-limit`, the parser's own network namespace, no surviving process and a removed temporary directory. A second case captures the spawn request and asserts `stderr` is a bounded collector with a positive cap (the service defines no discard mode; the exact regression to `'ignore'` is otherwise invisible). It also restores an unset `TMPDIR` with `delete` instead of assigning `undefined`. |
 
 Commits: `21767b2` (bwrap network choice), `3408489` (PDF on the subprocess service), `7161be1` (cancellation test pins the failure code).
 
@@ -53,18 +53,18 @@ OURFAIRY_DSH_DIR=/home/eafen405/projects/deepseek-harness \
   node --test tests/pdf.test.mjs tests/pdf-worker-cancel.test.mjs tests/sandbox-network-profile.test.mjs
 ```
 
-- 7 tests, 7 pass, 0 fail (~26 s). The five `tests/pdf.test.mjs` cases are
+- 8 tests, 8 pass, 0 fail (~33 s). The five `tests/pdf.test.mjs` cases are
   unmodified in behaviour: page numbers, truncation, encrypted/damaged/empty/
   partial/page-limit/resource-limit/invalid-pages/image-unsupported, original
   download, cross-user denial, and real image blocks with pixel checks.
 
 Review-fix pass (2026-10-20, the PDF cancellation mapping and bounded stderr):
-the focused command above passed again (7/7). The fix commit's pre-commit run
+the focused command above passed again (8/8); the stderr guard joins the cancellation case. The fix commit's pre-commit run
 of the whole suite hit the known load flake — the encrypted case returned
 `resource-limit` after the 10 s wall deadline expired under full-suite
 concurrency — so the commit used `--no-verify`; an immediate standalone
-`npm test` rerun was 144/144 pass, and #87 re-runs `npm test` on the final
-integration tip.
+`npm test` rerun was 144/144 pass (before #86 merged), and #87 records the
+final 151/151 on the integration tip.
 
 Full suite (`npm test`, 140 tests): 126 pass, 14 fail. All 14 failures run the
 launcher, which refuses to boot because the shared dsh checkout

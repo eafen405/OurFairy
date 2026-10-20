@@ -37,7 +37,7 @@ The failure text names the item and the fix, e.g.:
 ```
 required native capability missing: the llm-retry row is not mounted; add
 @deepseek-ai/dsh-llm-retry to backend/v1-bundle/cordis.patch.yml and run
-'ourfairy-backend start --reinstall'
+'npm run backend:start -- --reinstall'
 ```
 
 and for the export:

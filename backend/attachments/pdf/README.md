@@ -35,8 +35,9 @@ The library's own decompression limits also report `resource-limit`.
 The worker runs under the native `ctx.subprocess` service: the module passes the
 bwrap/prlimit argv, the 10-second wall deadline as the spawn `signal`, `graceMs`,
 the 256 KiB stdout collect cap and a small bounded, discarded stderr collector.
-The service kills the whole range and proves it empty (`waitForExit`) before the
-module removes its temporary directory. The module keeps only its own budgets
+The service kills the whole range; the module awaits `waitForExit()` before
+removing its temporary directory, and the cancellation test asserts that no
+worker survives. The module keeps only its own budgets
 and the numeric result mapping: a worker the service terminates (deadline or
 caller stop, reported as SIGTERM) is `resource-limit`; `bwrap` turns a killed
 payload into `128+signal`, so 152 (SIGXCPU from `--cpu=5`) and 137 (SIGKILL

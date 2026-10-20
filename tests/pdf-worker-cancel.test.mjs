@@ -129,7 +129,30 @@ test('a cancelled PDF worker reports the numeric failure, removes its directory,
     assert.ok(!readdirSync(isolated).some(name => name.startsWith('ourfairy-pdf-') && !before.has(name)),
       'the temporary directory must be removed after the call')
     await ctx.dispose?.()
-    process.env.TMPDIR = previousTmp
+    if (previousTmp === undefined) delete process.env.TMPDIR
+    else process.env.TMPDIR = previousTmp
     rmSync(isolated, { recursive: true, force: true })
   }
+})
+
+test('the PDF worker asks the service for a bounded stderr collector', async () => {
+  // The service has no discard mode: an unsupported string is collected with no
+  // cap. Memory growth is not observable from outside, so the request itself is
+  // the seam under test — the same kind of narrow seam as the network profile.
+  const { installPdf } = await import(pathToFileURL(join(repoRoot, 'backend/attachments/src/pdf.mjs')).href)
+  const agent = { session: {}, options: {} }
+  let registered
+  let spec
+  installPdf({
+    subprocess: { spawn: value => { spec = value; throw new Error('spawn captured') } },
+    llm: {}, on() {},
+    agents: { list: () => [{ ...agent, ctx: { tools: { register: definition => { registered = definition } } } }] },
+    attachments: { readFileStream: async function* () { yield costlyPdf() } },
+  }, { qualifiedFile: async () => ({ mime: 'application/pdf', name: 'spec.pdf', original: {} }) })
+  assert.equal(registered?.name, 'pdf_read_pages')
+  await assert.rejects(registered.execute({ file_path: 'qualified.pdf', pages: [1] }, { agent }), /spawn captured/)
+  assert.equal(typeof spec.stdio.stderr, 'object',
+    `stderr must be a bounded collector, not ${JSON.stringify(spec.stdio.stderr)}`)
+  assert.ok(Number.isSafeInteger(spec.stdio.stderr.maxBytes) && spec.stdio.stderr.maxBytes > 0,
+    `stderr needs a positive in-memory cap; got ${JSON.stringify(spec.stdio.stderr)}`)
 })

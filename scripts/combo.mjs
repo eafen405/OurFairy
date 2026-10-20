@@ -188,18 +188,18 @@ export function nativeCapabilityFailures(rows, resolveExport) {
     const entry = mounted.get(id)
     if (entry === undefined) {
       failures.push(`required native capability missing: the ${id} row is not mounted;`
-        + ` add ${name} to backend/v1-bundle/cordis.patch.yml and run 'ourfairy-backend start --reinstall'`)
+        + ` add ${name} to backend/v1-bundle/cordis.patch.yml and run 'npm run backend:start -- --reinstall'`)
       continue
     }
     if (entry.disabled === true) {
       failures.push(`required native capability missing: the ${id} row (${name}) is disabled in the installed profile;`
-        + ` enable it in the profile's cordis.patch.yml or remove the override, then run 'ourfairy-backend start --reinstall'`)
+        + ` enable it in the profile's cordis.patch.yml or remove the override, then run 'npm run backend:start -- --reinstall'`)
       continue
     }
     if (entry.name !== name) {
       failures.push(`required native capability drifted: the ${id} row mounts ${entry.name ?? '<no package>'},`
         + ` but the product depends on ${name}; fix backend/v1-bundle/cordis.patch.yml and run`
-        + ` 'ourfairy-backend start --reinstall'`)
+        + ` 'npm run backend:start -- --reinstall'`)
     }
   }
   try {
@@ -232,14 +232,14 @@ export function verifyInstalledNativeCapabilities({ binName, bundlePackage, inst
     profile = boot.loadProfileDirectory(binName, profileDir, installAnchor)
   } catch (error) {
     return { ok: false, checked: [], failures: [`the installed profile ${profileDir} could not be read through`
-      + ` @deepseek-ai/dsh-app-boot (${error.message}); run 'ourfairy-backend start --reinstall'`] }
+      + ` @deepseek-ai/dsh-app-boot (${error.message}); run 'npm run backend:start -- --reinstall'`] }
   }
   const layer = profile.layers.find(entry => entry.packageName === bundlePackage)
   if (layer === undefined) {
     const skipped = profile.skippedBundles.find(entry => entry.packageName === bundlePackage)
     const reason = skipped === undefined ? 'it is not listed in the profile' : skipped.reason
     return { ok: false, checked: [], failures: [`${bundlePackage} was not loaded from ${profileDir}: ${reason};`
-      + ` run 'ourfairy-backend start --reinstall'`] }
+      + ` run 'npm run backend:start -- --reinstall'`] }
   }
   const rows = boot.composeEntries([...profile.layers.map(entry => entry.patches), profile.patches])
   const failures = nativeCapabilityFailures(rows, specifier => createRequire(installAnchor).resolve(specifier))

@@ -12,7 +12,7 @@ The fixed combination, including the dsh commit, is [`combo.json`](../../combo.j
 This record names only the rows and exports the product depends on, so a reader
 can tell which parts of that composition are load-bearing.
 
-Run `ourfairy-backend doctor` before a boot: its `native capabilities` check
+Run `npm run backend:doctor` before a boot: its `native capabilities` check
 reads the **installed** profile through dsh's own loader and fails naming the
 missing row or export. [`tests/native-capabilities.test.mjs`](../../tests/native-capabilities.test.mjs)
 proves that failure. The doctor check covers the rows and the public export;
@@ -32,9 +32,9 @@ part of the pinned dsh installation recorded in `combo.json`.
   declares the peer in [`backend/attachments/package.json`](../../backend/attachments/package.json).
 - **Behavior relied on.** `spawn` takes the bwrap/prlimit argv plus a wall
   deadline `signal`, `graceMs`, a 256 KiB stdout cap and a small, discarded
-  stderr collector; the service kills the whole process range and
-  `waitForExit()` proves it empty before the module removes its temporary
-  directory. The module keeps the page rules and maps the service's termination
+  stderr collector; the service kills the whole process range and the module awaits
+  `waitForExit()` before removing its temporary directory; the cancellation
+  test asserts that no worker survives. The module keeps the page rules and maps the service's termination
   and exit facts to numeric status: a worker the service terminates (the 10 s
   deadline, a caller stop, the resource limit) and a `152`/`137` exit map to
   `resource-limit`; any other non-zero exit is `worker-unavailable`. See
