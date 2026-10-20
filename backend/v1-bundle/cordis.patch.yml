@@ -242,6 +242,21 @@
       name: '@ourfairy/dsh-spaces/policy'
       config:
         mode: workspace-write
+    # The four scoped providers are rows of their own: the spaces row keeps the
+    # scope, and each provider can be disabled or replaced alone. Disabling one
+    # leaves the depending capability waiting (no unscoped native provider is
+    # mounted), which the probe reports against the row.
+    - id: scoped-fs
+      name: '@ourfairy/dsh-spaces/fs'
+      config:
+        cwd: !!js dshHomePath('spaces')
+        diffBasisMaxBytes: 10485760
+    - id: scoped-sandbox
+      name: '@ourfairy/dsh-spaces/sandbox'
+    - id: scoped-bash
+      name: '@ourfairy/dsh-spaces/bash'
+    - id: scoped-directory
+      name: '@ourfairy/dsh-spaces/directory'
     - id: subprocess
       name: '@deepseek-ai/dsh-subprocess-local'
     - id: shell-env

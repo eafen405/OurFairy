@@ -1,6 +1,9 @@
 # Owned file spaces and execution
 
-The spaces module mounts the existing dsh file, directory and shell tools over product providers. Authority is the native `SessionHeader.owner`; cwd, a caller-supplied user number and sandbox escalation do not grant access. Durable groups extend the same space capability from the existing business SQLite; formal Session formats are unchanged.
+The spaces module mounts the existing dsh file, directory and shell tools over product providers.
+It owns the scope itself; the four scoped providers are independent rows of the bundle
+(`scoped-fs`, `scoped-sandbox`, `scoped-bash`, `scoped-directory`), so any one of them can be
+disabled or replaced without taking the scope — or the other providers — away. Authority is the native `SessionHeader.owner`; cwd, a caller-supplied user number and sandbox escalation do not grant access. Durable groups extend the same space capability from the existing business SQLite; formal Session formats are unchanged.
 
 Disk layout under `DSH_HOME`:
 
