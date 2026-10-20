@@ -4,7 +4,7 @@ import { assembleAssistantStream } from '@deepseek-ai/dsh-llm/assistant-stream'
 
 const attachmentsOf = message => (message.source?.attachments ?? []).map((item, index) => ({ index, type: item.image ? 2 : 1, name: item.name, mime: item.mime, bytes: item.original.bytes }))
 const messageText = message => (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
-function attemptText(stream) {
+export function attemptText(stream) {
   return assembleAssistantStream(stream).interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('')
 }
 function requestMessages(events) {
