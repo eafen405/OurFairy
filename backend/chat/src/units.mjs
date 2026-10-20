@@ -18,9 +18,16 @@
  * attempt text, `replyStatus`, `stopping` and `error` stay live in
  * `runtime.mjs` and are overlaid at read time.
  *
+ * The native `inbox` projection owns pending messages. `ourfairyWork` keeps
+ * only each pending message's id and source kind, because report consumption
+ * and activity episode boundaries must be replayed from history; storing the
+ * messages themselves would be a second inbox authority.
+ *
  * `stateVersion` increments whenever this module's fold semantics or state
  * shape change; the registry then discards persisted rows of an older version
- * and refolds the log from `init`.
+ * and refolds the log from `init`. Both units are at version 2: the transcript
+ * added its `repositions` window index, and the work unit replaced full pending
+ * messages with the narrow id/kind index.
  *
  * This module is the only fold of a chat session: the read path
  * (`runtime.mjs`, `service.mjs`) takes durable values from these units and
@@ -74,6 +81,7 @@ const receiptSchema = z.object({
   uploadIds: z.array(z.string()),
 })
 const turnEndSchema = z.object({ seq: z.number().int(), interrupted: z.boolean() })
+const repositionSchema = z.object({ index: z.number().int(), seq: z.number().int() })
 export const transcriptStateSchema = z.object({
   sessionId: z.string(),
   rows: z.array(transcriptRowSchema),
@@ -81,6 +89,12 @@ export const transcriptStateSchema = z.object({
   attemptsByTurn: z.record(z.string(), z.array(z.number().int())),
   turnEnds: z.record(z.string(), turnEndSchema),
   receipts: z.array(receiptSchema),
+  /**
+   * Rows whose surface append moved them forward, in settle-seq order. This is
+   * the narrow side index that lets a read window start at `fromSeq` without
+   * scanning every earlier row; `rows` itself stays in first-appearance order.
+   */
+  repositions: z.array(repositionSchema),
 })
 
 /** One row's wire shape at the inclusive cut `cut`, in the old fold's field order. */
@@ -104,9 +118,9 @@ function rowAtCut(row, cut) {
  */
 export const transcriptDefinition = {
   key: 'ourfairyTranscript',
-  stateVersion: 1,
+  stateVersion: 2,
   stateSchema: transcriptStateSchema,
-  init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [] }),
+  init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], repositions: [] }),
   apply(state, event) {
     if (event.type === 'agent/inbox/spliced') {
       const inserted = event.data.inserted.filter(message => message.source?.kind === 'user' && message.source.rpcId)
@@ -187,37 +201,75 @@ function putRow(state, row, settled = null) {
   // The row's first appearance (and therefore its page position before the
   // settle cut) is the earlier event's fact.
   rows[index] = { ...row, first: rows[index].first, settled }
-  return { ...state, rows }
+  const repositions = settled?.repositions === true && !state.repositions.some(item => item.index === index)
+    ? [...state.repositions, { index, seq: settled.seq }]
+    : state.repositions
+  return { ...state, rows, repositions }
+}
+
+/** First index in ascending `items` whose extracted key is at least `target`. */
+function firstAtLeast(items, keyOf, target) {
+  let low = 0
+  let high = items.length
+  while (low < high) {
+    const middle = (low + high) >> 1
+    if (keyOf(items[middle]) < target) low = middle + 1
+    else high = middle
+  }
+  return low
 }
 
 /**
- * Every transcript row visible at the inclusive log cut `cut`, in
- * first-appearance order — the order the per-read Map fold returned.
+ * Every transcript row visible at the inclusive log cut `cut` whose wire `seq`
+ * is at least `fromSeq`, in first-appearance order — the order the per-read Map
+ * fold returned. `repositions` is the narrow index that makes a tail read
+ * independent of the transcript's length: rows before `fromSeq` are considered
+ * only when a surface append moved them into the window.
  * @param state - the transcript unit state.
  * @param cut - inclusive `throughSeq`; the default reads the current end.
+ * @param fromSeq - inclusive lower bound on the row's `seq` at `cut`.
  */
-export function transcriptAt(state, cut = Infinity) {
-  return state.rows.filter(row => row.first.seq <= cut).map(row => rowAtCut(row, cut))
+export function transcriptAt(state, cut = Infinity, fromSeq = 0) {
+  const start = firstAtLeast(state.rows, row => row.first.seq, fromSeq)
+  const end = firstAtLeast(state.rows, row => row.first.seq, cut === Infinity ? Infinity : cut + 1)
+  const movedIntoWindow = []
+  const firstReposition = firstAtLeast(state.repositions, item => item.seq, fromSeq)
+  for (let offset = firstReposition; offset < state.repositions.length; offset++) {
+    const reposition = state.repositions[offset]
+    if (reposition.seq > cut) break
+    const row = state.rows[reposition.index]
+    // Rows whose first appearance is already in the window are emitted by the
+    // slice below; only an earlier row moved forward needs this path.
+    if (row.first.seq >= fromSeq) continue
+    if (row.settled === null || row.settled.seq !== reposition.seq || !row.settled.repositions) continue
+    movedIntoWindow.push(reposition.index)
+  }
+  movedIntoWindow.sort((left, right) => left - right)
+  const visible = start < end ? Array.from({ length: end - start }, (_, offset) => start + offset) : []
+  return [...movedIntoWindow, ...visible].map(index => rowAtCut(state.rows[index], cut))
 }
 
 /**
  * The receipt a request id was accepted under, read from unit state alone.
  * @param state - the transcript unit state.
- * @param sessionId - the session the receipt belongs to.
  * @param requestId - the client-generated request identity.
  * @returns `{receipt,text,uploadIds}`, or null for an unseen request id.
  */
-export function receiptFrom(state, sessionId, requestId) {
+export function receiptFrom(state, requestId) {
   const receipt = state.receipts.find(item => item.requestId === requestId)
   if (receipt === undefined) return null
-  return { receipt: { sessionId, requestId, messageId: receipt.messageId, acceptedSeq: receipt.acceptedSeq },
+  return { receipt: { sessionId: state.sessionId, requestId, messageId: receipt.messageId, acceptedSeq: receipt.acceptedSeq },
     text: receipt.text, uploadIds: receipt.uploadIds }
 }
 
 /* ------------------------------------------------------------- tasks */
 
 const jobRowSchema = z.object({
-  taskId: z.string(), generation: z.string(), kind: z.string(), label: z.string(), status: z.string(), startedAt: z.number(),
+  taskId: z.string(), generation: z.string(),
+  /** The native job identity kept alongside the generation-qualified taskId. */
+  id: z.string(),
+  owner: z.string().optional(), progress: z.unknown().optional(),
+  kind: z.string(), label: z.string(), status: z.string(), startedAt: z.number(),
   finishedAt: z.number().optional(), detail: z.string().optional(),
   output: z.object({ earliest: z.number(), total: z.number() }),
 })
@@ -240,13 +292,21 @@ const activitySchema = z.object({
   decisions: z.array(z.string()),
   unavailable: z.array(z.string()),
 })
+/**
+ * One pending message's identity and source kind. The native `inbox`
+ * projection owns the messages themselves; the work unit keeps only this
+ * narrow per-event index because report consumption and activity episode
+ * boundaries must be replayed historically, which a current inbox snapshot
+ * cannot reconstruct.
+ */
+const pendingEntrySchema = z.object({ id: z.string(), kind: z.string() })
 export const workStateSchema = z.object({
   sessionId: z.string(),
   order: z.array(z.string()),
   rows: z.record(z.string(), jobRowSchema),
   reports: z.record(z.string(), reportSchema),
   consumed: z.record(z.string(), consumedSchema),
-  queues: z.record(z.string(), z.array(z.unknown())),
+  pending: z.record(z.string(), z.array(pendingEntrySchema)),
   endings: z.record(z.string(), z.string()),
   turn: z.number().int().nullable(),
   activity: activitySchema,
@@ -307,8 +367,8 @@ function visitActivity(activity, sessionId, event, state) {
     activity.decisions = activity.decisions.filter(item => item !== id)
   }
   const begin = seq => { activity.episode ??= { episodeId: `${sessionId}/${seq}`, startedSeq: seq } }
-  const pending = Object.values(state.queues).flat()
-  const waking = !activity.parked && pending.some(message => message.source?.kind === 'user')
+  const pending = Object.values(state.pending).flat()
+  const waking = !activity.parked && pending.some(message => message.kind === 'user')
   const working = activity.executing || waking || activity.decisions.length > 0
     || rosterOf(state).some(row => !activity.unavailable.includes(row.taskId)
       && (['running', 'stopping'].includes(row.status) || [1, 2].includes(row.report.status)))
@@ -352,9 +412,9 @@ function workEventOf(event) {
  */
 export const workDefinition = {
   key: 'ourfairyWork',
-  stateVersion: 1,
+  stateVersion: 2,
   stateSchema: workStateSchema,
-  init: header => ({ sessionId: header.id, order: [], rows: {}, reports: {}, consumed: {}, queues: {}, endings: {},
+  init: header => ({ sessionId: header.id, order: [], rows: {}, reports: {}, consumed: {}, pending: {}, endings: {},
     turn: null, activity: emptyActivity() }),
   apply(state, event) {
     if (!workEventOf(event)) return state
@@ -385,11 +445,12 @@ export const workDefinition = {
       next.endings = { ...next.endings, [String(data.turn)]: data.reason.kind }
       next.turn = null
     } else if (event.type === 'agent/inbox/spliced') {
-      const queue = [...(next.queues[data.target] ?? [])]
-      const removed = queue.splice(data.start, data.removedCount ?? 0, ...data.inserted)
-      next.queues = { ...next.queues, [data.target]: queue }
+      const queue = [...(next.pending[data.target] ?? [])]
+      const removed = queue.splice(data.start, data.removedCount ?? 0,
+        ...data.inserted.map(message => ({ id: message.id, kind: message.source?.kind ?? 'other' })))
+      next.pending = { ...next.pending, [data.target]: queue }
       for (const message of removed) {
-        if (message.source?.kind !== 'tool-jobs') continue
+        if (message.kind !== 'tool-jobs') continue
         next.consumed = { ...next.consumed,
           [message.id]: data.outcome === 'canceled' ? { status: 4 } : { status: 2, turn: next.turn } }
       }
@@ -454,9 +515,10 @@ function activityAt(state, tasks, running, cut) {
  * @param ctx - host context carrying the jobs registry.
  * @param sessionId - the session whose live jobs are read.
  * @param running - whether the Agent is running right now (live, never folded).
- * @param cut - inclusive `throughSeq`, `-1` for an empty log.
+ * @param cut - inclusive `throughSeq`, `-1` for an empty log. Required: an
+ *   omitted cut would fabricate a `session/Infinity` episode.
  */
-export function tasksAndActivityAt(state, ctx, sessionId, running, cut = Infinity) {
+export function tasksAndActivityAt(state, ctx, sessionId, running, cut) {
   const tasks = tasksAt(state, ctx, sessionId)
   return { tasks, activity: activityAt(state, tasks, running, cut) }
 }

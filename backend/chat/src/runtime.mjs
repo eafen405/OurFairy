@@ -206,7 +206,7 @@ export class SessionRuntime {
    */
   async pageEvents(state, fromSeq, end) {
     const seeded = state.window?.events
-    if (seeded !== null && seeded !== undefined) return seeded.slice(fromSeq, end)
+    if (seeded != null) return seeded.slice(fromSeq, end)
     const handle = await this.ctx.sessionPersistence.open(state.sessionId, 'read')
     try {
       const { events } = await handle.read(fromSeq, end - fromSeq)
@@ -309,6 +309,16 @@ export class SessionRuntime {
   }
 
   /**
+   * The committed cut this live session can serve. A seeded window is the
+   * observed authority; before the first read the session's own sequence is.
+   */
+  cursorOf(state) {
+    const events = state.window?.events
+    if (events != null) return events.at(-1)?.seq ?? -1
+    return state.session.seq - 1
+  }
+
+  /**
    * One observer's view: the durable unit state plus the live overlay. The
    * opening observer freezes `throughSeq`/`fromSeq`; later snapshots keep that
    * cut and include its `fromSeq` through the current cursor.
@@ -316,7 +326,7 @@ export class SessionRuntime {
   async projection(state, range) {
     const window = await this.#windowOf(state)
     const attempt = state.attempt
-    const cursor = window.events.at(-1)?.seq ?? -1
+    const cursor = this.cursorOf(state)
     const throughSeq = range.throughSeq ?? cursor
     const fromSeq = range.fromSeq ?? Math.max(0, throughSeq - range.maxEvents + 1)
     // One observer retains only its opening tail plus all later formal events.
@@ -330,7 +340,7 @@ export class SessionRuntime {
       durableThroughSeq: Math.min(cursor, state.durableThroughSeq),
       throughSeq, fromSeq, events: window.events.slice(fromSeq), hasMore: fromSeq > 0, beforeSeq: fromSeq > 0 ? fromSeq : null,
       tasks, activity,
-      messages: transcriptAt(transcriptState).filter(message => message.seq >= fromSeq),
+      messages: transcriptAt(transcriptState, Infinity, fromSeq),
       attempt: attempt === null ? null : { attemptId: attempt.attemptId, revision: attempt.revision,
         text: attempt.assembler.interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('') },
       settledAttempt: state.settledAttempt,

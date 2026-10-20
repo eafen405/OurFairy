@@ -1,13 +1,12 @@
 /**
- * The shared task/activity fold reads every event once (tickets #53/#90).
+ * The shared task/activity unit folds one log into the documented wire values
+ * (tickets #53/#90).
  *
  * `units.mjs` owns the only fold now: `ourfairyWork` produces the task roster
  * and its activity summary in one pass, and `tasksAndActivityAt` is the read
  * function the runtime calls. This seam is dependency-free apart from the
  * registry contract, so it can be exercised directly — the same reason
- * `queues.mjs` is tested on its own (ticket #51). The observable here is fold
- * count, not time: a counting log fails the moment the read applies events a
- * second time, and the read itself must not fold at all.
+ * `queues.mjs` is tested on its own (ticket #51).
  *
  * Expected task/activity values are derived from the documented wire contract
  * (`backend/chat/README.md`), so a semantic change in the shared fold fails here
@@ -24,15 +23,11 @@ const units = await import('../backend/chat/src/units.mjs')
 const job = (overrides = {}) => ({ id: 'job-1', owner: 'session-1', kind: 'task', label: 'work',
   startedAt: 10, output: { earliest: 0, total: 0 }, ...overrides })
 
-/** Fold a log through the unit, counting how many events the fold touches. */
+/** Fold a log through the unit once. */
 function foldLog(log) {
-  const counter = { applied: 0 }
   let state = units.workDefinition.init({ id: 'session-1' }, 0)
-  for (const event of log) {
-    counter.applied += 1
-    state = units.workDefinition.apply(state, event)
-  }
-  return { state, counter }
+  for (const event of log) state = units.workDefinition.apply(state, event)
+  return state
 }
 
 /** A turn around one background task that settles while the registry job still runs. */
@@ -45,19 +40,11 @@ function oneTaskLog() {
   ]
 }
 
-test('tasks and activity share one fold, and the read does not fold again', () => {
+test('the work unit folds one task log into the documented wire values', () => {
   const ctx = { jobs: { generation: 'g1', list: () => [job({ status: 'running' })] } }
-  const { state, counter } = foldLog(oneTaskLog())
-  assert.equal(counter.applied, 4, 'the unit must fold every event exactly once')
+  const state = foldLog(oneTaskLog())
 
-  const read = () => {
-    const before = counter.applied
-    const value = units.tasksAndActivityAt(state, ctx, 'session-1', false, 3)
-    assert.equal(counter.applied, before, 'reading a unit must not fold the log again')
-    return value
-  }
-
-  assert.deepEqual(read(), {
+  assert.deepEqual(units.tasksAndActivityAt(state, ctx, 'session-1', false, 3), {
     tasks: [{ taskId: 'g1/job-1', kind: 'task', label: 'work', status: 1, availability: 1,
       startedAt: 10, output: { earliest: 0, total: 0 }, report: { status: 0 } }],
     activity: { status: 2, reasons: [2], episodeId: 'session-1/0', startedSeq: 0, throughSeq: 3 },
@@ -66,7 +53,7 @@ test('tasks and activity share one fold, and the read does not fold again', () =
 
 test('an empty log with a running agent still opens an episode at seq 0', () => {
   const ctx = { jobs: { generation: 'g1', list: () => [] } }
-  const { state } = foldLog([])
+  const state = foldLog([])
 
   const { tasks, activity } = units.tasksAndActivityAt(state, ctx, 'session-1', true, -1)
 
@@ -90,19 +77,19 @@ test('a turn end closes the episode it leaves idle, while a running task keeps i
     { seq: 5, type: 'turn/start', data: { turn: 2 } },
     { seq: 6, type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } },
   ]
-  const { state } = foldLog(log)
+  const state = foldLog(log)
 
   // At the aborted turn end the task is still running, so the episode stays open.
   const open = foldLog(log.slice(0, 3))
   const runningCtx = { jobs: { generation: 'g1', list: () => [job({ status: 'running' })] } }
-  const openActivity = units.tasksAndActivityAt(open.state, runningCtx, 'session-1', false, 2).activity
+  const openActivity = units.tasksAndActivityAt(open, runningCtx, 'session-1', false, 2).activity
   assert.equal(openActivity.episodeId, 'session-1/0')
   assert.equal(openActivity.completed, undefined)
   assert.deepEqual(openActivity.reasons, [2])
 
   // The settled notice closes the first episode once its report consumes the
   // decision; the second turn then opens and closes its own episode.
-  const settledState = foldLog(log.slice(0, 5)).state
+  const settledState = foldLog(log.slice(0, 5))
   const closed = units.tasksAndActivityAt(settledState, ctx, 'session-1', false, 4).activity
   assert.deepEqual(closed, { status: 1, reasons: [], episodeId: 'session-1/0', startedSeq: 0,
     throughSeq: 4, completed: { episodeId: 'session-1/0', startedSeq: 0, finishedSeq: 4 } })
