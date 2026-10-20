@@ -33,13 +33,14 @@ reads at most five selected pages and returns at most 4,000 characters per page.
 The library's own decompression limits also report `resource-limit`.
 
 The worker runs under the native `ctx.subprocess` service: the module passes the
-bwrap/prlimit argv, the 10-second wall deadline as the spawn `signal`, `graceMs`
-and the 256 KiB stdout collect cap, and the service kills the whole range and
-proves it empty (`waitForExit`) before the module removes its temporary directory.
-The module keeps only its own budgets and the numeric result mapping. `done`
-reports exit facts rather than the killing signal, and `bwrap` turns a killed
-payload into `128+signal`: 152 (SIGXCPU from `--cpu=5`) and 137 (SIGKILL
-escalation or OOM) map to `resource-limit`; any other nonzero exit is
+bwrap/prlimit argv, the 10-second wall deadline as the spawn `signal`, `graceMs`,
+the 256 KiB stdout collect cap and a small bounded, discarded stderr collector.
+The service kills the whole range and proves it empty (`waitForExit`) before the
+module removes its temporary directory. The module keeps only its own budgets
+and the numeric result mapping: a worker the service terminates (deadline or
+caller stop, reported as SIGTERM) is `resource-limit`; `bwrap` turns a killed
+payload into `128+signal`, so 152 (SIGXCPU from `--cpu=5`) and 137 (SIGKILL
+escalation or OOM) also map to `resource-limit`; any other nonzero exit is
 `worker-unavailable`.
 
 These are product demo budgets, not a promise of perfect complex-layout or OCR

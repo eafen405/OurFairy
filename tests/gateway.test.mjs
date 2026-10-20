@@ -391,8 +391,8 @@ test('a route a running reply uses refuses the change, and the retry succeeds on
 test('a route saved from the phone keeps the deployment retry policy the draft does not own', async () => {
   const home = freshHome()
   // The double answers one rate limit then succeeds: only a route that still
-  // carries the deployment's `retryPolicy` recovers within the turn.
-  // `repeatLast` lets the second boot of this case reuse the same double.
+  // carries the deployment's `retryPolicy` recovers within the turn. The
+  // sequence covers the two boots of this case, so no replay option is needed.
   const double = await modelDouble({ sequence: ['rate_limit', 'success', 'rate_limit', 'success'], successText: 'recovered after the save' })
   const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
   try {
