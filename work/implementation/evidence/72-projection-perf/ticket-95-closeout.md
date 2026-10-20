@@ -36,13 +36,15 @@ node --test --test-concurrency=1 "tests/**/*.test.mjs"
 npm run backend:doctor
 # → 1 check failed: rikkahub product/ourfairy-v1 is 2d97ed14 but combo.json locks 460109d1。
 #   其余 node/pnpm/dsh build/product packages/profile/model double/bundle model 全 ok。
+#   本次运行输出摘要；原始日志按 CONVENTIONS §5 不入库。
 
 npm run combo:verify
 # → ourfairy ok（worktree 基于集成分支 tip）；dsh ok（5b8ec0f）；rikkahub MISMATCH。
 #   1 drift/missing entry。
 ```
 
-rikkahub 漂移属于客户端合仓（#123 / spec-123）的收敛范围：`combo.json` 锁 `460109d1`，
+**本票不声称三个入口全绿**：默认并发 `npm test` 的 1 个失败和 doctor/combo 的错误都来自
+两个外部条件，而不是本 spec 的代码。rikkahub 漂移属于客户端合仓（#123 / spec-123）的收敛范围：`combo.json` 锁 `460109d1`，
 本地检出是 `2d97ed14`。本 spec 按约定不改 `combo.json`、不切共享的 rikkahub 检出，因此
 `doctor`/`combo verify` 的这两条失败**不是本 spec 引入**，也不能在本 spec 内修复。#71 的
 PDF 取消用例失败同理，单独跑与串行全量均通过。
@@ -68,6 +70,24 @@ PDF 取消用例失败同理，单独跑与串行全量均通过。
 （门槛 ≤0.85）、观察者放大 1.76（门槛 ≤1.80）、read p95 最差 0.91（门槛 ≤1.50）、峰值内存
 最差 1.07（门槛 ≤1.25）、payload 1.008（门槛 ≤1.05）。内存没有下降，观察者放大接近门槛，
 均已在 #94 如实记录。
+
+## 3.1 最终评审后的额外修复
+
+- transcript 行改为「不可变 `first` + 有序 `transitions`」，并只用会移动行位置的 transition
+  建 `moves` 索引；修复了 re-splice 后数组不再按 first.seq 排序、尾窗口可能丢行的问题。
+- 新增 5000 行窗口访问计数测试、重复 splice 顺序测试、pending id/kind 形状测试；`stateVersion`
+  由测试精确绑定（transcript 3 / work 2）。
+- 新增 `scripts/bench-gate.mjs` 与 `tests/bench-gate.test.mjs`，把 #94 的 18 个相对检查变成
+  失败即红的命令；最终两次静默运行在 `9f002a4` 上全过（观察者放大 1.76，接近 1.80 门槛）。
+- 默认并发全量为 172/171（唯一 #71 PDF flake），串行 172/172。
+
+## 3.2 已知偏离（未在本票内消除）
+
+- **inbox**：原生 `inbox` 投影拥有 pending 消息内容；activity/report 必须按历史事件重放，
+  因此 work 保留每条 pending 的 id/source-kind 窄索引。它不是 pending 消息的第二份存储，
+  但字面上仍是对 spec「不重新实现 inbox fold」的偏离；消除它需要改变 activity 的历史语义。
+- **window**：事件窗口保留会话的完整已提交前缀，而不是 ticket-03 的「最近的窗口」；#90 已
+  记录理由（任意 `fromSeq` 与长连接冻结 L），#94 的内存也如实记录为未下降（+6–7%）。
 
 ## 4. 证据索引与链接
 
