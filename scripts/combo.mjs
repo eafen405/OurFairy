@@ -196,6 +196,32 @@ function flattenEntries(entries) {
 }
 
 /**
+ * Load the installed bundle layer through dsh's own profile reader.
+ *
+ * Both checks read the installation the launcher generated: the bundle layer
+ * dsh selected, its skip reason when it selected none, and the app-boot module
+ * whose public exports read manifests and judge compatibility. Loading it in
+ * one place keeps the package set and the compatibility judgement from reading
+ * two different installations.
+ * @param {{
+ *   binName: string,
+ *   bundlePackage: string,
+ *   installAnchor: string,
+ *   profileDir: string,
+ * }} options
+ * @returns {{boot: any, layer: object|undefined, skipped: object|undefined}}
+ */
+function installedBundle({ binName, bundlePackage, installAnchor, profileDir }) {
+  const boot = createRequire(installAnchor)('@deepseek-ai/dsh-app-boot')
+  const profile = boot.loadProfileDirectory(binName, profileDir, installAnchor)
+  return {
+    boot,
+    layer: profile.layers.find(entry => entry.packageName === bundlePackage),
+    skipped: profile.skippedBundles.find(entry => entry.packageName === bundlePackage),
+  }
+}
+
+/**
  * Compare the bundle's patch rows with the product packages it declares and
  * with the packages the generated profile installs.
  *
@@ -224,14 +250,11 @@ function flattenEntries(entries) {
 export function verifyBundlePackages({ binName, bundlePackage, installAnchor, profileDir }) {
   // Loaded the same way the launcher boots: the profile's bundle layer, the
   // patches it declares, and the rows composed from them.
-  const boot = createRequire(installAnchor)('@deepseek-ai/dsh-app-boot')
-  const profile = boot.loadProfileDirectory(binName, profileDir, installAnchor)
+  const { boot, layer, skipped } = installedBundle({ binName, bundlePackage, installAnchor, profileDir })
   const failures = []
-  const skipped = profile.skippedBundles.find(entry => entry.packageName === bundlePackage)
   if (skipped !== undefined) {
     failures.push(`${bundlePackage} was not loaded from ${profileDir}: ${skipped.reason}`)
   }
-  const layer = profile.layers.find(entry => entry.packageName === bundlePackage)
   if (layer === undefined) {
     if (skipped === undefined) failures.push(`${bundlePackage} is not a loaded bundle of ${profileDir}`)
     return { ok: false, declared: [], mounted: [], failures }
@@ -280,6 +303,59 @@ export function verifyBundlePackages({ binName, bundlePackage, installAnchor, pr
   }
 
   return { ok: failures.length === 0, declared, mounted, failures }
+}
+
+/**
+ * Judge every installed product package's dsh peers against the runtime the
+ * pinned CLI provides.
+ *
+ * The judgement is dsh's own public `evaluatePluginCompatibility`, given the
+ * runtime version `getDshRuntimeVersion` reads from the same app-boot module —
+ * not a range comparison implemented here. The manifests are the installed
+ * copies the dsh loader reads, resolved through the profile, so the answer is
+ * about what would boot. `evaluatePluginCompatibility` judges only dsh peers
+ * (`@deepseek-ai/dsh` and `@deepseek-ai/dsh-*`); a product package's other
+ * peers are declarations for readers and pnpm, not inputs to this runtime
+ * decision.
+ * @param {{
+ *   binName: string,
+ *   bundlePackage: string,
+ *   installAnchor: string,
+ *   profileDir: string,
+ * }} options
+ * @returns {{ok: boolean, dshVersion: string, checked: string[], failures: string[]}}
+ */
+export function verifyPluginCompatibility({ binName, bundlePackage, installAnchor, profileDir }) {
+  const { boot, layer, skipped } = installedBundle({ binName, bundlePackage, installAnchor, profileDir })
+  const dshVersion = boot.getDshRuntimeVersion()
+  const failures = []
+  if (skipped !== undefined) {
+    failures.push(`${bundlePackage} was not loaded from ${profileDir}: ${skipped.reason}`)
+  }
+  if (layer === undefined) {
+    if (skipped === undefined) failures.push(`${bundlePackage} is not a loaded bundle of ${profileDir}`)
+    return { ok: false, dshVersion, checked: [], failures }
+  }
+
+  const manifest = boot.readProfileManifest(binName, layer.packageDir)
+  const checked = []
+  for (const name of Object.keys(manifest.dependencies ?? {}).sort()) {
+    let installed
+    try {
+      installed = boot.readProfileManifest(binName, boot.resolveBundleDir(binName, name, installAnchor, profileDir))
+    } catch (error) {
+      failures.push(`${name} is declared by ${bundlePackage} but not readable from ${profileDir}: ${error.message}`)
+      continue
+    }
+    const issue = boot.evaluatePluginCompatibility(installed, {}, dshVersion)
+    if (issue !== undefined) {
+      const peers = Object.entries(issue.peers).map(([peer, range]) => `${peer} ${range}`).join(', ')
+      failures.push(`${name}@${issue.version} is incompatible with dsh ${dshVersion}: peerDependencies ${peers}`)
+      continue
+    }
+    checked.push(`${name}@${installed.version}`)
+  }
+  return { ok: failures.length === 0, dshVersion, checked, failures }
 }
 
 function printTable(rows) {

@@ -36,7 +36,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
-import { readCombo, repoPath, verifyBundlePackages, verifyCombination } from './combo.mjs'
+import { readCombo, repoPath, verifyBundlePackages, verifyCombination, verifyPluginCompatibility } from './combo.mjs'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -867,6 +867,21 @@ function commandDoctor(layout, options) {
     must(result.failures.length === 0, result.failures.join('; '))
     return `${result.declared.length} declared package(s) mounted by ${result.mounted.length} row(s): `
       + result.mounted.map(row => `${row.id}:${row.name}`).join(', ')
+  })
+  check('plugin compatibility', () => {
+    // The same installed copies the boot loads, judged by dsh's own public
+    // compatibility function against the version this pinned CLI publishes —
+    // no range comparison lives here. The detail names the version judged
+    // against, so a green result says what it was green against.
+    const result = verifyPluginCompatibility({
+      binName: 'dsh',
+      bundlePackage: BUNDLE_PACKAGE,
+      installAnchor: join(resolveDsh(options).dir, 'apps', 'cli', 'package.json'),
+      profileDir: layout.profileDir,
+    })
+    must(result.failures.length === 0, result.failures.join('; '))
+    return `${result.checked.length} installed product package(s) compatible with dsh ${result.dshVersion}: `
+      + result.checked.join(', ')
   })
   check('model double', () => {
     const base = process.env.OURFAIRY_MINIMAX_BASE_URL ?? process.env.DEEPSEEK_BASE_URL
