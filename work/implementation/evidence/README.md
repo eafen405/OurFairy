@@ -87,6 +87,7 @@
 | [101-scoped-rows](101-scoped-rows/README.md) | #101 文件系统、sandbox、bash、工作目录 provider 各自成行 |
 | [102-config](102-config/README.md) | #102 产品行声明 Config 并在加载期以行名和字段失败 |
 | [103-model](103-model/README.md) | #103 共享模型初始声明只保留在 bundle，探针读取 `agentDefaultModel` |
+| [104-bundle-only](104-bundle-only/README.md) | #104 只声明 bundle 的 profile 可安装、启动并服务认证后的产品请求 |
 
 ## 原生能力收敛（规格 #71）
 
