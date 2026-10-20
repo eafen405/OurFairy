@@ -1,3 +1,5 @@
+> 2026-10-20 状态：现行。本文记录 2026-10-20 的判断，不描述当前实现。
+
 # Native capability dependencies
 
 This is the upgrade record for the four native dsh capabilities the first

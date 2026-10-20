@@ -1,3 +1,5 @@
+> 2026-10-20 状态：已被 [Android / vivo 通知审计](android-notification-audit.md) 取代。本文记录 2026-10-14 的判断，不描述当前实现。
+
 # vivo S50（不依赖 Google）通知通道能力边界 — 事实层
 
 > **2026-10-14 复核纠正：本文为保留的旧研究，部分结论错误，不应直接作为决策依据。** Force Stop 与 Task Manager Stop、Doze 维护窗口、FGS 超时前提、vpush 测试资格和本地通知限制的纠正见[Android / vivo 通知审计](android-notification-audit.md)。旧文遗漏的本地通知分类规则对当前设备的影响尚需实测。

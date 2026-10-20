@@ -1,3 +1,5 @@
+> 2026-10-20 状态：已被 #43 取代。本文记录 2026-10-18 的判断，不描述当前实现。
+
 # 上游兼容与模型接入：设计校准
 
 2026-10-18，方向确认完成。本文保留用户取舍、调查依据及后续验证项。产品行为已纳入[父规格](../specs/ourfairy-v1.md)，对应的网关与集成票面已修订。
@@ -43,6 +45,8 @@
 固定产品提交与官方 rc.2 的核心选模及 turn 循环契约一致。原生 `selectModel` 的选择按后续 step 生效；一轮回复在工具调用后还可能继续请求模型，因此直接调用该命令可能在本轮中途切换。原生 [`installModelSelection`](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/core/agent/src/model-selection.ts#L78) 与 [`turn/start` 生命周期](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/core/agent-loop/src/agent.ts#L299) 提供了产品侧接线的候选：每轮开始读取共用选择，在该轮内保持固定。原生 turn 包含多个模型 step 和工具调用；`running` 状态可连续覆盖多个 turn，等待整个 Agent idle 会推迟切换。
 
 当前产品在 [resume](../../backend/chat/src/runtime.mjs) 时取得共用默认值，尚未实现每轮跟随共用选择。后续应以“首请求 → 工具暂停 → 修改共用选择 → 同轮续请求 → 下一轮”验证既定行为，并覆盖既有及冷恢复会话。附件能力检查也需与实际执行选择相符。这些是待实施验证的接线建议，本轮未修改运行时代码。
+
+（已被 #43 取代：每轮开始重读共用选择已实现，[tests/gateway.test.mjs](../../tests/gateway.test.mjs) 有此断言。）
 
 ### 配置权威与在途回复
 
