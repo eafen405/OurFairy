@@ -1,8 +1,8 @@
 # 106-closeout — 票 #106 证据
 
 > 父票 [#73](https://github.com/eafen405/OurFairy/issues/73)；票面
-> `work/tickets/73/11-closeout.md`；分支 `integration/spec-73`；代码合并 tip `5d0a74f`
-> （本收口提交只改文档/证据，在其后）。任务图 `work/tickets/73/README.md`；执行状态
+> `work/tickets/73/11-closeout.md`；分支 `integration/spec-73`；最终状态为收口提交
+> （代码合并 `5d0a74f`，随后是本轮测试隔离与证据更正）。任务图 `work/tickets/73/README.md`；执行状态
 > `work/implementation/notes/73-execution.md`；评审发现与修复
 > `work/implementation/notes/73-review-findings.md`。
 
@@ -40,7 +40,7 @@
 
 ## 实际执行
 
-在 `integration/spec-73` 的代码合并 tip `5d0a74f` 的干净 worktree
+在 `integration/spec-73` 的收口阶段（运行时 ourfairy tip 为 `9a52730`）的干净 worktree
 （`.worktrees/verify-73`）上：
 
 ```
@@ -49,16 +49,16 @@ $ npm test
 ℹ suites 7
 ℹ pass 185
 ℹ fail 0
-ℹ duration_ms 87908.66
+ℹ duration_ms 92786.61
 
 $ npm run combo:verify
 repo      branch                   expected          actual            result
-ourfairy  integration/ourfairy-v1  based on integra  5d0a74fc4e0ae695  ok (worktree is based on the integration tip)
+ourfairy  integration/ourfairy-v1  based on integra  9a527306d49cb8be  ok (worktree is based on the integration tip)
 dsh       product/ourfairy-v1      5b8ec0f175d3d7ba  5b8ec0f175d3d7ba  ok
 rikkahub  product/ourfairy-v1      460109d1b89b824a  2d97ed143e7a6487  MISMATCH
 combo: 1 drift/missing entry
 
-$ git diff --check 88c27b0...5d0a74f
+$ git diff --check 88c27b0...9a52730
 （无输出）
 ```
 
