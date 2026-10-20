@@ -164,7 +164,7 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
  * @param {string} specifier
  * @returns {string}
  */
-function packageOf(specifier) {
+export function packageOf(specifier) {
   return specifier.split('/').slice(0, 2).join('/')
 }
 
