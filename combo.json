@@ -53,7 +53,7 @@
     "launcher": "scripts/ourfairy-backend.mjs",
     "agentModel": {
       "provider": "minimax-cn",
-      "model": "MiniMax-M3.1-Flash-Preview",
+      "model": "MiniMax-M3.1-Flash",
       "reasoningEffort": "max",
       "apiKeyEnv": "MINIMAX_CN_API_KEY"
     },

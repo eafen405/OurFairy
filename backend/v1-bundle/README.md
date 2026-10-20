@@ -48,7 +48,7 @@ SQL results to ids from the caller's own session headers. See
 
 **The model route starts from a declared pair, then belongs to Phaethon.** The
 `agent-default-model` row states the combination's initial shared selection
-(`minimax-cn`/`MiniMax-M3.1-Flash-Preview` at `max` thinking effort), and the
+(`minimax-cn`/`MiniMax-M3.1-Flash` at `max` thinking effort), and the
 product chat runtime reads that service at every turn start — so a selection
 Phaethon saves through the gateway (`/gateway/selection`) takes effect from each
 conversation's next reply without editing this file. The MiniMax route reuses

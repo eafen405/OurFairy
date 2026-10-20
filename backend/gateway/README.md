@@ -40,7 +40,7 @@
 `agent-default-model`。选择对**所有会话**从各自下一轮回复开始生效：每个 turn 开始时读取一次
 并固定到该 turn 结束，包括工具调用后的模型续请求；正在执行的回复不切换。保存选择不受
 在用状态限制。省略 `reasoningEffort` 会清除该字段的 profile 覆盖，回到组合声明的默认值；
-响应回显的是生效值。`minimax-cn` / `MiniMax-M3.1-Flash-Preview` 需要自适应思考，默认
+响应回显的是生效值。`minimax-cn` / `MiniMax-M3.1-Flash` 需要自适应思考，默认
 `max`；带空格的别名会被服务端静默降级，写入时请使用连字符 id。
 
 ### 供应商路由
