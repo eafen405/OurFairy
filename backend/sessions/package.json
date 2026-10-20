@@ -15,7 +15,7 @@
     "README.md"
   ],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:~",
-    "@ourfairy/dsh-identity": "workspace:~"
+    "@deepseek-ai/cordis": "^4.0.5-alpha.1",
+    "@ourfairy/dsh-identity": "^0.1.0"
   }
 }
