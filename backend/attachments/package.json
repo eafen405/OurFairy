@@ -14,12 +14,12 @@
     "pdf"
   ],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:~",
-    "@deepseek-ai/dsh-llm": "workspace:~",
-    "@deepseek-ai/dsh-subprocess": "workspace:~",
-    "@ourfairy/dsh-identity": "workspace:~",
-    "@ourfairy/dsh-sessions": "workspace:~",
-    "@deepseek-ai/dsh-tools": "workspace:~",
-    "@ourfairy/dsh-spaces": "workspace:~"
+    "@deepseek-ai/cordis": "^4.0.5-alpha.1",
+    "@deepseek-ai/dsh-llm": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-subprocess": "^0.2.1-alpha.2",
+    "@ourfairy/dsh-identity": "^0.1.0",
+    "@ourfairy/dsh-sessions": "^0.1.0",
+    "@deepseek-ai/dsh-tools": "^0.2.1-alpha.2",
+    "@ourfairy/dsh-spaces": "^0.1.0"
   }
 }
