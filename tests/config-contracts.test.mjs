@@ -89,6 +89,13 @@ const INVALID_CONFIGS = [
     field: '$.phaethonName',
     why: 'phaethonName is a number instead of a string',
   },
+  {
+    row: 'identity',
+    config: home => ({ path: join(home, 'identity-override.sqlite'), sessionTtlDays: 2 ** 60 }),
+    field: '$.sessionTtlDays',
+    case: 'TTL beyond the safe-integer bound',
+    why: 'sessionTtlDays exceeds Number.MAX_SAFE_INTEGER',
+  },
   { row: 'attachments', config: {}, field: '$.root', why: 'root is missing' },
 ]
 
