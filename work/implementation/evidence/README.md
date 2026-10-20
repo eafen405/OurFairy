@@ -81,6 +81,7 @@
 | --- | --- |
 | [96-bundle-authority](96-bundle-authority/README.md) | #96 bundle 成为产品包集合的唯一权威 |
 | [98-compat](98-compat/README.md) | #98 产品包声明明确 dsh 兼容范围并由 doctor 校验 |
+| [100-groups](100-groups/README.md) | #100 群组工具成为独立产品行 |
 
 ## 原生能力收敛（规格 #71）
 

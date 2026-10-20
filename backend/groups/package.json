@@ -1,0 +1,26 @@
+{
+  "name": "@ourfairy/dsh-groups",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OurFairy's group row: the group membership tools and the group-root contribution to the product's file spaces.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "locale/*.json"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5-alpha.1",
+    "@deepseek-ai/dsh-agent": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-tools": "^0.2.1-alpha.2",
+    "@ourfairy/dsh-identity": "^0.1.0",
+    "@ourfairy/dsh-spaces": "^0.1.0"
+  }
+}
