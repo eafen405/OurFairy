@@ -56,12 +56,6 @@ function readCombination() {
       fail(`${path} backend.${field} must be a non-empty string; the launcher reads its pins from combo.json`)
     }
   }
-  const agentModel = backend.agentModel
-  if (agentModel === undefined || typeof agentModel.provider !== 'string' || typeof agentModel.model !== 'string'
-    || agentModel.provider === '' || agentModel.model === '') {
-    fail(`${path} backend.agentModel must declare non-empty provider and model strings;`
-      + ' the probe refuses to run a turn without an explicit selection')
-  }
   return backend
 }
 
@@ -345,43 +339,10 @@ function isolatedEnv(layout, extra = {}) {
   }
 }
 
-/**
- * The provider/model pair the bundle's `agent-default-model` row declares.
- *
- * Read from that row rather than searched for in the whole patch: the old
- * `includes('model: deepseek-flash')` test also matched `model:
- * deepseek-flash-drifted`, so a drifted bundle kept the doctor check green
- * while `combo.json backend.agentModel` and the README promised it could not.
- * @returns {{provider?: string, model?: string}}
- */
-function bundleAgentModel() {
-  const patchPath = join(repoRoot, COMBINATION.bundlePathInRepo, 'cordis.patch.yml')
-  const lines = readFileSync(patchPath, 'utf8').split('\n')
-  const start = lines.findIndex(line => /^\s*- id: agent-default-model\s*$/.test(line))
-  if (start < 0) return {}
-  const row = {}
-  for (const line of lines.slice(start + 1)) {
-    if (/^\s*- id: /.test(line)) break
-    const field = /^\s*(provider|model): (.+?)\s*$/.exec(line)
-    if (field !== null) row[field[1]] = field[2]
-  }
-  return row
-}
-
-/** Whether the bundle's row declares exactly the model pair combo.json locks. */
-function bundleDeclaresAgentModel(selection) {
-  const row = bundleAgentModel()
-  return row.provider === selection.provider && row.model === selection.model
-}
-
 function childEnv(layout, { reportPath, mode, holdMs }) {
-  const selection = COMBINATION.agentModel
   const env = isolatedEnv(layout, {
     OURFAIRY_PROBE_REPORT: reportPath,
     OURFAIRY_PROBE_MODE: mode,
-    OURFAIRY_PROBE_PROVIDER: selection.provider,
-    OURFAIRY_PROBE_MODEL: selection.model,
-    ...selection.reasoningEffort === undefined ? {} : { OURFAIRY_PROBE_REASONING_EFFORT: selection.reasoningEffort },
   })
   if (holdMs !== undefined) env.OURFAIRY_PROBE_HOLD_MS = String(holdMs)
   return env
@@ -888,16 +849,6 @@ function commandDoctor(layout, options) {
     if (base === undefined || base === '') return 'not configured (keyless startup only)'
     return process.env.OURFAIRY_MINIMAX_BASE_URL === undefined
       ? `DEEPSEEK_BASE_URL=${base}` : `OURFAIRY_MINIMAX_BASE_URL=${base}`
-  })
-  check('bundle agent model', () => {
-    const selection = COMBINATION.agentModel
-    const declared = bundleAgentModel()
-    must(bundleDeclaresAgentModel(selection),
-      `${COMBINATION.bundlePathInRepo}/cordis.patch.yml declares`
-      + ` ${declared.provider ?? '<missing provider>'}/${declared.model ?? '<missing model>'} in its agent-default-model row,`
-      + ` but combo.json backend.agentModel locks ${selection.provider}/${selection.model};`
-      + ' the two declarations have drifted apart')
-    return `${selection.provider}/${selection.model} declared in both combo.json and the bundle`
   })
 
   const failed = checks.filter(entry => !entry.ok)

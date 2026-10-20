@@ -64,20 +64,20 @@ Chinese substring matching, and the `@ourfairy/dsh-search` tools restrict native
 SQL results to ids from the caller's own session headers. See
 [`backend/search/README.md`](../search/README.md) for interval semantics and rebuild.
 
-**The model route starts from a declared pair, then belongs to Phaethon.** The
-`agent-default-model` row states the combination's initial shared selection
-(`minimax-cn`/`MiniMax-M3.1-Flash-Preview` at `max` thinking effort), and the
-product chat runtime reads that service at every turn start — so a selection
-Phaethon saves through the gateway (`/gateway/selection`) takes effect from each
-conversation's next reply without editing this file. The MiniMax route reuses
-dsh's installed `minimax-cn` provider: this bundle only narrows it to the model
-the deployment uses, declares its 1M context, image input and adaptive thinking,
-and names `MINIMAX_CN_API_KEY`. The official DeepSeek route stays mounted as a
-switchable alternative and is not selected. The probe creates its own Agent outside that runtime, so the
-launcher passes the same pair to it as explicit `agentOptions`. `doctor`'s
-`bundle agent model` check reads this file and asserts both values match
-`combo.json`; that check covers the *initial* declaration only, never the saved
-runtime selection.
+**The model route starts from the bundle's declared pair, then belongs to Phaethon.** The
+`agent-default-model` row is the sole declaration of the combination's initial
+shared selection (`minimax-cn`/`MiniMax-M3.1-Flash-Preview` at `max` thinking
+effort): `combo.json` carries no provider/model copy and `doctor` has no
+comparison check. The product chat runtime and the probe both read
+`agentDefaultModel.currentSelection()` at the start of a turn; the probe also
+writes that selection into its boot report (`report.model`), so changing this row
+changes what the probe observes. A selection Phaethon saves through the gateway
+(`/gateway/selection`) takes effect from each conversation's next reply without
+editing this file. The MiniMax route reuses dsh's installed `minimax-cn` provider:
+this bundle only narrows it to the model the deployment uses, declares its 1M
+context, image input and adaptive thinking, and names `MINIMAX_CN_API_KEY`. The
+official DeepSeek route stays mounted as a switchable alternative and is not
+selected.
 
 **Model recovery and tool-result retention are native rows.** `llm-retry` re-runs a
 failed model step inside the same open turn, and each provider profile owns the

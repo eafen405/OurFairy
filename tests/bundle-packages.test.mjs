@@ -212,15 +212,9 @@ test('the installed copy boots with no product source tree behind it', () => {
   const installed = join(profileDir(home), 'node_modules', '@ourfairy')
   const overlay = join(installed, 'dsh-baseline-probe', 'overlay.patch.yml')
   const reportPath = join(home, 'installed-copy-probe.json')
+  // A boot reads the model selection from the bundle row; it needs no explicit
+  // pair from the environment (#103).
   const { combo } = readCombo(root)
-  // The probe refuses a turn without a selection; a boot needs none, so the
-  // pair is passed only while combo.json still declares one. (#103 moves that
-  // declaration into the bundle, and this test must not depend on either.)
-  const selection = combo.backend.agentModel
-  const selectionEnv = selection === undefined ? {} : {
-    OURFAIRY_PROBE_PROVIDER: selection.provider,
-    OURFAIRY_PROBE_MODEL: selection.model,
-  }
   const dshBin = join(repoPath(combo, 'dsh', root), 'apps', 'cli', 'lib', 'bin.js')
   const result = spawnSync(process.execPath, [dshBin, '--profile', 'ourfairy', '--patch', overlay], {
     cwd: home,
@@ -234,7 +228,6 @@ test('the installed copy boots with no product source tree behind it', () => {
       OURFAIRY_PORT: '0',
       OURFAIRY_PROBE_REPORT: reportPath,
       OURFAIRY_PROBE_MODE: 'boot',
-      ...selectionEnv,
       XDG_CACHE_HOME: join(home, 'cache'),
       XDG_CONFIG_HOME: join(home, 'config'),
       XDG_DATA_HOME: join(home, 'data'),

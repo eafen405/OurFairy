@@ -85,6 +85,7 @@
 | [100-groups](100-groups/README.md) | #100 群组工具成为独立产品行 |
 | [101-scoped-rows](101-scoped-rows/README.md) | #101 文件系统、sandbox、bash、工作目录 provider 各自成行 |
 | [102-config](102-config/README.md) | #102 产品行声明 Config 并在加载期以行名和字段失败 |
+| [103-model](103-model/README.md) | #103 共享模型初始声明只保留在 bundle，探针读取 `agentDefaultModel` |
 
 ## 原生能力收敛（规格 #71）
 
