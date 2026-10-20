@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OurFairy peer delivery",
+    "description": "The OurFairy delivery row: the deliver_message tool, durable delivery coordination and restart recovery over the chat runtime's narrow queue, live-session and barrier service."
+  }
+}
