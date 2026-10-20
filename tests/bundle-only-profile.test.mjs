@@ -14,16 +14,25 @@
  * chat send/read) against a local in-process Messages double. The model
  * endpoint is the only replaced dependency.
  *
+ * Beyond the probe report, the installed bundle copy is composed through dsh's
+ * own public app-boot reader (`loadOverlayPatches` + `composeEntries`, flattened
+ * by the same helper the doctor uses): every product row the bundle's patch
+ * contributes must appear as an active row, and every package the bundle
+ * manifest declares must be mounted by at least one composed row. A row deleted
+ * from the patch therefore fails this acceptance even though the report only
+ * lists rows that still exist.
+ *
  * The last test proves the same profile fails to boot, naming the package, when
  * the bundle stops declaring one of the packages its own patch mounts.
  */
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import net from 'node:net'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
-import { readCombo, repoPath } from '../scripts/combo.mjs'
+import { flattenEntries, packageOf, readCombo, repoPath } from '../scripts/combo.mjs'
 import {
   copyProductRepo, describeRun, httpJson, makeHome, readReport, removeHome, repoRoot,
 } from './helpers/backend.mjs'
@@ -171,6 +180,68 @@ function probeOverlay(profileDir) {
   return installedPath(profileDir, PROBE_PACKAGE, 'overlay.patch.yml')
 }
 
+/**
+ * The rows the installed bundle's own patch composes.
+ *
+ * Read through dsh's public app-boot reader — the same functions a boot uses —
+ * rather than parsing YAML here, and flattened by the helper the doctor's
+ * package check uses, so group-nested rows count exactly as the loader mounts
+ * them.
+ * @param {string} profileDir the profile the bundle was installed into.
+ * @returns {{id: string, name: string}[]}
+ */
+function composedBundleRows(profileDir) {
+  const installAnchor = join(dshDir, 'apps', 'cli', 'package.json')
+  const boot = createRequire(installAnchor)('@deepseek-ai/dsh-app-boot')
+  const patchPath = installedPath(profileDir, BUNDLE_PACKAGE, 'cordis.patch.yml')
+  return flattenEntries(boot.composeEntries([boot.loadOverlayPatches('dsh', patchPath)]))
+    .filter(row => typeof row.name === 'string')
+}
+
+/**
+ * The acceptance the probe report alone cannot express: every product row the
+ * installed bundle patch contributes is composed and active, and every package
+ * the bundle manifest declares is mounted by at least one composed row.
+ *
+ * Deleting a row from the patch while leaving its package declared passes the
+ * report-only assertions (there is no row left to observe) and this assertion
+ * is what fails.
+ * @param {{profileDir: string, report: any}} context
+ */
+function assertBundleRowsComposedAndMounted({ profileDir, report }) {
+  const manifest = JSON.parse(
+    readFileSync(installedPath(profileDir, BUNDLE_PACKAGE, 'package.json'), 'utf8'),
+  )
+  const declared = Object.keys(manifest.dependencies ?? {}).sort()
+  const composed = composedBundleRows(profileDir)
+  const productRows = composed.filter(row => row.name.startsWith('@ourfairy/'))
+  assert.ok(productRows.length > 0, `the bundle patch composed no product rows: ${JSON.stringify(composed)}`)
+
+  const reported = new Map((report.rows ?? []).map(row => [row.id, row]))
+  for (const row of productRows) {
+    const id = String(row.id)
+    const observed = reported.get(id)
+    assert.ok(
+      observed !== undefined,
+      `bundle product row "${id}" (${row.name}) must appear in the probe report;`
+      + ` it reported ${JSON.stringify([...reported.keys()])}`,
+    )
+    assert.equal(observed.disabled, false,
+      `bundle product row "${id}" (${row.name}) must not be disabled`)
+    assert.equal(observed.fiberState, 'active',
+      `bundle product row "${id}" (${row.name}) must be active`)
+  }
+
+  const mounted = new Set(productRows.map(row => packageOf(row.name)))
+  for (const name of declared) {
+    assert.ok(
+      mounted.has(name),
+      `the bundle declares ${name} but no composed bundle row mounts it;`
+      + ` mounted packages: ${JSON.stringify([...mounted].sort())}`,
+    )
+  }
+}
+
 /** A free loopback port for the product web carrier. */
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -290,6 +361,10 @@ test('a profile declaring only the bundle installs, boots every product row, and
       assert.equal(row.disabled, false, `product row "${row.id}" (${row.name}) must not be disabled`)
       assert.equal(row.fiberState, 'active', `product row "${row.id}" (${row.name}) must be active`)
     }
+    // And the installed bundle's own patch must still compose every row and
+    // mount every declared package: a deleted row is invisible to the report
+    // loop above, so the expectation is derived from the patch the loader reads.
+    assertBundleRowsComposedAndMounted({ profileDir, report })
 
     // Every service the probe checks is live; the probe already turns a failed
     // expected row into a failure, so report.ok covers the row's fiber state.

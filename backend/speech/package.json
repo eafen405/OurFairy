@@ -1,1 +1,22 @@
-{"name":"@ourfairy/dsh-speech","version":"0.1.0","private":true,"type":"module","license":"UNLICENSED","main":"./src/index.mjs","exports":{".":"./src/index.mjs"},"files":["src","README.md"],"peerDependencies":{"@ourfairy/dsh-identity":"^0.1.0","@deepseek-ai/schemastery":"^3.18.5-alpha.1"}}
+{
+  "name": "@ourfairy/dsh-speech",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "locale/*.json"
+  ],
+  "peerDependencies": {
+    "@ourfairy/dsh-identity": "^0.1.0",
+    "@deepseek-ai/schemastery": "^3.18.5-alpha.1"
+  },
+  "description": "OurFairy speech-to-text transcription of uploaded audio through the configured ASR route."
+}

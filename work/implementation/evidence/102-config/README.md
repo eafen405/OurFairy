@@ -68,3 +68,15 @@ $ npm test
 - 未在真实模型服务/真机上验证；本票只改配置契约与加载期检查，测试走真实 launcher/CLI。
 - 未跑 Android 构建（不在本票范围）。
 - 未修 `conversation-search`/`pdf-worker-cancel` 在并发全量下的偶发抖动（单独重跑通过）。
+
+## 2026-10-20 终审轮补记：服务表的 disabled-row 规则与 TTL 上限
+
+- `collectServices` 现在把 disabled expected row 的缺席记为刻意缺席、把 live service 记为
+  替换行提供，二者都不计失败；非 disabled expected row 缺服务、行缺席或未激活仍然失败。本文件
+  正文的「刻意 disabled 的行不算激活失败」原本只描述 `collectInactiveProductRows`，现在服务表
+  采用同一原则。因此 #105 的 `scoped-bash` 禁用/替换用例可以走 launcher `start`；`scoped-fs`/
+  `scoped-directory` 仍通过等待中的依赖服务失败。
+- `Config.sessionTtlDays` 增加 `.max(Number.MAX_SAFE_INTEGER)`：schemastery 的
+  `min(1).step(1)` 接受 `2**60`，而大数日数在 `Date` 运算中会丢失精度。
+  `tests/config-contracts.test.mjs` 增加第 7 条用例：`sessionTtlDays: 2**60` 在加载期失败并
+  命名 `$.sessionTtlDays`。此前该配置能启动（红），加界后转绿。

@@ -6,6 +6,18 @@
 > 分支 `ticket/98-compat`；开工时 `integration/spec-73` tip `d73f88f`，已先合入
 > （fast-forward，`231fd21..d73f88f`）。实现提交 `15d42b9`、`f8b63fe`；本证据提交随后。
 
+## 2026-10-20 补记（#73 终审轮）
+
+本文件是 #98 交付时的证据。之后 #99–#101 新增了 delivery/groups 包与四个 scoped provider 行，
+review-fix 的包一致性修复又把 `verifyPluginCompatibility` 的判定集合从 bundle `dependencies`
+改为 **profile 实际安装的产品包集合**（见 `scripts/combo.mjs` 的 `installedProductPackages`）。
+因此当前的行为是：
+
+- 判定的集合是已安装的 12 个产品包：10 个 bundle 声明依赖 + bundle 自身 + probe 测试机件；
+  其中 10 个 manifest 有 `peerDependencies`（bundle 与 probe 没有 peers，判定为 no-op）。
+- 下面是 #98 固定提交上的**历史快照**，不是当前行为。`8 installed product package(s)` 与
+  第 1 节的「8 个 `backend/*/package.json`」都是那时的数字；当前组合的兼容检查覆盖全部已安装包。
+
 ## 改了什么
 
 ### 1. 产品包 peer 从 `workspace:` 改为明确 semver 范围
@@ -52,7 +64,8 @@
 ### 3. `doctor` 新增 `plugin compatibility` 检查
 
 `scripts/ourfairy-backend.mjs:871`，排在 `bundle packages` 之后（它读同一个已安装 profile）。
-成功时报告被检查的 dsh 版本与每个包，例如：
+成功时报告被检查的 dsh 版本与每个包。下面是 #98 固定提交上的**历史输出快照**（此后 #99–#101
+新增包、review-fix 改为判定已安装集合；当前数字见文首补记）：
 
 ```
 ok  plugin compatibility: 8 installed product package(s) compatible with dsh 0.2.1-alpha.2:
@@ -115,7 +128,8 @@ $ node --test tests/plugin-compatibility.test.mjs
 ℹ tests 3 / pass 3 / fail 0
 ```
 
-真实 `doctor`（临时 `OURFAIRY_HOME`，非测试替身）输出摘要：
+真实 `doctor`（临时 `OURFAIRY_HOME`，非测试替身）输出摘要。这是 #98 固定提交上的**历史
+快照**（8 个声明包 / 9 行 / 8 个已安装包），不是当前组合的数字：
 
 ```
 $ OURFAIRY_HOME=$(mktemp -d) node scripts/ourfairy-backend.mjs doctor --json

@@ -22,7 +22,9 @@ export const inject = ['webServer', 'connection']
 /** The loader validates the row config before `apply`; `resolveConfig` fills the defaults. */
 export const Config = z.object({
   path: z.string().min(1).required(),
-  sessionTtlDays: z.number().min(1).step(1),
+  // A day count is arithmetic on Date values: above the safe-integer bound the
+  // session expiry silently loses precision, so reject it at load time.
+  sessionTtlDays: z.number().min(1).step(1).max(Number.MAX_SAFE_INTEGER),
   phaethonName: z.string(),
   phaethonPassword: z.string(),
 })

@@ -36,6 +36,12 @@
      `active` 且未 disabled；`report.services` 的每个服务都 `live`；`report.model`
      存在，provider/model/reasoningEffort 来自 bundle 的 `agent-default-model` 行，
      `selection` 为 `agentDefaultModel.currentSelection()`。
+   - **行集由 dsh 自己的 loader 组合**：读安装副本的 bundle patch 经
+     `createRequire(<dsh>/apps/cli/package.json)('@deepseek-ai/dsh-app-boot')` 的
+     `loadOverlayPatches` + `composeEntries`，再用 `scripts/combo.mjs` 的 `flattenEntries`
+     展开；断言 **every bundle-declared product row is composed and active; every declared
+     package is mounted**（子路径用导出的 `packageOf` 归到所属包）。删除任一 patch 行而保留包
+     声明会让该断言失败；现有「缺包」负例保留。
    - profile 直接依赖恰好是 bundle + probe；安装后 `node_modules/@ourfairy/` 里除
      bundle（声明层）与 probe（测试机件）之外的产品包，恰好等于 bundle manifest 的
      `dependencies` 键集合——证明没有 launcher 包清单参与。
@@ -152,3 +158,19 @@ rikkahub  product/ourfairy-v1      460109d1b89b824a  2d97ed143e7a6487  MISMATCH
 ```
 
 本证据追加提交后 HEAD 会再前进一个只改 Markdown 的提交；该提交不改变被测代码。
+
+## 终审轮补记（2026-10-20，#106）
+
+- 验收措辞更新为 **every bundle-declared product row is composed and active; every declared
+  package is mounted**。原测试只遍历 `report.rows` 中已存在的行，删除 bundle patch 的一行
+  （例如 `groups`）而保留包声明仍会通过；现在期望从安装副本的 patch 经 dsh 公开 loader 派生。
+- 红测演练：临时从 worktree 的 bundle patch 删除 `groups` 行（包仍声明），新断言报
+  `the bundle declares @ourfairy/dsh-groups but no composed bundle row mounts it`；随即用
+  `git checkout -- backend/v1-bundle/cordis.patch.yml` 恢复，复跑 2/2 绿，最终检查包含
+  `git diff --exit-code -- backend/v1-bundle/cordis.patch.yml` 无输出。
+- 最终代码树（`fix/73-final`，最终代码提交 `0cb471a`；本文件随后提交）上执行：
+  `node --test tests/bundle-only-profile.test.mjs` → 2/2 pass（~3.8s）；
+  `npm test` → **185 tests / 185 pass / 0 fail**（85.4s）；
+  `npm run combo:verify` → ourfairy/dsh ok，rikkahub 为已知外部漂移
+  （`2d97ed14` ≠ 锁定 `460109d1`），退出码 1；未改 `combo.json`、未动 rikkahub。
+- 该全量运行在最终代码提交 `0cb471a` 上执行；本文件与其它证据随后以 Markdown 提交，不改变被测代码。

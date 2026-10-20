@@ -85,3 +85,22 @@ $ node --test tests/conversation-search.test.mjs
 - 未跑 Android 构建（不在本票范围）。
 - `pdf-worker-cancel` 与 `conversation-search` 的偶发失败未修：并发全量下的已知抖动，单独重跑通过；
   修复属测试稳定性问题，不在本票范围。
+
+## 2026-10-20 终审轮补记：disabled expected row 的探针规则
+
+探针的 `collectServices` 现在把「expected row 被禁用且服务缺席」当作刻意缺席、把「服务 live
+但 expected row 被禁用」当作替换行提供，两者都不计失败。仍然失败的是：expected row 存在且未
+禁用但服务缺席、服务 live 但 expected row 不在组合中、服务 live 但未禁用行未激活。行本身继续
+由 `collectInactiveProductRows` 按「非刻意禁用」检查。
+
+因此本文件第 2 条用例的四个 provider 结果由 `tests/scoped-provider-rows.test.mjs` 固定为：
+
+- `scoped-bash` 禁用 → probe 退出 0、`report.ok=true`、`services.shell.live=false` 且
+  `disabled=true`，不再出现 `service "shell" is not live`；#105 因此可以用 launcher `start`
+  证明「scoped provider 禁用后仍能启动」。
+- `scoped-fs`、`scoped-sandbox`、`scoped-directory` 仍失败，但失败来自等待中的依赖（fs →
+  attachments/chat 的 `ourfairyAttachments`；sandbox → `shell`；directory → attachments），
+  不是被禁用行自己的服务。
+- 四种情况下组合都不出现原生 fallback 行，被禁用行的工具行不 active。
+
+本票其余内容（行拆分、服务映射、模型 turn 证据）不变。

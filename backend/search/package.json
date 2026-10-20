@@ -2,10 +2,14 @@
   "name": "@ourfairy/dsh-search",
   "version": "0.1.0",
   "private": true,
+  "description": "OurFairy conversation search over the native session query index, scoped to the authenticated owner.",
   "type": "module",
   "main": "./src/index.mjs",
-  "files": ["src", "README.md"],
-  "exports": { ".": "./src/index.mjs" },
+  "files": ["src", "README.md", "locale/*.json"],
+  "exports": {
+    ".": "./src/index.mjs",
+    "./locale/*.json": "./locale/*.json"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.5-alpha.1",
     "@deepseek-ai/dsh-tools": "^0.2.1-alpha.2",

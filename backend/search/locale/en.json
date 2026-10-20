@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OurFairy conversation search",
+    "description": "Owner-scoped conversation search over the native session query index, returning bounded snippets for the caller's own sessions."
+  }
+}
