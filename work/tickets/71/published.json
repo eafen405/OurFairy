@@ -1,0 +1,37 @@
+{
+  "01-pdf-native-subprocess.md": {
+    "number": 81,
+    "id": 5923014552,
+    "url": "https://github.com/eafen405/OurFairy/issues/81"
+  },
+  "02-native-rows-retry-spill.md": {
+    "number": 82,
+    "id": 5923015262,
+    "url": "https://github.com/eafen405/OurFairy/issues/82"
+  },
+  "03-spill-retrievable.md": {
+    "number": 83,
+    "id": 5923015855,
+    "url": "https://github.com/eafen405/OurFairy/issues/83"
+  },
+  "04-dsh-history-seam.md": {
+    "number": 84,
+    "id": 5923016431,
+    "url": "https://github.com/eafen405/OurFairy/issues/84"
+  },
+  "05-product-history-adapter.md": {
+    "number": 85,
+    "id": 5923016988,
+    "url": "https://github.com/eafen405/OurFairy/issues/85"
+  },
+  "06-upgrade-review-and-retained.md": {
+    "number": 86,
+    "id": 5923017621,
+    "url": "https://github.com/eafen405/OurFairy/issues/86"
+  },
+  "07-closeout.md": {
+    "number": 87,
+    "id": 5923018243,
+    "url": "https://github.com/eafen405/OurFairy/issues/87"
+  }
+}
