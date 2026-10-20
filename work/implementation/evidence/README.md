@@ -84,6 +84,7 @@
 | [99-delivery](99-delivery/README.md) | #99 投递成为独立产品行，chat 只暴露窄运行时服务 |
 | [100-groups](100-groups/README.md) | #100 群组工具成为独立产品行 |
 | [101-scoped-rows](101-scoped-rows/README.md) | #101 文件系统、sandbox、bash、工作目录 provider 各自成行 |
+| [102-config](102-config/README.md) | #102 产品行声明 Config 并在加载期以行名和字段失败 |
 
 ## 原生能力收敛（规格 #71）
 
