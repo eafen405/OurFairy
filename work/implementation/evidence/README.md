@@ -81,6 +81,7 @@
 | --- | --- |
 | [81-pdf-subprocess](81-pdf-subprocess/README.md) | #81 PDF worker 经原生 subprocess 服务，bwrap 网络显式化 |
 | [82-native-rows](82-native-rows/README.md) | #82 原生模型重试与大工具结果 spill |
+| [83-spill-read](83-spill-read/README.md) | #83 被 spill 的结果由本会话只读取回，其他会话与用户被拒绝 |
 
 ## 阶段整合与评审
 
