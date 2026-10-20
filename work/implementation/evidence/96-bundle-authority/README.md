@@ -7,6 +7,12 @@
 > `9e0b42c`）。完成前按约定合入 `integration/spec-73` tip `22a86aa` 与
 > `integration/ourfairy-v1` tip `78949a4`（它把 dsh 锁定提交推进到 `5b8ec0f1`，
 > 来自 #84 历史 seam 的合并）。最终状态 `13edf1f`。
+>
+> **历史快照说明（2026-10-20 评审补记）：** 本目录的命令与输出是票 #96 在固定状态
+> `13edf1f` 上的记录，不是对最终树的描述。`tests/executable-claims.test.mjs` 后来由 #103
+> 删除；#99–#101 又在 bundle 中新增了包与行，因此文中 155 个测试、37/40 行、8 包 9 行等
+> 数字只描述当时那棵树。当前的行/包集合以 `backend/v1-bundle/cordis.patch.yml` 与
+> `backend/v1-bundle/package.json` 为准。
 
 ## 改了什么
 

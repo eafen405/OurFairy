@@ -10,8 +10,9 @@
 
 ### 1. 产品包 peer 从 `workspace:` 改为明确 semver 范围
 
-9 个 `backend/*/package.json` 的 `peerDependencies` 按票面给定的当前安装版本改写，
-不再出现 pnpm `workspace:` 协议：
+8 个 `backend/*/package.json` 的 `peerDependencies` 按票面给定的当前安装版本改写，
+不再出现 pnpm `workspace:` 协议（`backend/probe` 与 `backend/v1-bundle` 没有
+`peerDependencies`，#99/#100 的 delivery/groups 在本票之后才加入）：
 
 | peer | 范围 |
 | --- | --- |
@@ -60,7 +61,10 @@ ok  plugin compatibility: 8 installed product package(s) compatible with dsh 0.2
     @ourfairy/dsh-spaces@0.1.0, @ourfairy/dsh-speech@0.1.0
 ```
 
-失败时 `doctor` 退出码非 0，`detail` 同时含包名、peer 名、范围与被检查的 dsh 版本。
+检查失败时 `detail` 同时含包名、peer 名、范围与被检查的 dsh 版本。测试断言的是
+`plugin compatibility` 这条检查的 `ok:false` 与 `detail`；副本的 `combo combination` 检查因
+「不是 Git checkout」这一无关原因也会失败，所以测试不读 doctor 的退出码（退出码路径在这两份
+证据里未被断言）。
 
 ### 4. 测试（`tests/plugin-compatibility.test.mjs`）
 
