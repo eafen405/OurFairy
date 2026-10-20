@@ -79,7 +79,9 @@ export class RemoteChat extends Service {
   async page(owner, { sessionId, throughSeq, beforeSeq, maxEvents }) {
     const limit = maxEventsOf(maxEvents)
     const state = await this.runtime.open(owner, sessionId)
-    const { events, cursor } = await this.runtime.events(sessionId)
+    // The live session already knows the committed end; a page never re-reads
+    // the log to learn it.
+    const cursor = state.session.seq - 1
     if (!Number.isSafeInteger(throughSeq) || throughSeq < -1 || throughSeq > cursor
       || !Number.isSafeInteger(beforeSeq) || beforeSeq < 0 || beforeSeq > throughSeq + 1) {
       throw new ChatError(400, 'chat/invalid-page', 'name a fixed inclusive throughSeq and exclusive beforeSeq within that cut')
@@ -89,7 +91,7 @@ export class RemoteChat extends Service {
     // Project at the fixed cut, then select rows whose authoritative seq belongs
     // to this page. A page can validly contain no bubbles but still fills event coverage.
     return { sessionId, throughSeq, fromSeq, beforeSeq: fromSeq > 0 ? fromSeq : null,
-      hasMore: fromSeq > 0, events: events.slice(fromSeq, end),
+      hasMore: fromSeq > 0, events: await this.runtime.pageEvents(state, fromSeq, end),
       messages: transcriptAt(this.transcriptState(state), throughSeq)
         .filter(message => message.seq >= fromSeq && message.seq < end) }
   }

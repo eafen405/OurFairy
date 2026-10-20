@@ -199,6 +199,23 @@ export class SessionRuntime {
   /** One safe one-shot read of a session's event stream, shared with attachments. */
   events(sessionId) { return readSessionEvents(this.ctx, sessionId) }
 
+  /**
+   * One page's event slice only. A seeded window already holds the log, so this
+   * is an array slice; otherwise the native read handle returns exactly the
+   * requested range. Paging never reads the whole log.
+   */
+  async pageEvents(state, fromSeq, end) {
+    const seeded = state.window?.events
+    if (seeded !== null && seeded !== undefined) return seeded.slice(fromSeq, end)
+    const handle = await this.ctx.sessionPersistence.open(state.sessionId, 'read')
+    try {
+      const { events } = await handle.read(fromSeq, end - fromSeq)
+      return [...events]
+    } finally {
+      await handle.close()
+    }
+  }
+
   async barrier(state) {
     // Capture BEFORE await: later appended events are not claimed durable by this barrier.
     const through = state.session.seq - 1
