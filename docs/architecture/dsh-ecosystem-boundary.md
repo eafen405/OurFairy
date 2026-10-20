@@ -67,6 +67,7 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | 产品会话路径不在 `/api` 下，已认证 token 也无法经 `/api/sessions/*` 读到会话 | `tests/owned-sessions.test.mjs`：`cold ownerless and foreign sessions are refused without changing durable artifacts` |
 | `/api` 在 handler 之前整体准入：匿名 401，已准入后无端点 404 | `tests/identity-http.test.mjs`：`a session credential admits dsh /api while an anonymous request is refused at the door` |
 | 产品流式面是自建 SSE，断开观察不停止后端回复 | `tests/remote-chat.test.mjs`：`SSE preserves every text prefix and disconnecting observation leaves the backend reply running` |
+| 错误响应的 code 以模块前缀区分 | `tests/gateway.test.mjs`：`the gateway reads the shared configuration, refuses an ordinary agent, and survives a restart`（断言 `gateway/unauthorized`、`gateway/forbidden`） |
 | 产品路由拒绝匿名与越权（含法厄同），且早于冷恢复 | `tests/remote-chat.test.mjs`：`all remote paths reject anonymous and foreign owners, including administrator, before cold resume` |
 | 每个产品模块的代表入口都在解析请求体或读取凭据之前拒绝不受信的 Host | `tests/identity-http.test.mjs`：`every product module entry point rejects an untrusted Host before parsing the body or reading the credential` |
 | 组合不挂载 Gateway、Remote/Typert 与 plugin manager 行 | `tests/ecosystem-boundary.test.mjs`（解析 bundle 行集合，任一包名出现即失败） |
