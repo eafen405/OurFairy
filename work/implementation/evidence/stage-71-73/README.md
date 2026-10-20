@@ -52,7 +52,7 @@
    - `chat-page-cut` 的假宿主补上同样两个方法；
    - `bundle-only-profile` 的探针模型断言改为 `MiniMax-M3.1-Flash`。
 
-## 实际执行的命令与结果（在 `5185764` 上）
+## 实际执行的命令与结果（代码 tip `5185764`；基准在其后的同一代码树上跑）
 
 ```text
 $ npm test
@@ -76,7 +76,21 @@ android source  product/ourfairy-v1  460109d1b89b824a  460109d1b89b824a  ok (dec
 
 $ git diff --check 88c27b0...HEAD -- . ':(exclude)android'
 (no output)
+
+$ node scripts/bench-projection.mjs --label after-merge --out work/tmp/after-merge-1.json
+(8 runs, one document: 40/160 turns × 1/2 observers, 2 repetitions each)
+
+$ node scripts/bench-gate.mjs \
+    --baseline work/implementation/evidence/72-projection-perf/baseline-run1.json \
+               work/implementation/evidence/72-projection-perf/baseline-run2.json \
+               work/implementation/evidence/72-projection-perf/baseline-run3-final-tip.json \
+    --after work/tmp/after-merge-1.json
+bench-gate: all gates pass   (18/18)
 ```
+
+关键比值（after/before）：`cost160` 0.696（160/1）与 0.675（160/2），门槛 0.85；`historySlope`
+0.965 / 1.011，门槛 1.20；`observerRatio` 1.586，门槛 1.80；`readP95` 最高 1.228（40/2），
+门槛 1.50；`memory` 最高 1.075，门槛 1.25；`payload` 最高 1.009，门槛 1.05。
 
 三次合并提交都由仓库的 `pre-commit` 钩子跑过全量与 `combo:verify`（`.githooks/pre-commit`）；
 #73 合并在 `8f128f6` 上为 191 条通过，#72、#71 的合并提交后为全量通过。
@@ -86,9 +100,8 @@ $ git diff --check 88c27b0...HEAD -- . ':(exclude)android'
 
 ## 未执行 / 已知限制
 
-- **基准门槛未在合并树上重跑**：`scripts/bench-gate.mjs` 需要重新生成的 after JSON（#94 的
-  测量矩阵）。本次只跑既有单测（含 `tests/bench-gate.test.mjs` 的门槛逻辑）；#94 的测量
-  数据须在本 tip 上重测后才算数。
+- **after 基准只跑了一次**：门槛一次通过（18/18），但 #94 的记录用多次运行取中位数；
+  若要把多次运行写进证据，在本 tip 上按同样的参数重复 `bench-projection.mjs` 即可。
 - **Android 构建与真机未运行**：本次合并不改 `android/` 或客户端代码；客户端行为以其自身
   证据（`123-client-merge`）为准。
 - **真实模型与云服务未调用**：全量测试使用模型替身。
