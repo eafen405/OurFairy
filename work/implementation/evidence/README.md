@@ -85,6 +85,7 @@
 | [84-history-seam](84-history-seam/README.md) | #84 dsh fork 暴露 Host 可调用的 assistant 基线与事件 cursor 接缝 |
 | [85-history-adapter](85-history-adapter/README.md) | #85 断线重连/live 历史改用原生 assistant 基线与事件 cursor |
 | [86-upgrade-review](86-upgrade-review/README.md) | #86 原生能力升级依赖记录、保留实现理由与 doctor 缺项检查 |
+| [87-closeout](87-closeout/README.md) | #87 版本组合、最终验收、评审处理与 #71 交接 |
 
 ## 阶段整合与评审
 
