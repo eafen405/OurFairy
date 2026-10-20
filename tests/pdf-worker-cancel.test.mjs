@@ -12,8 +12,9 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createRequire, registerHooks } from 'node:module'
 import { deflateSync } from 'node:zlib'
-import { readdirSync, readFileSync, readlinkSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { repoRoot } from './helpers/backend.mjs'
 
@@ -90,9 +91,14 @@ async function waitFor(predicate, timeoutMs = 5000) {
 }
 
 test('a cancelled PDF worker reports the numeric failure, removes its directory, and leaves no process or shared network', async () => {
+  // A private temp root keeps this call's directory scan from seeing another
+  // test's `ourfairy-pdf-*` directory while that test still uses it.
+  const isolated = mkdtempSync(join(tmpdir(), 'ourfairy-pdf-cancel-'))
+  const previousTmp = process.env.TMPDIR
+  process.env.TMPDIR = isolated
   const { ctx, installPdf } = await load()
   const pdf = costlyPdf()
-  const before = new Set(readdirSync('/tmp').filter(name => name.startsWith('ourfairy-pdf-')))
+  const before = new Set()
   let registered
   const agent = { session: {}, options: {} }
   installPdf({ subprocess: ctx.subprocess, llm: {}, on() {}, agents: { list: () => [{ ...agent, ctx: { tools: { register: definition => { registered = definition } } } }] },
@@ -102,10 +108,10 @@ test('a cancelled PDF worker reports the numeric failure, removes its directory,
   const controller = new AbortController()
   const started = Date.now()
   const running = registered.execute({ file_path: 'qualified.pdf', pages: [1] }, { agent, signal: controller.signal })
-  const directory = await waitFor(() => readdirSync('/tmp').filter(name => name.startsWith('ourfairy-pdf-') && !before.has(name)))
+  const directory = await waitFor(() => readdirSync(isolated).filter(name => name.startsWith('ourfairy-pdf-') && !before.has(name)))
   try {
     assert.ok(directory?.length, 'the PDF call must start a worker in its own temporary directory')
-    const path = join('/tmp', directory[0])
+    const path = join(isolated, directory[0])
     const workers = await waitFor(() => processesMentioning(path, '/usr/bin/python3'))
     assert.ok(workers?.length, `the running parser must be observable under ${path}`)
     // The parser is untrusted input handling: its own network namespace, not the host's.
@@ -120,8 +126,10 @@ test('a cancelled PDF worker reports the numeric failure, removes its directory,
   } finally {
     controller.abort()
     await running.catch(() => {})
-    assert.ok(!readdirSync('/tmp').some(name => name.startsWith('ourfairy-pdf-') && !before.has(name)),
+    assert.ok(!readdirSync(isolated).some(name => name.startsWith('ourfairy-pdf-') && !before.has(name)),
       'the temporary directory must be removed after the call')
     await ctx.dispose?.()
+    process.env.TMPDIR = previousTmp
+    rmSync(isolated, { recursive: true, force: true })
   }
 })
