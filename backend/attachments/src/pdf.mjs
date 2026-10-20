@@ -20,19 +20,24 @@ async function runWorker(ctx, directory, request, callerSignal) {
   callerSignal?.throwIfAborted()
   // The wall deadline is the product's budget; the service owns killing the range.
   const deadline = AbortSignal.timeout(10000)
-  const handle = ctx.subprocess.spawn({ argv, cwd: directory, graceMs: 1000, stdio: { stdin: 'ignore', stderr: 'ignore',
+  // `stderr` is a small bounded collector that nobody reads: the seam has no
+  // discard mode, so 'ignore' would be an unbounded collector.
+  const handle = ctx.subprocess.spawn({ argv, cwd: directory, graceMs: 1000, stdio: { stdin: 'ignore', stderr: { maxBytes: 4096 },
     stdout: { maxBytes: 256 * 1024 } }, signal: callerSignal === undefined ? deadline : AbortSignal.any([callerSignal, deadline]) })
   try {
     const outcome = await handle.done
     const output = handle.collected.stdout.readFrom(0)
     // bwrap re-raises a killed payload as 128+signal and reports no signal of its
     // own: prlimit's SIGXCPU is 152, the SIGKILL escalation and an OOM kill are 137.
-    const killed = outcome.signal === 'SIGKILL' || outcome.signal === 'SIGXCPU' || outcome.exitCode === 137 || outcome.exitCode === 152
-    if (deadline.aborted || output.lossy || killed) return failure('resource-limit')
+    // The service's own termination (deadline or caller stop) arrives as SIGTERM.
+    const terminated = deadline.aborted || callerSignal?.aborted === true
+      || outcome.signal === 'SIGTERM' || outcome.signal === 'SIGKILL' || outcome.signal === 'SIGXCPU'
+      || outcome.exitCode === 137 || outcome.exitCode === 152
+    if (terminated || output.lossy) return failure('resource-limit')
     if (outcome.exitCode !== 0) return failure('worker-unavailable')
     try { return JSON.parse(output.text) } catch { return failure('worker-unavailable') }
   } catch (error) {
-    if (deadline.aborted) return failure('resource-limit')
+    if (deadline.aborted || callerSignal?.aborted === true) return failure('resource-limit')
     throw error
   } finally {
     await handle.waitForExit().catch(() => {})

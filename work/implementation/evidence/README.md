@@ -82,6 +82,7 @@
 | [81-pdf-subprocess](81-pdf-subprocess/README.md) | #81 PDF worker 经原生 subprocess 服务，bwrap 网络显式化 |
 | [82-native-rows](82-native-rows/README.md) | #82 原生模型重试与大工具结果 spill |
 | [83-spill-read](83-spill-read/README.md) | #83 被 spill 的结果由本会话只读取回，其他会话与用户被拒绝 |
+| [84-history-seam](84-history-seam/README.md) | #84 dsh fork 暴露 Host 可调用的 assistant 基线与事件 cursor 接缝 |
 | [85-history-adapter](85-history-adapter/README.md) | #85 断线重连/live 历史改用原生 assistant 基线与事件 cursor |
 | [86-upgrade-review](86-upgrade-review/README.md) | #86 原生能力升级依赖记录、保留实现理由与 doctor 缺项检查 |
 

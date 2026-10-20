@@ -120,7 +120,7 @@ test('a cancelled PDF worker reports the numeric failure, removes its directory,
     controller.abort(new Error('user stopped the reply'))
     const result = await running
     assert.equal(result.status, 3, `a cancelled worker is a numeric failure: ${JSON.stringify(result)}`)
-    assert.equal(result.error, 'worker-unavailable', `cancellation keeps the pre-service error code: ${JSON.stringify(result)}`)
+    assert.equal(result.error, 'resource-limit', `a service-terminated worker is a resource limit: ${JSON.stringify(result)}`)
     assert.ok(Date.now() - started < 8000, 'cancellation must not wait for the worker deadline')
     assert.deepEqual(processesMentioning(path), [], 'the cancelled worker must not survive its call')
   } finally {
