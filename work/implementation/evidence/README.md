@@ -88,6 +88,7 @@
 | [102-config](102-config/README.md) | #102 产品行声明 Config 并在加载期以行名和字段失败 |
 | [103-model](103-model/README.md) | #103 共享模型初始声明只保留在 bundle，探针读取 `agentDefaultModel` |
 | [104-bundle-only](104-bundle-only/README.md) | #104 只声明 bundle 的 profile 可安装、启动并服务认证后的产品请求 |
+| [105-overlay](105-overlay/README.md) | #105 经 profile overlay 证明投递/群组/scoped provider 行可寻址、可替换，以及非法 config 的加载期失败 |
 
 ## 原生能力收敛（规格 #71）
 
