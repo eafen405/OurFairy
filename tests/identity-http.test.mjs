@@ -186,12 +186,12 @@ describe('OurFairy identity over real HTTP', () => {
     assert.equal(typeof admitted.token, 'string', 'the loopback authority must still sign in')
   })
 
-  test('every product module entry point rejects an untrusted Host before reading the body or credential', async () => {
-    // One representative entry point per product module. No credential and an
-    // empty body: the 403 with a forbidden-authority code is only reachable
-    // through the fence, because each module's own authorization/body handling
-    // would answer 401 or 400 after a missing credential. `/speech` reports the
-    // bare code; the other modules prefix it with their own name.
+  test('every product module entry point rejects an untrusted Host before parsing the body or reading the credential', async () => {
+    // One representative entry point per product module. No credential and no
+    // body: the 403 with a forbidden-authority code is only reachable through
+    // the fence, because each module's own authorization/body handling would
+    // answer 401 or 400 after a missing credential. `/speech` reports the bare
+    // code; the other modules prefix it with their own name.
     const paths = [
       '/identity/sign-in',
       '/sessions/list',
@@ -206,7 +206,17 @@ describe('OurFairy identity over real HTTP', () => {
       assert.match(refused.json?.error?.code ?? '', /forbidden-authority$/u,
         `${path} must report a forbidden-authority code: ${refused.text}`)
     }
-    // The backend still answers the loopback authority after all six refusals.
+    // A malformed body pins the order: a fence that ran after JSON parsing would
+    // answer 400 before judging the authority. 403 with the forbidden-authority
+    // code is reachable only when the fence runs before the body is parsed.
+    for (const path of paths) {
+      const refused = await request(path, { host: 'attacker.invalid', rawBody: '{' })
+      assert.equal(refused.status, 403,
+        `${path} must be fenced off before its malformed body is parsed: ${refused.text}`)
+      assert.match(refused.json?.error?.code ?? '', /forbidden-authority$/u,
+        `${path} must report a forbidden-authority code for a malformed body: ${refused.text}`)
+    }
+    // The backend still answers the loopback authority after all refusals.
     const admitted = await signIn('phaethon', PHAETHON_PASSWORD)
     assert.equal(typeof admitted.token, 'string')
   })
