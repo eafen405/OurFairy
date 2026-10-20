@@ -26,10 +26,12 @@
 | [android-notification-audit.md](android-notification-audit.md) | 2026-10-14 | Android / vivo 通知结论审计：纠正 Force Stop、Doze 维护窗口、FGS 超时与 vpush 资格的误述。 |
 | [android-notifications.md](android-notifications.md) | 2026-10-13 | rikkahub 现有通知能力核查：系统通知构建、点击定位与会话入口的源码位置。 |
 | [backend-references.md](backend-references.md) | 2026-10-13 | Koishi、Open WebUI、LibreChat 的后端骨架参考，以及没有可直接照搬的结论。 |
+| [client-access-seams.md](client-access-seams.md) | 2026-10-14 | 客户端接入、认证与 HTTP/WS 载体接缝地图：admission 闸门与认证链路的源码实读。 |
 | [domestic-android-background-delivery.md](domestic-android-background-delivery.md) | 2026-10-14 | 国内 Android 后台消息通道核查：无 Google 依赖的前台服务、vivo 推送与 UnifiedPush 的能力边界。 |
 | [domestic-android-notification-vivopush-revival.md](domestic-android-notification-vivopush-revival.md) | 2026-10-14 | vivo S50 通知通道能力边界的旧研究，部分结论已被[通知审计](android-notification-audit.md)纠正。 |
 | [dsh-event-consumption-audit.md](dsh-event-consumption-audit.md) | 2026-10-14 | dsh 事件消费研究的源码复核：纠正单传输、`throughSeq`、token 兑换与授权等误判。 |
 | [dsh-event-consumption.md](dsh-event-consumption.md) | 2026-10-14 | dsh 事件消费、jobs 与客户端补取的事实层旧研究，结论已被[源码复核](dsh-event-consumption-audit.md)取代。 |
+| [dsh-ownership-seams.md](dsh-ownership-seams.md) | 2026-10-14 | dsh 会话归属与正式投递的原生改动地图：header、归属核对点与投递记录格式。 |
 | [dsh-sandbox-reuse.md](dsh-sandbox-reuse.md) | 2026-10-14 | Fairybot 空间权限与 dsh sandbox 的复用边界：可复用的授权逻辑与受限文件系统。 |
 | [dsh-skeleton.md](dsh-skeleton.md) | 2026-10-13 | dsh 骨架能力研究：用户作用域、共享能力与插件替换点。 |
 | [fairybot-features.md](fairybot-features.md) | 2026-10-13 | Fairybot 已有功能清单：作为候选需求来源，条目默认待取舍。 |
@@ -48,4 +50,4 @@
 | [v1-client-contract.md](v1-client-contract.md) | 2026-10-14 | 首版共同 Interface：会话投影、恢复与活动的工程建议。 |
 | [v1-input-path.md](v1-input-path.md) | 2026-10-14 | 首版输入链路：ASR、附件与 PDF 的兼容性研究。 |
 
-本文件是索引本身，不在上表内：`docs/research/` 现有 26 个 Markdown 文件＝上表 25 篇日期化调查 ＋ 本索引。
+本文件是索引本身，不在上表内：`docs/research/` 现有 28 个 Markdown 文件＝上表 27 篇日期化调查 ＋ 本索引。
