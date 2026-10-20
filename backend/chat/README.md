@@ -31,6 +31,8 @@
 `src/units.mjs` 把 transcript 与「任务 + 活动」注册到原生 `ctx.sessionProjections`
 （key `ourfairyTranscript` / `ourfairyWork`，均无 `wire`，只用公开的 `register` / `stateOf`）。
 两个单元都是同步纯 fold，state 为纯 JSON；不关心的事件返回同一 state 引用。
+每个单元声明 `key`、`stateVersion`、zod `stateSchema`、`init(header)` 与 `apply(state,event)`：
+`apply` 必须同步且纯，未解释的事件返回同一引用；state 必须能被 registry 做 JSON checkpoint。
 每个单元的 `stateVersion` 在折叠语义或 state 形状变化时递增，旧版本的持久化行会被丢弃并从 `init` 重折。
 当前两者均为 `2`（transcript 增加 `repositions` 窗口索引；work 把完整 pending 消息换成窄的 id/来源索引）。
 
@@ -45,6 +47,23 @@
 - receipt 由 transcript 单元的 `receipts` 回答（`receiptFrom`），`/chat/send` 的幂等与冲突检测从该映射取值。
 - `/chat/read` 与 `/chat/observe` 从这两个单元读 durable 值；同一会话的所有观察者共享同一份单元状态。
   事件窗口在会话恢复后只读一次日志，之后由提交事件增量维护；流式片段不读日志，单元只在提交事件上推进。
+
+### dsh 升级复核
+
+本模块依赖公开的 `sessionProjections.register/stateOf`、`SessionEvent` 的 inbox/turn/jobs
+形状、`isAppendSurfaceEvent` 与 `assembleAssistantStream`。升级 dsh 后按顺序复核：
+
+```bash
+node --test tests/projection-units.test.mjs tests/projection-units-real.test.mjs \
+  tests/chat-read-window.test.mjs tests/chat-page-cut.test.mjs \
+  tests/chat-multi-observer.test.mjs tests/chat-cold-boundary.test.mjs
+node --test tests/remote-chat.test.mjs tests/reconnect.test.mjs tests/jobs.test.mjs
+node scripts/bench-projection.mjs --label after-upgrade --out /tmp/projection-upgrade.json
+```
+
+第三条用与 #94 相同的 `PARAMS` 和相对门槛比较；若 registry 接口、事件形状或 `stateOf`
+消失，插件会在 `inject`/`stateOf` 处失败、相关测试报错，不能靠保留第二套 fold 绕过。
+行为测试与基准通过只证明当前组合兼容，不能当作长期兼容承诺。
 
 ## 投影
 
