@@ -30,8 +30,7 @@
 ## 全量门禁（#151/#152 合并后的树）
 
 在 `/home/eafen405/projects/OurFairy/.worktrees/153-closeout` 执行；HEAD 为 `4e3e11d`，工作树
-只含本收口提交的文档改动。收口提交未使用 `--no-verify`，`.githooks/pre-commit` 会在提交时
-再次执行下面两条命令。
+只含本收口提交的文档改动。`.githooks/pre-commit` 会在提交时再次执行下面两条命令。
 
 ```bash
 $ npm test
@@ -58,9 +57,8 @@ combo: combination verified
 本 spec 的两张子票都按票面要求把全量门禁延后到 #153：它们各自的证据只记录票级行为套件，
 最终 `npm test` 与 `combo:verify` 以本次合并树为准。
 
-收口提交未使用 `--no-verify`，`.githooks/pre-commit` 在每次收口提交时又执行了这两条命令，
-均为 `tests 234 / pass 234 / fail 0` 与 `combo: combination verified`。因此门禁结果在提交前的
-手工运行与提交钩子中得到一致确认。
+`.githooks/pre-commit` 在每次收口提交时又执行了这两条命令，均为 `tests 234 / pass 234 /
+fail 0` 与 `combo: combination verified`。
 
 ## 改动范围核对
 
@@ -136,11 +134,13 @@ $ node --test tests/gateway.test.mjs tests/delivery-row.test.mjs \
 三个夹具仍留在 `backend/chat/test-support/`，**本 spec 不移动它们**；这里只记录主人与故障点，
 供后续按主人迁移时使用。
 
-| 夹具 | 主人 | 故障点 | 当前使用处 | 本次是否移动 |
-| --- | --- | --- | --- | --- |
-| `fail-outlets.mjs` | 投递行 | `delivery/message` 的 durability 检查点与通知出口 | `tests/text-delivery.test.mjs`、`tests/file-delivery.test.mjs` | 否 |
-| `frame-gap.mjs` | 运行时一侧 | Assistant 帧边界（丢帧/乱序帧的形状） | `tests/reconnect.test.mjs` | 否 |
-| `lost-event.mjs` | 运行时一侧 | Session 事件读取边界（读到的列表缺一个已提交 seq） | `tests/reconnect.test.mjs` | 否 |
+| 夹具 | 主人 | 故障点 | 当前使用处 | 服务名核对 | 本次是否移动 |
+| --- | --- | --- | --- | --- | --- |
+| `fail-outlets.mjs` | 投递行 | `delivery/message` 的 durability 检查点与通知出口 | `tests/text-delivery.test.mjs`、`tests/file-delivery.test.mjs` | `inject = ['ourfairyChat','sessions']`；与 chat、sessions 今天挂载的服务名一致 | 否 |
+| `frame-gap.mjs` | 运行时一侧 | Assistant 帧边界（丢帧/乱序帧的形状） | `tests/reconnect.test.mjs` | 无 `inject` | 否 |
+| `lost-event.mjs` | 运行时一侧 | Session 事件读取边界（读到的列表缺一个已提交 seq） | `tests/reconnect.test.mjs` | `inject = ['ourfairyChat']`；与 chat 今天挂载的服务名一致 | 否 |
+
+三个夹具都在各自测试里实际加载；服务名与 chat / sessions 当前挂载的名称一致。
 
 夹具只由测试从 worktree 加载，不进入安装后的 profile；`tests/product-sources.test.mjs` 的
 「the hashed set follows what the packages publish, not their test fixtures」断言

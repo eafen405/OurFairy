@@ -41,7 +41,7 @@
  beforeSeq,hasMore,events,messages,attempt,settledAttempt,tasks,activity,replyStatus,error}
 ```
 
-`throughSeq`/`fromSeq`/`beforeSeq`/`hasMore`/`events` 是本连接的观察窗口，规则见「分页与重连」。
+`throughSeq`/`fromSeq`/`beforeSeq`/`hasMore`/`events` 是一次读取或一条 SSE 观察的窗口，规则见「分页与重连」。
 `tasks` 与 `activity` 的字段和数字编码见下。
 
 - `generation`：服务端 Agent 生命周期 UUID，不是永久身份。`version`：同一 generation 内的
@@ -137,8 +137,8 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 传输契约里的 live 字段不在 durable state 里，由 `src/runtime.mjs` 的 `LiveSession` 在读取时
 叠加：
 
-- `generation`：每次 live 会话（含冷恢复）新建的 UUID。`version`：`changed()` 是唯一写入者，
-  每次已发布输入变化递增。
+- `generation`：每次 live 会话（含冷恢复）新建的 UUID。`version`：每次已发布输入变化时递增
+  （`src/runtime.mjs` 的 `changed()`）。
 - `cursor`：已种子事件窗口的最后一个 seq；首次读取前为 `session.seq - 1`。
 - `durableThroughSeq`：`barrier` 在 await 前捕获 `session.seq - 1`，`ctx.sessions.flush` 后只
   向前推进；投影返回 `min(cursor, durableThroughSeq)`。
@@ -181,8 +181,7 @@ lost-page 用例）。
 （恢复的队列不自行调度推理）。`report.status` 由原生 `jobs/report` 的 delivery、收件箱消费
 记录与对应 turn 的结束状态派生。
 
-输出读取在可用时走 `ctx.jobs.readAt`/`ctx.jobs.get`，`next`/`earliest` 是注册表输出环的绝对
-字节位置。
+输出读取在可用时走 `ctx.jobs.readAt`/`ctx.jobs.get`；偏移与输出环位置由原生注册表给出。
 
 `/chat/jobs/output` 与 `/chat/jobs/stop` 保留为产品适配层：原生 `jobController` 是进程内的
 Typert 传输，不提供本投影的耐久任务折叠；保留理由与漂移信号见
@@ -233,28 +232,28 @@ spill 根、`DSH_HOME` 或 attachments 数据目录。贡献按文件操作求�
 不是消息附件。
 
 缺席降级：根从 `ctx.get('spillStore')?.root` 动态读取，不声明进 `inject`。没有 spill 行就没有
-spill 文件，贡献返回空；声明它会让所有 chat 路由等待一个辅助能力。shipped composition 仍由
-`tests/native-capabilities.test.mjs` 与 `doctor` 要求 `spill-local` 行存在，所以服务改名/删行
-不会静默通过。`tests/spill-read.test.mjs` 钉住本会话完整读取/搜索与跨会话、跨用户拒绝。
+spill 文件，贡献返回空；声明它会让所有 chat 路由等待一个辅助能力。shipped composition 由
+`tests/native-capabilities.test.mjs` 与 `doctor` 要求 `spill-local` 行（行 id + 包名）存在；
+检索行为由 `tests/spill-read.test.mjs` 钉住。
 
 ### 服务依赖
 
-`inject` 只列缺席就会让 chat 契约错误的服务；完整声明与 `inject` 的例外注释以 `src/index.mjs`
-为准，这里只记需要理由的条目。
+`inject` 的取舍规则：只声明缺席会让 chat 契约错误的服务；需要理由的例外列在下表，完整声明以
+`src/index.mjs` 为准。本 spec 按 Testing Decisions 不新增 inject 字面量断言，因此最小性由审查
+与提交说明承担，没有自动守卫。
 
 | 服务 | 声明 | 依据 |
 | --- | --- | --- |
 | `agentLoop` | `inject` | 不为调用，只为排序：它注册的 Agent 工厂必须先于本行可用；chat 内没有 `ctx.agentLoop` 调用。 |
-| `llm` | `inject` | 图片能力检查在带图片的回合开始时调用 `resolveModelInfo`；缺席应在组合期失败，而不是等图片轮次抛错。 |
+| `llm` | `inject` | 图片能力检查在带图片的回合开始时调用 `resolveModelInfo`；缺席时本行不会进入工作状态（未满足 inject 的行保持 pending），而不是等图片轮次抛错。 |
 | `sessionQuery` | `inject` | 不直接调用；经 `src/runtime.mjs` 的 `readSessionEvents(this.ctx, …)`，由 `backend/sessions/src/events.mjs` 调 `ctx.sessionQuery.observeSession`。 |
 | `systemPrompt` | `inject` | 不直接调用；Agent setup 里通过 `agentCtx.systemPrompt.section` 使用。 |
-| `spillStore` | 不声明，动态读取 | `ctx.get('spillStore')?.root`；缺席是受支持的降级：没有 spill 行就没有 spill 文件，贡献返回空。声明它会让所有 chat 路由等待一个辅助能力。 |
+| `spillStore` | 不声明，动态读取 | `ctx.get('spillStore')?.root`；缺席是受支持的降级，理由见读取处注释。 |
 | `identity`、`tools` | 不声明 | chat 内没有 `ctx.identity`/`ctx.tools` 引用；可用性由保留声明传递：`ourfairySessions` 自己 inject `identity`，`agentLoop` 自己 inject `tools`（`AgentLoop.inject`）。 |
 
-其余声明项在本模块源码里有直接的 `ctx.<name>` 调用（路由注册、会话/归属、Agent 注册与模型
-选择、写入 flush、持久化读取、jobs 注册表、投影注册）；它们的缺席会让对应路由、投影或写入在
-启动或调用处失败。`inject` 例外的依据写在 `src/index.mjs` 的声明与相邻注释里，`spillStore` 的
-动态读取与缺席语义写在 `src/spill-read.mjs` 的读取处；本节只做索引，冲突时以代码注释为准。
+其余条目在源码里各有使用处；新增或删除 `inject` 时，以 `src/index.mjs` 的声明与注释为准，并在
+提交说明里写明依据。`spillStore` 的动态读取与缺席语义写在 `src/spill-read.mjs` 的读取处；本节
+只做索引。
 
 ## dsh 升级复核
 

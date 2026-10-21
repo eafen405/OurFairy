@@ -10,9 +10,9 @@ import { SessionScopeError } from '@ourfairy/dsh-sessions'
 
 export const name = 'ourfairy-chat'
 /**
- * The services chat depends on: an entry belongs here only if chat's contract
- * would be wrong without it. The ordering-only entry and the optional
- * capability are called out at their sites, not silently listed or omitted.
+ * Services this row waits for before it accepts work. The ordering-only entry is
+ * annotated here; the optional `spillStore` is read with `ctx.get` and its
+ * absence semantics are annotated at the read site.
  */
 export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairySpaces', 'agents',
   // Declared for ordering/side effect, not for a call: `agentLoop` registers
