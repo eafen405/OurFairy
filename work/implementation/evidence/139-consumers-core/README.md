@@ -34,10 +34,10 @@ chat 与 gateway 零命中；sessions 只剩 `/owner` 导入与其 identity peer
 | `git merge integration/spec-131`（开工前） | 基线 `b9f7d28` | fast-forward 到 `fc6475a`（含 #138 的合并与 `backend/http`） |
 | `node --test tests/gateway.test.mjs tests/owned-sessions.test.mjs tests/remote-chat.test.mjs tests/plugin-compatibility.test.mjs tests/bundle-packages.test.mjs` | 改动前基线 | 37 tests / 37 pass / 0 fail |
 | 同一条命令 | 改动后 | 37 tests / 37 pass / 0 fail |
-| `node --test tests/gateway.test.mjs tests/owned-sessions.test.mjs tests/remote-chat.test.mjs tests/plugin-compatibility.test.mjs tests/bundle-packages.test.mjs` | 最终树（合并集成分支后） | 见下「最终门禁」 |
-| `npm test`（pre-commit hook 内） | 最终树 | 见下「最终门禁」 |
-| `npm run combo:verify`（pre-commit hook 内） | 最终树 | 见下「最终门禁」 |
-| `OURFAIRY_HOME=$(mktemp -d) node scripts/ourfairy-backend.mjs doctor --json` | 最终树 | 见下「最终门禁」 |
+| `git merge integration/spec-131`（开工后与交付前多次） | 交付前 | 均 `Already up to date.`；tip 仍 `fc6475a`，期间未再移动 |
+| `npm test`（直接运行与 pre-commit hook 内） | 最终树 | 最终两次完整运行均 234 tests / 234 pass / 0 fail |
+| `npm run combo:verify`（直接运行与 pre-commit hook 内） | 最终树 | `combo: combination verified`；ourfairy 行 `ok (worktree is based on the integration tip)` |
+| `COREPACK_ENABLE_NETWORK=0 OURFAIRY_HOME=$(mktemp -d) node scripts/ourfairy-backend.mjs doctor --json` | 最终树（证据提交只动本 README） | exit 0；11 项 check 全 ok，其中 `bundle packages` ok（11 declared package(s) mounted by 16 row(s)，含 `http:@ourfairy/dsh-http`），`plugin compatibility` ok（13 installed product package(s) compatible with dsh 0.2.1-alpha.2） |
 
 ## Red / green 说明
 
@@ -57,6 +57,13 @@ chat 与 gateway 零命中；sessions 只剩 `/owner` 导入与其 identity peer
 
 - 未 push、未合入集成分支、未改 `combo.json`、未评论或关闭 issue。
 - 未做真机/客户端验收：本票只涉及后端包边界。
+- 环境说明（不影响本票改动）：本机到 npm registry 的 corepack 下载会间歇性挂起；期间另一票的整套
+  测试并发运行、系统负载一度 >20。一次全量运行中 `tests/speech.test.mjs` 因负载报 `speech/timeout`，
+  单独重跑 2/2 通过，随后全量重跑 234/234 通过；speech 包本票未改。
+- 环境说明：`copyProductRepo` 的测试（bundle-packages、plugin-compatibility、product-sources 等）在
+  `COREPACK_ENABLE_NETWORK=0` 下会失败，因为副本只复制 `backend/scripts/combo.json/package.json`，
+  不含 `.corepack` 缓存；全量门禁因此用网络或 corepack shim（`COREPACK_HOME` 指向共享缓存）运行。
+  本票未改测试辅助或启动器。
 - 未新增断言。若认为「chat/gateway 不得再出现 identity import」需要可执行检查，那是 #141 收口票的
   范围（届时 identity 的 `./http` 兼容出口删除，遗留 import 会在加载期直接失败）；本票按票面只搬移
   import 与 peer，并在报告里提出。
