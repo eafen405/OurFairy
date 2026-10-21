@@ -376,8 +376,10 @@ export function verifyBundlePackages({ binName, bundlePackage, probePackage, ins
   // admission rules the launcher applies to the worktree copy. The containment
   // root is the profile's node_modules: the installed bundle's `file:../x`
   // declarations resolve to the sibling installed packages there. `declared`
-  // stays the manifest's dependency names, so a refused specifier is reported
-  // once, as this failure, and not also as an undeclared or ghost package.
+  // stays the manifest's dependency names, so a refused specifier is not also
+  // reported here as an undeclared or ghost package; later independent checks
+  // (a declared package no row mounts, an uninstalled package) may still report
+  // related facts about the same name.
   const manifestPath = join(layer.packageDir, 'package.json')
   const containmentRoot = join(profileDir, 'node_modules')
   const { refused } = admitBundleDependencies({

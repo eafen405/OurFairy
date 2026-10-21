@@ -39,6 +39,7 @@ import net from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { after, test } from 'node:test'
+import { isolatedEnv, layoutOf } from '../scripts/ourfairy-composition.mjs'
 import {
   describeRun, httpJson, makeHome, messageBlocks, readReport, registerUser, removeHome, repoRoot,
   runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay,
@@ -200,18 +201,13 @@ async function startDirect(home, overlay) {
   mkdirSync(join(home, 'user-home'), { recursive: true })
   const child = spawn(process.execPath, [dshBin, '--profile', 'ourfairy', '--patch', overlay], {
     cwd: home,
-    env: {
-      ...process.env,
-      HOME: join(home, 'user-home'),
-      DSH_HOME: join(home, 'dsh-home'),
-      OURFAIRY_HOME: home,
-      OURFAIRY_PORT: String(port),
-      OURFAIRY_PHAETHON_PASSWORD: password,
-      XDG_CACHE_HOME: join(home, 'cache'),
-      XDG_CONFIG_HOME: join(home, 'config'),
-      XDG_DATA_HOME: join(home, 'data'),
-      XDG_STATE_HOME: join(home, 'state'),
-    },
+    env: isolatedEnv(layoutOf(home), {
+      root: repoRoot,
+      extra: {
+        OURFAIRY_PORT: String(port),
+        OURFAIRY_PHAETHON_PASSWORD: password,
+      },
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   const logs = { stdout: '', stderr: '' }
