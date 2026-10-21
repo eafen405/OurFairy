@@ -478,13 +478,14 @@ const SESSION_HISTORY_EXPORT = '@deepseek-ai/dsh-agent/session-history'
  * Every required native capability that is not mounted, plus the public
  * history export when it does not resolve.
  *
- * @param {object[]} rows - the composed profile rows, as dsh's loader returns them.
+ * @param {object[]} rows - the composed profile rows, as dsh's loader returns them;
+ *   rows nested in a group's `config` are mounted too, so the lookup flattens.
  * @param {(specifier: string) => string} resolveExport - resolves from the dsh installation.
  * @returns {string[]} one message per missing, disabled, or drifted capability.
  */
 export function nativeCapabilityFailures(rows, resolveExport) {
   const failures = []
-  const mounted = new Map(rows.map(row => [row.id, row]))
+  const mounted = new Map(flattenEntries(rows).map(row => [row.id, row]))
   for (const { row: id, name } of REQUIRED_NATIVE_ROWS) {
     const entry = mounted.get(id)
     if (entry === undefined) {
