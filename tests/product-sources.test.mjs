@@ -111,10 +111,31 @@ test('the hashed set follows what the packages publish, not their test fixtures'
 
 test('unchanged product sources decide cached', () => {
   const layout = installedProfile()
+  const decision = installDecision(layout, { root: repoCopy })
   assert.equal(
-    installDecision(layout, { root: repoCopy }),
+    decision.mode,
     'cached',
     'the profile and its stamp already describe the current product sources, so the launcher must reuse the install',
+  )
+  assert.equal(typeof decision.hash, 'string', 'the decision must carry the hash the install was judged against')
+})
+
+test('reinstall decides install even when the installed profile is current', () => {
+  const layout = installedProfile()
+  assert.equal(
+    installDecision(layout, { root: repoCopy, reinstall: true }).mode,
+    'install',
+    'an explicit --reinstall must bypass the cached decision',
+  )
+})
+
+test('a missing linked bundle manifest decides install', () => {
+  const layout = installedProfile()
+  rmSync(profileLinkedManifestPath(layout, repoCopy))
+  assert.equal(
+    installDecision(layout, { root: repoCopy }).mode,
+    'install',
+    'a profile whose linked bundle manifest is gone cannot be reused, even with a matching stamp',
   )
 })
 
@@ -131,7 +152,7 @@ test('a new product source file changes the hash and decides install', () => {
       `the hashed source set must cover ${added}; it listed ${productSources(repoCopy).length} file(s)`,
     )
     assert.equal(
-      installDecision(layout, { root: repoCopy }),
+      installDecision(layout, { root: repoCopy }).mode,
       'install',
       `${added} changed the product sources, so the installed copy is stale and must be rebuilt`,
     )

@@ -53,7 +53,6 @@ import {
   isolatedEnv,
   layoutOf as compositionLayoutOf,
   productSources,
-  productSourceHash,
   profileLinkedManifestPath,
   readCombination,
   readCombo,
@@ -156,8 +155,8 @@ function resolveDsh(options, combination) {
  */
 function installProfile(layout, options, combination) {
   writeProfile(layout, repoRoot)
-  if (installDecision(layout, { root: repoRoot, reinstall: options.reinstall }) === 'cached') return 'cached'
-  const hash = productSourceHash(repoRoot)
+  const decision = installDecision(layout, { root: repoRoot, reinstall: options.reinstall })
+  if (decision.mode === 'cached') return 'cached'
   const linked = profileLinkedManifestPath(layout, repoRoot)
   const [command, args] = pnpmInvocation(combination)
   const result = spawnSync(command, [...args, 'install', '--ignore-scripts', '--store-dir', layout.pnpmStore], {
@@ -173,7 +172,7 @@ function installProfile(layout, options, combination) {
     fail(`profile install reported success but ${linked} is missing;`
       + ` the product bundle would be silently skipped instead of failing the boot`)
   }
-  writeSourceStamp(layout, hash)
+  writeSourceStamp(layout, decision.hash)
   return 'installed'
 }
 
@@ -584,7 +583,6 @@ function nodeSatisfies(range, version) {
 }
 
 function commandDoctor(layout, options, combination) {
-  assertIsolatedHome(layout, repoRoot)
   const checks = []
   const check = (name, run) => {
     try {
@@ -597,6 +595,24 @@ function commandDoctor(layout, options, combination) {
   const must = (condition, message) => {
     if (!condition) throw new Error(message)
   }
+  const report = () => {
+    const failed = checks.filter(entry => !entry.ok)
+    const lines = checks.map(entry => `${entry.ok ? 'ok  ' : 'FAIL'}  ${entry.name}: ${entry.detail}`)
+    process.stdout.write(options.json
+      ? `${JSON.stringify({ ok: failed.length === 0, checks }, undefined, 2)}\n`
+      : `ourfairy-backend doctor\n${lines.join('\n')}\n${failed.length === 0 ? 'doctor: all checks passed' : `doctor: ${failed.length} check(s) failed`}\n`)
+    return failed.length === 0 ? 0 : 1
+  }
+
+  // Isolation is the first recorded check, and a failure stops the report
+  // there: every later check may write (corepack's cache, the profile install),
+  // so recording it and returning is what keeps an unsafe home from being
+  // touched while still producing a normal report.
+  check('isolated home', () => {
+    assertIsolatedHome(layout, repoRoot)
+    return layout.home
+  })
+  if (!checks[0].ok) return report()
 
   check('node version', () => {
     const { nodeRange } = readCombination(repoRoot)
@@ -628,10 +644,6 @@ function commandDoctor(layout, options, combination) {
     // bundle declares, so a package added to the install without a
     // published-file list fails while deriving it.
     return productSources(repoRoot).join(', ')
-  })
-  check('isolated home', () => {
-    assertIsolatedHome(layout, repoRoot)
-    return layout.home
   })
   check('profile project linked', () => {
     const mode = installProfile(layout, options, combination)
@@ -692,12 +704,7 @@ function commandDoctor(layout, options, combination) {
       ? `DEEPSEEK_BASE_URL=${base}` : `OURFAIRY_MINIMAX_BASE_URL=${base}`
   })
 
-  const failed = checks.filter(entry => !entry.ok)
-  const lines = checks.map(entry => `${entry.ok ? 'ok  ' : 'FAIL'}  ${entry.name}: ${entry.detail}`)
-  process.stdout.write(options.json
-    ? `${JSON.stringify({ ok: failed.length === 0, checks }, undefined, 2)}\n`
-    : `ourfairy-backend doctor\n${lines.join('\n')}\n${failed.length === 0 ? 'doctor: all checks passed' : `doctor: ${failed.length} check(s) failed`}\n`)
-  return failed.length === 0 ? 0 : 1
+  return report()
 }
 
 /**

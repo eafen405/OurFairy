@@ -7,7 +7,7 @@
  * leaks neither ports nor child processes.
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { describeRun, makeHome, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
@@ -116,6 +116,66 @@ test('a missing dsh checkout fails loudly instead of booting something else', ()
     `ourfairy-backend: dsh checkout missing at ${join(home, 'no-such-dsh')}; set OURFAIRY_DSH_DIR or clone ${remoteUrl}\n`,
     `probe must print the exact missing-checkout line naming the path and override:\n${run.stdout}\n${run.stderr}`,
   )
+})
+
+test('doctor --json records an unsafe isolated home as its first failed check', () => {
+  const hostHome = process.env.HOME
+  assert.ok(
+    typeof hostHome === 'string' && hostHome !== '',
+    'the test needs HOME to name the host home the launcher must refuse',
+  )
+  const run = runBackend(['doctor', '--json'], { ...env, OURFAIRY_HOME: hostHome })
+  let report
+  assert.doesNotThrow(() => {
+    report = JSON.parse(run.stdout)
+  }, `doctor --json must still print one JSON report when the isolated home is refused:\n${describeRun('doctor --json', run)}`)
+  assert.equal(run.code, 1, `doctor must exit 1 when the isolated home is refused:\n${describeRun('doctor --json', run)}`)
+  assert.equal(report.ok, false, `the report must mark the run failed:\n${JSON.stringify(report)}`)
+  // The refusal must be the only check: every later check can write (corepack
+  // cache, profile install), so doctor has to stop here.
+  assert.equal(
+    report.checks.length,
+    1,
+    `doctor must stop before checks that could write; it ran ${JSON.stringify(report.checks.map(entry => entry.name))}`,
+  )
+  const check = report.checks[0]
+  assert.equal(check.name, 'isolated home', `the first recorded check must be the isolation check: ${JSON.stringify(check)}`)
+  assert.equal(check.ok, false, `an unsafe isolated home must fail its check: ${JSON.stringify(check)}`)
+  assert.equal(
+    check.detail,
+    `refusing OURFAIRY_HOME=${hostHome}: it is the host home (${hostHome}) or an ancestor of it.`
+      + ` Backend state must stay isolated; unset OURFAIRY_HOME to use ${join(repoRoot, '.ourfairy')}.`,
+    `the check must carry the exact refusal message: ${JSON.stringify(check.detail)}`,
+  )
+})
+
+test('doctor --json records a profile install failure instead of dying', () => {
+  const installHome = makeHome('ourfairy-lifecycle-install-failure-')
+  try {
+    // pnpm cannot use a regular file as its store directory, so the install
+    // fails inside the "profile project linked" check.
+    writeFileSync(join(installHome, 'pnpm-store'), 'not a directory\n')
+    const run = runBackend(['doctor', '--json'], { ...env, OURFAIRY_HOME: installHome })
+    let report
+    assert.doesNotThrow(() => {
+      report = JSON.parse(run.stdout)
+    }, `doctor --json must still print one JSON report when the profile install fails:\n${describeRun('doctor --json', run)}`)
+    assert.notEqual(run.code, 0, `doctor must exit non-zero when a check fails:\n${describeRun('doctor --json', run)}`)
+    assert.equal(report.ok, false, `the report must mark the run failed:\n${JSON.stringify(report)}`)
+    const check = report.checks.find(entry => entry.name === 'profile project linked')
+    assert.ok(
+      check !== undefined,
+      `the report must carry the profile check; it ran ${JSON.stringify(report.checks.map(entry => entry.name))}`,
+    )
+    assert.equal(check.ok, false, `a failed install must fail the profile check: ${JSON.stringify(check)}`)
+    const profileDir = join(installHome, 'dsh-home', 'profiles', 'ourfairy')
+    assert.ok(
+      check.detail.startsWith(`profile install failed in ${profileDir} (exit `),
+      `the failed check must carry the install message naming ${profileDir}: ${JSON.stringify(check.detail)}`,
+    )
+  } finally {
+    removeHome(installHome)
+  }
 })
 
 test('doctor --json records a missing dsh checkout as a failed check instead of dying', () => {
