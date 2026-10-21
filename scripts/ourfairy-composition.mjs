@@ -8,10 +8,12 @@
  * and the overlays one boot applies. The launcher next door keeps the process
  * layer: argv, git, pnpm, child processes, and command dispatch.
  *
- * The module is zero-spawn by construction: its import surface is `node:fs`,
- * `node:path`, `node:crypto`, and `node:os`, so it cannot call git or pnpm even
- * by accident. That is what makes these decisions directly assertable from a
- * test instead of through a subprocess.
+ * The zero-spawn boundary is this module's import surface: it imports only
+ * `node:fs`, `node:path`, `node:crypto`, and `node:os`, never
+ * `node:child_process`, so the composition functions have no git or pnpm to
+ * call. That is what makes these decisions directly assertable from a test
+ * instead of through a subprocess. Nothing beyond review enforces the boundary;
+ * no behavioural test asserts it.
  *
  * Every function that reads the repository takes a root directory and defaults
  * to the repository this module lives in, so a test can point it at a throwaway
@@ -58,8 +60,9 @@ export function readCombination(root = repoRoot) {
 /**
  * Resolved isolated layout; every durable path lives under `home`.
  *
- * The profile directory uses the combination's `profileName`, so the layout and
- * the manifest the launcher writes cannot name different profiles.
+ * The profile directory uses the combination's `profileName`; `profileManifest`
+ * reads the same recorded field, so both derive the name from combo.json
+ * instead of keeping a profile name of their own.
  */
 export function layoutOf(home, root = repoRoot) {
   const homeDir = resolve(home ?? join(root, '.ourfairy'))

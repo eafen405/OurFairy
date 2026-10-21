@@ -54,9 +54,13 @@ test('duplicate start is refused, stop is clean, and nothing leaks across cycles
 
     const duplicate = runBackend(['start'], env)
     assert.notEqual(duplicate.code, 0, 'a second start must be refused, not silently spawn a second backend')
-    assert.ok(
-      /already running/.test(`${duplicate.stdout}\n${duplicate.stderr}`),
-      `duplicate start must say the backend is already running; output was:\n${duplicate.stdout}\n${duplicate.stderr}`,
+    // The dynamic pid and timestamp are read from the state the first start
+    // wrote, so the whole rendered line is pinned rather than a fragment.
+    const recorded = JSON.parse(readFileSync(join(home, 'run', 'backend.json'), 'utf8'))
+    assert.equal(
+      duplicate.stderr,
+      `ourfairy-backend: backend already running with pid ${recorded.pid} (started ${recorded.startedAt}); run 'stop' first\n`,
+      `duplicate start must print the exact already-running line:\n${duplicate.stdout}\n${duplicate.stderr}`,
     )
 
     const stopped = runBackend(['stop'], env)
@@ -106,10 +110,11 @@ test('doctor reports its checks on a clean isolated home', () => {
 test('a missing dsh checkout fails loudly instead of booting something else', () => {
   const run = runBackend(['probe'], { ...env, OURFAIRY_DSH_DIR: join(home, 'no-such-dsh') })
   assert.notEqual(run.code, 0, 'probe with a missing dsh checkout must fail')
-  const output = `${run.stdout}\n${run.stderr}`
-  assert.ok(
-    output.includes('no-such-dsh') && output.includes('OURFAIRY_DSH_DIR'),
-    `diagnostic must name the bad path and the override variable; output was:\n${output}`,
+  const remoteUrl = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8')).repos.dsh.remoteUrl
+  assert.equal(
+    run.stderr,
+    `ourfairy-backend: dsh checkout missing at ${join(home, 'no-such-dsh')}; set OURFAIRY_DSH_DIR or clone ${remoteUrl}\n`,
+    `probe must print the exact missing-checkout line naming the path and override:\n${run.stdout}\n${run.stderr}`,
   )
 })
 
