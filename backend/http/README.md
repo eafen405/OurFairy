@@ -12,10 +12,10 @@ import { bearerToken, postHandler, sendJson } from '@ourfairy/dsh-http/http'
 ```
 
 `readJsonBody` is module-private; product routes reach it through `postHandler`.
-Both take the owning module's error class (`HttpError`) and error-code prefix
-(`codePrefix`) as required arguments, with no default: a product package that
-answers 4xx passes its own class, so the catch in `postHandler` only ever
-matches the errors its caller declared.
+Both are given the owning module's error class (`HttpError`) and error-code
+prefix (`codePrefix`); the caller passes them explicitly, because the catch in
+`postHandler` must see exactly one error type — the class that route declared —
+so its own errors are answered as 4xx and nothing else is mistaken for them.
 
 ## Why the row is empty
 
@@ -32,6 +32,6 @@ empty row is the smallest thing that puts the transport in both lists.
 
 The transport knows nothing about users, invites or sessions. It was split out
 of `@ourfairy/dsh-identity` so the product packages that only need
-`postHandler`/`sendJson` can drop their identity dependency (#139, #140). This
-manifest therefore declares no peer dependency at all, and imports nothing
-outside the Node runtime.
+`postHandler`/`sendJson` can drop their identity dependency (#139, #140). Its
+manifest has no `peerDependencies` field, and `src/http.mjs` has no import
+declarations: the module names no package, product or otherwise.

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "OurFairy identity",
-    "description": "Users, short numbers, invites, sessions and roles in the business SQLite store, with the product's own HTTP paths and dsh /api admission."
+    "description": "Users, short numbers, invites, sessions and roles in the business SQLite store, with its own /identity/* routes and session tokens that admit dsh /api."
   }
 }

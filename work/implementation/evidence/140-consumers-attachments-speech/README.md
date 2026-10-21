@@ -13,9 +13,9 @@
 - `backend/speech/package.json`：同样替换。
 
 未改：`backend/speech/src/service.mjs`（其中 `sendJson` 只出现在 `@param` 类型注释里，描述的是
-`createSpeechHandler` 的入参，不是模块 import，原样读通）；两个包的 `inject` 数组（`speech` 仍注入
-`identity` 用于 `ctx.identity.authenticateRequest`，`attachments` 仍注入 `identity`）——`inject`
-清理属票 #133。identity、bundle、chat、gateway、sessions、`tests/`、
+`createSpeechHandler` 的入参，不是模块 import，原样读通）；两个包的 `inject` 数组（`speech` 仍调用
+`ctx.identity.authenticateRequest`，`attachments` 仍读 `ctx.identity.uploads` / `users`——属运行期
+服务依赖，不清理）。identity、bundle、chat、gateway、sessions、`tests/`、
 `docs/architecture/dsh-ecosystem-boundary.md` 均未触碰。
 
 改后 `grep -rn "@ourfairy/dsh-identity" backend/attachments backend/speech` 无输出（exit 1）。
@@ -42,8 +42,10 @@ plugin compatibility    ok | 13 installed product package(s) compatible with dsh
                              @ourfairy/dsh-attachments@0.1.0, ..., @ourfairy/dsh-http@0.1.0, @ourfairy/dsh-identity@...
 ```
 
-两个迁移包同时出现在 `plugin compatibility` 的已判清单里，说明替换后的 peer 面（`dsh-http` 0.1.0）
-被真实安装并被 dsh 判过；`bundle packages` 仍把 `http` 行与其声明对上。
+两个迁移包同时出现在 `plugin compatibility` 的已判清单里，说明它们已被真实安装、其 dsh peer 与
+0.2.1-alpha.2 兼容；但 `evaluatePluginCompatibility` 只判 `@deepseek-ai/dsh*` 前缀的 peer，
+identity → `@ourfairy/dsh-http` 这次 peer 改向不在该判定内。`bundle packages` 仍把 `http` 行与其
+声明对上。
 
 ## Red / green 说明
 
