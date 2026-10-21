@@ -2,21 +2,27 @@
 
 > 父票 [#134 组合层显式化内核与插件](https://github.com/eafen405/OurFairy/issues/134)；票面
 > [`work/tickets/134/04-closeout.md`](../../../tickets/134/04-closeout.md)；
-> 任务图与 19/27 归属 [`work/tickets/134/README.md`](../../../tickets/134/README.md)；
+> 任务图 [`work/tickets/134/README.md`](../../../tickets/134/README.md)；
 > 分析记录 [`docs/research/dsh-bundle-group-composition.md`](../../../../docs/research/dsh-bundle-group-composition.md)。
-> 分支 `ticket/162-closeout`，基于 `integration/spec-134` @ `be37140`。
+> 收口分支 `ticket/162-closeout`，基于 `integration/spec-134` @ `be37140`；
+> 评审修复分支 `ticket/134-review-fixes`，基于 `integration/spec-134` @ `7bf1b0e`。
 > 三票证据：[#159](01-native-group-aware.md) · [#161](02-bundle-groups.md) · [#160](03-absence-attribution.md)。
 
-本票只写证据与索引，并把 `work/tickets/134/` 下的四份副本刷新到当前 GitHub 票面。产品代码、测试、
-`backend/v1-bundle/cordis.patch.yml` 与 bundle README 均未改；收口分支相对 `be37140` 的差异只有
-`work/implementation/evidence/` 与 `work/tickets/134/` 下的 Markdown。
+本目录记录 #159–#162 的交付与收口。收口票 #162 本身只写证据与索引，并把
+`work/tickets/134/` 下的四份副本刷新到当时的 GitHub 票面；产品代码、测试、
+`backend/v1-bundle/cordis.patch.yml` 与 bundle README 当时未改。
+
+评审修复分支在此之上修了六类问题：bundle README 的不可证声称、票面工作副本里的第二份
+行清单、bundle 文件头的过度声称、`flattenEntries` 的重复实现与行数断言，以及「禁用
+group 对原生能力检查不可见」的行为缺口。**下文数字与结论均为修复后的最终树**；涉及
+历史提交的段落保留原提交信息。
 
 ## 规格改了什么（指针）
 
 | 票 | 交付 | 证据 |
 | --- | --- | --- |
-| #159 | `scripts/combo.mjs` 的 `nativeCapabilityFailures` 建 id 表前先 `flattenEntries`；`tests/native-capabilities.test.mjs` 的 `composedRows()` 返回展开行，doctor 删行用例改为按 id 递归删除并用 `entryListSchema` 写回。组合文件未改。 | [01-native-group-aware](01-native-group-aware.md) |
-| #161 | `backend/v1-bundle/cordis.patch.yml` 的顶层 `insert` 拆成 `kernel`（19 行）与 `plugins`（27 行）两个 loader 原生 group；新增 `tests/bundle-groups.test.mjs`；bundle README 的「Row set and package set」段改写；`composedRows()` 过滤 group 行以保持二次展开稳定。 | [02-bundle-groups](02-bundle-groups.md) |
+| #159 | `scripts/combo.mjs` 的 `flattenEntries` 改为只返回叶子行、把祖先 group 的 `disabled` 物化到叶子且幂等；`nativeCapabilityFailures` 仍展开输入；`verifyInstalledNativeCapabilities` 显式传入展开行。`tests/native-capabilities.test.mjs` 的 `composedRows()` 返回叶子行，新增「必选行在 disabled group 里被报为 disabled」用例，doctor 删行用例按 id 递归删除并用 `entryListSchema` 写回。组合文件行内容未改。 | [01-native-group-aware](01-native-group-aware.md) |
+| #161 | `backend/v1-bundle/cordis.patch.yml` 的顶层 `insert` 拆成 `kernel`（19 行）与 `plugins`（27 行）两个 loader 原生 group；新增 `tests/bundle-groups.test.mjs`（不写死行数，用 `flattenEntries` 检查叶子 id 唯一）；bundle README 的「Row set and package set」段改写；文件头对停用 `plugins` 的结论改为「后端启动且内核服务 live」。 | [02-bundle-groups](02-bundle-groups.md) |
 | #160 | `tests/baseline-boot.test.mjs` 的 `FORBIDDEN_ROW_IDS` 按四段组织并各写一行理由，34 → 37 个 id；bundle README 的「Absent rows」改为指向名单的指针。 | [03-absence-attribution](03-absence-attribution.md) |
 | #162 | 本收口：零语义变化对照、探针行集与行数断言审计、kernel-only 实测、最终门禁、票面副本核对。 | 本文 |
 
@@ -73,7 +79,8 @@ extra []
 ```
 
 即 46 行的 `id`/`name`/`config` 深度相等；除两个新 group 行外没有新增、删除或改配任何行。原始输出
-未入库；上面的命令可原样重放。
+未入库；上面的命令可原样重放。评审修复分支复跑了同一对照（组合文件只改了头部注释），输出与上面
+完全一致：`before rows 46 after rows 46 groups kernel:19, plugins:27`、`mismatches []`、`extra []`。
 
 ## 探针行集与行数断言
 
@@ -97,6 +104,10 @@ rows 50
 groups [ 'kernel:disabled=false', 'plugins:disabled=false' ]
 ```
 
+摘要里的 `24 services live` 是 `report.services` 的**条目数**，不是 24 个 live 服务：这次
+kernel-only boot 中 24 个服务项里 10 个 live、其余 14 个 disabled。行数是 50（46 个挂载行
++ 2 个 group 行 + `include` + `ourfairy-baseline-probe`），没有被任何测试写死。
+
 ### 行数断言审计
 
 检查命令：
@@ -111,23 +122,23 @@ grep -rn "report\.rows\.length" tests/ --include='*.mjs'
 
 | 位置 | 断言 | 判读 |
 | --- | --- | --- |
-| `tests/bundle-groups.test.mjs:46` | `flattened.length === 48` | #161 新增的组合行计数（46 个挂载行 + 2 个 group 行），不是 probe 行数。 |
 | `tests/bundle-packages.test.mjs:259` | `productRows.length > 0` | 下界，不约束 probe 总行数。 |
 | `tests/ecosystem-boundary.test.mjs:64` | `rows.length > 5` | 下界，不约束 probe 总行数。 |
 | `tests/bundle-only-profile.test.mjs:218`、`:359` | `productRows.length > 0` | 下界，不约束 probe 总行数。 |
 
 `report.rows.length` 的断言为 0 条；现有断言按 id 建集合或按 id 查找，例如
 `tests/baseline-boot.test.mjs:146` 的 `new Set(report.rows.map(row => row.id))` 与
-`tests/bundle-groups.test.mjs:27` 的 `rowById`。因此多出的两个 group 行不会让任何测试因行数失败。
+`tests/bundle-groups.test.mjs` 的 `rowById`。因此多出的两个 group 行不会让任何测试因行数失败。
 
-需要说清楚的一层：票面「没有任何按行数比较的断言」若按字面读并不成立——`tests/bundle-groups.test.mjs:46`
-确实断言了组合行数 48。但它断言的是组合树（46 + 2 group），不是 probe 行集，且是 #161 为「顶层只允许
-两个 group 行」刻意加的结构断言。探针行数（50）没有被任何测试写死或比较。
+`tests/bundle-groups.test.mjs` 原先的 `flattened.length === 48` 已在评审修复中删除：现在它
+只断言顶层恰为两个 group、每个 group 的 `config` 非空、顶层没有非 group 行、以及
+`flattenEntries` 展开后的叶子行 id 唯一，不比较行数。因此票面「没有任何按行数比较的断言」
+在修复后成立；上表的三个命中都是下界，不是行数比较。
 
 ## Kernel-only 启动
 
 `tests/bundle-groups.test.mjs` 的 `disabling the plugins group leaves the kernel booting`
-（第 51–87 行）用真实 launcher 跑 `probe --patch <plugins 整组停用> --report <path>`，断言：
+（第 52–88 行）用真实 launcher 跑 `probe --patch <plugins 整组停用> --report <path>`，断言：
 
 - exit 0、`report.ok === true`、`report.failures` 为空；
 - 7 个内核服务 live：`sessions`、`tools`、`llm`、`agents`、`sessionPersistence`、`sessionQuery`、
@@ -137,32 +148,36 @@ grep -rn "report\.rows\.length" tests/ --include='*.mjs'
 - `plugins` 与 `kernel` 两个 group 行自身都 `disabled: false`。loader 的 group 行从不报告 disabled，
   状态在子行上，所以「整组停用」的断言依据是子行状态，不能拿 group 行判断。
 
+这条用例证明的是**后端启动且内核服务 live**；停用 `plugins` 后没有产品的模型回合路径
+（`chat` 在 `plugins` 里），所以文件头不再声称「一轮模型仍可运行」。
+
 实际结果：
 
 ```text
 $ node --test tests/bundle-groups.test.mjs
-✔ the composition is two segments and every row belongs to one (4.419109ms)
-✔ disabling the plugins group leaves the kernel booting (3669.994368ms)
+✔ the composition is two segments and every row belongs to one (5.578779ms)
+✔ disabling the plugins group leaves the kernel booting (4212.879981ms)
 ℹ tests 2
 ℹ pass 2
 ℹ fail 0
-ℹ duration_ms 3762.961243
+ℹ duration_ms 4321.950665
 ```
 
 ## 最终门禁
 
-在 `integration/spec-134` tip `be37140` 的代码/测试/组合树上执行（worktree 由 `combo:verify` 确认
-基于该 tip）；收口分支随后只追加/刷新 Markdown（evidence 与 `work/tickets/134/` 副本）。写完本文与索引后，单独复跑
-`node --test tests/docs.test.mjs` 校验相对链接，结果 **1 pass / 0 fail**。
+在评审修复后的最终树（`ticket/134-review-fixes`，基于 `integration/spec-134` @ `7bf1b0e`）上执行；
+修复分支之后只追加 Markdown。`combo:verify` 的 ourfairy 行显示该树基于 `7bf1b0e`。
 
 | 命令 | 结果 |
 | --- | --- |
-| `npm test` | **237 pass / 0 fail**，7 suites，`duration_ms` 117546.532977；未出现 150 ms ASR 超时 flake，无需重跑。 |
-| `npm run combo:verify` | 三行 ok：ourfairy `be3714061f6c`（based on the integration tip）、dsh `5b8ec0f175d3`、android source `460109d1b89b`；末行 `combo: combination verified`，exit 0。 |
+| `npm test` | **238 pass / 0 fail**，7 suites，`duration_ms` 116374；未出现 150 ms ASR 超时 flake。 |
+| `npm run combo:verify` | 三行 ok：ourfairy `7bf1b0e19496`（based on the integration tip）、dsh `5b8ec0f175d3`、android source `460109d1b89b`；末行 `combo: combination verified`，exit 0。 |
 | `npm run backend:doctor` | `doctor: all checks passed`，exit 0。含 `bundle packages: 10 declared package(s) mounted by 15 row(s)`、`plugin compatibility: 12 installed product package(s)`、`native capabilities` 5 项（`llm-retry`、`spill-local`、`spill-policy`、`subprocess`、`@deepseek-ai/dsh-agent/session-history`）；`model double: not configured (keyless startup only)`。 |
+| `node --test tests/docs.test.mjs` | **1 pass / 0 fail**。 |
 
-`npm test` 的 237 条包含 `tests/bundle-groups.test.mjs` 的 2 条；全量运行没有触发
-`tests/speech.test.mjs` 的既有 150 ms ASR 超时 flake（#161 证据记录过它曾出现过一次）。
+`npm test` 的 238 条包含 `tests/bundle-groups.test.mjs` 的 2 条与
+`tests/native-capabilities.test.mjs` 的 8 条（评审修复新增 disabled-group 用例）。收口票 #162
+的原门禁（237）跑在 `be37140`；评审修复新增 1 条测试后为 238。
 
 ## 票面副本核对
 
@@ -201,8 +216,7 @@ GitHub 票面本身未改。
 - **未用真实云服务**：全量测试按 keyless 方式跑，模型侧使用测试替身；`backend:doctor` 明确报告
   `model double: not configured (keyless startup only)`。真实 DeepSeek/MiniMax/ASR 服务未在本次收口中
   重新验收。
-- **未在独立干净 worktree 重跑**：门禁在 `be37140` 的代码树上执行，收口分支只追加/刷新 Markdown
-  （evidence 与票面副本）；`npm test` 在写本文前完成，`node --test tests/docs.test.mjs` 在最终 Markdown
-  上单独复跑。若要求「最终提交的完整 `npm test`」，需要再跑一次全量（预计 2–3 分钟）。
+- **评审修复后的门禁已在最终树重跑**：`npm test` 238 pass、`backend:doctor` 全绿、`combo:verify`
+  三行 ok、`docs.test.mjs` 1 pass，均记录在上面的「最终门禁」。
 - **探针行数不被测试锁定**：50 行是本次实测事实；没有测试断言 probe 的精确行数，所以未来增删行不会
   因这个数字失败，也不会被这个数字提醒。这是刻意的（避免把诊断输出变成第二份行清单）。

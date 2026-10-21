@@ -24,16 +24,18 @@
    判据写在文件头：**停掉该段之后基本功能是否还成立**，不是包名前缀。`tool-todo`、
    `jobs-local`、`attachment-local`、`config-editor`、`settings` 与各工具行虽是原生包，
    停掉后内核仍能启动，所以归 `plugins`。文件头删掉了「分组只为读者」的旧说法，写明
-   新增产品行必须决定归属段；顶层出现非 group 行会被新测试拦住。
+   新增产品行必须决定归属段；顶层出现非 group 行会被新测试拦住。文件头对停用 `plugins`
+   的结论是测试实际证明的那一条——**后端仍能启动且内核服务 live**——不再声称还能跑通
+   一轮模型（`chat` 在 `plugins` 里，停用整组后没有产品的模型回合路径）。
    每行的注释与 `!!js` 表达式原样保留；行内顺序只影响可读性。
 2. `backend/v1-bundle/README.md` — 「Row set and package set」段改为描述两个 group、判据，
    并指向文件；不再按旧 section 清单复述行集。「Absent rows」段未动（#160）。
 3. `tests/bundle-groups.test.mjs`（新增，2 个用例，全部走 dsh 自己的加载器与真实 launcher）：
    - `the composition is two segments and every row belongs to one`：用
      `loadOverlayPatches` + `composeEntries` 读组合；顶层恰为 `kernel`、`plugins`，二者
-     `name: cordis:group`、`group: true`、`Array.isArray(config)`；展开后 48 行（46 行 +
-     2 group）；顶层没有非 group 行；id 唯一。顶层非 group 行的断言是「新增产品行必须
-     选段」的可执行形式。
+     `name: cordis:group`、`group: true`、`Array.isArray(config)` 且 `config` 非空；顶层
+     没有非 group 行；用 `scripts/combo.mjs` 的 `flattenEntries` 展开后叶子行 id 唯一。
+     这里不写死行数：行集由组合文件本身提供，硬编码计数会成为第二份权威。
    - `disabling the plugins group leaves the kernel booting`：overlay
      `[{ id: 'plugins', disabled: true }]`，用 `runBackend` 跑
      `probe --patch <overlay> --report <path>`（keyless）；断言 exit 0、`report.ok === true`、
@@ -42,12 +44,14 @@
      `plugins.config` 每个子行 `disabled: true`，`kernel.config` 每个子行 `disabled: false`；
      `plugins` 与 `kernel` 两个 group 行自身 `disabled: false`（loader 语义：group 行永不
      报告 disabled，状态在子行上）；`report.rows` 含两个 group 行。
-4. `tests/native-capabilities.test.mjs` — `composedRows()` 展开后过滤掉 group 行。原因：
-   `flattenEntries` 不是幂等的，而该文件的失败注入用例先把展开行集 `filter`/`map`，再传给
-   内部还会展开的 `nativeCapabilityFailures`。分组后 group 行仍在集合里，二次展开会把刚删掉
-   的子行重新展开回来，`a missing required row fails by row id, package, and remedy` 会静默
-   变成 0 failures。这是 #159 的 helper 在真正分组后暴露的缺陷，不是本票新增的检查；过滤后
-   行集在二次展开下稳定，7 个用例全过。
+4. `tests/native-capabilities.test.mjs` — `composedRows()` 返回
+   `flattenEntries(composeEntries(...))` 的叶子行，不再过滤 group 行。`flattenEntries`
+   现在只返回叶子行、把祖先 group 的 `disabled` 物化到叶子，并且是幂等的；失败注入用例
+   对展开行集 `filter`/`map` 后再次传入 `nativeCapabilityFailures` 不会重复展开子行。
+   新增 `a required row inside a disabled group is reported as disabled`：把整份叶子行包进
+   一个 `disabled: true` 的 group，断言四个必选原生行都被报为 disabled（每个消息点名行 id
+   并含 disabled）。没有这条断言时，禁用整个 `plugins` 会让 `subprocess` 在运行时失效，
+   但 doctor 的逐行 flag 检查仍会通过。
 
 ## 零语义变化对照
 
@@ -107,10 +111,10 @@ extra []
 | 命令 | 结果 |
 | --- | --- |
 | `node --test tests/bundle-groups.test.mjs` | **2 pass / 0 fail**（最终树 `duration_ms` 13620；kernel-only boot 用例 12850 ms） |
-| `node --test tests/native-capabilities.test.mjs` | **7 pass / 0 fail**（最终树 `duration_ms` 13720） |
+| `node --test tests/native-capabilities.test.mjs` | **8 pass / 0 fail**（评审修复新增 disabled-group 用例；#161 当时的树为 7 pass） |
 | `node --test tests/row-addressability.test.mjs` | **7 pass / 0 fail**（最终树 `duration_ms` 99148；原样通过，overlay 仍能按 id 命中 group 内的 `delivery`、`groups`、`scoped-*`） |
 | `npm run backend:doctor` | `doctor: all checks passed`，含 `native capabilities`（4 行 + history export）与 `bundle packages`（10 declared package(s) mounted by 15 row(s)） |
-| `npm test` | **237 pass / 0 fail**，7 suites（最终树 `duration_ms` 173795） |
+| `npm test` | **238 pass / 0 fail**，7 suites（评审修复新增 1 条 disabled-group 用例；#161 当时的树为 237） |
 | `npm run combo:verify` | 三行 ok：ourfairy（based on the integration tip）、dsh、android source；`combo: combination verified` |
 
 kernel-only boot 的实测事实（来自上述 `bundle-groups` 用例）：`probe --patch <plugins 整组
@@ -126,4 +130,4 @@ kernel-only boot 的实测事实（来自上述 `bundle-groups` 用例）：`pro
 - 无未完成项。`work/implementation/evidence/README.md` 未改，索引条目归收口票 #162。
 - 备注：`tests/speech.test.mjs` 的 150 ms ASR 超时用例在本机是既有 flake。第一次 `npm test`
   出现 236/237（`speech/timeout`），把本票改动 `git stash` 掉后该用例仍失败，单独重跑通过；
-  第二次 `npm test` 237/237。不是本票引入，未改该测试。
+  第二次 `npm test` 237/237（评审修复后为 237/238）。不是本票引入，未改该测试。

@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { flattenEntries } from '../scripts/combo.mjs'
 import { describeRun, makeHome, readReport, removeHome, repoRoot, runBackend, writeOverlay } from './helpers/backend.mjs'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
@@ -38,13 +39,13 @@ test('the composition is two segments and every row belongs to one', () => {
     assert.equal(group.name, 'cordis:group', `${group.id} must be a loader-native group`)
     assert.equal(group.group, true, `${group.id} must declare group: true`)
     assert.ok(Array.isArray(group.config), `${group.id} must nest its rows in a config list`)
+    assert.ok(group.config.length > 0, `${group.id} must have children`)
   }
   assert.deepEqual(rows.filter(row => row.group !== true), [],
     'a non-group row at the top level would escape the segment decision')
 
-  const flattened = rows.flatMap(row => [row, ...row.config])
-  assert.equal(flattened.length, 48, '46 mounted rows plus the two group rows')
-  const ids = flattened.map(row => row.id)
+  const leaves = flattenEntries(rows)
+  const ids = leaves.map(row => row.id)
   assert.equal(new Set(ids).size, ids.length, `row ids must be unique: ${JSON.stringify(ids)}`)
 })
 
