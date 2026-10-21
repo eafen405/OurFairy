@@ -6,7 +6,7 @@
  *
  * @module @ourfairy/dsh-sessions/src/http
  */
-import { postHandler } from '@ourfairy/dsh-identity/http'
+import { postHandler } from '@ourfairy/dsh-http/http'
 import { SessionScopeError } from './service.mjs'
 
 /** Paths this module owns, in the order the carrier registers them. */
