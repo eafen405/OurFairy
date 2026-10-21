@@ -109,6 +109,12 @@
 | --- | --- |
 | [123-client-merge](123-client-merge/README.md) | #123 客户端合仓：快照导入、来源校验、构建与测试证据 |
 
+## 包清单真实性（规格 #136）
+
+| 目录 | 内容 |
+| --- | --- |
+| [136-closeout](136-closeout/README.md) | #148–#150：peer 与 license 声明对齐、内核包 README、`files` 存在性检查 |
+
 ## 阶段整合与评审
 
 | 目录 | 内容 |
