@@ -59,12 +59,17 @@
 node --test tests/projection-units.test.mjs tests/projection-units-real.test.mjs \
   tests/chat-read-window.test.mjs tests/chat-page-cut.test.mjs \
   tests/chat-multi-observer.test.mjs tests/chat-cold-boundary.test.mjs
-node --test tests/remote-chat.test.mjs tests/reconnect.test.mjs tests/jobs.test.mjs
+node --test tests/remote-chat.test.mjs tests/reconnect.test.mjs tests/jobs.test.mjs \
+  tests/native-job-status.test.mjs tests/native-job-stop-outcome.test.mjs
 node scripts/bench-projection.mjs --label after-upgrade --out /tmp/projection-upgrade.json
 ```
 
 第三条用与 #94 相同的 `PARAMS` 和相对门槛比较；若 registry 接口、事件形状或 `stateOf`
 消失，插件会在 `inject`/`stateOf` 处失败、相关测试报错，不能靠保留第二套 fold 绕过。
+第二条里的两条对账用例 `native job status vocabulary matches the projection` 与
+`native job stop outcome vocabulary matches the adapter` 分别读取 pinned dsh 的任务状态声明与
+停止返回类型，与产品的映射逐项比较；上游增删状态或返回值时它们先失败并点名成员，而不是让
+`undefined` 或「已结束」静默进入投影（运行期对未知值分别显式记为未知与 5xx 响亮失败）。
 行为测试与基准通过只证明当前组合兼容，不能当作长期兼容承诺。
 
 ## 投影
