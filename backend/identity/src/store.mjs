@@ -5,9 +5,8 @@
  *
  * Every mutation that spans more than one statement runs inside one
  * `BEGIN IMMEDIATE` transaction. The schema declares no UNIQUE constraint and no
- * foreign key (AGENTS.md forbids both), so duplicate names, short-number
- * allocation and association existence are checked explicitly inside that
- * transaction.
+ * foreign key, so duplicate names, short-number allocation and association
+ * existence are checked explicitly inside that transaction.
  *
  * Deletion is a stored state: reads skip deleted rows and a login name or short
  * number stays reserved once issued.
