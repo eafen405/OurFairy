@@ -77,11 +77,14 @@ node --test --test-name-pattern="the same request id sent twice in a row produce
 
 ## 全量入口
 
-提交 `40ad8e3` 经仓库 pre-commit 钩子（`.githooks/pre-commit`）通过，`git commit` 退出码 0，
-即同一棵树上 `npm test` 与 `npm run combo:verify` 都通过；未使用 `--no-verify`。原始输出未入库
-（证据协议），需要时在同一提交上重放这两条命令。
+## 全量入口
 
-本提交的 `--amend` 只改这份证据文本，不改测试或生产代码；amended 提交仍经同一钩子通过。
+本票的功能提交（`6818be7`，其前身 `40ad8e3`）经仓库 pre-commit 钩子
+（`.githooks/pre-commit`）通过，`git commit` 退出码 0，即同一棵树上 `npm test` 与
+`npm run combo:verify` 都通过（输出末行 `combo: combination verified`）；未使用
+`--no-verify`。原始输出未入库（证据协议），需要时在同一提交上重放这两条命令。
+
+`6818be7` 相对 `40ad8e3` 只 amend 了这份证据文本，不改测试或生产代码，并再次经过同一钩子。
 
 ## 未完成项
 
