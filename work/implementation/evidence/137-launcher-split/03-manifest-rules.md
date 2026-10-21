@@ -4,6 +4,10 @@
 > `work/tickets/137/03-manifest-rules.md`；分支 `ticket/157-manifest-rules`；
 > 基线 `integration/spec-137` 的 `06b5198`；实现提交 `988a961`、`02f6174`；
 > 证据提交即本文件所在提交。
+>
+> 复核修正（#137 两轴 review）：分支 `ticket/137-review-fixes`（基于 `integration/spec-137`
+> @ `135e283`），提交 `ccdde9f`。已安装副本的端到端覆盖从 `file:` 一条扩展到三条规则；
+> 见「复核修正」。
 
 ## 改了什么
 
@@ -50,6 +54,12 @@
   `@ourfairy/dsh-search` 改成 `^1.0.0`；再跑 `doctor --json`。源哈希未变，doctor 复用
   已安装副本（断言 mutation 仍在）。断言 "bundle packages" 失败，detail 含包名、
   `file:`、已安装 manifest 路径，且不含 `does not declare @ourfairy/dsh-search`。
+  复核修正（`ccdde9f`）把该用例改为
+  「installed bundle admission violations fail the check and name the package and rule」：
+  安装一次后依次变异**已安装** manifest 的非 `file:` specifier、containment 根外目标、
+  与 bundle 条目重名三种违规，每次跑 `doctor --json` 断言 "bundle packages" 失败并点名
+  包名、已安装 manifest 路径与对应规则；每个 case 后恢复 manifest，最后再断言恢复后
+  检查变绿。源哈希不变，所有 doctor 都复用已安装副本（每个 case 断言 mutation 仍在）。
 
 ## 红 → 绿
 
@@ -85,18 +95,43 @@
 `npm test` 从基线 239 增至 241，新增的两个用例即本票的直接判定测试与端到端测试。
 Node 24.18.0，Linux。
 
+## 复核修正（#137 两轴 review）
+
+review 指出已安装副本的准入规则只有 `file:` 一条做了端到端验证，另两条只有组合层直接
+测试。`ccdde9f` 把 `tests/bundle-packages.test.mjs` 的已安装用例扩展为三种违规的端到端
+变异（非 `file:`、containment 根外、与 bundle 条目重名），并恢复 `(installed)` /
+`(cached)` 的 doctor 安装模式断言：
+
+- 安装 profile 一次，之后每个 case 只改**已安装** bundle manifest；源哈希不变，doctor
+  复用已安装副本，不重装覆盖变异。
+- 每个 case 断言 `bundle packages` 失败、detail 含包名、已安装 manifest 路径与规则文本
+  （`an installed product package is linked, not fetched` /
+  `an installed bundle may only link packages inside the profile's node_modules` /
+  `twice: once as a bundle/probe entry and once in dependencies`），且不额外报
+  `does not declare <name>`。
+- 每个 case 后恢复 manifest；最后一个 doctor 断言恢复后检查变绿。
+
+| 命令 | 结果 |
+| --- | --- |
+| `node --test --test-name-pattern='installed bundle admission|bundle rows, its declared|installed copy boots' tests/bundle-packages.test.mjs` | 3/3 pass，26.9s |
+| `node --test tests/bundle-packages.test.mjs tests/lifecycle.test.mjs` | 16/16 pass，121.3s |
+| 合并后 `node --test tests/lifecycle.test.mjs tests/bundle-packages.test.mjs tests/product-sources.test.mjs tests/launcher-import.test.mjs tests/baseline-boot.test.mjs` | 29/29 pass，86.2s |
+| 提交 `ccdde9f` 的 pre-commit hook | `npm test` 246/246 pass，105.9s；`combo:verify` 三行 ok |
+
 ## 合并
 
 `git merge integration/spec-137` → `Already up to date.`：集成分支 tip 仍是 `06b5198`
 （本票基线），无冲突需要解决。合并后重跑 5 个测试文件 23/23 pass。
 
+复核修正分支合并时 `git merge integration/spec-137` 同样为 `Already up to date.`
+（tip `135e283`），无冲突；合并后重跑 5 个受影响测试文件 29/29 pass。
+
 ## 未执行 / 范围外
 
 - 未改 `scripts/ourfairy-backend.mjs`：doctor 的 `bundle packages` 检查仍只把
   `verifyBundlePackages` 的 `failures` join 成 detail，消息不需要移动。
-- 未对 installed 形状的 containment / duplicate 违规做端到端 `doctor` 变异：
-  两种形状对三条规则的同一判定由组合层的直接测试覆盖；端到端覆盖 `file:` 规则，
-  即票面要求的「证明 combo.mjs 路径应用同一规则集」。
 - 未做 Windows 验证；本仓库测试均在本机 Linux 上运行。
 - 未新增源码扫描式「只有一份实现」测试：`CODING_STANDARDS.md` 禁止用正则扫源码
   充当检查。单份实现由两调用点共用同一导出、且组合层不 import `combo.mjs` 体现。
+- 复核修正未做 judgement calls 未列出的项：不重命名 `readCombination`、不收窄导出、
+  不合并 worktree/installed 两套规则消息渲染器。

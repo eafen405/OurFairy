@@ -13,7 +13,11 @@
  * and exits the test process with code 2 before this assertion runs.
  */
 import assert from 'node:assert/strict'
+import { rmSync } from 'node:fs'
+import { join } from 'node:path'
 import { test } from 'node:test'
+import { pathToFileURL } from 'node:url'
+import { copyProductRepo } from './helpers/backend.mjs'
 
 test('importing the launcher has no side effects and exposes main', async () => {
   const launcher = await import('../scripts/ourfairy-backend.mjs')
@@ -23,4 +27,23 @@ test('importing the launcher has no side effects and exposes main', async () => 
     'the launcher must export main(argv) so a caller can run it without the import itself being a CLI run',
   )
   assert.equal(typeof launcher.repoRoot, 'string', 'the launcher must keep exporting the repository root')
+})
+
+test('importing a launcher copy with no combo.json resolves and exposes main', async () => {
+  // The guard is not merely "no exit": a module-load read of combo.json would
+  // reject this import. Deleting the copy's combo.json makes that read fail,
+  // so a successful import proves the load itself reads nothing.
+  const root = copyProductRepo('ourfairy-launcher-import-')
+  try {
+    rmSync(join(root, 'combo.json'))
+    const launcher = await import(pathToFileURL(join(root, 'scripts', 'ourfairy-backend.mjs')).href)
+    assert.equal(
+      typeof launcher.main,
+      'function',
+      'the launcher must resolve and export main even when its checkout has no combo.json',
+    )
+    assert.equal(launcher.repoRoot, root, 'the imported copy must report its own repository root')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })

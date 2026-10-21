@@ -3,6 +3,10 @@
 > 父票 [#137](https://github.com/eafen405/OurFairy/issues/137)；票面
 > `work/tickets/137/02-composition-module.md`；分支 `ticket/156-composition-module`；
 > 基线 `integration/spec-137` 的 `1a12d7a`；实现提交 `ef49e0f`；证据提交即本文件所在提交。
+>
+> 复核修正（#137 两轴 review）：分支 `ticket/137-review-fixes`（基于 `integration/spec-137`
+> @ `135e283`），提交 `a4e92e6`、`917e2fe`、`ccdde9f`。下面「复核修正」一节记录更正后的
+> 零 spawn 措辞、pin 读取事实、import 检查与 `installDecision` 形状。
 
 ## 改了什么
 
@@ -10,7 +14,9 @@
 
 组合层，零 spawn。导入面只有 `node:fs` / `node:path` / `node:crypto` / `node:os`；
 仓库根由 `import.meta.dirname` 推出（不 import `node:url`，因为允许的导入面不含它）。
-每个读仓库的函数接受根目录参数并默认到该模块所在仓库根。
+每个读仓库的函数接受根目录参数并默认到该模块所在仓库根。**边界就是导入面**：模块没有
+`node:child_process`，组合函数因此拿不到 git/pnpm；除 review 外没有机制强制这一点，
+也没有行为测试断言它（见「未执行」）。
 
 从启动器迁入：`readCombination`、`layoutOf`、`assertIsolatedHome`、`isolatedEnv`、
 `productPackages`、`productSources`、`publishedEntries`、`readPackageManifest`、
@@ -25,8 +31,9 @@
 因此没有可默认的根目录参数（票面表格也是这个签名）。
 
 安装拆成两半：`installDecision(layout, { root, reinstall })` 比较 `productSourceHash`
-与已写 stamp、并检查已链接 bundle manifest 是否存在，返回 `cached` / `install`；
-`writeSourceStamp(layout, hash)` 只写 stamp，由进程层在 pnpm 成功后调用。
+与已写 stamp、并检查已链接 bundle manifest 是否存在，返回 `{ mode, hash }`
+（`cached` / `install` 加判定所用的哈希）；`writeSourceStamp(layout, hash)` 只写 stamp，
+由进程层在 pnpm 成功后用判定返回的 `hash` 调用。
 
 三条 bundle manifest 依赖准入规则的实现与消息文本原样迁入 `productPackages`：
 非 `file:` specifier、解析目标在仓库外、与 bundle/probe 条目重名。
@@ -39,13 +46,18 @@
   唯一 CLI 边界在 main 的 `try/catch`（`cliFailure` 写既有前缀并返回 1）。
 - 底部 `if (import.meta.main) process.exit(await main(process.argv))`。import 启动器
   不解析 argv、不读 `combo.json`、不打印、不退出。
-- 删除模块加载期的 `COMBINATION` 读取：pin 在 `main` 开头读一次（先于 argv，保持
-  「坏组合先于用法错误」的既有失败顺序），再传给命令。`layoutOf` 委托组合层。
+- 删除模块加载期的 `COMBINATION` 读取。`main` 开头读一次组合用于命令参数（如 pnpm pin），
+  但 `layoutOf`、`productPackages`、`installDecision` 等组合函数**各自**调用
+  `readCombination(root)`；同一命令内会多次读取 `combo.json`。这是当前形状，不是
+  「pin 只在 main 读一次」；`layoutOf` 委托组合层。
 - `installProfile`：`writeProfile` → `installDecision` → 进程层 `spawnSync` pnpm →
-  成功后 `writeSourceStamp`。doctor 的 `profile project linked` 仍报 `(installed|cached)`。
+  成功后 `writeSourceStamp(layout, decision.hash)`。`installDecision` 返回
+  `{ mode: 'cached'|'install', hash }`，进程层不再第二次计算 `productSourceHash`。
+  doctor 的 `profile project linked` 仍报 `(installed|cached)`。
 - doctor 的四个组合事实改为调用组合层：`product packages` → `productSources`、
-  `isolated home` → `assertIsolatedHome`、`node version` → `readCombination().nodeRange`、
-  `profile project linked` → `installProfile`（组合判定 + 进程执行）。需要子进程的检查
+  `isolated home` → `assertIsolatedHome`（复核修正后是第一条记录项；失败即只报告这一条并
+  返回 1）、`node version` → `readCombination().nodeRange`、`profile project linked` →
+  `installProfile`（组合判定 + 进程执行）。需要子进程的检查
   （corepack pin、dsh 构建、combo 校验、bundle/插件/原生能力）仍留在启动器。
 - `--patch` 准入仍在派发处，文本未改。
 
@@ -58,12 +70,13 @@
 
 ### 测试
 
-- `tests/product-sources.test.mjs`：三个用例改为直接 import 组合层，不再起子进程跑
+- `tests/product-sources.test.mjs`：用例改为直接 import 组合层，不再起子进程跑
   `doctor --json`。用 `copyProductRepo` 的可变副本：(1) 哈希集合覆盖磁盘上每个包发布
   的 `src/` 与 manifest，且不含 `test-support/`、含 PDF wheel，哈希项都真实存在；
   (2) 写入 profile + stamp + 已链接 manifest 后，未改动源判定 `cached`；
   (3) 新增 `backend/identity/src/staleness-probe.mjs` 后哈希改变、源集合包含它、
-  判定 `install`。
+  判定 `install`。复核修正（`917e2fe`）把断言改为 `decision.mode`，并补两个未覆盖分支：
+  `reinstall: true` 判定 `install`、已链接 manifest 缺失判定 `install`。
 - `tests/bundle-only-profile.test.mjs`：仍自己写 bundle-only profile，`isolatedEnv`
   改为组合层实现（本地薄包装：`compositionEnv(layoutOf(home, repoRoot), { root: repoRoot, extra })`，
   worktree 根用于共享 `.corepack`）。
@@ -73,6 +86,9 @@
 - `tests/launcher-import.test.mjs`（新增）：进程内 `await import('../scripts/ourfairy-backend.mjs')`，
   断言 `typeof launcher.main === 'function'` 且 `repoRoot` 为字符串。若不惰性，测试进程
   会因 `node --test <file>` 的 argv（`argv.slice(2)` 为空）走 help 分支退出 2。
+  复核修正（`a4e92e6`）再加一条 committed 检查：`copyProductRepo` 到临时根、删除其
+  `combo.json`、用 `pathToFileURL` import 该副本的启动器，断言解析成功且导出 `main`；
+  模块加载期若读 `combo.json` 会直接 reject。临时根在 `finally` 清理。
 
 ## 红 → 绿
 
@@ -116,14 +132,44 @@ node --test tests/product-sources.test.mjs tests/composition-module.test.mjs tes
 ### 零 spawn / import 惰性
 
 - `scripts/ourfairy-composition.mjs` 的 import 行只有
-  `node:crypto`、`node:fs`、`node:os`、`node:path`；无 `node:child_process`。
+  `node:crypto`、`node:fs`、`node:os`、`node:path`；无 `node:child_process`。这是导入面
+  事实，不是行为测试；模块之外没有机制阻止以后新增 spawn 依赖。
 - 把三个脚本复制到没有 `combo.json` 的临时目录后
   `node -e "import('…/ourfairy-backend.mjs').then(m => console.log(typeof m.main))"`
-  输出 `function`，证明 import 不读组合。
+  输出 `function`。复核修正把同一事实做成 committed 检查：
+  `tests/launcher-import.test.mjs` 的 `importing a launcher copy with no combo.json resolves
+  and exposes main`。
+
+## 复核修正（#137 两轴 review）
+
+review 指出的问题与本文件的更正：
+
+1. 启动器头注释曾写零 spawn「by construction … cannot call git or pnpm even by accident」。
+   已改为描述导入面边界（没有 `node:child_process`，因此没有 git/pnpm 可调），不保留
+   不可能性声称；本文件也明确没有行为测试。
+2. 本文件曾写「pin 在 main 开头读一次，再传给命令」。实际是 `main` 为命令参数读一次，
+   `layoutOf` / `productPackages` / `installDecision` 等组合函数各自
+   `readCombination(root)`；同一命令会多次读 `combo.json`。上文已更正，未改读取架构。
+3. `tests/launcher-import.test.mjs` 原来只证明 import 不退出。新增一条检查：删除复制仓库的
+   `combo.json` 后 dynamic import 该副本启动器，仍解析并导出 `main`。
+4. `installDecision` 现在返回 `{ mode, hash }`，`installProfile` 用返回的 hash 写 stamp，
+   不再第二次调用 `productSourceHash`；`tests/product-sources.test.mjs` 断言
+   `decision.mode`，并补 `reinstall: true` 与缺失已链接 manifest 两个分支。
+
+### 复核命令与结果
+
+| 命令 | 结果 |
+| --- | --- |
+| `node --test tests/launcher-import.test.mjs` | 2/2 pass，84.9ms |
+| `node --test tests/product-sources.test.mjs` | 5/5 pass，154ms |
+| `node --test --test-name-pattern='disabling the fs provider' tests/row-addressability.test.mjs` | 1/1 pass，15.3s（`isolatedEnv` 替换手写环境） |
+| 合并后 `node --test tests/lifecycle.test.mjs tests/bundle-packages.test.mjs tests/product-sources.test.mjs tests/launcher-import.test.mjs tests/baseline-boot.test.mjs` | 29/29 pass，86.2s |
+| 提交 `a4e92e6` / `917e2fe` / `ccdde9f` 的 pre-commit hook | `npm test` 242/242、246/246、246/246；`combo:verify` 三行 ok |
 
 ## 未执行 / 范围外
 
-- `combo.mjs` 的 `verifyBundlePackages` 尚未收敛到组合层同一规则函数：那是 #157。
+- `combo.mjs` 的 `verifyBundlePackages` 在本票时尚未收敛到组合层同一规则函数；#157 已完成
+  （见 [03-manifest-rules](03-manifest-rules.md)）。
 - 未做源码扫描式的「零 spawn」测试：`CODING_STANDARDS.md` 禁止用正则扫源码充当检查，
   因此只记录导入面，不声称「已被检查」。
 - 未做 Windows 验证；本仓库现有测试均在本机 Linux 上运行。
@@ -138,6 +184,9 @@ node --test tests/product-sources.test.mjs tests/composition-module.test.mjs tes
 `node --test tests/product-sources.test.mjs tests/composition-module.test.mjs tests/launcher-import.test.mjs`：
 7/7 pass；`node --test tests/bundle-only-profile.test.mjs tests/lifecycle.test.mjs`：6/6 pass。
 提交 `ef49e0f` 的 pre-commit hook 跑 `npm test` 239/239 与 `combo:verify` 三行 ok，均通过。
+
+复核修正分支合并时 `git merge integration/spec-137` 为 `Already up to date.`（tip
+`135e283`），无冲突；合并后重跑 5 个受影响测试文件 29/29 pass。
 
 ### 全量门禁的偶发失败（与本票无关）
 

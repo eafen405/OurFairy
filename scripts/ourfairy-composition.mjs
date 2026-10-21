@@ -8,10 +8,12 @@
  * and the overlays one boot applies. The launcher next door keeps the process
  * layer: argv, git, pnpm, child processes, and command dispatch.
  *
- * The module is zero-spawn by construction: its import surface is `node:fs`,
- * `node:path`, `node:crypto`, and `node:os`, so it cannot call git or pnpm even
- * by accident. That is what makes these decisions directly assertable from a
- * test instead of through a subprocess.
+ * The zero-spawn boundary is this module's import surface: it imports only
+ * `node:fs`, `node:path`, `node:crypto`, and `node:os`, never
+ * `node:child_process`, so the composition functions have no git or pnpm to
+ * call. That is what makes these decisions directly assertable from a test
+ * instead of through a subprocess. Nothing beyond review enforces the boundary;
+ * no behavioural test asserts it.
  *
  * Every function that reads the repository takes a root directory and defaults
  * to the repository this module lives in, so a test can point it at a throwaway
@@ -58,8 +60,9 @@ export function readCombination(root = repoRoot) {
 /**
  * Resolved isolated layout; every durable path lives under `home`.
  *
- * The profile directory uses the combination's `profileName`, so the layout and
- * the manifest the launcher writes cannot name different profiles.
+ * The profile directory uses the combination's `profileName`; `profileManifest`
+ * reads the same recorded field, so both derive the name from combo.json
+ * instead of keeping a profile name of their own.
  */
 export function layoutOf(home, root = repoRoot) {
   const homeDir = resolve(home ?? join(root, '.ourfairy'))
@@ -331,19 +334,24 @@ export function profileLinkedManifestPath(layout, root = repoRoot) {
 }
 
 /**
- * Decide whether the installed profile can be reused: `cached` or `install`.
+ * Decide whether the installed profile can be reused: `{ mode, hash }`.
  *
  * The decision compares the current product-source content hash with the stamp
  * written after the last successful install and requires the linked bundle
- * manifest to still exist. Executing pnpm and writing the new stamp belong to
- * the process layer, which owns subprocesses.
+ * manifest to still exist. The hash is returned with the decision so the
+ * process layer can stamp the install it is about to perform without hashing
+ * the sources a second time. Executing pnpm belongs to the process layer, which
+ * owns subprocesses.
+ * @param {{home: string, profileDir: string}} layout
+ * @param {{root?: string, reinstall?: boolean}} [options]
+ * @returns {{mode: 'cached'|'install', hash: string}}
  */
 export function installDecision(layout, { root = repoRoot, reinstall = false } = {}) {
   const stampPath = join(layout.profileDir, '.ourfairy-source-hash')
   const hash = productSourceHash(root)
   const stamped = existsSync(stampPath) ? readFileSync(stampPath, 'utf8').trim() : undefined
-  if (!reinstall && existsSync(profileLinkedManifestPath(layout, root)) && stamped === hash) return 'cached'
-  return 'install'
+  const mode = !reinstall && existsSync(profileLinkedManifestPath(layout, root)) && stamped === hash ? 'cached' : 'install'
+  return { mode, hash }
 }
 
 /** Record the product-source hash an install was built from. */

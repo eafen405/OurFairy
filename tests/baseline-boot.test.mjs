@@ -159,8 +159,11 @@ describe('OurFairy v1 baseline composition', () => {
     // instead of reporting a boot that never mounted what the caller asked for.
     const run = runBackend(['boot-product', '--patch', join(sharedHome, 'unused.patch.yml')], keylessEnv)
     assert.notEqual(run.code, 0, describeRun('boot-product with --patch', run))
-    assert.match(run.stderr, /--patch applies to probe and start only/u,
-      `the refusal must name the flag's commands:\n${run.stderr}`)
+    assert.equal(
+      run.stderr,
+      "ourfairy-backend: --patch applies to probe and start only; 'boot-product' does not mount profile overlays\n",
+      `the refusal must be the launcher's exact message for boot-product:\n${run.stderr}`,
+    )
   })
 
   test('a requested turn without MINIMAX_CN_API_KEY fails loudly, naming the missing configuration', () => {
