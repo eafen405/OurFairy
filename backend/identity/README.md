@@ -1,23 +1,24 @@
 # @ourfairy/dsh-identity
 
 The product's identity kernel: users, short numbers, invites and login
-credentials in one business SQLite file, the `/identity/*` request paths, and
-the second credential that admits one of its session tokens to dsh's `/api`.
+credentials in a business SQLite file this package opens, the `/identity/*`
+request paths, and the second credential that admits one of its session tokens
+to dsh's `/api`.
 
 ## Owns
 
 In one sentence: the product's users, short numbers, invites and login
-credentials, the one business SQLite file those rows and three coordination
-domains share, and the request paths plus dsh credential that speak for them.
+credentials, the business SQLite file that holds their rows and the group,
+upload and delivery coordination rows, and the request paths plus dsh
+credential that speak for them.
 
 - Users, short numbers, invites, the administrator flag, and hashed session
   tokens, including seeding Phaethon and keeping a removed identity's short
   number reserved.
 - The business SQLite file itself, and the narrow faces other product rows read
   it through: `users`, `groups`, `uploads` and `deliveries`. Group membership,
-  upload lifetime and delivery coordination are stored here so they share one
-  writer and one `BEGIN IMMEDIATE` transaction; the behaviour over those rows
-  belongs to the packages that call the faces.
+  upload lifetime and delivery coordination rows are stored here; the behaviour
+  over those rows belongs to the packages that call the faces.
 - The `user:<shortId>` owner codec exported as `./owner`, which writes and reads
   `SessionHeader.owner`.
 - The `/identity/*` paths, their POST body/error envelope, and the
@@ -46,11 +47,10 @@ domains share, and the request paths plus dsh credential that speak for them.
 | `connection.revokePrincipal(principal)` | revoking that admitted scope on sign-out |
 | `@deepseek-ai/schemastery` `Config` | declaring the row's validated fields to the loader |
 
-It injects `webServer` and `connection`; it does not inject `sessions` or
-`sessionPersistence`.
+It injects `webServer` and `connection`.
 
 ## Service
 
 `ctx.identity`, exposing `authenticateRequest(request)` and the `users`,
-`groups`, `uploads` and `deliveries` faces. The store behind them stays inside
-this package.
+`groups`, `uploads` and `deliveries` faces. The store behind the faces is the
+SQLite file this package opens.

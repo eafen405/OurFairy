@@ -9,23 +9,25 @@ nothing of its own.
 In one sentence: the ownership decision and the primary-session binding, exposed
 as `ctx.ourfairySessions` and the `/sessions/*` paths.
 
-- `SessionHeader.owner` as the only ownership authority, written through the
-  `user:<shortId>` codec from `@ourfairy/dsh-identity/owner`. There is no second
-  ownership table to keep in step with the session logs.
+- `SessionHeader.owner` as the ownership record, written through the
+  `user:<shortId>` codec from `@ourfairy/dsh-identity/owner`.
 - The deterministic primary id `ourfairy-user-<shortId>-primary`, created on
   first use; ordinary sessions get a UUID id under the same namespace so a
   restart of dsh's `session-<n>` counter cannot collide with them.
-- The ownership check: an unknown or foreign session answers the same 404, an
-  ownerless header answers 403 rather than being adopted, and the check runs
-  before any handle is opened. `/primary` and `/create` are serialized per owner
-  so a race cannot observe "no primary" twice.
+- The ownership check: an unknown or foreign session answers the same 404; on
+  `/sessions/read` and `/sessions/select` an ownerless header answers 403
+  `sessions/unowned-session`, and on `/sessions/primary` and `/sessions/create`
+  an ownerless reserved primary answers 409 `sessions/unowned-primary` — neither
+  is adopted. The check runs before any handle is opened. `/primary` and
+  `/create` are serialized per owner so a race cannot observe "no primary" twice.
 - The one-shot event read exported as `./events`: `readSessionEvents` opens an
   observation, returns its events and cursor, and disposes it in `finally`.
 
 ## Does not own
 
 - Session storage, headers, logs or events. `sessions` creates the header and
-  `sessionPersistence` writes and reads it; this package adds no session rows.
+  `sessionPersistence` writes and reads it; this package reaches session records
+  through that seam.
 - Users, short numbers or credentials. [`identity`](../identity/README.md)
   resolves the caller; this package only compares the resulting owner.
 - Message content, transcripts or projections; [`chat`](../chat/README.md) owns
@@ -44,8 +46,8 @@ as `ctx.ourfairySessions` and the `/sessions/*` paths.
 | `sessionPersistence.create(header)` | persisting a new owned header, followed by `flush` and `close` |
 | `sessionQuery.observeSession(id, { projectionMode: 'none' })` | the exported one-shot read in `./events` |
 
-It also reuses `postHandler` and `ownerOf` from `@ourfairy/dsh-identity` instead
-of keeping a second copy of the fence/body/envelope or the owner format.
+It also uses `postHandler` and `ownerOf` from `@ourfairy/dsh-identity` for the
+fence/body/envelope and the owner format.
 
 ## Service
 
