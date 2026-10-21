@@ -10,6 +10,8 @@
  * provider.
  */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import {
@@ -20,6 +22,10 @@ const PHAETHON_PASSWORD = 'gateway-password'
 const combo = JSON.parse(await import('node:fs').then(fs => fs.readFileSync(join(repoRoot, 'combo.json'), 'utf8')))
 const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
 const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
+const dshRequire = createRequire(join(dshDir, 'apps', 'cli', 'package.json'))
+
+/** Model fields the phone may edit; a previous entry's other fields are deployment-owned. */
+const PHONE_MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input'])
 
 const servers = []
 const homes = []
@@ -93,6 +99,42 @@ function minimaxRoute(baseURL, extra = {}) {
     models: [{ id: 'MiniMax-M3.1-Flash', name: 'MiniMax M3.1 Flash', contextWindow: 200000, input: ['text', 'image'] }],
     ...extra,
   }
+}
+
+/**
+ * The `llm-pi-ai` route dictionary the phone's last save persisted.
+ *
+ * Read from the profile's user layer with dsh's own patch loader, so the
+ * assertion sees the document that survives a restart rather than a value the
+ * gateway happened to echo. Parsing the YAML here would be a second reader of
+ * the same file and could agree with the writer while disagreeing with a boot.
+ * @param {string} home - the isolated OURFAIRY_HOME the launcher booted with.
+ * @returns {Record<string, any>} the saved providers dictionary.
+ */
+function savedProviders(home) {
+  const patchPath = join(home, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml')
+  const boot = dshRequire('@deepseek-ai/dsh-app-boot')
+  const row = boot.loadOverlayPatches('dsh', patchPath).find(entry => entry.id === 'llm-pi-ai')
+  assert.ok(row?.config?.providers !== undefined, `${patchPath} must carry the saved llm-pi-ai providers row`)
+  return row.config.providers
+}
+
+/**
+ * One model entry of the deployment bundle exactly as the native schema
+ * resolves it — the "previous entry" a phone save starts from. Resolving the
+ * declaration instead of reading the live gateway means the expectation comes
+ * from the deployment layer, not from the value under test.
+ * @param {string} provider - route key in the bundle's `llm-pi-ai` row.
+ * @param {string} id - model id to return.
+ * @returns {Record<string, any>} the resolved model entry.
+ */
+function declaredModel(provider, id) {
+  const boot = dshRequire('@deepseek-ai/dsh-app-boot')
+  const bundle = join(repoRoot, 'backend', 'v1-bundle', 'cordis.patch.yml')
+  const row = boot.loadOverlayPatches('dsh', bundle).flatMap(entry => entry.insert ?? []).find(entry => entry.id === 'llm-pi-ai')
+  const declared = row.config.providers[provider].models.find(model => model.id === id)
+  const resolved = dshRequire('@deepseek-ai/dsh-llm-pi-ai').Config({ providers: { [provider]: { models: [declared] } } })
+  return resolved.providers.get()[provider].models[0]
 }
 
 /** One valid 16 kHz mono PCM WAV the speech route accepts. */
@@ -427,6 +469,60 @@ test('a route saved from the phone keeps the deployment retry policy the draft d
     assert.deepEqual(double.server.requests.map(request => request.behavior).slice(-2), ['rate_limit', 'success'],
       'the saved route keeps the deployment retry policy across a restart')
     assert.equal(projection.error, null)
+  } finally {
+    await stop(home)
+  }
+})
+
+test('a route saved from the phone keeps model fields the draft does not edit', async () => {
+  const home = freshHome()
+  const double = await modelDouble()
+  const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
+  try {
+    const admin = await signIn(port)
+    // The deployment's own entry is the "previous entry" the save starts from.
+    // Its fields outside the phone's editable set are the expectation; when the
+    // deployment (or upstream) adds another one, this list grows by itself.
+    const previous = declaredModel('minimax-cn', 'MiniMax-M3.1-Flash')
+    const unedited = Object.entries(previous).filter(([field]) => !PHONE_MODEL_FIELDS.has(field))
+    assert.ok(unedited.length >= 2, `the deployment model must declare fields the phone cannot edit; got ${JSON.stringify(previous)}`)
+
+    // The draft supplies `maxTokens` and omits the deployment's `contextWindow`:
+    // supplied fields overwrite, omitted ones are cleared rather than inherited.
+    const first = minimaxRoute(`${double.server.baseURL}/v1`)
+    first.models = [{ id: 'MiniMax-M3.1-Flash', name: 'MiniMax M3.1 Flash', maxTokens: 8192, input: ['text', 'image'] }]
+    await httpJson(port, '/gateway/route', { token: admin, body: first })
+
+    const saved = savedProviders(home)['minimax-cn']
+    assert.equal(saved.retryPolicy, undefined,
+      'the route-level deployment retry policy stays in the deployment layer; a save must not copy it into the user layer')
+    const [savedModel] = saved.models
+    assert.equal(savedModel.contextWindow, undefined, 'an editable field the draft omits is cleared, not inherited from the previous entry')
+    assert.equal(savedModel.maxTokens, 8192, 'an editable field the draft supplies overwrites the previous entry')
+    for (const [field, value] of unedited) {
+      assert.deepEqual(savedModel[field], value,
+        `model field "${field}" the draft does not edit must survive the save unchanged`)
+    }
+
+    // A second save: `maxTokens` is now omitted too, so the previous user-layer
+    // value must be cleared as well, and a brand-new model id has no previous
+    // entry to inherit deployment fields from.
+    const second = minimaxRoute(`${double.server.baseURL}/v1`)
+    second.models = [
+      { id: 'MiniMax-M3.1-Flash', name: 'MiniMax M3.1 Flash', input: ['text', 'image'] },
+      { id: 'MiniMax-other', name: 'Other', input: ['text'] },
+    ]
+    await httpJson(port, '/gateway/route', { token: admin, body: second })
+
+    const resaved = savedProviders(home)['minimax-cn']
+    const [resavedModel, addedModel] = resaved.models
+    assert.equal(resavedModel.maxTokens, undefined, 'a field the previous user-layer entry declared is cleared when the draft omits it')
+    for (const [field, value] of unedited) {
+      assert.deepEqual(resavedModel[field], value,
+        `model field "${field}" the draft does not edit must survive a later save unchanged`)
+    }
+    assert.deepEqual(addedModel, { id: 'MiniMax-other', name: 'Other', input: ['text'] },
+      'a new model id is stored exactly as the draft declares it, with no deployment fields borrowed from a sibling')
   } finally {
     await stop(home)
   }
