@@ -421,8 +421,9 @@ export function verifyBundlePackages({ binName, bundlePackage, probePackage, ins
  * `evaluatePluginCompatibility` judges only dsh peers (`@deepseek-ai/dsh` and
  * `@deepseek-ai/dsh-*`); a product package's other peers are declarations for
  * readers and pnpm, not inputs to this runtime decision. The bundle and the
- * probe are included: they declare no peers, so the judgement is a no-op for
- * them, but a reader sees every installed product package accounted for.
+ * probe are included: the bundle declares no peers, and the probe declares one
+ * `@ourfairy/*` peer, which this judgement ignores because it judges only dsh
+ * peers; a reader still sees every installed product package accounted for.
  * @param {{
  *   binName: string,
  *   bundlePackage: string,
