@@ -86,6 +86,8 @@ $ node --input-type=module -e '…workDefinition.apply(jobs/lifecycle status="pa
 
 ## 验收命令与结果
 
+合并后状态（`080a687`，已合入 `integration/spec-135` tip `3ebc115`，无冲突）：
+
 ```
 $ node --test tests/projection-units.test.mjs tests/projection-fold.test.mjs tests/projection-units-real.test.mjs tests/native-job-status.test.mjs
 ℹ tests 21 / pass 21 / fail 0
@@ -94,19 +96,33 @@ $ node --test tests/jobs.test.mjs
 ℹ tests 9 / pass 9 / fail 0
 
 $ npm test
-ℹ tests 237 / suites 7 / pass 237 / fail 0
+ℹ tests 238 / suites 7 / pass 238 / fail 0
+
+$ node --test --test-concurrency=1 "tests/**/*.test.mjs"
+ℹ tests 238 / pass 238 / fail 0
 ```
 
-`npm test` 基线 234 条，本票新增 3 条（投影 1 + 新文件 2）。`tests/jobs.test.mjs` 未改动，booted
-套件原样通过。
+`npm test` 基线 235 条（合并 167 后），本票新增 3 条（投影 1 + 新文件 2），共 238。
+`tests/jobs.test.mjs` 未改动，booted 套件原样通过。
 
 ```
 $ npm run combo:verify
-ourfairy        integration/ourfairy-v1  28e8d325a3cdc04f  ok (worktree is based on the integration tip)
+ourfairy        integration/ourfairy-v1  080a687e05c83489  ok (worktree is based on the integration tip)
 dsh             product/ourfairy-v1      5b8ec0f175d3d7ba  ok
 android source  -                        460109d1b89b824a  ok (declaration matches)
 combo: combination verified
 ```
+
+并行负载记录：合并后有一次 `npm test` 只失败 `tests/remote-chat.test.mjs` 的
+`all remote paths reject anonymous and foreign owners…`（`artifacts()` 的 hash/mtime 快照与后台会话写入
+竞争）。该失败在**未合入本票**的 `integration/spec-135` tip `3ebc115` 上同样复现（同次还失败 PDF、
+speech 等 4 条），单独跑 `tests/remote-chat.test.mjs` 9/9 通过；串行全量 238/238 通过，随后并行
+`npm test` 也 238/238 通过。结论：共享机器负载下的既有 flake，不是本票引入；未用 `--no-verify`。
+
+## 合并
+
+- `080a687` Merge branch 'integration/spec-135' into ticket/163-job-status（无冲突；带入 167 的
+  `tests/remote-chat.test.mjs` 用例与证据目录）。
 
 ## 未完成项
 
