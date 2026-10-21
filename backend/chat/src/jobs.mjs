@@ -3,6 +3,22 @@ import { JobId } from '@deepseek-ai/dsh-jobs'
 import { SessionScopeError as ChatError } from '@ourfairy/dsh-sessions'
 import { taskStatusOf } from './units.mjs'
 
+/** Native `JobRegistry.kill` outcome to the wire's numeric stop outcome (README `后台任务`). */
+export const STOP_OUTCOME = Object.freeze({ requested: 1, 'already-finished': 2 })
+
+/**
+ * The wire stop outcome for one native `kill` return value. A value this table
+ * does not name is a product error, not "already finished": folding it into `2`
+ * would claim a settlement the native registry never reported. The raw value
+ * stays in the message so the drift names itself.
+ */
+export function stopOutcomeOf(result) {
+  if (!Object.hasOwn(STOP_OUTCOME, result)) {
+    throw new ChatError(500, 'chat/unknown-stop-outcome', `the native job registry returned an unknown stop outcome ${JSON.stringify(result)}`)
+  }
+  return STOP_OUTCOME[result]
+}
+
 export function installJobs(ctx, runtime) {
   ctx.jobs.events.subscribe({ owners: 'all' }, event => {
     if (event.type === 'output') return
@@ -29,7 +45,7 @@ export function installJobs(ctx, runtime) {
     if (task.availability === 0) return 0
     const result = ctx.jobs.kill(JobId(taskId.slice(ctx.jobs.generation.length + 1)), state.sessionId, 'cancelled by the user')
     await runtime.barrier(state)
-    return result === 'requested' ? 1 : 2
+    return stopOutcomeOf(result)
   }
   return { jobOutput, jobStop }
 }
