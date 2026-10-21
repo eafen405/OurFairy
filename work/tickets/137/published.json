@@ -1,0 +1,10 @@
+{
+  "parent": 137,
+  "title": "启动器拆分：组合层独立成零 spawn 模块，并修正 doctor 的错误契约",
+  "children": [
+    { "file": "01-error-contract.md", "issue": 155, "title": "启动器错误契约：组合错误抛错、CLI 边界统一打印，doctor 报告不再猝死" },
+    { "file": "02-composition-module.md", "issue": 156, "title": "组合层独立：抽成零 spawn 的脚本模块，启动器只留进程层" },
+    { "file": "03-manifest-rules.md", "issue": 157, "title": "bundle manifest 准入规则收敛：启动器与 combo.mjs 共用组合层的一处判定" },
+    { "file": "04-closeout.md", "issue": 158, "title": "spec 137 收口：全量门禁、证据索引与可执行声称复核" }
+  ]
+}
