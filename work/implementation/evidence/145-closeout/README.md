@@ -99,7 +99,7 @@
 
 | 声称 | 失效时失败的具体命令或测试 | 断言同一事实？ | 结论 |
 | --- | --- | --- | --- |
-| store 的原型方法恰为 19 个 | `tests/identity-interfaces.test.mjs` 的 'the store prototype declares exactly the nineteen methods spec 132 named'（直接读 `Object.getOwnPropertyNames(IdentityStore.prototype)`），多一个或少一个方法即失败 | 是（原型口径；`now` 是构造器注入的实例字段，不在这个口径内） | 有检查 |
+| store 的公开可调用成员恰为 19 个 | `tests/identity-interfaces.test.mjs` 的 'the store publishes exactly the nineteen methods spec 132 named'：原型名单逐个相等，且实例上没有函数型自有属性（`now` 已改为 `#now`） | 是 | 有检查 |
 | 改前是 24 个方法 | `git show main:backend/identity/src/store.mjs` 的同一读法（本次实测取到 24 个方法名） | 是（同一属性，不同树） | 可重放命令，非常驻测试 |
 | `readDelivery` 不是公开操作 | `tests/identity-interfaces.test.mjs` 的 'the delivery read stays inside the package'（`store.readDelivery === undefined`），加上上面那条原型名单 | 是 | 有检查 |
 | 领域面不泄漏 store 成员 | `tests/identity-interfaces.test.mjs` 第一条用例的四个面键集精确断言（`Object.keys(face)` 逐个相等），任何多出来的成员都会让它失败 | 是 | 有检查 |
@@ -174,8 +174,8 @@
 2. **已发布票面 #144 的兄弟票编号写错**：票面正文写「`#142` 与本票同时改 store，但行区间不相交：`#142`
    改方法区」，实际改方法区的是 #143（issue #142 是 spec 131 的 http 包票）。**已由 Lead 处理**：本地副本
    `work/tickets/132/02-schema-modules.md` 与已发布 issue #144 的正文同步改正，提交 `c560820`。
-3. **「每个公开方法都有生产调用方」没有常驻断言**：事实目前成立（调用点清单见上；口径是 19 个原型方法，
-   `now` 是构造器注入的实例字段），但只有方法名集合被断言。
+3. **「每个公开方法都有生产调用方」没有常驻断言**：事实目前成立（调用点清单见上；`now` 已改为 `#now`，
+   19 个原型方法就是全部可调用成员），但只有方法名集合被断言。
    按仓库规则不为它补扫源码式断言；要不要把它变成常驻检查（例如把四个领域面与服务操作的可达性做成
    一个结构断言），需要另开票决定。
 4. **仓库既有 flake（与本 spec 无关，本票未改代码）**：`tests/speech.test.mjs` 的 ASR 超时（150ms）在机器
@@ -193,7 +193,7 @@
 
 | 位置 | 问题 | 处理 |
 | --- | --- | --- |
-| `tests/identity-interfaces.test.mjs` | 用例名与断言消息声称「store 发布的方法恰为 19 个」，但检查只读 `IdentityStore.prototype`；`now` 是构造器注入的公开实例字段，检查看不到它 | 用例名与断言消息都改为只声称原型面；`now` 的口径写进上面的声称表（不在 19 个原型方法内） |
+| `tests/identity-interfaces.test.mjs` 与 `backend/identity/src/store.mjs` | 用例名与断言消息声称「store 发布的方法恰为 19 个」，但检查只读 `IdentityStore.prototype`；`now` 是构造器注入的公开实例字段，检查看不到它 | `now` 改为 `#now`（构造器仍接受 `now` 选项，测试注入不受影响），并加一条「实例上没有函数型自有属性」断言；用例名恢复为「公开面恰是这十九个」 |
 | `backend/identity/src/schema/indexes.mjs` | 注释声称这些索引是「the queries use」，但 `sessions_by_user` 的唯一读者 `liveSessionCount` 已在本增量删除；现存查询只按 `sessions.digest` 读 | 注释改为只描述 schema 声明的内容（非唯一查找索引）；索引本身保留——#144 冻结 schema 事实，删索引要另升版本 |
 | `backend/identity/src/schema/users.mjs` | 「in the order the store applies them」没有失效方式；该片段又不带结尾分号，store 需要 `${USERS_SCHEMA};` 特判 | 删掉顺序从句；片段自带 `;`，store 不再特判 |
 | 本文件与 144 证据 | 复核统计引用了 tip 的命令却记的是 `67d1940` 的数；「兄弟断言承接」与「删方法无引用」两行与事实不符；144 先说没有 flake 又记录一次例外 | 逐行改正，保留原始复核时点 |
@@ -208,5 +208,4 @@
 | `npm run combo:verify` | 三行 ok + `combo: combination verified` |
 | 拼出的 `SCHEMA` 与 `f331c38` 的旧树比对 | 2913 bytes、sha256 `7ea33bc4…f6699f94d`，逐字节相同 |
 
-未修（超出本次复核范围）：`sessions_by_user` 索引目前没有查询读者，删它要升 schema 版本；
-`now` 仍是构造器注入的公开实例字段，不在 19 个原型方法的口径内。两者都留待另票。
+未修（超出本次复核范围）：`sessions_by_user` 索引目前没有查询读者，删它要升 schema 版本，留待另票。

@@ -29,8 +29,9 @@
   「删除后名字仍被占用」仍由既有的 `identity/name-taken` 断言（`a removed name stays reserved`）承担。
 - `tests/identity-interfaces.test.mjs`：
   - 泄漏名单去掉已不存在的方法名（`inviteState`、`listUsers`、`liveSessionCount`、`userByName`、
-    `readDelivery`），留下仍存在的 store 成员（`authenticate`、`close`、`createInvite`、`now`、
-    `register`、`seedPhaethon`、`signIn`、`signOut`），「领域面不泄漏 store 成员」这条保障仍在；
+    `readDelivery`），留下当时仍存在的 store 成员（`authenticate`、`close`、`createInvite`、
+    `register`、`seedPhaethon`、`signIn`、`signOut`）；`now` 在收口后的复核修复里改为 `#now`，
+    名单随之去掉它（见 145 证据）。「领域面不泄漏 store 成员」这条保障仍在；
     四个领域的键集断言不变。
   - 新增两条断言：公开面方法名集合恰为那 19 个（多一个或少一个都失败）；`store.readDelivery`
     从包外不可达。
