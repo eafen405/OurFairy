@@ -44,7 +44,7 @@ store 侧只改了文件头部：
 | `npm run combo:verify` | 合并后最终树 | `combo: combination verified`；ourfairy 行 actual `90bd34160fcc37c9`，dsh 行与 android source 行 ok |
 | `npm test` | after（pre-commit hook 内，本证据文件的提交） | 234 tests / 234 pass / 0 fail（suites 7，约 104s） |
 
-没有出现 `speech/timeout` 之类的已知 flake。
+没有出现 `speech/timeout`。另有一次与本票无关的例外，如实记录如下。
 
 一次例外，如实记录：本证据文件**首次**提交的那轮 pre-commit hook 里，`npm test` 出现一条与本票无关的失败——
 `tests/conversation-search.test.mjs` 的 `read intervals have inclusive original positions, omit tool results,
