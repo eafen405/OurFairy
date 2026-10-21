@@ -24,10 +24,9 @@ import { sessionDir } from '@deepseek-ai/dsh-spill-local'
  * `spillStore` is read dynamically rather than injected. Its absence is a
  * supported degradation: no spill row means no spill files, so the contribution
  * grants nothing. Declaring it would instead gate every chat route on an
- * auxiliary capability. The shipped composition still requires the
- * `spill-local` row (`tests/native-capabilities.test.mjs`, and doctor's
- * native-capabilities check), so renaming or dropping that row fails there
- * rather than silently disabling retrieval.
+ * auxiliary capability. The shipped composition requires the `spill-local` row
+ * (row id and package) via `tests/native-capabilities.test.mjs` and doctor; the
+ * retrieval behavior is pinned by `tests/spill-read.test.mjs`.
  *
  * @param {object} ctx - the chat plugin context.
  * @param {object} session - the native Session the operation runs for.

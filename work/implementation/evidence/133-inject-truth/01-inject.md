@@ -47,11 +47,14 @@
 | `jobs` | `src/jobs.mjs:7,19,20,21,30`；`src/units.mjs:496,498` | 保留 |
 | `sessionProjections` | `src/units.mjs:562` `register`；`src/runtime.mjs:344` `stateOf` | 保留 |
 
-复核命令（无输出即无残留直接读取）：
+复核命令（一次性前提核对：无输出即当时没有残留直接读取）：
 
 ```bash
 grep -rnE "ctx\.identity\b|ctx\.tools\b" backend/chat/src/
 ```
+
+这是一次性的前提核对，不是持续检查；spec 明确不新增 inject 字面量断言，所以最小性没有自动
+守卫。
 
 ### `inject` 前后
 
@@ -65,9 +68,9 @@ export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairyS
 
 ```js
 /**
- * The services chat depends on: an entry belongs here only if chat's contract
- * would be wrong without it. The ordering-only entry and the optional
- * capability are called out at their sites, not silently listed or omitted.
+ * Services this row waits for before it accepts work. The ordering-only entry is
+ * annotated here; the optional `spillStore` is read with `ctx.get` and its
+ * absence semantics are annotated at the read site.
  */
 export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairySpaces', 'agents',
   // Declared for ordering/side effect, not for a call: `agentLoop` registers
@@ -82,14 +85,14 @@ export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairyS
 ### 删除 `identity`、`tools`
 
 依据是代码事实而非推测：#99 把投递行搬走后，`backend/chat/src/` 内不存在 `ctx.identity` /
-`ctx.tools` 引用（`@ourfairy/dsh-identity/http` 只是 POST 信封 helper 的模块 import）。组合里的
-可用性仍由保留的声明传递保证：
+`ctx.tools` 引用（`@ourfairy/dsh-identity/http` 只是 POST 信封 helper 的模块 import）。在
+pinned composition 里，传递可用性由这两处保留的声明承担：
 
 - `backend/sessions/src/index.mjs:14` 的 `inject` 含 `identity`；
 - dsh 的 `agent-loop`（`packages/core/agent-loop/src/index.ts:342`）`inject` 含 `tools`，而 chat
   保留了 `agentLoop`。
 
-因此删除不改变 shipped composition 的可装配性。
+因此删除不改变 pinned composition 的可装配性。
 
 ### `agentLoop` 保留
 
@@ -103,13 +106,24 @@ chat 不调用 `ctx.agentLoop`，但它注册的 Agent 工厂是 `agents.resume`
 （`backend/gateway/src/index.mjs:16`）与 `attachments`（`backend/attachments/src/index.mjs:11`）已采用
 同样的声明方式；本次只改这一个访问点，能跑回合的组合里行为不变。
 
+#### 与用户故事 9 的冲突
+
+用户故事 9 要求这次改动「不触碰运行时文件」。本项把 `src/runtime.mjs:120` 从
+`ctx.get('llm')` 改为 `ctx.llm`，确实触碰了运行时文件，因此**故事 9 未满足**，这是本 spec 的
+已知偏差。
+
+替代方案是保持动态读取并在调用处注明「允许缺席」，但对 `llm` 不成立：缺席不是可降级状态，
+带图片的回合会在 `resolveModelInfo` 处失败。因此选择声明。代价是调用点一行改动；在能跑回合
+的组合里行为不变。
+
 ### `spillStore` 保持动态读取
 
 `spillStore` 只服务 spill 检索，不是 chat 路由的前置。缺席是受支持的降级：没有 spill 行就没有
 spill 文件，`spillDirectory` 返回 `undefined`，贡献返回空数组（`src/spill-read.mjs`）。若声明进
-`inject`，所有 chat 路由都会等待这个辅助能力。shipped composition 仍由
+`inject`，所有 chat 路由都会等待这个辅助能力。shipped composition 由
 `tests/native-capabilities.test.mjs` 与 `doctor` 的 native-capabilities 检查要求 `spill-local` 行
-存在（`scripts/combo.mjs` 的 `REQUIRED_NATIVE_ROWS`），所以服务改名/删行不会静默通过。
+（行 id + 包名）存在（`scripts/combo.mjs` 的 `REQUIRED_NATIVE_ROWS`）；检索行为由
+`tests/spill-read.test.mjs` 钉住。
 
 ## 命令与结果
 

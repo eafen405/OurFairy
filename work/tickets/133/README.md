@@ -35,24 +35,29 @@ GitHub issue 是发布权威，原生 blocked-by 是实时状态权威；本目�
 | `jobs` | `src/jobs.mjs`、`src/units.mjs`：`events`/`list`/`readAt`/`get`/`kill`/`generation` | 保留 |
 | `sessionProjections` | `src/units.mjs`：`register`；`src/runtime.mjs`：`stateOf` | 保留 |
 
-删除 `identity`/`tools` 的传递保证：`ourfairySessions` 自己 inject `identity`；`agentLoop`
-（pinned dsh 的 `AgentLoop.inject`）自己 inject `tools`。chat 不再直接读这两个服务，但组合里的
-可用性仍由保留的声明保证。
+删除 `identity`/`tools` 的传递可用性：`ourfairySessions` 自己 inject `identity`；`agentLoop`
+（pinned dsh 的 `AgentLoop.inject`）自己 inject `tools`。chat 不再直接读这两个服务；在 pinned
+composition 里，二者的可用性由这两处声明传递。
 
 ## 已定决定
 
 1. **删除 `identity`、`tools`**。依据：#99 把投递行搬走后，chat 内不存在对这两个服务的
-   `ctx.<name>` 引用；上面两个传递保证让删除不改变组合可用性。
+   `ctx.<name>` 引用；上面两处传递声明让删除不改变 pinned composition 的可用性。
 2. **`agentLoop` 保留并注释**：chat 不调用 `ctx.agentLoop`，但它注册的 Agent 工厂是
    `agents.resume` 的前置；声明它让本行在工厂可用前不接受工作。
 3. **`llm` 声明进 `inject`，使用点改为已声明的服务访问**。图片能力检查在带图片的回合开始
-   时真正调用 `resolveModelInfo`；缺席应在组合期失败，而不是等图片轮次抛错。`gateway` 与
-   `attachments` 已采用同样的声明方式。这是本次唯一的运行时调用点改动；在能跑回合的组合里
-   行为不变。
+   时真正调用 `resolveModelInfo`；缺席时本行不会进入工作状态（未满足 inject 的行保持
+   pending），而不是等图片轮次抛错。`gateway` 与 `attachments` 已采用同样的声明方式。这是
+   本次唯一的运行时调用点改动；在能跑回合的组合里行为不变。
+
+   **与用户故事 9 的冲突**：故事 9 要求这次改动「不触碰运行时文件」，而本项把
+   `src/runtime.mjs:120` 从 `ctx.get('llm')` 改为 `ctx.llm`，确实触碰了运行时文件，因此
+   **故事 9 未满足**。替代方案「保持动态读取并注明允许缺席」对 `llm` 不成立：缺席会让图片
+   回合失败，而不是可降级。代价是调用点一行改动；在能跑回合的组合里行为不变。
 4. **`spillStore` 保持 `ctx.get('spillStore')` 动态读取**，在读取处注释「允许缺席」：
    没有 spill 行就没有 spill 文件，贡献返回空；声明它会让所有 chat 路由等待一个辅助能力。
-   shipped composition 仍由 `tests/native-capabilities.test.mjs` 与 `doctor` 要求 `spill-local`
-   行存在，所以服务改名/删行不会静默通过。
+   shipped composition 由 `tests/native-capabilities.test.mjs` 与 `doctor` 要求 `spill-local`
+   行（行 id + 包名）存在；检索行为由 `tests/spill-read.test.mjs` 钉住。
 5. **`sessionQuery`、`systemPrompt` 保留**：分别是经共享读取 helper 与经 Agent 上下文的间接
    使用；README 的服务依赖小节写清，避免下次误删。
 6. **不新增断言 `inject` 字面量的测试**（spec Testing Decisions）。接缝是真实启动器加产品
@@ -90,10 +95,10 @@ dsh 升级复核（跨两侧，逐条标注）
 | `projection-units`、`projection-units-real` | 运行时语义 | fold、`stateVersion`、state schema |
 | `chat-read-window`、`chat-page-cut` | 运行时语义 | 事件窗口与截点 |
 | `chat-multi-observer` | 运行时语义 | 同一会话共享单元状态 |
-| `chat-cold-boundary` | 运行时语义（含 HTTP 观察） | 冷恢复边界 |
+| `chat-cold-boundary` | 跨两侧（运行时语义为主；含 HTTP 观察） | 冷恢复边界 |
 | `remote-chat` | 传输契约 | 路由、SSE、鉴权、错误 |
 | `reconnect` | 传输契约 | 断线补齐的线上语义 |
-| `jobs` | 传输契约（含折叠观察） | 任务端点与任务折叠 |
+| `jobs` | 跨两侧（传输契约为主；含折叠观察） | 任务端点与任务折叠 |
 | `spill-read` | 运行时语义 | 本会话 spill 目录授权 |
 | `gateway` 图片能力用例 | 运行时语义 | `llm` 声明的图片能力检查 |
 | `bench-projection` | 运行时语义 | 投影成本 |
@@ -102,11 +107,14 @@ dsh 升级复核（跨两侧，逐条标注）
 
 ## `test-support` 夹具归属（#153 记录，本次不移动）
 
-| 夹具 | 主人 | 理由 |
-| --- | --- | --- |
-| `backend/chat/test-support/fail-outlets.mjs` | 投递行 | 故障点是 `delivery/message` 的 durability 与通知出口 |
-| `backend/chat/test-support/frame-gap.mjs` | 运行时一侧 | 故障点是 Assistant 帧边界 |
-| `backend/chat/test-support/lost-event.mjs` | 运行时一侧 | 故障点是 Session 事件读取边界 |
+| 夹具 | 主人 | 理由 | 服务名核对 |
+| --- | --- | --- | --- |
+| `backend/chat/test-support/fail-outlets.mjs` | 投递行 | 故障点是 `delivery/message` 的 durability 与通知出口 | `inject = ['ourfairyChat','sessions']`；与 chat、sessions 今天挂载的服务名一致 |
+| `backend/chat/test-support/frame-gap.mjs` | 运行时一侧 | 故障点是 Assistant 帧边界 | 无 `inject` |
+| `backend/chat/test-support/lost-event.mjs` | 运行时一侧 | 故障点是 Session 事件读取边界 | `inject = ['ourfairyChat']`；与 chat 今天挂载的服务名一致 |
+
+三个夹具都在各自测试里加载（`tests/text-delivery.test.mjs`、`tests/file-delivery.test.mjs`、
+`tests/reconnect.test.mjs`）；服务名与 chat / sessions 当前挂载的名称一致。
 
 ## 范围外发现
 
