@@ -272,3 +272,37 @@ test('a product row nested in a group is part of the package set', () => {
     assert.ok(check.detail.includes(needle), `the failure must name ${needle}: ${check.detail}`)
   }
 })
+
+test('an installed bundle dependency outside the file: rule fails the check and names it', () => {
+  const { root, home } = isolatedRun()
+  // The first doctor installs the profile and writes the source-hash stamp.
+  const installed = doctor({ root, home })
+  assert.equal(installed.check.ok, true, `the shipped profile must install cleanly first: ${JSON.stringify(installed.check)}`)
+
+  // Mutate the INSTALLED copy, not the worktree: the source hash is unchanged,
+  // so the second doctor reuses this copy instead of reinstalling over it. That
+  // is the manifest combo.mjs reads, so the check must apply the same three
+  // admission rules the launcher applies to the worktree copy.
+  const manifestPath = join(profileDir(home), 'node_modules', '@ourfairy', 'dsh-v1-bundle', 'package.json')
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  manifest.dependencies['@ourfairy/dsh-search'] = '^1.0.0'
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
+
+  const { check } = doctor({ root, home })
+  assert.equal(check.ok, false, `an installed dependency outside the file: rule must fail the check: ${JSON.stringify(check)}`)
+  for (const needle of ['@ourfairy/dsh-search', 'file:', manifestPath]) {
+    assert.ok(check.detail.includes(needle), `the failure must name ${needle}: ${check.detail}`)
+  }
+  // The declared set still comes from the installed manifest's dependency
+  // names, so the violation must not also report the package as undeclared.
+  assert.equal(
+    check.detail.includes('does not declare @ourfairy/dsh-search'),
+    false,
+    `the violation must not also report a declaration mismatch: ${check.detail}`,
+  )
+  assert.equal(
+    JSON.parse(readFileSync(manifestPath, 'utf8')).dependencies['@ourfairy/dsh-search'],
+    '^1.0.0',
+    'doctor must reuse the installed copy, not reinstall over the mutated manifest',
+  )
+})
