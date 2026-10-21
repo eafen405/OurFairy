@@ -36,13 +36,12 @@ const historyExport = '@deepseek-ai/dsh-agent/session-history'
 
 /**
  * The capability rows the bundle mounts, read through dsh's own patch loader.
- * Flattened, so a row inside a group is one row here just as it is one mounted
- * row; the group rows themselves are segment labels, not capabilities, and
- * keeping them would re-expand their children when a caller flattens again.
+ * `flattenEntries` returns the leaf rows, so a row inside a group is one row
+ * here just as it is one mounted row, and a disabled group's state is already
+ * on its children.
  */
 function composedRows() {
   return flattenEntries(boot.composeEntries([boot.loadOverlayPatches('dsh', bundlePatch)]))
-    .filter(row => row.group !== true)
 }
 
 /** Resolve the public export from the same installation the launcher boots. */
@@ -71,6 +70,25 @@ test('the shipped composition satisfies every required native capability', () =>
 test('a required row nested in a group is still found', () => {
   const nested = [{ id: 'kernel', name: 'cordis:group', group: true, config: composedRows() }]
   assert.deepEqual(nativeCapabilityFailures(nested, resolveFromDsh), [])
+})
+
+test('a required row inside a disabled group is reported as disabled', () => {
+  const disabled = [{
+    id: 'plugins',
+    name: 'cordis:group',
+    group: true,
+    disabled: true,
+    config: composedRows(),
+  }]
+  const failures = nativeCapabilityFailures(disabled, resolveFromDsh)
+  const required = ['llm-retry', 'spill-local', 'spill-policy', 'subprocess']
+  assert.equal(failures.length, required.length,
+    `every required row inherits the group's disabled state; got ${JSON.stringify(failures)}`)
+  for (const id of required) {
+    const failure = failures.find(message => message.includes(`the ${id} row`))
+    assert.ok(failure !== undefined, `the ${id} row must be reported; got ${JSON.stringify(failures)}`)
+    assert.match(failure, /disabled/u, `the ${id} row must be reported as disabled; got ${failure}`)
+  }
 })
 
 test('a missing required row fails by row id, package, and remedy', () => {

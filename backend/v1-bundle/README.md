@@ -43,9 +43,7 @@ not publish.
 `FORBIDDEN_ROW_IDS` in
 [`tests/baseline-boot.test.mjs`](../../tests/baseline-boot.test.mjs) is the list of
 row ids the boot test asserts absent from the live composition. The comments
-beside that list group the ids by why each one is absent — the list and its
-reasons are the single authority; this README keeps no second copy of the
-classification.
+beside that list give the reason for each group; read them there.
 
 ## Consuming it
 

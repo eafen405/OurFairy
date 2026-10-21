@@ -11,7 +11,7 @@
 # needs to establish a session, run a model turn, and raise the Web carrier and
 # its connection. `plugins` holds the product capabilities, plus the native tool
 # and support rows that exist only for them; stopping the whole `plugins` group
-# still leaves the backend booting and a model turn runnable.
+# still leaves the backend booting with the kernel services live.
 #
 # The rule is not a package-name prefix: `tool-todo`, `jobs-local`,
 # `attachment-local`, `config-editor`, `settings` and the tool rows are native

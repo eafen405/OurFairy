@@ -20,33 +20,13 @@
 
 ## 分组决定
 
-分段依据是「停掉之后基本功能是否还成立」，不是包名前缀。
+分段依据是「停掉之后基本功能是否还成立」，不是包名前缀。两组的逐行归属以
+`backend/v1-bundle/cordis.patch.yml` 的两个 group 为准（实现决定也记在 #161 的票面正文里）；
+本目录不复述行清单。每行的 `config` 一字不改。
 
-**`kernel`（19 行）**：一次启动要能建立会话、跑一轮模型、并把 Web 载体和连接立起来所需的行。
-
-```text
-agent, session, llm, system-prompt, session-projection, tools,
-agent-loop, agent-default-model, llm-deepseek-api-key, llm-retry,
-spill-local, spill-policy, session-persistence-jsonl,
-session-checkpoint-policy, session-query-sqlite, credentials,
-llm-pi-ai, webserver, connection
-```
-
-**`plugins`（27 行）**：产品能力行，以及只为这些能力存在、停掉后内核仍能启动的原生工具/支撑行。
-
-```text
-identity, sessions, conversation-search, chat, delivery,
-config-editor, settings, gateway,
-spaces, sandbox-policy, scoped-fs, scoped-sandbox, scoped-bash, scoped-directory,
-subprocess, shell-env, jobs-local, tool-todo, tool-fs, tool-working-directory,
-tool-bash, tool-jobs, fs-observation-policy,
-attachment-local, attachments, speech, groups
-```
-
-合计仍是 46 行；每行的 `config` 一字不改。`tool-todo`、`jobs-local`、`attachment-local`、
-`config-editor`、`settings` 与各工具行虽然是原生包，但停掉它们内核仍能启动，所以归入 `plugins`。
-离线实验已验证：`plugins` 整组停用后，probe 仍以 10 个内核服务 live 通过（24 个服务项中其余
-为 disabled）。
+`tool-todo`、`jobs-local`、`attachment-local`、`config-editor`、`settings` 与各工具行虽然是原生包，
+但停掉它们内核仍能启动，所以归入 `plugins`。离线实验已验证：`plugins` 整组停用后，probe 仍通过；
+24 个服务项中 10 个 live，其余 disabled。
 
 ## 四处对扁平行的假设
 
@@ -78,7 +58,8 @@ attachment-local, attachments, speech, groups
 ## 探针与 overlay 的已知语义
 
 - probe 会多报 `kernel` / `plugins` 两个 group 行（50 行 = 46 行 + 2 group + include + probe）。
-  现有断言没有按行数比较的，确认全绿即可。
+  现有断言没有按行数比较的（`tests/bundle-groups.test.mjs` 原先的 48 行硬编码已在评审修复中删除，
+  改为按 id 唯一性检查），确认全绿即可。
 - 禁用 group 行会连带禁用全部子行；group 行自身始终报告 `disabled: false`。任何「整段停用」的
   断言必须看子行状态。
 - overlay 按 id 寻址已经递归进 group（`applyEntryPatches` 的索引），`tests/row-addressability.test.mjs`
