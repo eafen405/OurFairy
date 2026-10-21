@@ -13,5 +13,8 @@
     "src/index.mjs",
     "overlay.patch.yml",
     "README.md"
-  ]
+  ],
+  "peerDependencies": {
+    "@ourfairy/dsh-identity": "^0.1.0"
+  }
 }
