@@ -1,5 +1,4 @@
-本仓库是 OurFairy 产品仓库，包含后端与 `android/` 下的 Android 客户端；deepseek-harness 是外部 fork。
-两者的本地路径、集成分支与锁定提交以 `combo.json` 为准。
+仓库拓扑、入口及版本来源见根 [`README.md`](README.md)；本地路径、集成分支与锁定提交以 [`combo.json`](combo.json) 为准。
 
 ## 研发与审查
 

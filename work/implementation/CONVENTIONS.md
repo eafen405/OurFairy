@@ -8,8 +8,8 @@
 
 1. 父规格：<https://github.com/eafen405/OurFairy/issues/23>（本地副本 [`docs/specs/ourfairy-v1.md`](../../docs/specs/ourfairy-v1.md)）
 2. 实施路线最终决议：<https://github.com/eafen405/OurFairy/issues/22#issuecomment-6167313227>（本地副本 [`docs/decisions/v1-implementation-route.md`](../../docs/decisions/v1-implementation-route.md)）
-3. 实施票：GitHub issue 为准，本地副本在 `work/tickets/<票号>/`；票的读写方式见 [`docs/agents/issue-tracker.md`](../../docs/agents/issue-tracker.md)
-4. 研究：目录索引与研究基线的唯一声明处在 [`docs/research/README.md`](../../docs/research/README.md)
+3. 实施票：GitHub issue 为准；单票副本位于 `work/tickets/<票号>/`，首版 #24–#45 的票集见 [`work/tickets/ourfairy-v1/README.md`](../../work/tickets/ourfairy-v1/README.md)，票的读写方式见 [`docs/agents/issue-tracker.md`](../../docs/agents/issue-tracker.md)
+4. 研究：目录索引与研究基线说明见 [`docs/research/README.md`](../../docs/research/README.md)
 5. 术语：各上下文的词汇表地图见 [`GLOSSARY-MAP.md`](../../GLOSSARY-MAP.md)
 
 票的依赖图以 GitHub 原生 blocked-by 为准（最小字段查询见 `docs/agents/issue-tracker.md`）。**票未解除阻塞前不要开始实现该票。**
@@ -23,7 +23,7 @@
 
 版本组合以 [`combo.json`](../../combo.json) 为唯一权威；仓库拓扑、入口、许可证与取上游修复的步骤见根
 [`README.md`](../../README.md) 的「版本组合」「来源与许可证」「历史证据与旧路径」三节。
-研究用的上游 SHA 不是产品提交，唯一声明处在 [`docs/research/README.md`](../../docs/research/README.md)。
+研究用的上游 SHA 不是产品提交；研究基线说明见 [`docs/research/README.md`](../../docs/research/README.md)。
 
 ## 2. 分支与 worktree 协议
 
@@ -102,7 +102,7 @@ OurFairy 侧怎么跑测试、怎么起后端，见根 [`README.md`](../../READM
 ## 8. 收口评审
 
 每个 spec 收口时跑**一次**两轴 code-review（Standards + Spec），范围是该 spec 的增量 diff。用
-`code-review` skill；Spec 轴引用**本地票面副本**（`work/tickets/<票号>/`）与**本地父规格副本**
+`code-review` skill；Spec 轴引用**本地票面副本**（路径见上方实施票说明）与**本地父规格副本**
 （[`docs/specs/ourfairy-v1.md`](../../docs/specs/ourfairy-v1.md)），仅在票面与规格冲突、或 issue 上出现
 更晚的明确决定时，才 `gh issue view <n> --comments` 核对。发现的问题**回到所属模块修**，不由 Lead 在集成分支上
 直接打补丁掩盖。

@@ -8,7 +8,7 @@
 | [`architecture/`](architecture/) | 模块边界与未采用的原生接缝 | 现行 |
 | [`adr/`](adr/) | 难逆的取舍 | 现行 |
 | [`agents/`](agents/) | 给代理的流程规则 | 现行 |
-| [`glossary/`](glossary/) | 分域词汇 | 现行 |
+| [`glossary/`](glossary/) | 外部感官领域词汇 | 现行 |
 | [`decisions/`](decisions/) | 日期化决策记录 | 日期化 |
 | [`research/`](research/) | 日期化调查 | 日期化 |
 | [`archive/`](archive/) | 已归档的提案与讨论 | 历史 |
