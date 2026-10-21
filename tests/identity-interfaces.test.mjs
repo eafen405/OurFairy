@@ -36,13 +36,29 @@ test('the store stays inside the package: four domain faces and nothing else', (
 
   // The width a consumer used to receive: no store member outside its domain
   // may leak through any face.
-  const leaked = ['authenticate', 'close', 'createInvite', 'inviteState', 'listUsers', 'liveSessionCount',
-    'now', 'readDelivery', 'register', 'seedPhaethon', 'signIn', 'signOut', 'userByName']
+  const leaked = ['authenticate', 'close', 'createInvite', 'now',
+    'register', 'seedPhaethon', 'signIn', 'signOut']
   for (const [domain, face] of Object.entries(identity)) {
     for (const name of leaked) {
       assert.equal(face[name], undefined, `${domain} must not publish ${name}`)
     }
   }
+})
+
+test('the store publishes exactly the nineteen methods their production callers use', () => {
+  const published = Object.getOwnPropertyNames(IdentityStore.prototype)
+    .filter(name => name !== 'constructor')
+    .sort()
+  assert.deepEqual(published, [
+    'authenticate', 'changeGroupMember', 'close', 'completeDelivery', 'createGroup', 'createInvite',
+    'groupsForMember', 'insertUpload', 'ownsGroup', 'pendingDeliveries', 'prepareDelivery',
+    'prepareDeliveryFile', 'readUpload', 'register', 'seedPhaethon', 'signIn', 'signOut',
+    'updateUpload', 'userByShortId',
+  ], 'a method with no production caller must not stay on the store')
+})
+
+test('the delivery read stays inside the package', () => {
+  assert.equal(store.readDelivery, undefined, 'the delivery read is module private')
 })
 
 test('users and groups answer under their own domain', () => {
