@@ -28,25 +28,22 @@ import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readCombo } from './ourfairy-composition.mjs'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(scriptDir, '..')
+
+/**
+ * Read combo.json. Owned by the composition module so the dependency direction
+ * stays one-way (`combo.mjs` -> composition); re-exported here because existing
+ * callers import it from this module.
+ */
+export { readCombo }
 
 /** Environment override per repository key; the default is combo.json's localPath. */
 const PATH_OVERRIDES = {
   ourfairy: 'OURFAIRY_REPO_DIR',
   dsh: 'OURFAIRY_DSH_DIR',
-}
-
-/** Read combo.json. */
-export function readCombo(root = repoRoot) {
-  const path = join(root, 'combo.json')
-  if (!existsSync(path)) throw new Error(`combo.json not found at ${path}`)
-  const parsed = JSON.parse(readFileSync(path, 'utf8'))
-  if (parsed === null || typeof parsed !== 'object' || typeof parsed.repos !== 'object') {
-    throw new Error(`${path} must be an object with a repos map`)
-  }
-  return { combo: parsed, path }
 }
 
 /** The repo holding combo.json resolves to this checkout, not to combo.json's canonical path. */
