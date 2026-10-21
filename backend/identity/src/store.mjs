@@ -25,6 +25,11 @@ import {
   sessionTokenDigest,
   verifyPassword,
 } from './codes.mjs'
+import { DELIVERIES_SCHEMA } from './schema/deliveries.mjs'
+import { GROUPS_SCHEMA } from './schema/groups.mjs'
+import { INDEXES_SCHEMA } from './schema/indexes.mjs'
+import { UPLOADS_SCHEMA } from './schema/uploads.mjs'
+import { USERS_SCHEMA } from './schema/users.mjs'
 
 /** The Phaethon short number: the deployment's first identity, reserved by rule. */
 export const PHAETHON_SHORT_ID = 1
@@ -32,124 +37,16 @@ export const PHAETHON_SHORT_ID = 1
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
 const SCHEMA_VERSION = 6
 
-/** Users, invites and sessions. Primary keys and the lookup indexes the queries use, nothing else. */
-const TABLE_DDL = {
-  users: `CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  short_id INTEGER NOT NULL,
-  name TEXT NOT NULL,
-  is_admin INTEGER NOT NULL DEFAULT 0,
-  password TEXT,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-)`,
-  invites: `CREATE TABLE IF NOT EXISTS invites (
-  code TEXT PRIMARY KEY,
-  created_by INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  redeemed_by INTEGER,
-  redeemed_at INTEGER,
-  deleted_at INTEGER
-)`,
-  sessions: `CREATE TABLE IF NOT EXISTS sessions (
-  digest TEXT PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  revoked_at INTEGER,
-  deleted_at INTEGER
-)`,
-}
-
-const INDEX_DDL = `
-CREATE INDEX IF NOT EXISTS sessions_by_user ON sessions(user_id);
-CREATE INDEX IF NOT EXISTS users_by_short_id ON users(short_id);
-CREATE INDEX IF NOT EXISTS users_by_name ON users(name);
-`
-
-/** Group ownership and membership; uniqueness is checked inside the transactions. */
-const GROUP_SCHEMA = `
-CREATE TABLE IF NOT EXISTS groups (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  owner_short_id INTEGER NOT NULL,
-  created_by INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-);
-CREATE TABLE IF NOT EXISTS group_members (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  group_id INTEGER NOT NULL,
-  user_short_id INTEGER NOT NULL,
-  created_by INTEGER NOT NULL,
-  updated_by INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-);
-CREATE INDEX IF NOT EXISTS groups_by_owner ON groups(owner_short_id);
-CREATE INDEX IF NOT EXISTS group_members_by_user ON group_members(user_short_id);
-CREATE INDEX IF NOT EXISTS group_members_by_group ON group_members(group_id);
-`
-
-/** Upload lifecycle only; native session messages own admitted references. */
-const UPLOAD_SCHEMA = `
-CREATE TABLE IF NOT EXISTS uploads (
-  upload_id TEXT PRIMARY KEY,
-  owner_short_id INTEGER NOT NULL,
-  session_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  mime TEXT NOT NULL,
-  size INTEGER NOT NULL,
-  sha256 TEXT NOT NULL,
-  status INTEGER NOT NULL DEFAULT 0, -- 0 uploading, 1 complete, 2 expired
-  offset INTEGER NOT NULL DEFAULT 0,
-  original_ref TEXT,
-  image_ref TEXT,
-  expires_at INTEGER NOT NULL,
-  created_by INTEGER NOT NULL,
-  updated_by INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-);
-`
-
-/** Delivery coordination only; the native log is the delivered-content authority. */
-const DELIVERY_SCHEMA = `
-CREATE TABLE IF NOT EXISTS deliveries (
-  delivery_id TEXT PRIMARY KEY,
-  sender_short_id INTEGER NOT NULL,
-  sender_session_id TEXT NOT NULL,
-  recipient_short_id INTEGER NOT NULL,
-  recipient_session_id TEXT NOT NULL,
-  text TEXT NOT NULL,
-  attachments_json TEXT NOT NULL DEFAULT '[]',
-  status INTEGER NOT NULL DEFAULT 0, -- 0 ready coordination, 1 durably delivered, 2 preparing files
-  message_id TEXT,
-  accepted_seq INTEGER,
-  created_by INTEGER NOT NULL,
-  updated_by INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-);
-`
-
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
-${Object.values(TABLE_DDL).join(';\n')};
-${INDEX_DDL}
-${GROUP_SCHEMA}
-${UPLOAD_SCHEMA}
-${DELIVERY_SCHEMA}
+${USERS_SCHEMA};
+${INDEXES_SCHEMA}
+${GROUPS_SCHEMA}
+${UPLOADS_SCHEMA}
+${DELIVERIES_SCHEMA}
 `
 
 /** Error carrying the HTTP status a request path answers with. */
