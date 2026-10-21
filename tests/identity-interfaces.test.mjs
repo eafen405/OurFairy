@@ -45,7 +45,7 @@ test('the store stays inside the package: four domain faces and nothing else', (
   }
 })
 
-test('the store publishes exactly the nineteen methods their production callers use', () => {
+test('the store publishes exactly the nineteen methods spec 132 named', () => {
   const published = Object.getOwnPropertyNames(IdentityStore.prototype)
     .filter(name => name !== 'constructor')
     .sort()
