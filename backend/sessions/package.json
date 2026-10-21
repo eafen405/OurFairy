@@ -18,6 +18,7 @@
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.5-alpha.1",
+    "@ourfairy/dsh-http": "^0.1.0",
     "@ourfairy/dsh-identity": "^0.1.0"
   }
 }
