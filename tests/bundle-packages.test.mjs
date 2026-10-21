@@ -16,11 +16,11 @@
  */
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, globSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { readCombo, repoPath } from '../scripts/combo.mjs'
-import { copyProductRepo, describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
+import { copyProductRepo, describeRun, makeHome, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
 
 const roots = []
 const homes = []
@@ -257,6 +257,38 @@ test('the installed copy boots with no product source tree behind it', () => {
   assert.equal(report.ok, true, `the installed copy alone must boot serving: ${JSON.stringify(report.failures)}`)
   const productRows = (report.rows ?? []).filter(row => String(row.name).startsWith('@ourfairy/'))
   assert.ok(productRows.length > 0, `the boot reported no product rows: ${JSON.stringify(report.rows)}`)
+})
+
+test('every file a product package declares in files exists', () => {
+  // `files` is what pnpm publishes into the installed profile. A literal path
+  // that is absent, a glob that matches nothing, or a directory with no file
+  // under it makes the installed copy silently thinner than the manifest
+  // claims. This reads manifests and the filesystem only, never source text.
+  const backend = join(repoRoot, 'backend')
+  const packages = readdirSync(backend, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && existsSync(join(backend, entry.name, 'package.json')))
+    .map(entry => entry.name)
+  assert.ok(packages.length > 0, `no package manifests were found under ${backend}`)
+
+  const missing = []
+  for (const packageName of packages) {
+    const dir = join(backend, packageName)
+    const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    for (const entry of manifest.files ?? []) {
+      const publishesFile = globSync(entry, { cwd: dir }).some((match) => {
+        const absolute = join(dir, match)
+        if (statSync(absolute).isFile()) return true
+        // Recursive listing yields directory names too; only files are published.
+        return readdirSync(absolute, { recursive: true }).some(file => statSync(join(absolute, file)).isFile())
+      })
+      if (!publishesFile) missing.push(`backend/${packageName}: ${entry}`)
+    }
+  }
+  assert.deepEqual(
+    missing,
+    [],
+    `every files entry must publish at least one real file; these do not:\n${missing.join('\n')}`,
+  )
 })
 
 test('a product row nested in a group is part of the package set', () => {
