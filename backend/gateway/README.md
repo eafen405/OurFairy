@@ -52,7 +52,11 @@
 
 `/gateway/route` 接受 `provider`、`displayName`、`api`、`baseURL`、`apiKeyEnv`、`models`。
 其余字段返回 400 `gateway/invalid-route`，不会被静默丢弃。`models` 每项接受 `id`、`name`、
-`contextWindow`、`maxTokens`、`input`。保存时以同 id 的先前模型条目为底，只覆盖这五个可编辑
+`contextWindow`、`maxTokens`、`input`。`input` 的取值以 pinned dsh 的
+`@deepseek-ai/dsh-llm-pi-ai` 目录模块导出的 `MODALITIES` 为唯一权威：网关直接导入该运行时
+列表，不维护本地词表，原生新增模态无需产品改动即可接受；不在列表中的值返回 400
+`gateway/invalid-route`。该包是网关声明的 peer，解析失败时启动直接失败并指出缺失的包/子路径，
+不回退到本地列表。保存时以同 id 的先前模型条目为底，只覆盖这五个可编辑
 字段；其余字段（如部署声明的思考能力 `reasoningEfforts`、协议兼容开关 `compat`，以及上游
 将来新增的模型级字段）默认保留，不会因保存而丢失。草稿省略的可编辑字段按「未设置」清除，
 不继承旧值；新模型 id 没有可保留的先前条目，按草稿原样写入。路由级部署字段（例如

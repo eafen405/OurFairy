@@ -14,6 +14,11 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
+import { pathToFileURL } from 'node:url'
+// Registers Node resolution for the pinned dsh checkout before the native
+// catalog below is loaded; it must stay the first helper import of this file.
+import './helpers/dsh-peers.mjs'
+import { resolveDshPeer } from './helpers/dsh-peers.mjs'
 import {
   describeRun, httpJson, makeHome, readReport, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
@@ -23,6 +28,14 @@ const combo = JSON.parse(await import('node:fs').then(fs => fs.readFileSync(join
 const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
 const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
 const dshRequire = createRequire(join(dshDir, 'apps', 'cli', 'package.json'))
+
+/**
+ * The native input modality list, read from the pinned dsh catalog module the
+ * gateway imports. The test must not keep its own copy: the point of the case
+ * below is that the gateway and this expectation move with upstream together.
+ */
+const { MODALITIES: NATIVE_MODALITIES } = await import(
+  pathToFileURL(resolveDshPeer('@deepseek-ai/dsh-llm-pi-ai/src/catalog.ts')).href)
 
 /** Model fields the phone may edit; a previous entry's other fields are deployment-owned. */
 const PHONE_MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input'])
@@ -282,6 +295,47 @@ test('an invalid configuration is refused with the reason, and nothing is persis
     assert.deepEqual(state.saved, { selection: false, routes: false, asr: false }, 'a refused write persists nothing')
     assert.deepEqual(state.routes.map(route => route.provider), ['deepseek-official', 'minimax-cn'],
       'a refused write leaves the deployment route in place')
+  } finally {
+    await stop(home)
+  }
+})
+
+test('the gateway accepts every native input modality', async () => {
+  const home = freshHome()
+  const double = await modelDouble()
+  const { port } = await boot(home, double.env)
+  try {
+    const admin = await signIn(port)
+    assert.ok(Array.isArray(NATIVE_MODALITIES) && NATIVE_MODALITIES.length > 0,
+      'the pinned dsh catalog must export a non-empty MODALITIES runtime list')
+    // Each native modality is submitted on its own route draft, so a refusal
+    // names the modality the gateway failed to accept rather than one of many.
+    for (const modality of NATIVE_MODALITIES) {
+      const saved = await httpJson(port, '/gateway/route', { token: admin, expect: false, body: {
+        provider: 'native-modalities',
+        api: 'openai-completions',
+        baseURL: 'https://native.example/v1',
+        models: [{ id: `native-${modality}`, name: `Native ${modality}`, input: [modality] }],
+      } })
+      assert.equal(saved.status, 200, `native modality "${modality}" must be accepted: ${saved.text}`)
+      assert.deepEqual(saved.json.route.models[0].input, [modality],
+        'the read-back echoes the modality the gateway accepted')
+    }
+
+    // A value outside the native list is still refused, with the route error
+    // code. Picking it from a pool rather than hard-coding one keeps a future
+    // native modality from being asserted as invalid.
+    const unsupported = ['audio', 'video', 'pdf'].find(modality => !NATIVE_MODALITIES.includes(modality))
+    assert.ok(unsupported !== undefined,
+      'the native list now covers every probe value; choose a value outside it')
+    const refused = await httpJson(port, '/gateway/route', { token: admin, expect: false, body: {
+      provider: 'native-modalities',
+      api: 'openai-completions',
+      baseURL: 'https://native.example/v1',
+      models: [{ id: 'unsupported', name: 'Unsupported', input: [unsupported] }],
+    } })
+    assert.equal(refused.status, 400, refused.text)
+    assert.equal(refused.json.error.code, 'gateway/invalid-route')
   } finally {
     await stop(home)
   }

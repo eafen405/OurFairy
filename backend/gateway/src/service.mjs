@@ -12,6 +12,28 @@
  */
 import { Service } from '@deepseek-ai/cordis'
 
+/**
+ * The native catalog owns the modality vocabulary. Importing the runtime value
+ * instead of keeping a local set means an upstream modality is accepted here
+ * without a product edit.
+ *
+ * The import is caught so the failure can be thrown from the service
+ * constructor: a module-scope throw is reported by the loader only as "failed
+ * to import", while a construction failure carries this message into the boot
+ * diagnostic. There is deliberately no fallback list.
+ */
+const NATIVE_CATALOG = '@deepseek-ai/dsh-llm-pi-ai/src/catalog.ts'
+let MODALITIES
+let catalogFailure
+try {
+  ({ MODALITIES } = await import(NATIVE_CATALOG))
+} catch (error) {
+  catalogFailure = error
+}
+if (!Array.isArray(MODALITIES) || MODALITIES.length === 0) {
+  catalogFailure ??= new Error(`"${NATIVE_CATALOG}" exports no MODALITIES list`)
+}
+
 
 /** One refusal with the HTTP status and product error code the route answers with. */
 export class GatewayError extends Error {
@@ -28,9 +50,6 @@ const PROVIDER_ID = /^[a-z][a-z0-9-]*$/
 
 /** Fields a shared model entry may declare. */
 const MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input'])
-
-/** Input modalities this product declares; the adapter still owns the endpoint's truth. */
-const MODALITIES = new Set(['text', 'image'])
 
 /** Draft fields outside `models` reshape every model on the route. */
 const ROUTE_WIDE_FIELDS = ['api', 'baseURL', 'apiKeyEnv']
@@ -66,7 +85,7 @@ function modelEntry(entry, index) {
   if (entry.input !== undefined) {
     if (!Array.isArray(entry.input) || entry.input.length === 0) throw invalid(`models[${index}].input must be a non-empty array`)
     for (const modality of entry.input) {
-      if (!MODALITIES.has(modality)) throw invalid(`models[${index}].input does not know modality "${String(modality)}"`)
+      if (!MODALITIES.includes(modality)) throw invalid(`models[${index}].input does not know modality "${String(modality)}"`)
     }
   }
   return { ...entry }
@@ -149,6 +168,11 @@ function keepDeploymentFields(previous, draft) {
 export class GatewayService extends Service {
   constructor(ctx) {
     super(ctx, 'ourfairyGateway')
+    if (catalogFailure !== undefined) {
+      throw new Error(`cannot load the native input modality list from "${NATIVE_CATALOG}";`
+        + ` install the @deepseek-ai/dsh-llm-pi-ai peer at the pinned dsh version (${catalogFailure.message})`,
+      { cause: catalogFailure })
+    }
   }
 
   /** The native settings service, or a named refusal when the profile cannot be edited. */
