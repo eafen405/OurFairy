@@ -35,11 +35,14 @@ const bundlePatch = join(repoRoot, combo.backend.bundlePathInRepo, 'cordis.patch
 const historyExport = '@deepseek-ai/dsh-agent/session-history'
 
 /**
- * The rows the bundle mounts, read through dsh's own patch loader. Flattened,
- * so a row inside a group is one row here just as it is one mounted row.
+ * The capability rows the bundle mounts, read through dsh's own patch loader.
+ * Flattened, so a row inside a group is one row here just as it is one mounted
+ * row; the group rows themselves are segment labels, not capabilities, and
+ * keeping them would re-expand their children when a caller flattens again.
  */
 function composedRows() {
   return flattenEntries(boot.composeEntries([boot.loadOverlayPatches('dsh', bundlePatch)]))
+    .filter(row => row.group !== true)
 }
 
 /** Resolve the public export from the same installation the launcher boots. */

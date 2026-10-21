@@ -12,11 +12,12 @@ default file/shell/sandbox rows with host-wide access. The scoped
 
 ## Row set and package set
 
-`cordis.patch.yml` is the row set: it is the file the profile loads. Its section
-comments group the rows — session/model/prompt core, model-request recovery and
-tool-result retention, durable session base, process-local support services, the
-HTTP carrier and identity paths, owned sessions and chat, the scoped file/shell
-adapters, and attachments/speech.
+`cordis.patch.yml` is the row set: it is the file the profile loads. Its
+top-level `insert` is two loader-native groups. `kernel` holds what one boot
+needs to establish a session, run a model turn, and raise the Web carrier and
+its connection; `plugins` holds the product capabilities and the native tool and
+support rows that exist only for them. The split rule and each row's segment sit
+in that file, next to the rows.
 
 Read that file for the inventory. The row ids and their packages have one
 authority, and it is the file the loader reads; a hand-kept table here listed
