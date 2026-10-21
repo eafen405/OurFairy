@@ -47,11 +47,14 @@
 
 `/gateway/route` 接受 `provider`、`displayName`、`api`、`baseURL`、`apiKeyEnv`、`models`。
 其余字段返回 400 `gateway/invalid-route`，不会被静默丢弃。`models` 每项接受 `id`、`name`、
-`contextWindow`、`maxTokens`、`input`；思考能力（`reasoningEfforts`）与协议兼容开关
-（`compat`）由部署声明，手机改写路由时按模型 id 保留，不会因保存而丢失。适配器仍是协议与
-配置合法性的权威，其拒绝信息原样返回。写回时只发送上述六个字段；读取附带的 `editable`、
-`declared`、`credential`、`inUse` 是只读事实，写回时若一并发送会被 400
-`gateway/invalid-route` 拒绝，而不是静默忽略。
+`contextWindow`、`maxTokens`、`input`。保存时以同 id 的先前模型条目为底，只覆盖这五个可编辑
+字段；其余字段（如部署声明的思考能力 `reasoningEfforts`、协议兼容开关 `compat`，以及上游
+将来新增的模型级字段）默认保留，不会因保存而丢失。草稿省略的可编辑字段按「未设置」清除，
+不继承旧值；新模型 id 没有可保留的先前条目，按草稿原样写入。路由级部署字段（例如
+`retryPolicy`）仍由部署层拥有，不会因为这次保存被复制进用户层。适配器仍是协议与配置合法性
+的权威，其拒绝信息原样返回。写回时只发送上述六个字段；读取附带的 `editable`、`declared`、
+`credential`、`inUse` 是只读事实，写回时若一并发送会被 400 `gateway/invalid-route` 拒绝，
+而不是静默忽略。
 
 修改会影响**正在运行的回复所用路由**时返回 409 `chat/route-in-use`，消息列出会话与模型；
 删除未在用的路由不受影响。按实际受影响范围判定：改端点、协议、凭据引用等路由级字段影响该

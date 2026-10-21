@@ -14,7 +14,9 @@
     另单独断言 `acceptedSeq` 相等；
   - 读回投影里该 `requestId` 的 role 1 消息恰好一条，且 `messageId` 等于 receipt 的 `messageId`；
   - 同一标识改文本仍 409 且 `error.code === 'chat/request-conflict'`；
-  - 冲突被拒后再读，该标识仍只有一条用户消息（拒绝路径不写入）。
+  - 冲突被拒后再读，该标识仍只有一条用户消息（拒绝路径不写入）；
+  - 用例结束前等到 `replyStatus === 0`，让被受理的那一轮回复落定，避免下一条用例的
+    session artifact 快照被仍在写入的回复扰动（见「全量入口」）。
 - 没有断言 transcript 单元内部的 `receipts` 映射，只断言端点返回与读回投影。
 
 既有并发重试 + 重启用例 `a stable send is durably accepted once across concurrent retries and backend restart`
@@ -77,8 +79,31 @@ node --test --test-name-pattern="the same request id sent twice in a row produce
 
 ## 全量入口
 
-提交时由 pre-commit 钩子运行 `npm test` 与 `npm run combo:verify`；结果见提交记录与下节。
-（若钩子出现与本票无关的 flake，会在本节补记重跑情况与 `--no-verify` 理由。）
+功能提交 `40ad8e3`（后 amend 为 `6818be7`）经仓库 pre-commit 钩子
+（`.githooks/pre-commit`：`npm test` + `npm run combo:verify`）通过，退出码 0，未使用
+`--no-verify`。
+
+合并 `integration/spec-135`（该分支已先合入 `40ad8e3`）得到 `4c3e01e`。对合并提交的 amend
+第一次在钩子里变红，失败的是既有用例
+`all remote paths reject anonymous and foreign owners, including administrator, before cold resume`：
+它的 `artifacts()` 快照在两次拒绝调用之间发生变化。原因是本票新用例结束时没有等被受理的那一轮
+回复落定，回复仍在写 alice 的 session artifact——这是新用例引入的测试隔离问题，不是产品缺陷。
+修在 `7f3d979`：新用例末尾等待 `replyStatus === 0` 且出现 role 2 消息后才返回，幂等断言未改。
+
+修完后钩子仍两次变红，失败的都是与本票无关的用例，且各自在隔离运行时通过：
+
+| 重跑 | 失败用例 | 隔离复跑 |
+| --- | --- | --- |
+| 1 | `speech proxy uses configured provider, returns editable text, and reports actual failures`（`speech/timeout`） | `node --test tests/speech.test.mjs` 2/2 通过 |
+| 2 | `read intervals have inclusive original positions, omit tool results, and bound message text`（`8001 !== 8000`）与 `stopping the current reply preserves accepted queued input for the next wake`（`2 !== 1`） | 各自 `--test-name-pattern` 复跑通过；`node --test tests/conversation-search.test.mjs` 6/6 通过 |
+
+两次失败时宿主 `load average` 为 23–42（32 核，同仓库其他票的 worktree 并行在跑），属负载导致的
+时序 flake；第 3 次重跑通过：`npm test` 235/235，`npm run combo:verify` 输出
+`combo: combination verified`。全程未使用 `--no-verify`，原始输出未入库（证据协议）。
+
+随后 `integration/spec-135` 又前进到 `98f6d3b`（并入 #163、#164）。本分支再次合入该 tip 得到
+`01d0dde`，无冲突；合并后 `node --test tests/remote-chat.test.mjs` 9/9 通过。合并进来的
+`units.mjs` 改动只涉及任务状态（`taskStatusOf`），未触及 `receipts` / `receiptFrom`。
 
 ## 未完成项
 
