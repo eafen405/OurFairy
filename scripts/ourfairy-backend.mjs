@@ -59,7 +59,13 @@ function readCombination() {
   return backend
 }
 
-const COMBINATION = readCombination()
+const COMBINATION = (() => {
+  try {
+    return readCombination()
+  } catch (error) {
+    return cliFailure(error)
+  }
+})()
 const PROFILE_NAME = COMBINATION.profileName
 const BUNDLE_PACKAGE = COMBINATION.bundlePackage
 const PROBE_PACKAGE = COMBINATION.probePackage
@@ -67,9 +73,22 @@ const BUNDLE_DIR = COMBINATION.bundlePathInRepo
 const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
 const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
 
-function fail(message, code = 1) {
-  process.stderr.write(`ourfairy-backend: ${message}\n`)
-  process.exit(code)
+/**
+ * Raise one launcher failure.
+ *
+ * Internal failures throw instead of exiting: `doctor` wraps each check in
+ * `try/catch` and records what it caught, so a check that exits the process
+ * could never appear in its report. The CLI boundary at the bottom of this
+ * file turns a throw into the launcher's stderr prefix and non-zero exit.
+ */
+function fail(message) {
+  throw new Error(message)
+}
+
+/** The CLI boundary: one failure message with the launcher prefix, then exit non-zero. */
+function cliFailure(error) {
+  process.stderr.write(`ourfairy-backend: ${error instanceof Error ? error.message : String(error)}\n`)
+  process.exit(1)
 }
 
 function parseArgv(argv) {
@@ -875,28 +894,32 @@ function commandDoctor(layout, options) {
   return failed.length === 0 ? 0 : 1
 }
 
-const options = parseArgv(process.argv)
-const layout = layoutOf(options)
-if (process.argv[2] === '--help' || options.command === 'help' || options.command === undefined) {
-  process.stdout.write('usage: ourfairy-backend <probe|boot-product|start|stop|status|doctor> [--turn] [--report <path>] [--home <dir>] [--json] [--reinstall] [--allow-drift] [--patch <path>]...\n')
-  process.exit(options.command === undefined ? 2 : 0)
-}
-// Only the overlay boots apply `--patch`. Accepting it silently elsewhere would
-// report a fixture that never mounted, which is the failure this flag exists to
-// make impossible: boot-product's contract is the product profile with no overlay.
-if (options.patches.length > 0 && options.command !== 'start' && options.command !== 'probe') {
-  fail(`--patch applies to probe and start only; '${options.command}' does not mount profile overlays`)
-}
-
-const exitCode = await (async () => {
-  switch (options.command) {
-    case 'probe': return commandProbe(layout, options)
-    case 'boot-product': return commandBootProduct(layout, options)
-    case 'start': return await commandStart(layout, options)
-    case 'stop': return await commandStop(layout, options)
-    case 'status': return commandStatus(layout, options)
-    case 'doctor': return commandDoctor(layout, options)
-    default: fail(`unknown command ${JSON.stringify(options.command)}; expected probe|boot-product|start|stop|status|doctor`)
+try {
+  const options = parseArgv(process.argv)
+  const layout = layoutOf(options)
+  if (process.argv[2] === '--help' || options.command === 'help' || options.command === undefined) {
+    process.stdout.write('usage: ourfairy-backend <probe|boot-product|start|stop|status|doctor> [--turn] [--report <path>] [--home <dir>] [--json] [--reinstall] [--allow-drift] [--patch <path>]...\n')
+    process.exit(options.command === undefined ? 2 : 0)
   }
-})()
-process.exit(exitCode)
+  // Only the overlay boots apply `--patch`. Accepting it silently elsewhere would
+  // report a fixture that never mounted, which is the failure this flag exists to
+  // make impossible: boot-product's contract is the product profile with no overlay.
+  if (options.patches.length > 0 && options.command !== 'start' && options.command !== 'probe') {
+    fail(`--patch applies to probe and start only; '${options.command}' does not mount profile overlays`)
+  }
+
+  const exitCode = await (async () => {
+    switch (options.command) {
+      case 'probe': return commandProbe(layout, options)
+      case 'boot-product': return commandBootProduct(layout, options)
+      case 'start': return await commandStart(layout, options)
+      case 'stop': return await commandStop(layout, options)
+      case 'status': return commandStatus(layout, options)
+      case 'doctor': return commandDoctor(layout, options)
+      default: fail(`unknown command ${JSON.stringify(options.command)}; expected probe|boot-product|start|stop|status|doctor`)
+    }
+  })()
+  process.exit(exitCode)
+} catch (error) {
+  cliFailure(error)
+}
