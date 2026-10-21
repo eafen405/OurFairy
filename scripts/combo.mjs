@@ -178,7 +178,6 @@ function androidSourceRow(root, source) {
     key: 'android source',
     role: source?.role ?? null,
     path,
-    branch: source?.branch ?? null,
     lock: 'declaration',
     expected,
   }

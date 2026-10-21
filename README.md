@@ -100,8 +100,7 @@ cd android
   是假的，Firebase/Crashlytics 运行时不可用——任何崩溃上报或真机结论都必须声明这一点。
 
 实测的 SDK 工具链：客户端的 `compileSdk` 解析到 `android-37.2` 平台（不是 `android-37.0`，取值见
-`android/app/build.gradle.kts`），AGP 会自动安装该平台，首次安装会拖长构建；构建实测用的是
-`build-tools 37.0.0` 与 NDK `28.2.13676358`。
+`android/app/build.gradle.kts`），AGP 会自动安装该平台，首次安装会拖长构建。
 
 测试通过、APK 构建成功、真机验收是三件不同的事，分别报告。
 

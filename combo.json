@@ -1,7 +1,6 @@
 {
   "schemaVersion": 1,
   "product": "OurFairy v1",
-  "description": "The version combination OurFairy v1 builds and tests against: this repository's integration branch, the pinned dsh fork commit, and the imported Android client's source commit.",
   "repos": {
     "ourfairy": {
       "role": "product",

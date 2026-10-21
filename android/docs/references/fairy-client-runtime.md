@@ -27,3 +27,10 @@ flowchart LR
 ```
 
 客户端装配 module 的 interface 收窄到产品入口所需的依赖，装配 seam 留在现有 `di/`。远程契约和 Android adapter 沿用现有实现，调用方因此不必理解本地模型、媒体和工作区的初始化顺序。启动路径由 `app/src/test/java/me/rerere/rikkahub/ClientStartupTest.kt` 覆盖，远程协议与恢复由 `app/src/test/java/me/rerere/rikkahub/data/remote/` 下的测试覆盖，两者都由 `./gradlew test` 执行。
+
+## 2026-10-19 的核验数字（日期化记录）
+
+以下数字是 2026-10-19 那一轮核验记下的结果，只作当日的记录，不作现行数字引用：
+
+- Kotlin 文件数：`app/src/main/java` 86 个，`ui/src/main/java` 10 个。
+- 客户端 JVM 测试：275 项通过（app 202、ui 20、highlight 53）。

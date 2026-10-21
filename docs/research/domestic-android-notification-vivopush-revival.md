@@ -1,4 +1,4 @@
-> 2026-10-20 状态：已被 [Android / vivo 通知审计](android-notification-audit.md) 取代。本文记录 2026-10-14 的判断，不描述当前实现。
+> 2026-10-20 状态：日期化记录，已被 [Android / vivo 通知审计](android-notification-audit.md) 取代。本文记录 2026-10-14 的判断，不描述当前实现。
 
 # vivo S50（不依赖 Google）通知通道能力边界 — 事实层
 
