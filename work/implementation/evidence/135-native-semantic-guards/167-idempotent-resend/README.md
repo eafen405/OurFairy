@@ -14,7 +14,9 @@
     另单独断言 `acceptedSeq` 相等；
   - 读回投影里该 `requestId` 的 role 1 消息恰好一条，且 `messageId` 等于 receipt 的 `messageId`；
   - 同一标识改文本仍 409 且 `error.code === 'chat/request-conflict'`；
-  - 冲突被拒后再读，该标识仍只有一条用户消息（拒绝路径不写入）。
+  - 冲突被拒后再读，该标识仍只有一条用户消息（拒绝路径不写入）；
+  - 用例结束前等到 `replyStatus === 0`，让被受理的那一轮回复落定，避免下一条用例的
+    session artifact 快照被仍在写入的回复扰动（见「全量入口」）。
 - 没有断言 transcript 单元内部的 `receipts` 映射，只断言端点返回与读回投影。
 
 既有并发重试 + 重启用例 `a stable send is durably accepted once across concurrent retries and backend restart`
@@ -77,14 +79,17 @@ node --test --test-name-pattern="the same request id sent twice in a row produce
 
 ## 全量入口
 
-## 全量入口
+功能提交 `40ad8e3` 与其 amend `6818be7` 都经仓库 pre-commit 钩子
+（`.githooks/pre-commit`：`npm test` + `npm run combo:verify`）通过，`git commit` 退出码 0，
+未使用 `--no-verify`。
 
-本票的功能提交（`6818be7`，其前身 `40ad8e3`）经仓库 pre-commit 钩子
-（`.githooks/pre-commit`）通过，`git commit` 退出码 0，即同一棵树上 `npm test` 与
-`npm run combo:verify` 都通过（输出末行 `combo: combination verified`）；未使用
-`--no-verify`。原始输出未入库（证据协议），需要时在同一提交上重放这两条命令。
-
-`6818be7` 相对 `40ad8e3` 只 amend 了这份证据文本，不改测试或生产代码，并再次经过同一钩子。
+合并 `integration/spec-135`（该分支已先合入 `40ad8e3`）得到 `4c3e01e`；对合并提交的 amend
+第一次在钩子里变红，失败的是既有用例
+`all remote paths reject anonymous and foreign owners, including administrator, before cold resume`：
+它的 `artifacts()` 快照在两次拒绝调用之间发生变化。原因是本票新用例结束时没有等被受理的那一轮
+回复落定，回复仍在写 alice 的 session artifact——这是新用例引入的测试隔离问题，不是产品缺陷。
+新用例末尾补上等待 `replyStatus === 0` 后，`node --test tests/remote-chat.test.mjs` 9/9 通过，
+再经钩子重跑全量。原始输出未入库（证据协议）；本证据所在的提交即通过上述钩子的最终树。
 
 ## 未完成项
 

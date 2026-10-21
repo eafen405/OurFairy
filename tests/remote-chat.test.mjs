@@ -109,6 +109,9 @@ test('the same request id sent twice in a row produces one message', async () =>
   const after = await request('/chat/read', alice.token, { sessionId })
   assert.equal(after.body.projection.messages.filter(message => message.role === 1 && message.requestId === body.requestId).length, 1,
     'a rejected conflicting retry writes nothing')
+  // Let the one accepted turn settle so the artifact snapshot of the next case is stable.
+  await eventually(() => request('/chat/read', alice.token, { sessionId }), r => r.body.projection?.replyStatus === 0
+    && r.body.projection.messages.some(message => message.role === 2))
 })
 
 function artifacts() {
