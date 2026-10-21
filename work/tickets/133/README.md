@@ -35,8 +35,9 @@ GitHub issue 是发布权威，原生 blocked-by 是实时状态权威；本目�
 | `jobs` | `src/jobs.mjs`、`src/units.mjs`：`events`/`list`/`readAt`/`get`/`kill`/`generation` | 保留 |
 | `sessionProjections` | `src/units.mjs`：`register`；`src/runtime.mjs`：`stateOf` | 保留 |
 
-删除 `identity`/`tools` 的传递保证：`ourfairySessions` 自己 inject `identity`；`agents`/`agentLoop`
-自己 inject `tools`。chat 不再直接读这两个服务，但组合里的可用性仍由保留的声明保证。
+删除 `identity`/`tools` 的传递保证：`ourfairySessions` 自己 inject `identity`；`agentLoop`
+（pinned dsh 的 `AgentLoop.inject`）自己 inject `tools`。chat 不再直接读这两个服务，但组合里的
+可用性仍由保留的声明保证。
 
 ## 已定决定
 
