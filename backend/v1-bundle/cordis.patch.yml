@@ -201,6 +201,13 @@
       config:
         trustedHosts: !!js (process.env.OURFAIRY_TRUSTED_HOSTS ?? '').split(',').filter(Boolean)
 
+    # The product transport envelope: the bounded JSON body reader, the bearer
+    # parser, the JSON writer and the POST wrapper the product routes share. The
+    # row is empty on purpose — it exists so the bundle declares and mounts the
+    # package, which is what puts it in the package and row checks.
+    - id: http
+      name: '@ourfairy/dsh-http'
+
     # The identity module: business SQLite beside (never inside) the dsh session
     # logs, plus the `/identity/*` request paths and the session-token
     # authenticator that admits `/api` requests for the right principal.

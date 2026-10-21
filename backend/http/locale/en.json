@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "OurFairy HTTP transport",
+    "description": "The product transport envelope: bounded JSON request reading, bearer credential parsing, JSON response writing, and the POST wrapper the product routes share."
+  }
+}

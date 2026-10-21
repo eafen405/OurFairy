@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.mjs",
     "./http": "./src/http.mjs",
+    "./routes": "./src/routes.mjs",
     "./owner": "./src/owner.mjs",
     "./locale/*.json": "./locale/*.json"
   },
@@ -19,6 +20,7 @@
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.5-alpha.1",
-    "@deepseek-ai/schemastery": "^3.18.5-alpha.1"
+    "@deepseek-ai/schemastery": "^3.18.5-alpha.1",
+    "@ourfairy/dsh-http": "^0.1.0"
   }
 }
