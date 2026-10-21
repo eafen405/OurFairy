@@ -458,17 +458,6 @@ export class IdentityStore {
     return row === undefined ? undefined : publicUser(row)
   }
 
-  /** One user by login name. */
-  userByName(name) {
-    const row = this.#db.prepare('SELECT * FROM users WHERE name = ? AND deleted_at IS NULL').get(String(name ?? '').trim())
-    return row === undefined ? undefined : publicUser(row)
-  }
-
-  /** Every live user in short-number order. */
-  listUsers() {
-    return this.#db.prepare('SELECT * FROM users WHERE deleted_at IS NULL ORDER BY short_id').all().map(publicUser)
-  }
-
   /** Mint one invite code for an administrator. */
   createInvite(adminShortId) {
     return this.#transaction(() => {
@@ -483,18 +472,6 @@ export class IdentityStore {
         .run(code, admin.id, now, now)
       return { code, createdAt: now }
     })
-  }
-
-  /** One invite's state, without exposing who redeemed it. */
-  inviteState(code) {
-    const row = this.#db.prepare('SELECT * FROM invites WHERE code = ? AND deleted_at IS NULL').get(canonicalInviteCode(code))
-    if (row === undefined) return undefined
-    return {
-      code: row.code,
-      createdAt: row.created_at,
-      redeemed: row.redeemed_by !== null,
-      redeemedAt: row.redeemed_at,
-    }
   }
 
   /**
@@ -563,15 +540,6 @@ export class IdentityStore {
       'UPDATE sessions SET revoked_at = ?, updated_at = ? WHERE digest = ? AND revoked_at IS NULL AND deleted_at IS NULL',
     ).run(now, now, sessionTokenDigest(token))
     return info.changes > 0
-  }
-
-  /** Live session count for one short number. */
-  liveSessionCount(shortId) {
-    const user = this.#db.prepare('SELECT id FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(shortId))
-    if (user === undefined) return 0
-    return Number(this.#db.prepare(
-      'SELECT COUNT(*) AS value FROM sessions WHERE user_id = ? AND deleted_at IS NULL AND revoked_at IS NULL AND expires_at > ?',
-    ).get(user.id, this.now()).value)
   }
 
   /** Mint and store one session for a user row id. */
