@@ -30,13 +30,17 @@
 
 ## 命令与结果（实际执行）
 
+提交 `c0459d3`（实现 + 证据），之后 `git merge integration/spec-134` 合入集成分支 tip
+`1d34620`（含 #160 的 `03-absence-attribution` 提交），合并提交 `4f695c7`，无冲突。
+下表是**合并后**在 `4f695c7` 上的结果；括号内为合并前 `c0459d3` 的结果，两者一致。
+
 | 命令 | 结果 |
 | --- | --- |
-| `node --test tests/native-capabilities.test.mjs` | 7 pass / 0 fail |
-| `node --test tests/bundle-packages.test.mjs` | 9 pass / 0 fail |
-| `npm run backend:doctor` | 全部 ok，含 `native capabilities: llm-retry:…, spill-local:…, spill-policy:…, subprocess:…, @deepseek-ai/dsh-agent/session-history` |
-| `npm test` | 235 pass / 0 fail（`tests 235`，`duration_ms` 117001） |
-| `npm run combo:verify` | 三行 ok（ourfairy / dsh / android source） |
+| `node --test tests/native-capabilities.test.mjs` | 7 pass / 0 fail（合并前同） |
+| `node --test tests/bundle-packages.test.mjs` | 9 pass / 0 fail（合并前同） |
+| `npm run backend:doctor` | 全部 ok，含 `native capabilities: llm-retry:…, spill-local:…, spill-policy:…, subprocess:…, @deepseek-ai/dsh-agent/session-history`（合并前同） |
+| `npm test` | 235 pass / 0 fail（合并后 `duration_ms` 122744；合并前 235 pass，`duration_ms` 117001；提交钩子内也跑过一次 235 pass） |
+| `npm run combo:verify` | 三行 ok（ourfairy @ `4f695c7` / dsh / android source；合并前三行同样 ok） |
 
 红-绿对照：临时把 `nativeCapabilityFailures` 的 `flattenEntries` 去掉后重跑
 `node --test tests/native-capabilities.test.mjs`，`a required row nested in a group is still
