@@ -1,0 +1,9 @@
+{
+  "parent": 134,
+  "tickets": [
+    { "local": "01-native-group-aware.md", "issue": 159 },
+    { "local": "02-bundle-groups.md", "issue": 161 },
+    { "local": "03-absence-attribution.md", "issue": 160 },
+    { "local": "04-closeout.md", "issue": 162 }
+  ]
+}
