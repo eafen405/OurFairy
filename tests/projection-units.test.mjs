@@ -20,7 +20,7 @@ import { test } from 'node:test'
 // module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
 import {
-  SESSION, attachment, event, transcriptLog, userMessage, workCases, workLog,
+  SESSION, attachment, event, job, transcriptLog, userMessage, workCases, workLog,
 } from './fixtures/projection-logs.mjs'
 
 const units = await import('../backend/chat/src/units.mjs')
@@ -58,6 +58,24 @@ test('the work unit reproduces the frozen task and activity values', () => {
     assert.deepEqual({ tasks, activity }, expected.workCases[index],
       `work unit must match the frozen values for running=${running}, ${liveJobs.length} live jobs, ${log.length} events`)
   })
+})
+
+test('an unmapped native job status is explicit unknown, not an absent field or a quiet session', () => {
+  // Upstream may add a native JobStatus member before this product maps it.
+  // The wire status must still be the numeric unknown, and the activity
+  // summary must not read the unconverged task as quiet (1) or active (2).
+  const log = [event(0, 'jobs/lifecycle', { generation: 'g1', phase: 'registered', job: job({ status: 'paused' }) })]
+  const state = fold(units.workDefinition, log)
+  const live = { ...job({ status: 'paused' }), owner: SESSION }
+
+  const available = units.tasksAndActivityAt(state, { jobs: { generation: 'g1', list: () => [live] } }, SESSION, false, 0)
+  assert.ok(Object.hasOwn(available.tasks[0], 'status'), 'the status field must be present, never undefined')
+  assert.equal(available.tasks[0].status, 0)
+  assert.equal(available.activity.status, 0)
+
+  const unavailable = units.tasksAndActivityAt(state, { jobs: { generation: 'g1', list: () => [] } }, SESSION, false, 0)
+  assert.equal(unavailable.tasks[0].status, 0)
+  assert.equal(unavailable.activity.status, 0)
 })
 
 test('the work unit keeps only pending identities, not a second inbox copy', () => {
