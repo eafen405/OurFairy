@@ -36,7 +36,7 @@ test('the store stays inside the package: four domain faces and nothing else', (
 
   // The width a consumer used to receive: no store member outside its domain
   // may leak through any face.
-  const leaked = ['authenticate', 'close', 'createInvite', 'now',
+  const leaked = ['authenticate', 'close', 'createInvite',
     'register', 'seedPhaethon', 'signIn', 'signOut']
   for (const [domain, face] of Object.entries(identity)) {
     for (const name of leaked) {
@@ -45,7 +45,7 @@ test('the store stays inside the package: four domain faces and nothing else', (
   }
 })
 
-test('the store prototype declares exactly the nineteen methods spec 132 named', () => {
+test('the store publishes exactly the nineteen methods spec 132 named', () => {
   const published = Object.getOwnPropertyNames(IdentityStore.prototype)
     .filter(name => name !== 'constructor')
     .sort()
@@ -54,7 +54,11 @@ test('the store prototype declares exactly the nineteen methods spec 132 named',
     'groupsForMember', 'insertUpload', 'ownsGroup', 'pendingDeliveries', 'prepareDelivery',
     'prepareDeliveryFile', 'readUpload', 'register', 'seedPhaethon', 'signIn', 'signOut',
     'updateUpload', 'userByShortId',
-  ], 'the prototype surface is exactly the nineteen methods spec 132 named')
+  ], 'the published surface is exactly the nineteen methods spec 132 named')
+  // A method assigned to the instance would not appear on the prototype, so the
+  // list above would miss it; the store keeps nothing callable off the prototype.
+  assert.deepEqual(Object.getOwnPropertyNames(store).filter(name => typeof store[name] === 'function'), [],
+    'no method may hide on the instance, outside the prototype list')
 })
 
 test('the delivery read stays inside the package', () => {

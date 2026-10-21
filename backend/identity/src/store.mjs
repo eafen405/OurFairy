@@ -91,12 +91,14 @@ function assertPassword(password) {
 /** The identity module's persistent business state. */
 export class IdentityStore {
   #db
+  #now
   #sessionTtlMilliseconds
 
   constructor({ path, sessionTtlDays = 30, now = () => Date.now() } = {}) {
     if (typeof path !== 'string' || path === '') {
       throw new IdentityError(500, 'identity/misconfigured', 'the identity store needs a database path')
     }
+    this.#now = now
     mkdirSync(dirname(path), { recursive: true })
     this.#db = new DatabaseSync(path)
     try {
@@ -108,7 +110,6 @@ export class IdentityStore {
       throw error
     }
     this.#sessionTtlMilliseconds = sessionTtlDays * DAY_MILLISECONDS
-    this.now = now
   }
 
   /**
@@ -175,7 +176,7 @@ export class IdentityStore {
         }
         return existing
       }
-      const now = this.now()
+      const now = this.#now()
       this.#db.prepare(`INSERT INTO deliveries
         (delivery_id,sender_short_id,sender_session_id,recipient_short_id,recipient_session_id,text,attachments_json,status,created_by,updated_by,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(row.deliveryId,row.senderShortId,row.senderSessionId,row.recipientShortId,
@@ -191,7 +192,7 @@ export class IdentityStore {
       const status = row.files.every(file => file.prepared !== null) ? 0 : 2
       this.#db.prepare(`UPDATE deliveries SET attachments_json = ?, status = ?,
         updated_by = sender_short_id, updated_at = ? WHERE delivery_id = ? AND deleted_at IS NULL`)
-        .run(JSON.stringify(row.files),status,this.now(),id)
+        .run(JSON.stringify(row.files),status,this.#now(),id)
       return this.#readDelivery(id)
     })
   }
@@ -201,7 +202,7 @@ export class IdentityStore {
   }
   completeDelivery(id, { messageId, acceptedSeq }) {
     this.#db.prepare('UPDATE deliveries SET status = 1, message_id = ?, accepted_seq = ?, updated_by = sender_short_id, updated_at = ? WHERE delivery_id = ? AND deleted_at IS NULL')
-      .run(messageId,acceptedSeq,this.now(),id)
+      .run(messageId,acceptedSeq,this.#now(),id)
   }
 
   /** Insert an opaque upload receipt after the staging file exists. */
@@ -228,7 +229,7 @@ export class IdentityStore {
     if (entries.some(([key]) => !Object.hasOwn(columns, key))) throw new Error('unknown upload lifecycle field')
     const values = entries.map(([key, value]) => key === 'original' || key === 'image' ? value === null ? null : JSON.stringify(value) : value)
     this.#db.prepare(`UPDATE uploads SET ${entries.map(([key]) => columns[key] + ' = ?').join(', ')},
-      updated_by = owner_short_id, updated_at = ? WHERE upload_id = ? AND deleted_at IS NULL`).run(...values,this.now(),id)
+      updated_by = owner_short_id, updated_at = ? WHERE upload_id = ? AND deleted_at IS NULL`).run(...values,this.#now(),id)
   }
 
   /** A group's public state; membership is read from the same business store. */
@@ -260,7 +261,7 @@ export class IdentityStore {
         throw new IdentityError(403, 'groups/forbidden', 'only Phaethon may create a group')
       }
       if (!this.userByShortId(ownerShortId)) throw new IdentityError(404, 'groups/unknown-user', 'no active user has that short number')
-      const now = this.now()
+      const now = this.#now()
       const info = this.#db.prepare('INSERT INTO groups (name, owner_short_id, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
         .run(groupName, ownerShortId, callerShortId, now, now)
       const groupId = Number(info.lastInsertRowid)
@@ -285,7 +286,7 @@ export class IdentityStore {
         throw new IdentityError(409, 'groups/owner-required', 'the designated group owner must remain a member')
       }
       const member = this.#db.prepare('SELECT * FROM group_members WHERE group_id = ? AND user_short_id = ?').get(groupId, userShortId)
-      const now = this.now()
+      const now = this.#now()
       if (action === 1 && !member) {
         this.#db.prepare('INSERT INTO group_members (group_id, user_short_id, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
           .run(groupId, userShortId, callerShortId, callerShortId, now, now)
@@ -328,7 +329,7 @@ export class IdentityStore {
       if (existing !== undefined && existing.deleted_at === null) {
         if (password !== undefined && password !== '' && existing.password === null) {
           this.#db.prepare('UPDATE users SET password = ?, updated_at = ? WHERE id = ?')
-            .run(hashPassword(assertPassword(password)), this.now(), existing.id)
+            .run(hashPassword(assertPassword(password)), this.#now(), existing.id)
           return { user: publicUser(this.#db.prepare('SELECT * FROM users WHERE id = ?').get(existing.id)), created: false }
         }
         return { user: publicUser(existing), created: false }
@@ -340,7 +341,7 @@ export class IdentityStore {
       if (this.#db.prepare('SELECT 1 FROM users WHERE name = ?').get(login) !== undefined) {
         throw new IdentityError(409, 'identity/name-taken', 'that name is already registered')
       }
-      const now = this.now()
+      const now = this.#now()
       const info = this.#db.prepare(
         'INSERT INTO users (short_id, name, is_admin, password, created_at, updated_at) VALUES (?, ?, 1, ?, ?, ?)',
       ).run(PHAETHON_SHORT_ID, login, password === undefined || password === '' ? null : hashPassword(assertPassword(password)), now, now)
@@ -364,7 +365,7 @@ export class IdentityStore {
         throw new IdentityError(403, 'identity/forbidden', 'only Phaethon may create invites')
       }
       const code = mintInviteCode()
-      const now = this.now()
+      const now = this.#now()
       this.#db.prepare('INSERT INTO invites (code, created_by, created_at, updated_at) VALUES (?, ?, ?, ?)')
         .run(code, admin.id, now, now)
       return { code, createdAt: now }
@@ -388,7 +389,7 @@ export class IdentityStore {
       if (this.#db.prepare('SELECT 1 FROM users WHERE name = ?').get(login) !== undefined) {
         throw new IdentityError(409, 'identity/name-taken', 'that name is already registered')
       }
-      const now = this.now()
+      const now = this.#now()
       // Allocation reads every row, deleted ones included, so a removed identity's
       // short number is never handed out a second time.
       const next = this.#db.prepare('SELECT COALESCE(MAX(short_id), 0) + 1 AS value FROM users').get()
@@ -412,7 +413,7 @@ export class IdentityStore {
     if (row === undefined || row.password === null || !verifyPassword(String(password ?? ''), row.password)) {
       throw new IdentityError(401, 'identity/bad-credentials', 'name and password do not match an identity')
     }
-    const now = this.now()
+    const now = this.#now()
     return { user: publicUser(row), token: this.#mintSession(row.id, now) }
   }
 
@@ -426,13 +427,13 @@ export class IdentityStore {
     `).get(sessionTokenDigest(token))
     if (row === undefined) return undefined
     if (row.revoked_at !== null) return undefined
-    if (row.expires_at <= this.now()) return undefined
+    if (row.expires_at <= this.#now()) return undefined
     return publicUser(row)
   }
 
   /** Revoke one session token; answers whether a live session was revoked. */
   signOut(token) {
-    const now = this.now()
+    const now = this.#now()
     const info = this.#db.prepare(
       'UPDATE sessions SET revoked_at = ?, updated_at = ? WHERE digest = ? AND revoked_at IS NULL AND deleted_at IS NULL',
     ).run(now, now, sessionTokenDigest(token))
