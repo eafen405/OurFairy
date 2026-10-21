@@ -112,3 +112,25 @@ test('a missing dsh checkout fails loudly instead of booting something else', ()
     `diagnostic must name the bad path and the override variable; output was:\n${output}`,
   )
 })
+
+test('doctor --json records a missing dsh checkout as a failed check instead of dying', () => {
+  const missing = join(home, 'no-such-dsh-doctor')
+  const run = runBackend(['doctor', '--json'], { ...env, OURFAIRY_DSH_DIR: missing })
+  assert.notEqual(
+    run.code,
+    0,
+    `doctor must exit non-zero when a check fails:\n${describeRun('doctor --json', run)}`,
+  )
+  let report
+  assert.doesNotThrow(() => {
+    report = JSON.parse(run.stdout)
+  }, `doctor --json must still print one JSON report when a check fails:\n${describeRun('doctor --json', run)}`)
+  assert.equal(report.ok, false, `the report must mark the run failed:\n${JSON.stringify(report)}`)
+  const check = report.checks.find(entry => entry.name === 'dsh CLI build')
+  assert.ok(check !== undefined, `the report must carry the dsh CLI build check; it ran ${JSON.stringify(report.checks.map(entry => entry.name))}`)
+  assert.equal(check.ok, false, `a missing dsh checkout must fail the dsh CLI build check: ${JSON.stringify(check)}`)
+  assert.ok(
+    check.detail.includes(missing),
+    `the failed check must name the missing path ${missing}; its detail was ${JSON.stringify(check.detail)}`,
+  )
+})
