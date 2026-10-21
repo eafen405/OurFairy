@@ -45,15 +45,17 @@
 
 | 命令 | 时点 | 结果 |
 | --- | --- | --- |
+| `git merge integration/spec-131`（开工与交付前各一次） | 基线 `e57827e` | 开工时 fast-forward 到 `544d082`（#139 合入）；交付前 `Already up to date`，tip 仍 `544d082`（含 #138、#139、#140） |
 | `node --test tests/identity-http.test.mjs tests/gateway.test.mjs tests/owned-sessions.test.mjs tests/attachments.test.mjs tests/speech.test.mjs` | 改动前基线 | 34 tests / 34 pass / 0 fail |
 | `git rm backend/identity/src/http.mjs`；删除 `exports` 的 `./http` | 改动 | — |
 | scratch `import.meta.resolve` + 动态 import `@ourfairy/dsh-identity/http` | 删除后 | **red**：`ERR_PACKAGE_PATH_NOT_EXPORTED`（`Package subpath './http' is not defined by "exports"`） |
 | `grep -rn "@ourfairy/dsh-identity/http" backend tests` | 删除后 | 无输出，exit 1 |
 | 五个验收文件（同第一行命令） | 删除后 | 34 tests / 34 pass / 0 fail |
 | `node --test tests/plugin-compatibility.test.mjs tests/bundle-packages.test.mjs tests/bundle-only-profile.test.mjs tests/docs.test.mjs tests/ecosystem-boundary.test.mjs` | 删除后 | 24 tests / 24 pass / 0 fail |
-| `npm test`（pre-commit hook 内，提交 `3cad61f`） | 删除提交树 | 234 tests / 234 pass / 0 fail（125 s） |
-| `npm run combo:verify`（同上） | 删除提交树 | 4 行全 ok，`combo: combination verified`；ourfairy 行 `ok (worktree is based on the integration tip)` |
-| `OURFAIRY_HOME=$(mktemp -d) node scripts/ourfairy-backend.mjs doctor --json` | 删除提交树 | exit 0；11 项 check 全 ok |
+| `npm test`（pre-commit hook 内，提交 `3cad61f` 与 `8f9d672`） | 两次提交树 | 各 234 tests / 234 pass / 0 fail（125 s / 109 s） |
+| `npm test`（最终树 `8f9d672`，直接运行） | 最终树 | 234 tests / 234 pass / 0 fail（106 s） |
+| `npm run combo:verify`（hook 内与最终树直接运行） | 最终树 | 4 行全 ok，`combo: combination verified`；ourfairy 行 `ok (worktree is based on the integration tip)`，actual `8f9d672` |
+| `OURFAIRY_HOME=$(mktemp -d) node scripts/ourfairy-backend.mjs doctor --json` | 最终树，全新 home | exit 0；11 项 check 全 ok |
 | `OURFAIRY_HOME=<同一临时 home> OURFAIRY_PORT=0 OURFAIRY_PHAETHON_PASSWORD=probe-password node scripts/ourfairy-backend.mjs probe --report ...` | 同一临时 home | exit 0，`ok: true`，0 failures，24 services live，49 rows 组合 |
 
 doctor 中与本票相关的四项（节选）：
@@ -75,7 +77,8 @@ product packages        ok | 逐包 files 清单（含 backend/http 与 backend/
 {"id":"http","name":"@ourfairy/dsh-http","disabled":false,"fiberState":"active"}
 ```
 
-16 个 `@ourfairy/*` 产品行（含 `http`）全部 `disabled=false fiber=active`。
+报告里 17 个 `@ourfairy/*` 行（bundle 挂的 16 行加测试探针行，含 `http`）全部
+`disabled=false fiber=active`，24 个服务 live，`failures` 为空。
 
 ## 未执行项与说明
 
