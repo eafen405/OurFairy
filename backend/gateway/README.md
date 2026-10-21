@@ -36,11 +36,16 @@
 
 ### 共用选模
 
-`/gateway/selection` 先确认 provider 已注册、model 在适配器提供的模型清单内，再写入
-`agent-default-model`。选择对**所有会话**从各自下一轮回复开始生效：每个 turn 开始时读取一次
-并固定到该 turn 结束，包括工具调用后的模型续请求；正在执行的回复不切换。保存选择不受
-在用状态限制。省略 `reasoningEffort` 会清除该字段的 profile 覆盖，回到组合声明的默认值；
-响应回显的是生效值。`minimax-cn` / `MiniMax-M3.1-Flash` 需要自适应思考，默认
+`/gateway/selection` 先确认 provider 已注册、model 在适配器提供的模型清单内，再经原生
+`agentDefaultModel.saveSelection(...)` 写入 `agent-default-model`；原生入口按提交顺序串行化
+保存（重叠保存的串行化由上游 `agent-default-model` 测试固定），网关不再直接写该行。缺少配置
+编辑器时返回 503 `gateway/configuration-unavailable`：原生入口在没有编辑器时保持组合入口、
+不落盘，网关不能因此假装保存成功。选择对**所有会话**从各自下一轮回复开始生效：每个 turn
+开始时读取一次并固定到该 turn 结束，包括工具调用后的模型续请求；正在执行的回复不切换。
+保存选择不受在用状态限制。省略 `reasoningEffort` 会清除该字段的 profile 覆盖，回到组合声明的
+默认值；网关从同一设置行的继承层（`base.reasoningEffort`）取出该默认值，随完整选择一起提交
+（与旧实现中 `unset` 取继承值一致），因此保存值等于组合声明时 profile 行仍会被移除。显式值按
+保存值回显，响应回显的是生效值。`minimax-cn` / `MiniMax-M3.1-Flash` 需要自适应思考，默认
 `max`；带空格的别名会被服务端静默降级，写入时请使用连字符 id。
 
 ### 供应商路由

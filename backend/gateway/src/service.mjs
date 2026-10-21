@@ -336,11 +336,23 @@ export class GatewayService extends Service {
     if (reasoningEffort !== undefined && (typeof reasoningEffort !== 'string' || reasoningEffort === '')) {
       throw new GatewayError(400, 'gateway/invalid-selection', 'reasoningEffort must be a non-empty string when present')
     }
-    await this.edit(() => this.settings().mutate('agent-default-model', [
-      { op: 'set', path: ['provider'], value: provider },
-      { op: 'set', path: ['model'], value: model },
-      reasoningEffort === undefined ? { op: 'unset', path: ['reasoningEffort'] } : { op: 'set', path: ['reasoningEffort'], value: reasoningEffort },
-    ]))
+    // The native entry serializes saves in submission order and keeps the
+    // composition entry when no configuration editor is mounted. That silent
+    // no-op must not become a successful save here: settings() is the same seam
+    // the read path uses, and the settings service itself injects configEditor,
+    // so its absence is the editor's absence.
+    this.settings()
+    // Omitting the effort follows the composition default, the value the old
+    // field-level unset resolved to. The native entry stores a complete
+    // selection, so resolve that default from the same settings row instead of
+    // dropping the field; a selection equal to the composition still removes
+    // the profile row, which is what clears the override.
+    const effort = reasoningEffort ?? this.row('agent-default-model')?.base?.reasoningEffort
+    await this.edit(() => this.ctx.agentDefaultModel.saveSelection({
+      provider,
+      model,
+      ...(effort === undefined ? {} : { reasoningEffort: effort }),
+    }))
     return { selection: this.ctx.agentDefaultModel.currentSelection(), applies: 'next-turn' }
   }
 
