@@ -21,7 +21,7 @@
 删除时同步删掉对应的测试断言，并在提交说明里写明这四个方法原来的调用方情况——「测试是唯一调用方」
 与「零调用」不是同一句话，删除不是静默的行为损失。
 
-`readDelivery` 只被同包的 `prepareDelivery` 与 `prepareDeliveryFile` 调用，转成模块私有（`#readDelivery`）。
+`readDelivery` 只被同包的 `prepareDelivery`、`prepareDeliveryFile` 与 `pendingDeliveries` 调用，转成模块私有（`#readDelivery`）。
 它不进入任何领域面，`identity.deliveries` 面的四个方法（`prepare`、`prepareFile`、`pending`、`complete`）不变。
 
 `tests/identity-interfaces.test.mjs` 的「store 不离开包」断言要更新到删除后的形状：不再断言已经不存在的方法名，

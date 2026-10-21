@@ -46,7 +46,7 @@
 ## Implementation Decisions
 
 - 删除 `userByName`、`listUsers`、`inviteState`、`liveSessionCount` 四个公开方法。前两者只有测试调用，后两者零调用。删除时同步删除对应的测试断言，并在提交说明里写明「测试是唯一调用方」。
-- `readDelivery` 转为模块私有（`#readDelivery`），它只被同包的 `prepareDelivery` 与 `prepareDeliveryFile` 调用。
+- `readDelivery` 转为模块私有（`#readDelivery`），它只被同包的 `prepareDelivery`、`prepareDeliveryFile` 与 `pendingDeliveries` 调用。
 - 五组 DDL 常量拆到 `src/schema/` 下以领域命名的模块，各自导出自己的 DDL 片段；store 导入后拼成唯一一份 `SCHEMA` 字符串并照旧一次性执行。这是纯文件搬移，行为零变化。
 - 不拆连接：`BEGIN IMMEDIATE` 是连接级的。多连接会让 `createGroup` / `changeGroupMember` 的跨表事务失效，直接丢掉「授权与写在一起」。
 - 不拆迁移阶梯：`#migrate()` 是一次幂等重放加一条形状探测式 `ALTER`，版本戳在同一个事务里最后写入。拆成多个注册者会产生多份版本权威，或在版本检查之前执行 DDL。

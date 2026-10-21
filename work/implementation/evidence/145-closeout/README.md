@@ -6,7 +6,7 @@
 
 - 票分支：`ticket/145-closeout`，基线 `integration/spec-132` = `67d1940`（已含 #143、#144 两次合并）。
 - 复核范围：`main`（`f331c38`）→ `integration/spec-132`（`67d1940`）的增量，15 个文件、610 增 156 删
-  （`git diff --stat main..integration/spec-132`）。
+  （`git diff --stat main..67d1940`；最终 tip `e72cfd0` 为 17 个文件、803 增 156 删）。
 - 评审依据：Standards 轴 = [`AGENTS.md`](../../../../AGENTS.md) 与
   [`CODING_STANDARDS.md`](../../../../CODING_STANDARDS.md)；Spec 轴 =
   [`work/tickets/132/`](../../../tickets/132/README.md) 的票面副本与
@@ -36,7 +36,7 @@
 | 编号 | 轴 | 位置 | 问题 | 处理 |
 | --- | --- | --- | --- | --- |
 | S1 | Standards | `backend/identity/src/schema/users.mjs:2` | DDL 拆分后，模块注释仍说本模块含 "the lookup indexes the queries use"，而三个查找索引已搬到 `schema/indexes.mjs`——注释与模块实际内容不符 | 改成只描述本模块实际持有的内容：users / invites / sessions 三张表，各自主键 |
-| S2 | Standards | `tests/identity-interfaces.test.mjs:48` | 用例名声称这十九个方法是「生产调用方在用的」，但断言只固定方法名集合：某个方法失去生产调用方时，断言照样通过 | 用例名改成断言的事实本身（公开面恰是 spec 132 点名的那十九个方法）。按 `CODING_STANDARDS.md`「不做源码正则扫描充当检查」与票面「答不出就删除该声称，不为它补断言」，不补新断言 |
+| S2 | Standards | `tests/identity-interfaces.test.mjs:48` | 用例名声称这十九个方法是「生产调用方在用的」，但断言只固定方法名集合：某个方法失去生产调用方时，断言照样通过 | 用例名改成断言的事实本身（原型面恰是 spec 132 点名的那十九个方法）。按 `CODING_STANDARDS.md`「不做源码正则扫描充当检查」与票面「答不出就删除该声称，不为它补断言」，不补新断言 |
 
 两处修改都在本票分支的提交 `0cd3249` 里，`integration/spec-132` 上没有打补丁。
 
@@ -77,7 +77,7 @@
 | #143 公开方法恰为 19 个 | 成立 | `tests/identity-interfaces.test.mjs` 读 `IdentityStore.prototype` 的名单断言 |
 | #143 `userByName`/`listUsers`/`inviteState`/`liveSessionCount` 不再存在于类上 | 成立 | `grep -rn "userByName\|listUsers\|inviteState\|liveSessionCount" backend/ tests/ scripts/ docs/ android/` 无输出 |
 | #143 `readDelivery` 模块私有、同包仍能调用 | 成立 | `#readDelivery` 不落在原型上；同包 `prepareDelivery`/`prepareDeliveryFile`/`pendingDeliveries` 仍调用它，投递行为由既有断言承担 |
-| #143 被删断言的行为由兄弟断言承接 | 成立 | `tests/identity-store.test.mjs` 的 'a removed user no longer signs in or authenticates' 与 'a removed name stays reserved' |
+| #143 被删断言的行为由兄弟断言承接 | 部分成立 | `tests/identity-store.test.mjs` 的 'a removed user no longer signs in or authenticates' 与 'a removed name stays reserved' 承接登录、认证与名字占用；`listUsers` 的「listing hides removed identities」没有兄弟断言承接（方法已删，143 证据的「未执行项」已记录） |
 | #143 领域面与消费方一行未改 | 成立 | `git diff --name-only main..integration/spec-132` 不含 `backend/identity/src/interfaces.mjs` 与 `backend/identity/src/index.mjs` |
 | #143 提交说明写明四个方法各自的调用方情况 | 成立 | 提交 `8396328` 正文逐个列出（两个「测试是唯一调用方」、两个「全仓零调用」） |
 | #144 五个模块各导出一段 DDL | 成立 | `backend/identity/src/schema/` 下五个模块，各一个导出常量 |
@@ -86,7 +86,7 @@
 | #144 存下的 schema 事实不变 | 成立 | 两条迁移路径的 `sqlite_master` 全量 dump 与旧树逐字节一致（本次复核实测，见下） |
 | #144 两个测试文件未被本票修改 | 成立 | `git diff --name-only 2f6504d..90bd341` 不含 `tests/` |
 | #143/#144 全量门槛 | 成立 | `npm test` 与 `npm run combo:verify`（见「实际命令与结果」） |
-| 父票 Further Notes：零调用方法若被文档或外部脚本引用则记录 | 不适用 | 四个被删方法在 `docs/`、`scripts/`、`android/`、`backend/`、`tests/` 下均无引用 |
+| 父票 Further Notes：零调用方法若被文档或外部脚本引用则记录 | 不适用 | 在 `f331c38` 上 `git grep` 于 `docs/`、`scripts/`、`android/`（排除 store 定义与 `tests/`）无引用；`tests/` 的两处引用随断言删除。`work/` 的旧证据按历史记录保留这些名字，不是调用方 |
 
 父规格 `docs/specs/ourfairy-v1.md` 的相关条款同样成立：业务库仍是一个迁移阶梯、一条连接、一个事务边界
 （增量未触及这三处）；测试原则「不断言私有方法调用次数、内部类布局」不受影响——新增的两条断言固定的是
@@ -99,7 +99,7 @@
 
 | 声称 | 失效时失败的具体命令或测试 | 断言同一事实？ | 结论 |
 | --- | --- | --- | --- |
-| store 的公开面恰为 19 个方法 | `tests/identity-interfaces.test.mjs` 的 'the store publishes exactly the nineteen methods spec 132 named'（直接读 `Object.getOwnPropertyNames(IdentityStore.prototype)`），多一个或少一个方法即失败 | 是 | 有检查 |
+| store 的原型方法恰为 19 个 | `tests/identity-interfaces.test.mjs` 的 'the store prototype declares exactly the nineteen methods spec 132 named'（直接读 `Object.getOwnPropertyNames(IdentityStore.prototype)`），多一个或少一个方法即失败 | 是（原型口径；`now` 是构造器注入的实例字段，不在这个口径内） | 有检查 |
 | 改前是 24 个方法 | `git show main:backend/identity/src/store.mjs` 的同一读法（本次实测取到 24 个方法名） | 是（同一属性，不同树） | 可重放命令，非常驻测试 |
 | `readDelivery` 不是公开操作 | `tests/identity-interfaces.test.mjs` 的 'the delivery read stays inside the package'（`store.readDelivery === undefined`），加上上面那条原型名单 | 是 | 有检查 |
 | 领域面不泄漏 store 成员 | `tests/identity-interfaces.test.mjs` 第一条用例的四个面键集精确断言（`Object.keys(face)` 逐个相等），任何多出来的成员都会让它失败 | 是 | 有检查 |
@@ -135,7 +135,7 @@
 
 | 命令 | 时点 | 结果 |
 | --- | --- | --- |
-| `git diff --stat main..integration/spec-132` | 复核开始 | 15 files changed, 610 insertions(+), 156 deletions(-) |
+| `git diff --stat main..67d1940` | 复核开始（当时 tip） | 15 files changed, 610 insertions(+), 156 deletions(-) |
 | `gh issue view 143/144/145 --json body -q .body` + 与本地副本 `diff` | 票面核对 | 正文逐字一致（差异只有本地惯例的标题与 `**Status:**` 行） |
 | `gh issue view 132 --json body -q .body` + 与 `work/tickets/132/README.md` 正文段 `diff` | 票面核对 | 一致 |
 | `npm test` | 本票开工时的基线树 | 236 tests / 236 pass / 0 fail（suites 7，duration 120692 ms） |
@@ -174,7 +174,8 @@
 2. **已发布票面 #144 的兄弟票编号写错**：票面正文写「`#142` 与本票同时改 store，但行区间不相交：`#142`
    改方法区」，实际改方法区的是 #143（issue #142 是 spec 131 的 http 包票）。**已由 Lead 处理**：本地副本
    `work/tickets/132/02-schema-modules.md` 与已发布 issue #144 的正文同步改正，提交 `c560820`。
-3. **「每个公开方法都有生产调用方」没有常驻断言**：事实目前成立（调用点清单见上），但只有方法名集合被断言。
+3. **「每个公开方法都有生产调用方」没有常驻断言**：事实目前成立（调用点清单见上；口径是 19 个原型方法，
+   `now` 是构造器注入的实例字段），但只有方法名集合被断言。
    按仓库规则不为它补扫源码式断言；要不要把它变成常驻检查（例如把四个领域面与服务操作的可达性做成
    一个结构断言），需要另开票决定。
 4. **仓库既有 flake（与本 spec 无关，本票未改代码）**：`tests/speech.test.mjs` 的 ASR 超时（150ms）在机器
@@ -184,3 +185,28 @@
    **已由 Lead 登记为 issue**：#146（8000 码点预算断言偶发多一个码点）、
    #147（`store.mjs` 文件头错引 `AGENTS.md` 的无外键/无唯一索引出处），两票都带 `needs-triage` 标签，
    均不在 spec 132 的增量内修。
+
+## 收口后的复核修复
+
+`integration/spec-132` 收口后，Lead 在 `e72cfd0` 上对本次增量又跑了一次两轴复核与可执行声称检查，
+发现五处可修问题。修复提交的说明含 `spec 132 review`（`git log --grep "spec 132 review"`），内容如下：
+
+| 位置 | 问题 | 处理 |
+| --- | --- | --- |
+| `tests/identity-interfaces.test.mjs` | 用例名与断言消息声称「store 发布的方法恰为 19 个」，但检查只读 `IdentityStore.prototype`；`now` 是构造器注入的公开实例字段，检查看不到它 | 用例名与断言消息都改为只声称原型面；`now` 的口径写进上面的声称表（不在 19 个原型方法内） |
+| `backend/identity/src/schema/indexes.mjs` | 注释声称这些索引是「the queries use」，但 `sessions_by_user` 的唯一读者 `liveSessionCount` 已在本增量删除；现存查询只按 `sessions.digest` 读 | 注释改为只描述 schema 声明的内容（非唯一查找索引）；索引本身保留——#144 冻结 schema 事实，删索引要另升版本 |
+| `backend/identity/src/schema/users.mjs` | 「in the order the store applies them」没有失效方式；该片段又不带结尾分号，store 需要 `${USERS_SCHEMA};` 特判 | 删掉顺序从句；片段自带 `;`，store 不再特判 |
+| 本文件与 144 证据 | 复核统计引用了 tip 的命令却记的是 `67d1940` 的数；「兄弟断言承接」与「删方法无引用」两行与事实不符；144 先说没有 flake 又记录一次例外 | 逐行改正，保留原始复核时点 |
+| `work/tickets/132/` 与 issue #132/#143 | 票面说 `readDelivery` 只被两个方法调用，实际还有 `pendingDeliveries` | 本地副本与已发布正文同步改为三个调用方 |
+
+验证（修复后）：
+
+| 命令 | 结果 |
+| --- | --- |
+| `node --test tests/identity-interfaces.test.mjs tests/identity-store.test.mjs` | 18 tests / 18 pass / 0 fail |
+| `npm test` | 236 tests / 236 pass / 0 fail |
+| `npm run combo:verify` | 三行 ok + `combo: combination verified` |
+| 拼出的 `SCHEMA` 与 `f331c38` 的旧树比对 | 2913 bytes、sha256 `7ea33bc4…f6699f94d`，逐字节相同 |
+
+未修（超出本次复核范围）：`sessions_by_user` 索引目前没有查询读者，删它要升 schema 版本；
+`now` 仍是构造器注入的公开实例字段，不在 19 个原型方法的口径内。两者都留待另票。

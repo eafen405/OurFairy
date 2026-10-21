@@ -45,7 +45,7 @@ test('the store stays inside the package: four domain faces and nothing else', (
   }
 })
 
-test('the store publishes exactly the nineteen methods spec 132 named', () => {
+test('the store prototype declares exactly the nineteen methods spec 132 named', () => {
   const published = Object.getOwnPropertyNames(IdentityStore.prototype)
     .filter(name => name !== 'constructor')
     .sort()
@@ -54,7 +54,7 @@ test('the store publishes exactly the nineteen methods spec 132 named', () => {
     'groupsForMember', 'insertUpload', 'ownsGroup', 'pendingDeliveries', 'prepareDelivery',
     'prepareDeliveryFile', 'readUpload', 'register', 'seedPhaethon', 'signIn', 'signOut',
     'updateUpload', 'userByShortId',
-  ], 'a method with no production caller must not stay on the store')
+  ], 'the prototype surface is exactly the nineteen methods spec 132 named')
 })
 
 test('the delivery read stays inside the package', () => {

@@ -4,7 +4,7 @@
  * @module @ourfairy/dsh-identity/src/schema/users
  */
 
-/** The three user-domain tables, in the order the store applies them. */
+/** The three user-domain tables. */
 export const USERS_SCHEMA = `CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   short_id INTEGER NOT NULL,
@@ -32,4 +32,4 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at INTEGER NOT NULL,
   revoked_at INTEGER,
   deleted_at INTEGER
-)`
+);`
