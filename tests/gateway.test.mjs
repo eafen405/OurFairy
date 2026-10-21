@@ -287,6 +287,30 @@ test('an invalid configuration is refused with the reason, and nothing is persis
   }
 })
 
+test('consecutive selection saves commit in submission order', async () => {
+  const home = freshHome()
+  const double = await modelDouble()
+  const { port } = await boot(home, double.env)
+  try {
+    const admin = await signIn(port)
+    // The gateway submits these two saves in this order; each response means
+    // that save's write settled. The native entry serializes overlapping saves
+    // (its own suite covers that); at this HTTP seam the deterministic
+    // submission order is the awaited pair, and the last one must win.
+    const first = await httpJson(port, '/gateway/selection', { token: admin,
+      body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'low' } })
+    assert.equal(first.selection.reasoningEffort, 'low', 'the first save is echoed as submitted')
+    const second = await httpJson(port, '/gateway/selection', { token: admin,
+      body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'high' } })
+    assert.equal(second.selection.reasoningEffort, 'high', 'the second save is echoed as submitted')
+    const state = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
+    assert.equal(state.selection.reasoningEffort, 'high',
+      'the last submitted selection save must be the effective one')
+  } finally {
+    await stop(home)
+  }
+})
+
 test('the shared selection applies from the next turn, and a running reply keeps its original model', async () => {
   const home = freshHome()
   const double = await modelDouble({ sequence: ['tool_call_success', 'success', 'success'],
