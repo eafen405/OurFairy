@@ -138,7 +138,9 @@ splice 与 turn 结束事件；注册表仍在时补充输出、进度与可用�
 `/chat/jobs/output` 接受绝对 UTF-8 字节偏移 `from`，chunks 保留原生
 `{at,text,channel?,gapBefore?}`；`next` 与 `earliest` 指向原生输出环，`gapBefore` 标记源侧
 丢失。终止状态不代表输出完整。`/chat/jobs/stop` 返回数字 `outcome`：0 不可用、1 已请求取消、
-2 已结束。
+2 已结束。只映射原生 `JobRegistry.kill` 的 `requested`（1）与 `already-finished`（2）；原生返回
+其它值时是 500 `chat/unknown-stop-outcome`，消息带原始值，不会折叠成 2。映射表与原生返回类型的
+对账见 `tests/native-job-stop-outcome.test.mjs`。
 
 任务状态：0 未知、1 运行中、2 停止中、3 完成、4 被终止、5 失败；`availability`
 0 不可用、1 可用。`report.status`：0 无计划报告、1 待处理、2 执行中、3 完成、4 取消、
