@@ -10,7 +10,6 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { flattenEntries } from '../scripts/combo.mjs'
 import { describeRun, makeHome, readReport, removeHome, repoRoot, runBackend, writeOverlay } from './helpers/backend.mjs'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
@@ -44,9 +43,16 @@ test('the composition is two segments and every row belongs to one', () => {
   assert.deepEqual(rows.filter(row => row.group !== true), [],
     'a non-group row at the top level would escape the segment decision')
 
-  const leaves = flattenEntries(rows)
-  const ids = leaves.map(row => row.id)
-  assert.equal(new Set(ids).size, ids.length, `row ids must be unique: ${JSON.stringify(ids)}`)
+  // Group ids share the loader's store with row ids: a group nested inside a
+  // group of the same id makes the parent chain cyclic at boot. Check every
+  // id, not just the leaves.
+  const ids = []
+  const collect = entries => entries.forEach(row => {
+    ids.push(row.id)
+    if (Array.isArray(row.config)) collect(row.config)
+  })
+  collect(rows)
+  assert.equal(new Set(ids).size, ids.length, `row and group ids must be unique: ${JSON.stringify(ids)}`)
 })
 
 test('disabling the plugins group leaves the kernel booting', () => {

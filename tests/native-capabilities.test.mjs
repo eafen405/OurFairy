@@ -13,7 +13,7 @@
  * missing instead of failing generically.
  */
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -152,12 +152,32 @@ test('doctor passes on the shipped composition and fails when a required row is 
     const installedPatch = join(home, 'dsh-home', 'profiles', combo.backend.profileName,
       'node_modules', ...combo.backend.bundlePackage.split('/'), 'cordis.patch.yml')
     const patches = boot.loadOverlayPatches('dsh', installedPatch)
-    // Nest the inserted rows in a group, as the bundle's kernel/plugins split
-    // will. The rows are still mounted, so the check must still pass.
-    const grouped = patches.map(patch => Array.isArray(patch.insert)
+    // Nest the inserted rows in a group only when the bundle is still flat:
+    // after #161 the shipped insert already has the kernel/plugins groups, and
+    // wrapping those in a second `kernel` group would reuse the loader's entry
+    // id for both parent and child (a cyclic parent chain at boot).
+    const alreadyGrouped = patches.some(patch => Array.isArray(patch.insert)
+      && patch.insert.some(row => row.group === true))
+    const grouped = alreadyGrouped ? patches : patches.map(patch => Array.isArray(patch.insert)
       ? { ...patch, insert: [{ id: 'kernel', name: 'cordis:group', group: true, config: patch.insert }] }
       : patch)
-    writeFileSync(installedPatch, yaml.dump(grouped, { schema: entryListSchema, noRefs: true }))
+    const groupedIds = []
+    const collectIds = rows => rows.forEach(row => {
+      groupedIds.push(row.id)
+      if (Array.isArray(row.config)) collectIds(row.config)
+    })
+    grouped.forEach(patch => collectIds(patch.insert ?? []))
+    assert.equal(new Set(groupedIds).size, groupedIds.length,
+      `the mutated composition must not reuse a row id: ${JSON.stringify(groupedIds)}`)
+    // pnpm installs a `file:` package by hard-linking its files: writing the
+    // installed path in place would rewrite the worktree's own bundle. Replace
+    // the directory entry instead so the source inode stays untouched.
+    const replaceInstalledPatch = text => {
+      const temp = `${installedPatch}.next`
+      writeFileSync(temp, text)
+      renameSync(temp, installedPatch)
+    }
+    replaceInstalledPatch(yaml.dump(grouped, { schema: entryListSchema, noRefs: true }))
     assert.equal(doctorCheck(runBackend(['doctor', '--json'], env)).ok, true,
       'the check must pass with the required rows inside a group')
 
@@ -165,7 +185,7 @@ test('doctor passes on the shipped composition and fails when a required row is 
     // indentation, which grouping changes.
     const removed = grouped.some(patch => Array.isArray(patch.insert) && removeRow(patch.insert, 'llm-retry'))
     assert.ok(removed, 'the installed bundle must declare the llm-retry row for this test to remove it')
-    writeFileSync(installedPatch, yaml.dump(grouped, { schema: entryListSchema, noRefs: true }))
+    replaceInstalledPatch(yaml.dump(grouped, { schema: entryListSchema, noRefs: true }))
 
     const failed = doctorCheck(runBackend(['doctor', '--json'], env))
     assert.equal(failed.ok, false, `a profile without llm-retry must fail the check; doctor reported ${JSON.stringify(failed)}`)
