@@ -49,6 +49,34 @@ tests/baseline-boot.test.mjs`，86.2s），`row-addressability` 的直连用例�
 `combo:verify` 三行 ok。合并前 `git merge integration/spec-137` 为 `Already up to date.`
 （tip `135e283`）。
 
+## 最终门禁（review 修正合并后，tip `7678669`）
+
+review 修正分支合并后，在 `integration/spec-137` 的 `7678669` 上、代码未改的状态重跑：
+
+```
+$ npm test
+ℹ tests 246
+ℹ suites 7
+ℹ pass 246
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 106191.66154
+```
+
+```
+$ npm run combo:verify
+row             branch                   expected          actual            result
+--------------  -----------------------  ----------------  ----------------  ---------------------------------------------
+ourfairy        integration/ourfairy-v1  based on integra  76786697ec752e86  ok (worktree is based on the integration tip)
+dsh             product/ourfairy-v1      5b8ec0f175d3d7ba  5b8ec0f175d3d7ba  ok
+android source  -                        460109d1b89b824a  460109d1b89b824a  ok (declaration matches)
+combo: combination verified
+```
+
+两条均 exit 0。下面一节是 review 修正前 `6269486` 上的历史门禁记录，保留为当时结果。
+
 ## 最终门禁（合并 tip `6269486`）
 
 在本 worktree、代码未改的状态执行；Node 24.18.0，Linux。同机另有 worktree 在跑测试
