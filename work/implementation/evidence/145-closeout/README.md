@@ -172,8 +172,8 @@
    （`tests/identity-store.test.mjs` 的 'carries no foreign key and no unique constraint beyond the primary key'），
    错的只是「AGENTS.md forbids both」这个出处。
 2. **已发布票面 #144 的兄弟票编号写错**：票面正文写「`#142` 与本票同时改 store，但行区间不相交：`#142`
-   改方法区」，实际改方法区的是 #143（issue #142 是 spec 131 的 http 包票）。本地副本与票面一致，按
-   「本地副本与票面一致」的要求不改本地副本；发布面需要 Lead 处理，本票无权评论 issue。
+   改方法区」，实际改方法区的是 #143（issue #142 是 spec 131 的 http 包票）。**已由 Lead 处理**：本地副本
+   `work/tickets/132/02-schema-modules.md` 与已发布 issue #144 的正文同步改正，提交 `c560820`。
 3. **「每个公开方法都有生产调用方」没有常驻断言**：事实目前成立（调用点清单见上），但只有方法名集合被断言。
    按仓库规则不为它补扫源码式断言；要不要把它变成常驻检查（例如把四个领域面与服务操作的可达性做成
    一个结构断言），需要另开票决定。
@@ -181,3 +181,6 @@
    负载高时假失败；`tests/conversation-search.test.mjs` 的 'read intervals have inclusive original positions…'
    偶发期望 8000 实得 8001（长 emoji 文本在传输分块时切点落进代理对中间，两半各编码成替换字符而多一个
    码点）。本票两次全量门禁均未复现；后者是仓库既有的潜在缺陷，按要求只记录不改。
+   **已由 Lead 登记为 issue**：#146（8000 码点预算断言偶发多一个码点）、
+   #147（`store.mjs` 文件头错引 `AGENTS.md` 的无外键/无唯一索引出处），两票都带 `needs-triage` 标签，
+   均不在 spec 132 的增量内修。
