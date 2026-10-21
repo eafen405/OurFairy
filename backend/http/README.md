@@ -31,7 +31,7 @@ empty row is the smallest thing that puts the transport in both lists.
 ## Why it does not depend on identity
 
 The transport knows nothing about users, invites or sessions. It was split out
-of `@ourfairy/dsh-identity` so the five product packages that only need
-`postHandler`/`sendJson` stop declaring an identity dependency. This manifest
-therefore declares no peer dependency at all, and imports nothing outside the
-Node runtime.
+of `@ourfairy/dsh-identity` so the product packages that only need
+`postHandler`/`sendJson` can drop their identity dependency (#139, #140). This
+manifest therefore declares no peer dependency at all, and imports nothing
+outside the Node runtime.
