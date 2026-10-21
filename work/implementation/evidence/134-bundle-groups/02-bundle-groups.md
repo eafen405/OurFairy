@@ -106,11 +106,11 @@ extra []
 
 | 命令 | 结果 |
 | --- | --- |
-| `node --test tests/bundle-groups.test.mjs` | **2 pass / 0 fail**（`duration_ms` 23446；kernel-only boot 用例 23216 ms） |
-| `node --test tests/native-capabilities.test.mjs` | **7 pass / 0 fail** |
-| `node --test tests/row-addressability.test.mjs` | **7 pass / 0 fail**（`duration_ms` 132843；原样通过，overlay 仍能按 id 命中 group 内的 `delivery`、`groups`、`scoped-*`） |
+| `node --test tests/bundle-groups.test.mjs` | **2 pass / 0 fail**（最终树 `duration_ms` 13620；kernel-only boot 用例 12850 ms） |
+| `node --test tests/native-capabilities.test.mjs` | **7 pass / 0 fail**（最终树 `duration_ms` 13720） |
+| `node --test tests/row-addressability.test.mjs` | **7 pass / 0 fail**（最终树 `duration_ms` 99148；原样通过，overlay 仍能按 id 命中 group 内的 `delivery`、`groups`、`scoped-*`） |
 | `npm run backend:doctor` | `doctor: all checks passed`，含 `native capabilities`（4 行 + history export）与 `bundle packages`（10 declared package(s) mounted by 15 row(s)） |
-| `npm test` | **237 pass / 0 fail**，7 suites（`duration_ms` 114158） |
+| `npm test` | **237 pass / 0 fail**，7 suites（最终树 `duration_ms` 173795） |
 | `npm run combo:verify` | 三行 ok：ourfairy（based on the integration tip）、dsh、android source；`combo: combination verified` |
 
 kernel-only boot 的实测事实（来自上述 `bundle-groups` 用例）：`probe --patch <plugins 整组
