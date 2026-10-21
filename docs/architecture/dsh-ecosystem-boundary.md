@@ -175,11 +175,11 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | 原生任务状态词表（`JobStatus`，导出类型）增删成员 | 运行期把无法映射的状态显式记为未知（wire 0），活动摘要把未知当作不可收敛而不是非终态；测试期读取 pinned dsh 的声明，与投影映射逐项对账并点名差异成员 | `tests/native-job-status.test.mjs`：`native job status vocabulary matches the projection`。没有它时，未知状态以 `undefined` 漏进投影，终态任务不收敛、活动摘要可能在任务仍执行时报告安静，且没有异常或日志 |
 | 原生停止结果词表（`JobRegistry.kill` 的返回类型）新增第三种返回值 | 只映射已知值（`requested` → 1、`already-finished` → 2）；未知值抛 5xx 产品错误并带上原始值；测试期对账原生返回类型 | `tests/native-job-stop-outcome.test.mjs`：`native job stop outcome vocabulary matches the adapter`。没有它时，任何非 `requested` 的返回值都被折成 2（已结束），手机无法区分真的结束与未知 |
 | 上游给模型条目新增手机不编辑的部署自有字段 | 允许列表：以先前条目为底，只覆盖手机可编辑的那组模型字段，其余字段默认保留 | `tests/gateway.test.mjs`：`a route saved from the phone keeps model fields the draft does not edit`。没有它时，上游每新增一个部署自有字段，手机保存一次路由就把它静默抹掉 |
-| 上游改变默认模型选型保存入口的串行化行为 | 选型写入走原生默认模型保存入口，不再直接改写设置；网关保留自己的校验与「没有配置编辑器时 503」的拒绝 | `tests/gateway.test.mjs`：`consecutive selection saves commit in submission order`。没有它时，连续保存没有提交顺序保证，后发的旧值可能最后落盘，用户看到旧选择 |
+| 选型写入绕过原生保存入口（改回直接写设置行） | 选型写入走原生默认模型保存入口，不再直接改写设置；网关保留自己的校验与「没有配置编辑器时 503」的拒绝。产品测试固定的是**调用路径**：原生入口收到完整选择、不经过 `settings().mutate`，无编辑器时 503 且不调用原生保存。背景（不是本行检查的对象）：重叠保存的串行化是原生服务自己的契约，由上游默认模型服务的测试 `serializes overlapping saves and continues after a rejected write` 固定 | `tests/gateway-service.test.mjs`：`a selection save goes through the native default-model entry`（断言原生 `saveSelection` 收到完整选择、`settings().mutate` 未被调用）；`tests/gateway-service.test.mjs`：`a selection save refuses when the profile cannot be edited`（503 且原生保存未调用）；`tests/gateway.test.mjs`：`consecutive selection saves commit in submission order`（按提交顺序完成两次保存时，最后提交的值生效，是顺序写入的 last-wins 行为，不是重叠保存的串行化证明）。没有前两条时，改回直接写设置行不会被任何测试发现——顺序等待的 HTTP 保存对两种写法都是绿的 |
 | 原生运行时输入模态列表增删成员 | 网关直接导入原生列表作为唯一权威，不维护本地集合；测试逐项提交原生列表里的每个模态并断言回显 | `tests/gateway.test.mjs`：`the gateway accepts every native input modality`。没有它时，本地列表落后于上游，手机提交新模态会得到误导性的 400「不认识的模态」 |
 | 上游改变 transcript 受理锚点的行为，或同标识重发走到锚点之外的路径 | 幂等按外部行为固定：同一请求标识连续两次发送只产生一条消息且受理序号相同，内容不同仍 409；守卫是行为断言，不把内部锚点当作契约 | `tests/remote-chat.test.mjs`：`the same request id sent twice in a row produces one message`。没有它时，锚点行为变化会让同标识重发变成第二条消息，而并发重试与重启用例仍可能通过 |
 
-这六条检查的标题同时登记在 `tests/ecosystem-boundary.test.mjs` 的引用清单里：测试改名或删除会让本节的声称失败。
+本节引用的检查标题同时登记在 `tests/ecosystem-boundary.test.mjs` 的引用清单里：测试改名或删除会让本节的声称失败。
 
 ## 5. 不在范围
 
@@ -199,6 +199,6 @@ Android 客户端在本仓库 `android/`，本文不对其代码做检查声明�
   `backend/v1-bundle/package.json`。本文提到「bundle 挂载的产品包」时指这两处，不复制。
 - 本文的每个例外与每条语义守卫都附一个检查；删除或改名检查时，同一次改动必须改写或删除对应声称
   （`CODING_STANDARDS.md`）。`tests/ecosystem-boundary.test.mjs` 会把本文引用的检查
-  与真实测试标题对账（含 4 节的六条），也会把本文与 bundle 的行/包集合对账。
+  与真实测试标题对账（含 4 节引用的各条），也会把本文与 bundle 的行/包集合对账。
 - 边界变化（例如开始使用 Remote，或换掉 scoped provider）是一次架构决定，应先改检查与
   ADR，再改本文，而不是让文档先漂移。

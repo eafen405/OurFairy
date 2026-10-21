@@ -121,6 +121,12 @@ const CITED_CHECKS = [
     'native job stop outcome vocabulary matches the adapter'],
   ['tests/gateway.test.mjs',
     'a route saved from the phone keeps model fields the draft does not edit'],
+  // The selection save's call path is pinned at the service seam; the booted
+  // case below only fixes sequential last-wins, not overlapping serialization.
+  ['tests/gateway-service.test.mjs',
+    'a selection save goes through the native default-model entry'],
+  ['tests/gateway-service.test.mjs',
+    'a selection save refuses when the profile cannot be edited'],
   ['tests/gateway.test.mjs',
     'consecutive selection saves commit in submission order'],
   ['tests/gateway.test.mjs',
