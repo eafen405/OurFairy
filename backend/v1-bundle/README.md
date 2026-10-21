@@ -41,11 +41,10 @@ not publish.
 
 `FORBIDDEN_ROW_IDS` in
 [`tests/baseline-boot.test.mjs`](../../tests/baseline-boot.test.mjs) is the list of
-row ids the boot test asserts absent from the live composition.
-
-v1 keeps skills, goals, subagents, telemetry, web and workflow tooling, plan mode
-and MCP resources out; the remainder of that list are the unscoped file, shell
-and sandbox defaults the scoped adapters replace.
+row ids the boot test asserts absent from the live composition. The comments
+beside that list group the ids by why each one is absent — the list and its
+reasons are the single authority; this README keeps no second copy of the
+classification.
 
 ## Consuming it
 
