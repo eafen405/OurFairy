@@ -260,7 +260,8 @@ export class IdentityStore {
       .run('schema_version', String(SCHEMA_VERSION))
   }
 
-  readDelivery(id) {
+  /** One delivery row; the package's own reads, never a published operation. */
+  #readDelivery(id) {
     const row = this.#db.prepare('SELECT * FROM deliveries WHERE delivery_id = ? AND deleted_at IS NULL').get(id)
     return row && { deliveryId: row.delivery_id, senderShortId: row.sender_short_id, senderSessionId: row.sender_session_id,
       recipientShortId: row.recipient_short_id, sessionId: row.recipient_session_id, text: row.text,
@@ -268,7 +269,7 @@ export class IdentityStore {
   }
   prepareDelivery(row) {
     return this.#transaction(() => {
-      const existing = this.readDelivery(row.deliveryId)
+      const existing = this.#readDelivery(row.deliveryId)
       if (existing) {
         if (existing.senderShortId !== row.senderShortId || existing.senderSessionId !== row.senderSessionId
           || existing.recipientShortId !== row.recipientShortId || existing.text !== row.text
@@ -282,24 +283,24 @@ export class IdentityStore {
         (delivery_id,sender_short_id,sender_session_id,recipient_short_id,recipient_session_id,text,attachments_json,status,created_by,updated_by,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(row.deliveryId,row.senderShortId,row.senderSessionId,row.recipientShortId,
           row.sessionId,row.text,JSON.stringify(row.files ?? []),(row.files?.length ? 2 : 0),row.senderShortId,row.senderShortId,now,now)
-      return this.readDelivery(row.deliveryId)
+      return this.#readDelivery(row.deliveryId)
     })
   }
   /** Persist each immutable file before moving on; null entries alone are retried. */
   prepareDeliveryFile(id, index, prepared) {
     return this.#transaction(() => {
-      const row = this.readDelivery(id)
+      const row = this.#readDelivery(id)
       row.files[index].prepared = prepared
       const status = row.files.every(file => file.prepared !== null) ? 0 : 2
       this.#db.prepare(`UPDATE deliveries SET attachments_json = ?, status = ?,
         updated_by = sender_short_id, updated_at = ? WHERE delivery_id = ? AND deleted_at IS NULL`)
         .run(JSON.stringify(row.files),status,this.now(),id)
-      return this.readDelivery(id)
+      return this.#readDelivery(id)
     })
   }
   pendingDeliveries() {
     return this.#db.prepare('SELECT delivery_id FROM deliveries WHERE status = 0 AND deleted_at IS NULL ORDER BY created_at,delivery_id')
-      .all().map(row => this.readDelivery(row.delivery_id))
+      .all().map(row => this.#readDelivery(row.delivery_id))
   }
   completeDelivery(id, { messageId, acceptedSeq }) {
     this.#db.prepare('UPDATE deliveries SET status = 1, message_id = ?, accepted_seq = ?, updated_by = sender_short_id, updated_at = ? WHERE delivery_id = ? AND deleted_at IS NULL')
