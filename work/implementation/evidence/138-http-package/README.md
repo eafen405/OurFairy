@@ -42,7 +42,7 @@ bundle 侧：`package.json` 的 `dependencies` 首位增 `"@ourfairy/dsh-http": 
 | `npm test`（pre-commit hook 内，提交 8956e80 时） | 最终树 | 234 tests / 234 pass / 0 fail |
 | `npm run combo:verify`（同上） | 最终树 | `combo: combination verified`（ourfairy 行 based on integration tip） |
 | `node scripts/ourfairy-backend.mjs doctor --json`（全新 `OURFAIRY_HOME`） | 最终树 | exit 0；`bundle packages` ok，`plugin compatibility` ok，`product packages` ok |
-| `node scripts/ourfairy-backend.mjs probe --report ...`（同一 home，keyless、`OURFAIRY_PORT=0`） | 最终树 | exit 0，`ok: true`，0 failures；`http` 行 `disabled=false fiber=active` |
+| `node scripts/ourfairy-backend.mjs probe --report ...`（全新 home，keyless、`OURFAIRY_PORT=0`、`OURFAIRY_PHAETHON_PASSWORD=probe-password`） | 最终树 | exit 0，`ok: true`，0 failures，17 个产品行全部 active；`http` 行 `disabled=false fiber=active` |
 
 doctor 的 `bundle packages` detail（节选，完整串含 16 行）：
 
