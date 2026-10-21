@@ -2,8 +2,9 @@
 
 票：GitHub #164（父票 #135，本地票面 `work/tickets/135/03-route-save-allowlist.md`）
 分支：`ticket/164-route-save`
-基线：`integration/spec-135` tip `28e8d32`（开工时 `git merge-base --is-ancestor` 已确认；收口前再 merge 该分支最新 tip）
-提交：本文件所在提交（提交说明写明「上游新增手机不可编辑的模型字段时失败的是哪条断言」）
+基线：`integration/spec-135` tip `28e8d32`（开工时 `git merge-base --is-ancestor` 已确认）
+提交：`1ac25f0`（实现 + 测试 + README + 本证据）；收口合并 `83b2700`（merge `integration/spec-135` tip `cd0c6c7`，无冲突）
+最终 SHA：`83b2700`
 
 ## 改动
 
@@ -41,6 +42,19 @@ node --test tests/gateway.test.mjs
 # ℹ tests 10  ℹ pass 10  ℹ fail 0
 ```
 
+提交时 pre-commit 钩子跑全量入口（`1ac25f0`，未用 `--no-verify`）：
+
+- `npm test`：`ℹ tests 235  ℹ pass 235  ℹ fail 0`（exit 0）。
+- `npm run combo:verify`：三行 `ok`，`combo: combination verified`（exit 0）。
+
+收口：`ticket/164-route-save` 先 merge `integration/spec-135` tip `cd0c6c7`（merge commit `83b2700`，无冲突），
+随后该分支已被合入集成分支（`98f6d3b Merge branch 'ticket/164-route-save'`），本分支再 fast-forward 到
+集成分支最新 tip `ac21e9a`（`git diff integration/spec-135 HEAD` 为空）。在 `ac21e9a` 上复跑：
+
+- `node --test tests/gateway.test.mjs`：`ℹ tests 10  ℹ pass 10  ℹ fail 0`。
+- `npm test`：`ℹ tests 239  ℹ pass 239  ℹ fail 0`（exit 0）。
+- `npm run combo:verify`：三行 `ok`，`combo: combination verified`（exit 0）。
+
 说明：当前部署只声明了 `reasoningEfforts` 与 `compat` 两个模型级部署字段，旧的硬编码搬运恰好覆盖它们，
 所以新测试对旧实现是绿的；它的守卫作用在「上游新增第三个模型级字段」时生效。下面用实验证明这一点。
 
@@ -62,4 +76,6 @@ node --test tests/gateway.test.mjs
 
 - 无。未做真机/真实供应商请求验收：本票只改路由保存的字段合并与持久化断言，模型请求路径未变；
   `retryPolicy` 的行为用例仍在同一提交内通过。
-- 收口前需把 `integration/spec-135` 最新 tip merge 进本分支并复跑定向测试（提交后执行）。
+- 合并后全量复跑曾遇到无关用例的并行负载抖动（`remote-chat` 冷读工件快照、`speech` 超时、PDF 资源预算）；
+  同一文件单独复跑均通过，集成分支随后以 `7f3d979 test(chat): settle the accepted turn before the next artifact snapshot`
+  修掉了其中一条。最终 `ac21e9a` 全量 239/239 通过，未使用 `--no-verify`。
