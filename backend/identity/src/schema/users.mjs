@@ -1,6 +1,5 @@
 /**
- * Users, invites and sessions. Primary keys and the lookup indexes the queries
- * use, nothing else.
+ * Users, invites and sessions: three tables, each keyed by its own primary key.
  *
  * @module @ourfairy/dsh-identity/src/schema/users
  */

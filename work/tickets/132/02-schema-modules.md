@@ -23,7 +23,7 @@ store 导入这五段，拼成唯一一份 `SCHEMA` 字符串，仍在 `#migrate
 事务边界不变，连接仍是一条。`tests/identity-store.test.mjs` 的迁移断言原样通过就是「行为零变化」的可执行证据，
 所以本票不改那个测试文件。
 
-`#142` 与本票同时改 store，但行区间不相交：`#142` 改方法区（公开方法与 `readDelivery` 的可见性），
+`#143` 与本票同时改 store，但行区间不相交：`#143` 改方法区（公开方法与 `readDelivery` 的可见性），
 本票改文件头部的 DDL 常量区与 import 区。
 
 ## Acceptance criteria
