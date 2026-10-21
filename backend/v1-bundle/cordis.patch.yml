@@ -6,303 +6,296 @@
 # The scoped T7 providers replace those defaults; every live product row is
 # listed here and the absent rows are asserted absent by tests/baseline-boot.
 #
-# Row order carries no load semantics (activation is service-availability
-# driven); the grouping below is for readers. Later tickets extend this list —
-# a capability is mounted here only once its own adaptation ticket lands.
+# The rows are two loader-native groups, split by one rule: whether the basic
+# function still works after the segment stops. `kernel` holds what one boot
+# needs to establish a session, run a model turn, and raise the Web carrier and
+# its connection. `plugins` holds the product capabilities, plus the native tool
+# and support rows that exist only for them; stopping the whole `plugins` group
+# still leaves the backend booting and a model turn runnable.
+#
+# The rule is not a package-name prefix: `tool-todo`, `jobs-local`,
+# `attachment-local`, `config-editor`, `settings` and the tool rows are native
+# packages that belong to `plugins` because the kernel still boots without
+# them. Adding a product row therefore means deciding which segment it belongs
+# to; a row at the top level would escape that decision
+# (tests/bundle-groups.test.mjs).
+#
+# Row order inside a group carries no load semantics (activation is
+# service-availability driven) and is kept for readers. Later tickets extend
+# this list — a capability is mounted here only once its own adaptation ticket
+# lands.
 
 - insert:
-    # ── session, model, and prompt core ────────────────────────────────────────
-    - id: agent
-      name: '@deepseek-ai/dsh-agent'
-
-    - id: session
-      name: '@deepseek-ai/dsh-session'
-
-    - id: llm
-      name: '@deepseek-ai/dsh-llm'
-
-    # The chat module contributes the deployment Fairy persona and scoped identity.
-    - id: system-prompt
-      name: '@deepseek-ai/dsh-system-prompt'
+    # ── kernel: one boot, one model turn, the Web carrier and connection ──────
+    - id: kernel
+      name: cordis:group
+      group: true
       config:
-        personaPrefix: ''
-        includeHarnessIdentity: false
+        # ── session, model, and prompt core ───────────────────────────────────────
+        - id: agent
+          name: '@deepseek-ai/dsh-agent'
+        - id: session
+          name: '@deepseek-ai/dsh-session'
+        - id: llm
+          name: '@deepseek-ai/dsh-llm'
+        # The chat module contributes the deployment Fairy persona and scoped identity.
+        - id: system-prompt
+          name: '@deepseek-ai/dsh-system-prompt'
+          config:
+            personaPrefix: ''
+            includeHarnessIdentity: false
+        - id: session-projection
+          name: '@deepseek-ai/dsh-session-projection'
+        # The tool registry. Only tools whose own adaptation landed are inserted
+        # below. T7 mounts the scoped filesystem, shell and directory adapters;
+        # subagent, goal, skill, web, and workflow remain absent.
+        - id: tools
+          name: '@deepseek-ai/dsh-tools'
+        # The loop mechanism only: `agents: []` mounts the factory and the session
+        # wiring without starting an Agent at boot.
+        - id: agent-loop
+          name: '@deepseek-ai/dsh-agent-loop'
+          config:
+            agents: []
+        # The v1 initial shared selection. MiniMax is the deployment's model; the
+        # official DeepSeek route below stays mounted so Phaethon can switch back
+        # through the gateway, but it is not selected. Explicit here because the
+        # base bundle's default is not inherited when base is not mounted.
+        - id: agent-default-model
+          name: '@deepseek-ai/dsh-agent-default-model'
+          config:
+            provider: minimax-cn
+            model: MiniMax-M3.1-Flash
+            reasoningEffort: max
+        # Official DeepSeek route, available but unused by default. No key or
+        # endpoint is inlined: the credential reference resolves per request and
+        # DEEPSEEK_BASE_URL overrides the endpoint.
+        - id: llm-deepseek-api-key
+          name: '@deepseek-ai/dsh-llm-deepseek-api-key'
+          config:
+            apiKeyEnv: DEEPSEEK_API_KEY
+        # ── model-request recovery and tool-result retention ─────────────────────
+        # Native recovery: a rate limit, timeout, or transport failure re-runs the
+        # failed step inside the same open turn, after a durable `llm/retry` event
+        # and before a cancellable wait. The policy itself lives on each provider
+        # profile (`llm-pi-ai` below), so this row takes no config.
+        - id: llm-retry
+          name: '@deepseek-ai/dsh-llm-retry'
+        # Spilled results are session-scoped files under the isolated DSH_HOME; the
+        # policy bounds what the model sees and the locator names the full result.
+        - id: spill-local
+          name: '@deepseek-ai/dsh-spill-local'
+          config:
+            root: !!js dshHomePath('spill')
+        # One inline budget for every tool result, measured in estimated tokens
+        # (`@deepseek-ai/dsh-token-meter/estimate`, 4 characters per token plus 4
+        # per block). A full 5-page PDF read costs 5 004 and stays inline; the
+        # 64 000-byte result the shell's own stream cap still produces costs 16 004
+        # and spills. `read` results are excluded by the native policy.
+        - id: spill-policy
+          name: '@deepseek-ai/dsh-spill-policy'
+          config:
+            maxInlineTokens: 8000
+        # ── durable session base ──────────────────────────────────────────────────
+        # Every durable path derives from DSH_HOME, which the launcher pins to the
+        # isolated OURFAIRY_HOME. Nothing here reaches the host's real home.
+        - id: session-persistence-jsonl
+          name: '@deepseek-ai/dsh-session-persistence-jsonl'
+          config:
+            root: !!js dshHomePath('sessions')
+        # Durability barrier before each model request and top-level dispatch.
+        - id: session-checkpoint-policy
+          name: '@deepseek-ai/dsh-session-checkpoint-policy'
+        # Rebuildable conversation index; literal substring matching supports Chinese
+        # without a second tokenizer/index. Ownership stays in native session headers.
+        - id: session-query-sqlite
+          name: '@deepseek-ai/dsh-session-query-sqlite'
+          config:
+            path: !!js dshHomePath('query/sessions.sqlite')
+            openAt: first-search
+            literalSubstring: true
+            snippetChars: 80
+        # ── the product's HTTP carrier and connection ─────────────────────────────
+        # #26 mounts the real Web carrier so the identity module serves `/identity/*`
+        # request paths. Those paths sit outside the shared `/api` prefix on purpose:
+        # `/api` is admitted as a whole before any handler runs, so an unauthenticated
+        # sign-in endpoint cannot exist under it.
+        - id: credentials
+          name: '@deepseek-ai/dsh-credentials-local'
+          config:
+            # The operator may point at the deployment's existing credential store
+            # explicitly; without an override the isolated home owns the document.
+            path: !!js process.env.OURFAIRY_CREDENTIALS_FILE ?? dshHomePath('.credentials.yaml')
+        # pi-ai's multi-provider adapter. The MiniMax route reuses dsh's installed
+        # `minimax-cn` catalog (endpoint, protocol, model metadata); this row only
+        # narrows the catalog to the one model the deployment uses, declares the
+        # 1M context and the adaptive thinking the model requires, and names the
+        # credential reference. Phaethon can edit the row through the gateway.
+        - id: llm-pi-ai
+          name: '@deepseek-ai/dsh-llm-pi-ai'
+          config:
+            providers:
+              minimax-cn:
+                apiKeyEnv: MINIMAX_CN_API_KEY
+                baseURL: !!js process.env.OURFAIRY_MINIMAX_BASE_URL ?? 'https://api.minimaxi.com/anthropic'
+                # The deployment's recovery policy for this route: the native
+                # default normal mode (5 retries, bounded 500 ms..10 s backoff,
+                # 10% jitter) over the transient failure codes. Written out because
+                # it is a deployment decision, not an inherited accident — the
+                # provider adapter owns the policy this row executes.
+                retryPolicy:
+                  mode: normal
+                models:
+                  - id: MiniMax-M3.1-Flash
+                    name: MiniMax M3.1 Flash
+                    contextWindow: 1000000
+                    input:
+                      - text
+                      - image
+                    reasoningEfforts:
+                      low: low
+                      medium: medium
+                      high: high
+                      xhigh: xhigh
+                      max: max
+                    compat:
+                      forceAdaptiveThinking: true
+        # `host` must be one concrete IP literal — the plugin rejects wildcard binds.
+        # Port 0 asks the OS for one, which is how the tests get an ephemeral port.
+        - id: webserver
+          name: '@deepseek-ai/dsh-host-webserver'
+          config:
+            host: !!js process.env.OURFAIRY_BIND_HOST ?? '127.0.0.1'
+            port: !!js Number(process.env.OURFAIRY_PORT ?? 3080)
+        # trustedHosts must name every authority that is not loopback: an Android
+        # client reaches this listener by an address the fence does not treat as
+        # loopback, and without the entry every request is a 403.
+        - id: connection
+          name: '@deepseek-ai/dsh-client-connection'
+          config:
+            trustedHosts: !!js (process.env.OURFAIRY_TRUSTED_HOSTS ?? '').split(',').filter(Boolean)
 
-    - id: session-projection
-      name: '@deepseek-ai/dsh-session-projection'
-
-    # The tool registry. Only tools whose own adaptation landed are inserted
-    # below. T7 mounts the scoped filesystem, shell and directory adapters;
-    # subagent, goal, skill, web, and workflow remain absent.
-    - id: tools
-      name: '@deepseek-ai/dsh-tools'
-
-    - id: tool-todo
-      name: '@deepseek-ai/dsh-tool-todo'
+    # ── plugins: product capabilities and their native support rows ───────────
+    - id: plugins
+      name: cordis:group
+      group: true
       config:
-        allowParallelInProgress: true
-
-    # The loop mechanism only: `agents: []` mounts the factory and the session
-    # wiring without starting an Agent at boot.
-    - id: agent-loop
-      name: '@deepseek-ai/dsh-agent-loop'
-      config:
-        agents: []
-
-    # The v1 initial shared selection. MiniMax is the deployment's model; the
-    # official DeepSeek route below stays mounted so Phaethon can switch back
-    # through the gateway, but it is not selected. Explicit here because the
-    # base bundle's default is not inherited when base is not mounted.
-    - id: agent-default-model
-      name: '@deepseek-ai/dsh-agent-default-model'
-      config:
-        provider: minimax-cn
-        model: MiniMax-M3.1-Flash
-        reasoningEffort: max
-
-    # Official DeepSeek route, available but unused by default. No key or
-    # endpoint is inlined: the credential reference resolves per request and
-    # DEEPSEEK_BASE_URL overrides the endpoint.
-    - id: llm-deepseek-api-key
-      name: '@deepseek-ai/dsh-llm-deepseek-api-key'
-      config:
-        apiKeyEnv: DEEPSEEK_API_KEY
-
-    # ── model-request recovery and tool-result retention ─────────────────────
-    # Native recovery: a rate limit, timeout, or transport failure re-runs the
-    # failed step inside the same open turn, after a durable `llm/retry` event
-    # and before a cancellable wait. The policy itself lives on each provider
-    # profile (`llm-pi-ai` below), so this row takes no config.
-    - id: llm-retry
-      name: '@deepseek-ai/dsh-llm-retry'
-
-    # Spilled results are session-scoped files under the isolated DSH_HOME; the
-    # policy bounds what the model sees and the locator names the full result.
-    - id: spill-local
-      name: '@deepseek-ai/dsh-spill-local'
-      config:
-        root: !!js dshHomePath('spill')
-
-    # One inline budget for every tool result, measured in estimated tokens
-    # (`@deepseek-ai/dsh-token-meter/estimate`, 4 characters per token plus 4
-    # per block). A full 5-page PDF read costs 5 004 and stays inline; the
-    # 64 000-byte result the shell's own stream cap still produces costs 16 004
-    # and spills. `read` results are excluded by the native policy.
-    - id: spill-policy
-      name: '@deepseek-ai/dsh-spill-policy'
-      config:
-        maxInlineTokens: 8000
-
-    # ── durable session base ──────────────────────────────────────────────────
-    # Every durable path derives from DSH_HOME, which the launcher pins to the
-    # isolated OURFAIRY_HOME. Nothing here reaches the host's real home.
-    - id: session-persistence-jsonl
-      name: '@deepseek-ai/dsh-session-persistence-jsonl'
-      config:
-        root: !!js dshHomePath('sessions')
-
-    # Durability barrier before each model request and top-level dispatch.
-    - id: session-checkpoint-policy
-      name: '@deepseek-ai/dsh-session-checkpoint-policy'
-
-    # Rebuildable conversation index; literal substring matching supports Chinese
-    # without a second tokenizer/index. Ownership stays in native session headers.
-    - id: session-query-sqlite
-      name: '@deepseek-ai/dsh-session-query-sqlite'
-      config:
-        path: !!js dshHomePath('query/sessions.sqlite')
-        openAt: first-search
-        literalSubstring: true
-        snippetChars: 80
-
-    - id: conversation-search
-      name: '@ourfairy/dsh-search'
-
-    # ── process-local support services ───────────────────────────────────────
-    # Native process-local job registry; durable lifecycle facts stay in Session logs.
-    - id: jobs-local
-      name: '@deepseek-ai/dsh-jobs-local'
-
-    # Content-addressed attachment bytes live outside the append-only session
-    # log; the directory resolves from the isolated DSH_HOME.
-    - id: attachment-local
-      name: '@deepseek-ai/dsh-attachment-local'
-      config:
-        dshHome: !!js dshHomePath()
-
-    # ── the product's HTTP carrier and its own identity paths ─────────────────
-    # #26 mounts the real Web carrier so the identity module serves `/identity/*`
-    # request paths. Those paths sit outside the shared `/api` prefix on purpose:
-    # `/api` is admitted as a whole before any handler runs, so an unauthenticated
-    # sign-in endpoint cannot exist under it.
-    - id: credentials
-      name: '@deepseek-ai/dsh-credentials-local'
-      config:
-        # The operator may point at the deployment's existing credential store
-        # explicitly; without an override the isolated home owns the document.
-        path: !!js process.env.OURFAIRY_CREDENTIALS_FILE ?? dshHomePath('.credentials.yaml')
-
-    # Live configuration forms and the profile editor they persist through.
-    # The gateway is the product's only caller; dsh's own settings UI is absent.
-    - id: config-editor
-      name: '@deepseek-ai/dsh-config-editor'
-
-    - id: settings
-      name: '@deepseek-ai/dsh-settings'
-
-    # pi-ai's multi-provider adapter. The MiniMax route reuses dsh's installed
-    # `minimax-cn` catalog (endpoint, protocol, model metadata); this row only
-    # narrows the catalog to the one model the deployment uses, declares the
-    # 1M context and the adaptive thinking the model requires, and names the
-    # credential reference. Phaethon can edit the row through the gateway.
-    - id: llm-pi-ai
-      name: '@deepseek-ai/dsh-llm-pi-ai'
-      config:
-        providers:
-          minimax-cn:
-            apiKeyEnv: MINIMAX_CN_API_KEY
-            baseURL: !!js process.env.OURFAIRY_MINIMAX_BASE_URL ?? 'https://api.minimaxi.com/anthropic'
-            # The deployment's recovery policy for this route: the native
-            # default normal mode (5 retries, bounded 500 ms..10 s backoff,
-            # 10% jitter) over the transient failure codes. Written out because
-            # it is a deployment decision, not an inherited accident — the
-            # provider adapter owns the policy this row executes.
-            retryPolicy:
-              mode: normal
-            models:
-              - id: MiniMax-M3.1-Flash
-                name: MiniMax M3.1 Flash
-                contextWindow: 1000000
-                input:
-                  - text
-                  - image
-                reasoningEfforts:
-                  low: low
-                  medium: medium
-                  high: high
-                  xhigh: xhigh
-                  max: max
-                compat:
-                  forceAdaptiveThinking: true
-
-    # `host` must be one concrete IP literal — the plugin rejects wildcard binds.
-    # Port 0 asks the OS for one, which is how the tests get an ephemeral port.
-    - id: webserver
-      name: '@deepseek-ai/dsh-host-webserver'
-      config:
-        host: !!js process.env.OURFAIRY_BIND_HOST ?? '127.0.0.1'
-        port: !!js Number(process.env.OURFAIRY_PORT ?? 3080)
-
-    # trustedHosts must name every authority that is not loopback: an Android
-    # client reaches this listener by an address the fence does not treat as
-    # loopback, and without the entry every request is a 403.
-    - id: connection
-      name: '@deepseek-ai/dsh-client-connection'
-      config:
-        trustedHosts: !!js (process.env.OURFAIRY_TRUSTED_HOSTS ?? '').split(',').filter(Boolean)
-
-    # The identity module: business SQLite beside (never inside) the dsh session
-    # logs, plus the `/identity/*` request paths and the session-token
-    # authenticator that admits `/api` requests for the right principal.
-    - id: identity
-      name: '@ourfairy/dsh-identity'
-      config:
-        path: !!js dshHomePath('identity/identity.sqlite')
-        sessionTtlDays: 30
-        phaethonName: !!js process.env.OURFAIRY_PHAETHON_NAME ?? 'phaethon'
-        # Left unset, Phaethon exists with short number 1 but no password: the
-        # operator provisions it by exporting this before a start.
-        phaethonPassword: !!js process.env.OURFAIRY_PHAETHON_PASSWORD
-
-    # The owned-session module: the product's `/sessions/*` paths. Ownership is
-    # `SessionHeader.owner` from the authenticated credential, and the primary
-    # session id is derived from the owner's short number — this module adds no
-    # second ownership table to keep in step with the session logs. It reads the
-    # dsh session store and its persistence, which the rows above already mount,
-    # and reuses the identity module's fence and POST helper.
-    - id: sessions
-      name: '@ourfairy/dsh-sessions'
-
-
-    # Narrow authenticated remote chat; reuses native Agent, inbox and SessionQuery.
-    - id: chat
-      name: '@ourfairy/dsh-chat'
-
-    # Peer delivery as its own row: the deliver_message tool and durable
-    # delivery coordination/recovery over the chat runtime's narrow service.
-    - id: delivery
-      name: '@ourfairy/dsh-delivery'
-
-    # Phaethon's shared-configuration gateway: provider routes, the shared model
-    # selection and the ASR connection, persisted through the row settings above.
-    - id: gateway
-      name: '@ourfairy/dsh-gateway'
-
-    # Scoped file operations and network-enabled script execution (#30).
-    - id: spaces
-      name: '@ourfairy/dsh-spaces'
-      config:
-        root: !!js dshHomePath('spaces')
-    - id: sandbox-policy
-      name: '@ourfairy/dsh-spaces/policy'
-      config:
-        mode: workspace-write
-    # The four scoped providers are rows of their own: the spaces row keeps the
-    # scope, and each provider can be disabled or replaced alone. Disabling one
-    # leaves the depending capability waiting (no unscoped native provider is
-    # mounted), which the probe reports against the row.
-    - id: scoped-fs
-      name: '@ourfairy/dsh-spaces/fs'
-      config:
-        cwd: !!js dshHomePath('spaces')
-        diffBasisMaxBytes: 10485760
-    - id: scoped-sandbox
-      name: '@ourfairy/dsh-spaces/sandbox'
-    - id: scoped-bash
-      name: '@ourfairy/dsh-spaces/bash'
-    - id: scoped-directory
-      name: '@ourfairy/dsh-spaces/directory'
-    - id: subprocess
-      name: '@deepseek-ai/dsh-subprocess-local'
-    - id: shell-env
-      name: '@deepseek-ai/dsh-shell-env'
-    - id: tool-fs
-      name: '@deepseek-ai/dsh-tool-fs'
-    - id: tool-working-directory
-      name: '@deepseek-ai/dsh-tool-working-directory'
-    - id: tool-bash
-      name: '@deepseek-ai/dsh-tool-bash'
-      config:
-        enableRunInBackground: true
-        promoteOnTimeout: true
-    - id: tool-jobs
-      name: '@deepseek-ai/dsh-tool-jobs'
-      config:
-        completionDelivery: wakeup
-    - id: fs-observation-policy
-      name: '@deepseek-ai/dsh-fs-observation-policy'
-
-    - id: attachments
-      name: '@ourfairy/dsh-attachments'
-      config:
-        root: !!js dshHomePath('uploads')
-
-    - id: speech
-      name: '@ourfairy/dsh-speech'
-      config:
-        # Phaethon edits these through the gateway; the environment only seeds
-        # the initial row. The credential is a reference, resolved per request.
-        apiKeyEnv: !!js process.env.OURFAIRY_ASR_API_KEY_ENV ?? 'VOICE_API_KEY'
-        model: !!js process.env.OURFAIRY_ASR_MODEL ?? 'FunAudioLLM/SenseVoiceSmall'
-        endpoint: !!js process.env.OURFAIRY_ASR_ENDPOINT ?? 'https://api.siliconflow.cn/v1/audio/transcriptions'
-        maxDurationMs: !!js Number(process.env.OURFAIRY_ASR_MAX_DURATION_MS ?? 60000)
-        maxAudioBytes: !!js Number(process.env.OURFAIRY_ASR_MAX_AUDIO_BYTES ?? 1920044)
-        timeoutMs: !!js Number(process.env.OURFAIRY_ASR_TIMEOUT_MS ?? 45000)
-        maxGlobalInFlight: !!js Number(process.env.OURFAIRY_ASR_MAX_GLOBAL_IN_FLIGHT ?? 2)
-        maxUserInFlight: !!js Number(process.env.OURFAIRY_ASR_MAX_USER_IN_FLIGHT ?? 1)
-
-    # The group row: group membership tools, plus the member group roots it
-    # contributes to the spaces row. It owns no scope calculation and can be
-    # disabled alone without taking the private/public spaces away.
-    - id: groups
-      name: '@ourfairy/dsh-groups'
+        - id: tool-todo
+          name: '@deepseek-ai/dsh-tool-todo'
+          config:
+            allowParallelInProgress: true
+        - id: conversation-search
+          name: '@ourfairy/dsh-search'
+        # ── process-local support services ───────────────────────────────────────
+        # Native process-local job registry; durable lifecycle facts stay in Session logs.
+        - id: jobs-local
+          name: '@deepseek-ai/dsh-jobs-local'
+        # Content-addressed attachment bytes live outside the append-only session
+        # log; the directory resolves from the isolated DSH_HOME.
+        - id: attachment-local
+          name: '@deepseek-ai/dsh-attachment-local'
+          config:
+            dshHome: !!js dshHomePath()
+        # Live configuration forms and the profile editor they persist through.
+        # The gateway is the product's only caller; dsh's own settings UI is absent.
+        - id: config-editor
+          name: '@deepseek-ai/dsh-config-editor'
+        - id: settings
+          name: '@deepseek-ai/dsh-settings'
+        # ── the product's identity and owned-session paths ────────────────────────
+        # The identity module: business SQLite beside (never inside) the dsh session
+        # logs, plus the `/identity/*` request paths and the session-token
+        # authenticator that admits `/api` requests for the right principal.
+        - id: identity
+          name: '@ourfairy/dsh-identity'
+          config:
+            path: !!js dshHomePath('identity/identity.sqlite')
+            sessionTtlDays: 30
+            phaethonName: !!js process.env.OURFAIRY_PHAETHON_NAME ?? 'phaethon'
+            # Left unset, Phaethon exists with short number 1 but no password: the
+            # operator provisions it by exporting this before a start.
+            phaethonPassword: !!js process.env.OURFAIRY_PHAETHON_PASSWORD
+        # The owned-session module: the product's `/sessions/*` paths. Ownership is
+        # `SessionHeader.owner` from the authenticated credential, and the primary
+        # session id is derived from the owner's short number — this module adds no
+        # second ownership table to keep in step with the session logs. It reads the
+        # dsh session store and its persistence, which the rows above already mount,
+        # and reuses the identity module's fence and POST helper.
+        - id: sessions
+          name: '@ourfairy/dsh-sessions'
+        # Narrow authenticated remote chat; reuses native Agent, inbox and SessionQuery.
+        - id: chat
+          name: '@ourfairy/dsh-chat'
+        # Peer delivery as its own row: the deliver_message tool and durable
+        # delivery coordination/recovery over the chat runtime's narrow service.
+        - id: delivery
+          name: '@ourfairy/dsh-delivery'
+        # Phaethon's shared-configuration gateway: provider routes, the shared model
+        # selection and the ASR connection, persisted through the row settings above.
+        - id: gateway
+          name: '@ourfairy/dsh-gateway'
+        # Scoped file operations and network-enabled script execution (#30).
+        - id: spaces
+          name: '@ourfairy/dsh-spaces'
+          config:
+            root: !!js dshHomePath('spaces')
+        - id: sandbox-policy
+          name: '@ourfairy/dsh-spaces/policy'
+          config:
+            mode: workspace-write
+        # The four scoped providers are rows of their own: the spaces row keeps the
+        # scope, and each provider can be disabled or replaced alone. Disabling one
+        # leaves the depending capability waiting (no unscoped native provider is
+        # mounted), which the probe reports against the row.
+        - id: scoped-fs
+          name: '@ourfairy/dsh-spaces/fs'
+          config:
+            cwd: !!js dshHomePath('spaces')
+            diffBasisMaxBytes: 10485760
+        - id: scoped-sandbox
+          name: '@ourfairy/dsh-spaces/sandbox'
+        - id: scoped-bash
+          name: '@ourfairy/dsh-spaces/bash'
+        - id: scoped-directory
+          name: '@ourfairy/dsh-spaces/directory'
+        - id: subprocess
+          name: '@deepseek-ai/dsh-subprocess-local'
+        - id: shell-env
+          name: '@deepseek-ai/dsh-shell-env'
+        - id: tool-fs
+          name: '@deepseek-ai/dsh-tool-fs'
+        - id: tool-working-directory
+          name: '@deepseek-ai/dsh-tool-working-directory'
+        - id: tool-bash
+          name: '@deepseek-ai/dsh-tool-bash'
+          config:
+            enableRunInBackground: true
+            promoteOnTimeout: true
+        - id: tool-jobs
+          name: '@deepseek-ai/dsh-tool-jobs'
+          config:
+            completionDelivery: wakeup
+        - id: fs-observation-policy
+          name: '@deepseek-ai/dsh-fs-observation-policy'
+        - id: attachments
+          name: '@ourfairy/dsh-attachments'
+          config:
+            root: !!js dshHomePath('uploads')
+        - id: speech
+          name: '@ourfairy/dsh-speech'
+          config:
+            # Phaethon edits these through the gateway; the environment only seeds
+            # the initial row. The credential is a reference, resolved per request.
+            apiKeyEnv: !!js process.env.OURFAIRY_ASR_API_KEY_ENV ?? 'VOICE_API_KEY'
+            model: !!js process.env.OURFAIRY_ASR_MODEL ?? 'FunAudioLLM/SenseVoiceSmall'
+            endpoint: !!js process.env.OURFAIRY_ASR_ENDPOINT ?? 'https://api.siliconflow.cn/v1/audio/transcriptions'
+            maxDurationMs: !!js Number(process.env.OURFAIRY_ASR_MAX_DURATION_MS ?? 60000)
+            maxAudioBytes: !!js Number(process.env.OURFAIRY_ASR_MAX_AUDIO_BYTES ?? 1920044)
+            timeoutMs: !!js Number(process.env.OURFAIRY_ASR_TIMEOUT_MS ?? 45000)
+            maxGlobalInFlight: !!js Number(process.env.OURFAIRY_ASR_MAX_GLOBAL_IN_FLIGHT ?? 2)
+            maxUserInFlight: !!js Number(process.env.OURFAIRY_ASR_MAX_USER_IN_FLIGHT ?? 1)
+        # The group row: group membership tools, plus the member group roots it
+        # contributes to the spaces row. It owns no scope calculation and can be
+        # disabled alone without taking the private/public spaces away.
+        - id: groups
+          name: '@ourfairy/dsh-groups'
