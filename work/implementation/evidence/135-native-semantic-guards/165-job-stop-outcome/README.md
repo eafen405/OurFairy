@@ -117,11 +117,27 @@ combo: combination verified
 
 即先前失败是共享机器高负载下的既有竞态，未使用 `--no-verify`。
 
+## 合并后（最终状态）
+
+`git merge integration/spec-135` 无冲突，合并提交 `01c9620` 带入了 #164/#167 的改动，其中
+`7f3d979`（`test(chat): settle the accepted turn before the next artifact snapshot`）正是上述
+remote-chat 竞态的修复。在合并后的工作树重跑完整入口：
+
+```
+$ npm test
+ℹ tests 242 / suites 7 / pass 242 / fail 0
+
+$ npm run combo:verify
+ourfairy        integration/ourfairy-v1  01c9620bbd3fce4a  ok (worktree is based on the integration tip)
+dsh             product/ourfairy-v1      5b8ec0f175d3d7ba  ok
+android source  -                        460109d1b89b824a  ok (declaration matches)
+combo: combination verified
+```
+
 ## 未完成项
 
 - 无。
 - 说明：booted 后端无法制造未知的原生 `kill` 返回值（原生 registry 只会返回自己的成员），
   因此未知值路径由 adapter 级用例覆盖，与票 #163 的 `/chat/jobs/output` 做法一致。
-- 范围外观察：`tests/remote-chat.test.mjs` 存在一个既有竞态（前一用例发出慢速 mock 回复后未等
-  其落盘，下一用例的会话产物快照会看到后台写入），在高负载下会失败；本票未修改该文件，交由
-  其归属票处理。
+- 范围外观察：`tests/remote-chat.test.mjs` 的既有竞态（前一用例发出慢速 mock 回复后未等其落盘，
+  下一用例的会话产物快照会看到后台写入）已由集成分支的 `7f3d979` 修复；本票未修改该文件。
