@@ -44,6 +44,17 @@ import { z } from 'zod'
 
 /** Native job lifecycle status to the wire's numeric task status (README `任务状态`). */
 export const TASK_STATUS = Object.freeze({ running: 1, stopping: 2, completed: 3, killed: 4, failed: 5 })
+
+/**
+ * The wire task status for one native job status. A native value the table
+ * does not name is `0` (unknown): returning `undefined` would drop the field
+ * from the projection and hide an unconverged task, and guessing a terminal
+ * number would claim a settlement that never happened.
+ */
+export function taskStatusOf(status) {
+  return Object.hasOwn(TASK_STATUS, status) ? TASK_STATUS[status] : 0
+}
+
 const terminal = status => status >= 3
 const interruptedKind = kind => ['aborted', 'interrupted', 'forked'].includes(kind)
 const taskKey = (generation, id) => `${generation}/${id}`
@@ -498,7 +509,7 @@ function tasksAt(state, ctx, sessionId) {
     const job = row.generation === ctx.jobs.generation ? live.get(row.id) : undefined
     const available = job !== undefined
     const current = job ?? row
-    const status = TASK_STATUS[current.status]
+    const status = taskStatusOf(current.status)
     const report = { ...row.report }
     // A restored queue does not schedule inference by itself.
     if (!available && [1, 2].includes(report.status)) report.status = 6
