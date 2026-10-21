@@ -37,10 +37,14 @@
 ### 共用选模
 
 `/gateway/selection` 先确认 provider 已注册、model 在适配器提供的模型清单内，再经原生
-`agentDefaultModel.saveSelection(...)` 写入 `agent-default-model`；原生入口按提交顺序串行化
-保存（重叠保存的串行化由上游 `agent-default-model` 测试固定），网关不再直接写该行。缺少配置
-编辑器时返回 503 `gateway/configuration-unavailable`：原生入口在没有编辑器时保持组合入口、
-不落盘，网关不能因此假装保存成功。选择对**所有会话**从各自下一轮回复开始生效：每个 turn
+`agentDefaultModel.saveSelection(...)` 写入 `agent-default-model`；网关不再直接写该行。保存的
+调用路径由 `tests/gateway-service.test.mjs` 的单元测试固定：原生入口收到完整选择、
+`settings().mutate` 未被调用。重叠保存的串行化是原生 `agent-default-model` 服务自己的契约，
+由上游测试 `serializes overlapping saves and continues after a rejected write` 固定，不是产品
+HTTP 测试的断言——`consecutive selection saves commit in submission order` 固定的是按提交顺序
+完成两次保存时最后一次的值生效。缺少配置编辑器时返回 503
+`gateway/configuration-unavailable`：原生入口在没有编辑器时保持组合入口、不落盘，网关不能因此
+假装保存成功（同一单元测试断言此时不调用原生保存）。选择对**所有会话**从各自下一轮回复开始生效：每个 turn
 开始时读取一次并固定到该 turn 结束，包括工具调用后的模型续请求；正在执行的回复不切换。
 保存选择不受在用状态限制。省略 `reasoningEffort` 会清除该字段的 profile 覆盖，回到组合声明的
 默认值；网关从同一设置行的继承层（`base.reasoningEffort`）取出该默认值，随完整选择一起提交
@@ -55,8 +59,12 @@
 `contextWindow`、`maxTokens`、`input`。`input` 的取值以 pinned dsh 的
 `@deepseek-ai/dsh-llm-pi-ai` 目录模块导出的 `MODALITIES` 为唯一权威：网关直接导入该运行时
 列表，不维护本地词表，原生新增模态无需产品改动即可接受；不在列表中的值返回 400
-`gateway/invalid-route`。该包是网关声明的 peer，解析失败时启动直接失败并指出缺失的包/子路径，
-不回退到本地列表。保存时以同 id 的先前模型条目为底，只覆盖这五个可编辑
+`gateway/invalid-route`。该包是网关声明的 peer，不回退到本地列表：模块级加载失败被
+`GatewayService` 构造函数重新抛出，因此启动失败并指出缺失的包/子路径，而不是只报「加载失败」。
+`loadNativeModalities(...)` 导出同一段加载逻辑，`tests/gateway-service.test.mjs` 的
+`a missing native catalog fails naming the peer and the module specifier` 用一个不存在的子路径
+直接构造该失败并断言消息点名子路径与 peer（不需要整机启动），同一用例断言默认加载返回原生
+列表。保存时以同 id 的先前模型条目为底，只覆盖这五个可编辑
 字段；其余字段（如部署声明的思考能力 `reasoningEfforts`、协议兼容开关 `compat`，以及上游
 将来新增的模型级字段）默认保留，不会因保存而丢失。草稿省略的可编辑字段按「未设置」清除，
 不继承旧值；新模型 id 没有可保留的先前条目，按草稿原样写入。路由级部署字段（例如

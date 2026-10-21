@@ -82,10 +82,11 @@ test('known native stop outcomes keep their numeric wire contract', async () => 
   assert.deepEqual(unavailable.calls, [], 'an unavailable task keeps returning 0 without calling kill')
 })
 
-test('an unknown native stop outcome is a 5xx product error naming it', async () => {
+test('an unknown native stop outcome is a 500 product error naming it', async () => {
   await assert.rejects(stop('paused').done, error => {
-    assert.ok(error.status >= 500 && error.status < 600, `the stop outcome error must be 5xx; got ${error.status}`)
-    assert.match(error.code, /^chat\//, `the stop outcome error must carry a chat/... code; got ${error.code}`)
+    assert.equal(error.status, 500, `the stop outcome error must be the documented 500; got ${error.status}`)
+    assert.equal(error.code, 'chat/unknown-stop-outcome',
+      `the stop outcome error must carry chat/unknown-stop-outcome; got ${error.code}`)
     assert.match(error.message, /paused/, `the stop outcome error must name the native value; got ${error.message}`)
     return true
   })

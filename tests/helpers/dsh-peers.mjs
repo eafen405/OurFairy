@@ -30,10 +30,12 @@ const dshRoot = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
  */
 const anchors = {
   '@deepseek-ai/cordis': join(dshRoot, 'vendor', 'cordis', 'package.json'),
+  '@deepseek-ai/dsh-app-boot': join(dshRoot, 'packages', 'boot', 'app-boot', 'package.json'),
   '@deepseek-ai/dsh-session': join(dshRoot, 'packages', 'core', 'session', 'package.json'),
   '@deepseek-ai/dsh-session-projection': join(dshRoot, 'packages', 'session', 'session-projection', 'package.json'),
   '@deepseek-ai/dsh-llm': join(dshRoot, 'packages', 'llm', 'llm', 'package.json'),
   '@deepseek-ai/dsh-llm-pi-ai': join(dshRoot, 'packages', 'llm', 'llm-pi-ai', 'package.json'),
+  '@deepseek-ai/dsh-llm-mock-server': join(dshRoot, 'packages', 'test-support', 'llm-mock-server', 'package.json'),
   '@deepseek-ai/dsh-agent': join(dshRoot, 'packages', 'core', 'agent', 'package.json'),
   '@deepseek-ai/dsh-jobs': join(dshRoot, 'packages', 'jobs', 'jobs', 'package.json'),
   '@deepseek-ai/schemastery': join(dshRoot, 'vendor', 'schemastery', 'package.json'),

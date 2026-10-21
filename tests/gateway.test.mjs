@@ -10,35 +10,29 @@
  * provider.
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { pathToFileURL } from 'node:url'
 // Registers Node resolution for the pinned dsh checkout before the native
-// catalog below is loaded; it must stay the first helper import of this file.
+// modules below are loaded; it must stay the first helper import of this file.
 import './helpers/dsh-peers.mjs'
-import { resolveDshPeer } from './helpers/dsh-peers.mjs'
 import {
   describeRun, httpJson, makeHome, readReport, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'gateway-password'
-const combo = JSON.parse(await import('node:fs').then(fs => fs.readFileSync(join(repoRoot, 'combo.json'), 'utf8')))
-const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
-const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
-const dshRequire = createRequire(join(dshDir, 'apps', 'cli', 'package.json'))
+const { startMockLlmServer } = await import('@deepseek-ai/dsh-llm-mock-server')
+const { loadOverlayPatches } = await import('@deepseek-ai/dsh-app-boot')
+const { Config: PiAiConfig } = await import('@deepseek-ai/dsh-llm-pi-ai')
+// The phone-editable allowlist has one authority: the gateway service exports
+// the same set its route validator and save overlay use.
+const { PHONE_EDITABLE_MODEL_FIELDS } = await import('../backend/gateway/src/service.mjs')
 
 /**
  * The native input modality list, read from the pinned dsh catalog module the
  * gateway imports. The test must not keep its own copy: the point of the case
  * below is that the gateway and this expectation move with upstream together.
  */
-const { MODALITIES: NATIVE_MODALITIES } = await import(
-  pathToFileURL(resolveDshPeer('@deepseek-ai/dsh-llm-pi-ai/src/catalog.ts')).href)
-
-/** Model fields the phone may edit; a previous entry's other fields are deployment-owned. */
-const PHONE_MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input'])
+const { MODALITIES: NATIVE_MODALITIES } = await import('@deepseek-ai/dsh-llm-pi-ai/src/catalog.ts')
 
 const servers = []
 const homes = []
@@ -126,8 +120,7 @@ function minimaxRoute(baseURL, extra = {}) {
  */
 function savedProviders(home) {
   const patchPath = join(home, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml')
-  const boot = dshRequire('@deepseek-ai/dsh-app-boot')
-  const row = boot.loadOverlayPatches('dsh', patchPath).find(entry => entry.id === 'llm-pi-ai')
+  const row = loadOverlayPatches('dsh', patchPath).find(entry => entry.id === 'llm-pi-ai')
   assert.ok(row?.config?.providers !== undefined, `${patchPath} must carry the saved llm-pi-ai providers row`)
   return row.config.providers
 }
@@ -142,11 +135,10 @@ function savedProviders(home) {
  * @returns {Record<string, any>} the resolved model entry.
  */
 function declaredModel(provider, id) {
-  const boot = dshRequire('@deepseek-ai/dsh-app-boot')
   const bundle = join(repoRoot, 'backend', 'v1-bundle', 'cordis.patch.yml')
-  const row = boot.loadOverlayPatches('dsh', bundle).flatMap(entry => entry.insert ?? []).find(entry => entry.id === 'llm-pi-ai')
+  const row = loadOverlayPatches('dsh', bundle).flatMap(entry => entry.insert ?? []).find(entry => entry.id === 'llm-pi-ai')
   const declared = row.config.providers[provider].models.find(model => model.id === id)
-  const resolved = dshRequire('@deepseek-ai/dsh-llm-pi-ai').Config({ providers: { [provider]: { models: [declared] } } })
+  const resolved = PiAiConfig({ providers: { [provider]: { models: [declared] } } })
   return resolved.providers.get()[provider].models[0]
 }
 
@@ -562,7 +554,7 @@ test('a route saved from the phone keeps model fields the draft does not edit', 
     // Its fields outside the phone's editable set are the expectation; when the
     // deployment (or upstream) adds another one, this list grows by itself.
     const previous = declaredModel('minimax-cn', 'MiniMax-M3.1-Flash')
-    const unedited = Object.entries(previous).filter(([field]) => !PHONE_MODEL_FIELDS.has(field))
+    const unedited = Object.entries(previous).filter(([field]) => !PHONE_EDITABLE_MODEL_FIELDS.has(field))
     assert.ok(unedited.length >= 2, `the deployment model must declare fields the phone cannot edit; got ${JSON.stringify(previous)}`)
 
     // The draft supplies `maxTokens` and omits the deployment's `contextWindow`:
