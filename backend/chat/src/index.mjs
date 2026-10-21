@@ -9,7 +9,17 @@ import { installSpillRead } from './spill-read.mjs'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 
 export const name = 'ourfairy-chat'
-export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairySpaces', 'agents', 'agentLoop', 'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'identity', 'tools', 'sessionPersistence', 'jobs', 'sessionProjections']
+/**
+ * The services chat depends on: an entry belongs here only if chat's contract
+ * would be wrong without it. The ordering-only entry and the optional
+ * capability are called out at their sites, not silently listed or omitted.
+ */
+export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairySpaces', 'agents',
+  // Declared for ordering/side effect, not for a call: `agentLoop` registers
+  // the Agent factory that `agents.resume` needs, so this row must not take
+  // work before that factory is available. Chat never reads `ctx.agentLoop`.
+  'agentLoop',
+  'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'llm', 'sessionPersistence', 'jobs', 'sessionProjections']
 export function apply(ctx) {
   // Every registered unit folds on the native event drive, once per session and
   // shared by every observer; `register` installs its own effect on this fiber.
