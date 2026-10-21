@@ -119,10 +119,13 @@ export function affectedModels(previous, next) {
 }
 
 /**
- * Carry the deployment-owned model fields (thinking capability, wire compat)
- * from the stored profile onto a draft that no longer names them: the phone
- * edits ids, labels, windows and modalities, and saving must not silently strip
- * the thinking configuration the bundle declared.
+ * Overlay the phone-editable fields of a draft model onto the previous entry of
+ * the same id. Every other field the previous entry carries — thinking
+ * capability, wire compat, and any field upstream adds later — stays as the
+ * deployment declared it, so a save cannot silently drop a field the phone has
+ * no way to send. A draft that omits an editable field clears it, matching the
+ * phone's "blank means unset" drafts; a model id with no previous entry is
+ * stored exactly as the draft declares it.
  */
 function keepDeploymentFields(previous, draft) {
   if (previous === undefined || !Array.isArray(draft.models)) return draft
@@ -132,11 +135,12 @@ function keepDeploymentFields(previous, draft) {
     models: draft.models.map(model => {
       const prior = before.get(model.id)
       if (prior === undefined) return model
-      return {
-        ...model,
-        ...prior.reasoningEfforts === undefined ? {} : { reasoningEfforts: prior.reasoningEfforts },
-        ...prior.compat === undefined ? {} : { compat: prior.compat },
+      const merged = { ...prior }
+      for (const field of MODEL_FIELDS) {
+        if (model[field] === undefined) delete merged[field]
+        else merged[field] = model[field]
       }
+      return merged
     }),
   }
 }
