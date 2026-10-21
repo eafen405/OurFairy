@@ -16,7 +16,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { productPackages, readCombination } from '../scripts/ourfairy-composition.mjs'
+import { admitBundleDependencies, productPackages, readCombination } from '../scripts/ourfairy-composition.mjs'
 import { copyProductRepo, repoRoot } from './helpers/backend.mjs'
 
 const roots = []
@@ -70,6 +70,68 @@ test('a dependency resolving outside the repository is refused by name and rule'
   const message = admissionMessage(root)
   assert.match(message, /declares @ourfairy\/dsh-outside at .*outside-product, which is outside this repository/)
   assert.match(message, /product packages live under backend\//)
+})
+
+test('the shared rule gives the worktree and installed shapes the same verdict', () => {
+  const { bundlePackage, probePackage } = readCombination(repoRoot)
+  const root = copiedRepo('shared-verdict')
+  // The two shapes differ only in the bundle directory and the containment
+  // root: the worktree bundle resolves `file:` paths from backend/v1-bundle
+  // inside the repository; the installed bundle resolves the same declarations
+  // from its profile copy inside the profile's node_modules.
+  const shapes = {
+    worktree: {
+      bundleDir: join(root, 'backend', 'v1-bundle'),
+      containmentRoot: root,
+    },
+    installed: {
+      bundleDir: join(root, 'home', 'dsh-home', 'profiles', 'ourfairy', 'node_modules', '@ourfairy', 'dsh-v1-bundle'),
+      containmentRoot: join(root, 'home', 'dsh-home', 'profiles', 'ourfairy', 'node_modules'),
+    },
+  }
+  const cases = [
+    {
+      label: 'an admitted dependency',
+      dependencies: { '@ourfairy/dsh-identity': 'file:../identity' },
+      expected: { admitted: ['@ourfairy/dsh-identity'], refused: [] },
+    },
+    {
+      label: 'a non-file: specifier',
+      dependencies: { '@ourfairy/dsh-registry': '^1.0.0' },
+      expected: { admitted: [], refused: [{ name: '@ourfairy/dsh-registry', rule: 'file' }] },
+    },
+    {
+      label: 'a target outside the containment root',
+      dependencies: { '@ourfairy/dsh-outside': 'file:../../../outside-product' },
+      expected: { admitted: [], refused: [{ name: '@ourfairy/dsh-outside', rule: 'containment' }] },
+    },
+    {
+      label: 'a dependency duplicating the bundle entry',
+      dependencies: { [bundlePackage]: 'file:../v1-bundle' },
+      expected: { admitted: [], refused: [{ name: bundlePackage, rule: 'duplicate' }] },
+    },
+    {
+      label: 'a dependency duplicating the probe entry',
+      dependencies: { [probePackage]: 'file:../probe' },
+      expected: { admitted: [], refused: [{ name: probePackage, rule: 'duplicate' }] },
+    },
+  ]
+
+  for (const { label, dependencies, expected } of cases) {
+    for (const [shape, { bundleDir, containmentRoot }] of Object.entries(shapes)) {
+      const { admitted, refused } = admitBundleDependencies({
+        dependencies,
+        bundleDir,
+        containmentRoot,
+        entries: [bundlePackage, probePackage],
+      })
+      const verdict = {
+        admitted: admitted.map(entry => entry.name),
+        refused: refused.map(entry => ({ name: entry.name, rule: entry.rule })),
+      }
+      assert.deepEqual(verdict, expected, `the ${shape} shape must judge ${label} the same way; it said ${JSON.stringify(verdict)}`)
+    }
+  }
 })
 
 test('a dependency duplicating the bundle or probe entry is refused by name and rule', () => {

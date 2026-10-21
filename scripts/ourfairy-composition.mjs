@@ -121,6 +121,61 @@ export function isolatedEnv(layout, { root = repoRoot, extra = {} } = {}) {
 }
 
 /**
+ * The three admission rules for a bundle manifest's dependencies.
+ *
+ * A product package is linked from a checkout, never fetched from a registry:
+ * every dependency must be a `file:` specifier, must resolve inside the root
+ * that contains the bundle copy, and must not repeat the bundle or probe entry.
+ * The rules are stated once here because two callers read two copies of the
+ * same manifest — the launcher reads the worktree copy (containment root = the
+ * repository) and combo.mjs reads the installed copy (containment root = the
+ * profile's `node_modules`). The roots differ; the verdicts must not.
+ *
+ * `admitted` keeps declaration order and carries each package directory
+ * relative to `containmentRoot`, which is how the launcher turns the inventory
+ * into repo-relative sources. `refused` names the violated rule instead of
+ * throwing, so a caller that reports rather than fails (doctor's bundle
+ * packages check) can turn it into a failure line.
+ * @param {{
+ *   dependencies?: Record<string, unknown>,
+ *   bundleDir: string,
+ *   containmentRoot: string,
+ *   entries: string[],
+ * }} options - `entries` are the bundle and probe package names, the entries a
+ *   dependency may not duplicate.
+ * @returns {{
+ *   admitted: {name: string, dir: string}[],
+ *   refused: {name: string, specifier: unknown, target?: string, rule: 'file'|'containment'|'duplicate'}[],
+ * }}
+ */
+export function admitBundleDependencies({ dependencies, bundleDir, containmentRoot, entries }) {
+  const admitted = []
+  const refused = []
+  const reserved = new Set(entries)
+  for (const [name, specifier] of Object.entries(dependencies ?? {})) {
+    if (typeof specifier !== 'string' || !specifier.startsWith('file:')) {
+      refused.push({ name, specifier, rule: 'file' })
+      continue
+    }
+    const target = resolve(bundleDir, specifier.slice('file:'.length))
+    // The staleness hash lists the sources the install copies; a package
+    // outside the containment root could change without the hash noticing,
+    // which is the stale install the hash exists to prevent.
+    const dir = relative(containmentRoot, target)
+    if (dir === '' || dir.startsWith('..') || isAbsolute(dir)) {
+      refused.push({ name, specifier, target, rule: 'containment' })
+      continue
+    }
+    if (reserved.has(name)) {
+      refused.push({ name, specifier, target, rule: 'duplicate' })
+      continue
+    }
+    admitted.push({ name, dir })
+  }
+  return { admitted, refused }
+}
+
+/**
  * The product packages the profile installs, derived from the bundle manifest.
  *
  * The bundle's `dependencies` are the product package inventory: every entry is
@@ -129,34 +184,34 @@ export function isolatedEnv(layout, { root = repoRoot, extra = {} } = {}) {
  * own directory — exactly how pnpm resolves it when the bundle is installed —
  * so adding a product package is one manifest edit and no launcher change. The
  * probe is the one package the bundle never mounts: combo.json names it
- * separately.
+ * separately. Admission is the shared rule above, with this checkout as the
+ * containment root; a violation is a hard failure because the launcher cannot
+ * derive an installable inventory from it.
  * @param {string} [root] - repository root.
  * @returns {{name: string, dir: string}[]} package name plus repo-relative directory.
  */
 export function productPackages(root = repoRoot) {
   const { bundlePackage, probePackage, bundlePathInRepo, probePathInRepo } = readCombination(root)
-  const bundleDir = join(root, bundlePathInRepo)
   const manifest = readPackageManifest(bundlePathInRepo, root)
-  const packages = [{ name: bundlePackage, dir: bundlePathInRepo }, { name: probePackage, dir: probePathInRepo }]
-  for (const [name, specifier] of Object.entries(manifest.dependencies ?? {})) {
-    if (typeof specifier !== 'string' || !specifier.startsWith('file:')) {
-      throw new Error(`${bundlePathInRepo}/package.json declares ${name} as ${JSON.stringify(specifier)};`
-        + ' the launcher links product packages from this checkout, so the bundle must declare each one as file:<path>')
-    }
-    const dir = relative(root, resolve(bundleDir, specifier.slice('file:'.length)))
-    // The staleness hash lists repo-relative sources; a package outside the
-    // repository could change without the hash noticing, which is the stale
-    // install the hash exists to prevent.
-    if (dir === '' || dir.startsWith('..') || isAbsolute(dir)) {
-      throw new Error(`${bundlePathInRepo}/package.json declares ${name} at ${resolve(bundleDir, specifier.slice('file:'.length))},`
-        + ' which is outside this repository; product packages live under backend/')
-    }
-    if (packages.some(entry => entry.name === name)) {
-      throw new Error(`${bundlePathInRepo}/package.json declares ${name} twice: once as a bundle/probe entry and once in dependencies`)
-    }
-    packages.push({ name, dir })
+  const { admitted, refused } = admitBundleDependencies({
+    dependencies: manifest.dependencies,
+    bundleDir: join(root, bundlePathInRepo),
+    containmentRoot: root,
+    entries: [bundlePackage, probePackage],
+  })
+  const [refusal] = refused
+  if (refusal?.rule === 'file') {
+    throw new Error(`${bundlePathInRepo}/package.json declares ${refusal.name} as ${JSON.stringify(refusal.specifier)};`
+      + ' the launcher links product packages from this checkout, so the bundle must declare each one as file:<path>')
   }
-  return packages
+  if (refusal?.rule === 'containment') {
+    throw new Error(`${bundlePathInRepo}/package.json declares ${refusal.name} at ${refusal.target},`
+      + ' which is outside this repository; product packages live under backend/')
+  }
+  if (refusal?.rule === 'duplicate') {
+    throw new Error(`${bundlePathInRepo}/package.json declares ${refusal.name} twice: once as a bundle/probe entry and once in dependencies`)
+  }
+  return [{ name: bundlePackage, dir: bundlePathInRepo }, { name: probePackage, dir: probePathInRepo }, ...admitted]
 }
 
 /**
