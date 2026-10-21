@@ -1,6 +1,6 @@
 /** Authenticated upload/download routes and session-scoped native model/file integration. */
 import z from '@deepseek-ai/schemastery'
-import { postHandler, sendJson } from '@ourfairy/dsh-identity/http'
+import { postHandler, sendJson } from '@ourfairy/dsh-http/http'
 import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.mjs'
 import { installPdf } from './pdf.mjs'
 import { createDownloadResponder } from './download.mjs'

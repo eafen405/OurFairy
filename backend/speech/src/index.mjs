@@ -10,7 +10,7 @@
  * @module @ourfairy/dsh-speech
  */
 import z from '@deepseek-ai/schemastery'
-import { sendJson } from '@ourfairy/dsh-identity/http'
+import { sendJson } from '@ourfairy/dsh-http/http'
 import { createSpeechHandler, resolveSpeechSettings, SpeechError } from './service.mjs'
 
 export const name = 'ourfairy-speech'
