@@ -74,7 +74,7 @@
 
 | 票面要求 | 核对结果 | 依据 |
 | --- | --- | --- |
-| #143 公开方法恰为 19 个 | 成立 | `tests/identity-interfaces.test.mjs` 读 `IdentityStore.prototype` 的名单断言 |
+| #143 公开方法恰为 19 个 | 成立 | `tests/identity-interfaces.test.mjs` 的名单断言（原型 19 个 + 实例上没有函数型自有属性，`now` 已改为 `#now`） |
 | #143 `userByName`/`listUsers`/`inviteState`/`liveSessionCount` 不再存在于类上 | 成立 | `grep -rn "userByName\|listUsers\|inviteState\|liveSessionCount" backend/ tests/ scripts/ docs/ android/` 无输出 |
 | #143 `readDelivery` 模块私有、同包仍能调用 | 成立 | `#readDelivery` 不落在原型上；同包 `prepareDelivery`/`prepareDeliveryFile`/`pendingDeliveries` 仍调用它，投递行为由既有断言承担 |
 | #143 被删断言的行为由兄弟断言承接 | 部分成立 | `tests/identity-store.test.mjs` 的 'a removed user no longer signs in or authenticates' 与 'a removed name stays reserved' 承接登录、认证与名字占用；`listUsers` 的「listing hides removed identities」没有兄弟断言承接（方法已删，143 证据的「未执行项」已记录） |
@@ -143,7 +143,7 @@
 | `node` 求值旧树与新树各一次的 `SCHEMA` 模板并比 sha256 | DDL 零变化核对 | 两者同为 `7ea33bc456e1081d414a4368b1316c1161a723ef15605852d557216f6699f94d`、2913 bytes，逐字节相同 |
 | 两条迁移路径（全新文件、v2 文件升级）的 `sqlite_master` / 列 / 外键 / 索引 / 版本 dump，旧树与新树各跑一次后 `diff` | 同上 | 无输出（逐字节一致）；两边的 `meta.schema_version` 都是 6 |
 | 旧树读 `IdentityStore.prototype` 的方法名 | 「24 → 19」核对 | 24 个（含 `inviteState`、`listUsers`、`liveSessionCount`、`readDelivery`、`userByName`） |
-| 临时给 store 加一个第 20 个公开方法后跑 `node --test tests/identity-interfaces.test.mjs`，随即还原 | 「19 个方法」这条声称的可执行性（红检查） | **red**：6 tests / 5 pass / 1 fail，报 `a method with no production caller must not stay on the store`；还原后 `git diff --stat HEAD` 为空 |
+| 临时给 store 加一个第 20 个公开方法后跑 `node --test tests/identity-interfaces.test.mjs`，随即还原 | 「19 个方法」这条声称的可执行性（红检查） | **red**：6 tests / 5 pass / 1 fail，报原型名单差异（`a method with no production caller must not stay on the store`，当时的断言消息）；还原后 `git diff --stat HEAD` 为空 |
 | `grep -rn "userByName\|listUsers\|inviteState\|liveSessionCount" backend/ tests/ scripts/ docs/ android/` | 删方法的残留引用 | 无输出 |
 | `npm test` | 修完 S1/S2、本证据文件写入后 | 236 tests / 236 pass / 0 fail（suites 7，duration 101832 ms） |
 | `npm run combo:verify` | 同上 | 三行 ok + `combo: combination verified` |
