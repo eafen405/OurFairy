@@ -28,7 +28,7 @@ import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readCombo } from './ourfairy-composition.mjs'
+import { admitBundleDependencies, readCombo } from './ourfairy-composition.mjs'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(scriptDir, '..')
@@ -298,6 +298,30 @@ function installedBundle({ binName, bundlePackage, installAnchor, profileDir }) 
 }
 
 /**
+ * The failure line for one dependency the installed bundle may not declare.
+ *
+ * The worktree copy fails hard with the launcher's message; this copy is
+ * reported instead, because doctor's job is to collect failures rather than
+ * abort on the first one. The message names the installed manifest, the
+ * package, and the rule it broke.
+ * @param {string} manifestPath - the installed bundle's manifest.
+ * @param {string} containmentRoot - the profile's node_modules.
+ * @param {{name: string, specifier: unknown, target?: string, rule: 'file'|'containment'|'duplicate'}} refusal
+ * @returns {string}
+ */
+function installedAdmissionFailure(manifestPath, containmentRoot, { name, specifier, target, rule }) {
+  if (rule === 'file') {
+    return `${manifestPath} declares ${name} as ${JSON.stringify(specifier)};`
+      + ' an installed product package is linked, not fetched, so the bundle must declare each one as file:<path>'
+  }
+  if (rule === 'containment') {
+    return `${manifestPath} declares ${name} at ${target}, which is outside ${containmentRoot};`
+      + " an installed bundle may only link packages inside the profile's node_modules"
+  }
+  return `${manifestPath} declares ${name} twice: once as a bundle/probe entry and once in dependencies`
+}
+
+/**
  * Compare the bundle's patch rows with the product packages it declares and
  * with the packages the generated profile installs.
  *
@@ -348,6 +372,23 @@ export function verifyBundlePackages({ binName, bundlePackage, probePackage, ins
 
   const manifest = boot.readProfileManifest(binName, layer.packageDir)
   const declared = Object.keys(manifest.dependencies ?? {}).sort()
+  // The installed copy is the one a boot reads, so it gets the same three
+  // admission rules the launcher applies to the worktree copy. The containment
+  // root is the profile's node_modules: the installed bundle's `file:../x`
+  // declarations resolve to the sibling installed packages there. `declared`
+  // stays the manifest's dependency names, so a refused specifier is reported
+  // once, as this failure, and not also as an undeclared or ghost package.
+  const manifestPath = join(layer.packageDir, 'package.json')
+  const containmentRoot = join(profileDir, 'node_modules')
+  const { refused } = admitBundleDependencies({
+    dependencies: manifest.dependencies,
+    bundleDir: layer.packageDir,
+    containmentRoot,
+    entries: [bundlePackage, probePackage],
+  })
+  for (const refusal of refused) {
+    failures.push(installedAdmissionFailure(manifestPath, containmentRoot, refusal))
+  }
   const rows = flattenEntries(boot.composeEntries([layer.patches]))
   // Product rows share a scope with the bundle's own package or with a declared
   // package. Taking that scope from the data, not from a package list, is what
