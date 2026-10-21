@@ -1,7 +1,7 @@
 /** Owned HTTP controls over the native job registry, authorized like model tools. */
 import { JobId } from '@deepseek-ai/dsh-jobs'
 import { SessionScopeError as ChatError } from '@ourfairy/dsh-sessions'
-import { TASK_STATUS } from './units.mjs'
+import { taskStatusOf } from './units.mjs'
 
 export function installJobs(ctx, runtime) {
   ctx.jobs.events.subscribe({ owners: 'all' }, event => {
@@ -20,7 +20,7 @@ export function installJobs(ctx, runtime) {
     const output = ctx.jobs.readAt(id, from, state.sessionId)
     const job = ctx.jobs.get(id, state.sessionId)
     return { taskId, availability: 1, chunks: output.chunks, next: output.next, lossy: output.lossy,
-      earliest: job.output.earliest, total: job.output.total, status: TASK_STATUS[job.status] }
+      earliest: job.output.earliest, total: job.output.total, status: taskStatusOf(job.status) }
   }
   const jobStop = async (owner, { sessionId, taskId }) => {
     const state = await runtime.open(owner, sessionId)
