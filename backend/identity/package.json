@@ -2,7 +2,7 @@
   "name": "@ourfairy/dsh-identity",
   "version": "0.1.0",
   "private": true,
-  "description": "OurFairy identity module: users, short numbers, invites, and sessions in the business SQLite store, with the product's own request paths and Connection's second-credential admission.",
+  "description": "OurFairy identity module: users, short numbers, invites, and sessions in the business SQLite store, with its own /identity/* routes and session tokens that admit dsh /api.",
   "type": "module",
   "license": "UNLICENSED",
   "main": "./src/index.mjs",

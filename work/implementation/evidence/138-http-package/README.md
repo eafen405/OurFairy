@@ -10,7 +10,7 @@
 - `src/http.mjs`：从 identity 搬入的传输信封 —— 模块私有 `MAX_BODY_BYTES`、`headerOf`、
   `bearerToken`、`carriesBody`、`readJsonBody`、`sendJson`、`postHandler`。
   `readJsonBody(request, HttpError, codePrefix)` 与 `postHandler({ ..., HttpError, codePrefix })`
-  的这两个参数改为**必传**：`IdentityError` 默认值与 `'identity'` 前缀已删除，新包不 import 任何产品包。
+  的这两个参数改为**由调用方显式传入**：`IdentityError` 默认值与 `'identity'` 前缀已删除，新包不 import 任何产品包。
 - `locale/en.json`：非空 `meta.title` / `meta.description`。
 - `README.md`：包是什么、`./http` 导出什么、行为何为空的、为何不依赖 identity。
 
@@ -27,8 +27,10 @@ identity 侧：
 bundle 侧：`package.json` 的 `dependencies` 首位增 `"@ourfairy/dsh-http": "file:../http"`；
 `cordis.patch.yml` 在 `identity` 行之前增 `http` 行（带同风格段注释），identity 行 config 未动。
 
-五个消费包（chat、gateway、sessions、attachments、speech）、`docs/architecture/dsh-ecosystem-boundary.md`
-与 `tests/` 均未改动：它们继续 import `@ourfairy/dsh-identity/http`，由兼容出口解析到新包。
+五个消费包（chat、gateway、sessions、attachments、speech）与
+`docs/architecture/dsh-ecosystem-boundary.md` 均未改动：五个包继续 import
+`@ourfairy/dsh-identity/http`，由临时兼容出口解析到新包。`tests/` 也未改动——它们经启动器走
+HTTP，本来就没有 import 过这个子路径。
 
 ## 实际命令与结果
 
@@ -68,6 +70,10 @@ http:@ourfairy/dsh-http, identity:@ourfairy/dsh-identity, sessions:@ourfairy/dsh
 
 - 未 push、未合入集成分支、未改 `combo.json`、未评论或关闭 issue。
 - `git merge integration/spec-131`：`Already up to date.` —— 集成分支 tip 仍是 `b9f7d28`，期间没有别的票合入。
-- 未新增测试断言。若后续需要「新包不出现 `IdentityError`/`identity` 默认值」的可执行检查，那是收口票
-  #141 的范围（届时兼容出口删除，遗留 import 会在加载期直接失败），本票只按票面搬移与去默认值。
+- 未新增测试断言。「新包不出现 `IdentityError` / `identity` 默认值」是文件本身的事实：
+  `backend/http/src/http.mjs` 没有任何 import 声明，也不含 `IdentityError` 或 `identity` 字样
+  （`grep -nE '^\s*import\b' backend/http/src/http.mjs` 与
+  `grep -nE 'IdentityError|identity' backend/http/src/http.mjs` 均无输出，exit 1），因此它不
+  import 任何 `@ourfairy/*` 包；`HttpError` 与 `codePrefix` 只由调用方传入。文件里唯一的
+  `@ourfairy/` 出现在 `@module` 注释行，不是 import。
 - 未做真机/客户端验收：本票只涉及后端包边界与组合行。

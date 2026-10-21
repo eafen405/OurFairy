@@ -15,7 +15,8 @@ peer 声明：
 - `backend/gateway/package.json`：同上。
 - `backend/sessions/package.json`：增 `@ourfairy/dsh-http`，保留 `@ourfairy/dsh-identity`。
 
-未改：三个包的 `inject` 数组（仍注入 `identity`；清理归 #133）、identity 包、bundle、
+未改：三个包的 `inject` 数组（chat 的 `identity` 已无 `ctx.identity` 调用，是残留，清理归 #133；
+gateway 与 sessions 仍实际调用 `ctx.identity`，属运行期服务依赖）、identity 包、bundle、
 attachments/speech（归 #140）、`tests/`、`docs/architecture/dsh-ecosystem-boundary.md`。
 
 改后边界（`grep -rn "@ourfairy/dsh-identity" backend/chat backend/gateway backend/sessions`）：
@@ -46,12 +47,17 @@ chat 与 gateway 零命中；sessions 只剩 `/owner` 导入与其 identity peer
 
 改动前先跑一遍五个验收文件确认基线是绿的（37/37），改完后同一条命令仍 37/37：`postHandler` 的
 行为（fence、方法检查、body 上限、错误信封）由这些既有断言覆盖，`tests/plugin-compatibility.test.mjs`
-的 peer 范围/元数据断言与 `tests/bundle-packages.test.mjs` 的「声明/挂载/已安装」对账覆盖 manifest 改动。
+的 peer 范围/元数据断言与 `tests/bundle-packages.test.mjs` 的「声明/挂载/已安装」对账覆盖已声明
+peer 的形状与安装集合——不覆盖 peer 改向本身（见下）。
 
 `@ourfairy/dsh-http` 的 peer 范围不参与 `evaluatePluginCompatibility` 判定（该函数只看
-`@deepseek-ai/dsh*` 前缀的 peer），所以 peer 改向的可执行证据来自
-`tests/plugin-compatibility.test.mjs` 的「显式 semver 范围」与「每个产品包具备 description/locale」
-两条断言，以及 `tests/bundle-packages.test.mjs` 的已安装集合对账——三者都原样通过。
+`@deepseek-ai/dsh*` 前缀的 peer）。`tests/plugin-compatibility.test.mjs` 断言的是「每个已声明的
+peer 都是显式 caret 范围」（不校验 peer 指向哪个包）与「每个产品包具备 description/locale」；
+`tests/bundle-packages.test.mjs` 对账「声明 = 挂载 = 已安装」，也不涉及 peer 身份。这些断言都不
+校验 peer 指向哪个包：manifest 若仍写 `@ourfairy/dsh-identity` 也会通过，因此**peer 改向本身
+没有专门断言**。它的证据是结构性的：`grep -rn "@ourfairy/dsh-identity" backend/chat backend/gateway backend/sessions`
+只剩 sessions 的 `/owner` 导入与 peer 行（见上）；改后的包仍能被安装（doctor 的 `bundle packages`
+把 `http` 对进已安装集合）并加载（全量 `npm test` 通过）。
 
 ## 未执行项与说明
 
