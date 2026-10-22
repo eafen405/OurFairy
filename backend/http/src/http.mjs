@@ -1,24 +1,18 @@
 /**
- * The identity module's own request paths.
+ * The product transport envelope every product-owned route shares: the bounded
+ * JSON request reader, the bearer credential parser, the JSON response writer,
+ * and the `post` wrapper around them.
  *
- * They sit outside dsh's `/api` prefix, which is admitted as a whole before any
- * handler runs. Every route derives the caller from the presented credential.
+ * The routes themselves, and the error class each one throws, belong to the
+ * package that owns the domain: `postHandler` and `readJsonBody` are given that
+ * class and the error-code prefix by the caller, so this module imports no
+ * product package and catches only the one error type it was handed.
  *
- * @module @ourfairy/dsh-identity/src/http
+ * @module @ourfairy/dsh-http/src/http
  */
-import { IdentityError } from './store.mjs'
 
-/** Largest JSON body these endpoints accept; a credential document is tiny. */
+/** Largest JSON body any product route accepts; a request document is tiny. */
 const MAX_BODY_BYTES = 64 * 1024
-
-/** Paths this module owns, in the order the carrier registers them. */
-export const IDENTITY_PATHS = Object.freeze([
-  '/identity/invite',
-  '/identity/register',
-  '/identity/sign-in',
-  '/identity/session',
-  '/identity/sign-out',
-])
 
 function headerOf(request, name) {
   const value = request.headers?.[name]
@@ -34,9 +28,9 @@ export function bearerToken(request) {
 }
 
 /**
- * Whether this request carries a payload at all. `/identity/invite`,
- * `/identity/session` and `/identity/sign-out` act on the credential alone and
- * are posted with no body and therefore no `content-type`.
+ * Whether this request carries a payload at all. Several product routes act on
+ * the credential alone and are posted with no body and therefore no
+ * `content-type`.
  */
 function carriesBody(request) {
   const declared = headerOf(request, 'content-length')
@@ -48,7 +42,7 @@ function carriesBody(request) {
  * Read a bounded JSON body; a wrong content type or an oversized body is a 4xx.
  * @returns the parsed JSON object, or `{}` for a bodyless POST.
  */
-async function readJsonBody(request, HttpError = IdentityError, codePrefix = 'identity') {
+async function readJsonBody(request, HttpError, codePrefix) {
   if (!carriesBody(request)) return {}
   const mediaType = headerOf(request, 'content-type')?.split(';', 1)[0]?.trim().toLowerCase()
   if (mediaType !== 'application/json') {
@@ -91,8 +85,13 @@ export function sendJson(response, status, payload) {
  * The `post` wrapper every product-owned JSON route shares: fence, method check,
  * body parsing and the error envelope. `respond` lets a streaming sibling write
  * its own response after the same admission checks.
+ *
+ * `HttpError` and `codePrefix` are the owning route's error class and code
+ * prefix, passed by the caller rather than defaulted here: the catch below must
+ * see exactly one error type, so a module's own errors are answered as 4xx and
+ * nothing else is mistaken for them.
  */
-export function postHandler({ fence, handle, HttpError = IdentityError, codePrefix = 'identity', internalMessage, respond = (response, result) => sendJson(response, 200, result) }) {
+export function postHandler({ fence, handle, HttpError, codePrefix, internalMessage, respond = (response, result) => sendJson(response, 200, result) }) {
   return async (request, response) => {
     try {
       if (fence(request) !== undefined) {
@@ -114,50 +113,4 @@ export function postHandler({ fence, handle, HttpError = IdentityError, codePref
       })
     }
   }
-}
-
-/**
- * Build one handler per path in {@link IDENTITY_PATHS}. The store is passed
- * alongside the service rather than read back from it: the service keeps the
- * store private, and the registration and sign-in routes have no identity rule
- * of their own.
- */
-export function identityHandlers({ service, store, fence }) {
-  const callerOf = (request) => {
-    const user = service.authenticateRequest(request)
-    if (user === undefined) {
-      throw new IdentityError(401, 'identity/unauthorized', 'present a live session credential')
-    }
-    return user
-  }
-  const post = (handle) => postHandler({
-    fence,
-    handle,
-    HttpError: IdentityError,
-    codePrefix: 'identity',
-    internalMessage: 'the identity module failed to handle this request',
-  })
-
-  return new Map([
-    ['/identity/invite', post(async (body, request) => {
-      const caller = callerOf(request)
-      return { ok: true, invite: service.createInvite(caller) }
-    })],
-    ['/identity/register', post(async (body) => ({
-      ok: true,
-      ...store.register(body),
-    }))],
-    ['/identity/sign-in', post(async (body) => ({
-      ok: true,
-      ...store.signIn(body),
-    }))],
-    ['/identity/session', post(async (_body, request) => ({
-      ok: true,
-      user: callerOf(request),
-    }))],
-    ['/identity/sign-out', post(async (_body, request) => ({
-      ok: true,
-      ...await service.signOutRequest(request),
-    }))],
-  ])
 }
