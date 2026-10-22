@@ -26,17 +26,36 @@ const REQUIRED_SERVICES = [
 ]
 
 /**
- * Rows the first version must NOT mount: file, shell, and sandbox capabilities
- * whose permission adaptation is not implemented yet, plus capabilities the
- * product decision excluded from v1 entirely.
+ * Rows the first version must NOT mount, grouped by why they are absent.
  *
  * This list is the single expectation for row absence. The probe intentionally
  * keeps no copy of it — it reports the composed row ids as a fact, and this test
  * decides what must not appear among them. A duplicated list inside the probe
  * would let the two agree with each other while both drifted from the bundle.
+ *
+ * The sections separate decisions from to-dos, and each reason names what is
+ * missing rather than only that the row is unwanted, so a reader can tell what
+ * would have to change for the row to mount.
  */
 const FORBIDDEN_ROW_IDS = [
+  // Deferred: the product needs these, but has not adapted them yet.
+  // `session-title` needs a title field in the product's session projection and
+  // a client place that consumes the `title` projection unit. `session-title-llm`
+  // has no registration target until `session-title` lands, and its auxiliary
+  // requests would have to go through the product's `llm-pi-ai` route.
+  'session-title',
+  'session-title-llm',
+
+  // Conflicts with the scoped filesystem: the bundled ripgrep binary is not
+  // inside the product's bwrap namespace, and the returned paths are based on a
+  // global cwd rather than the scoped root derived from ownership.
   'tool-fs-search',
+
+  // Hard exclusion (Remote seam): its only factory answer path is a Typert/Remote
+  // method, and the product deliberately does not take that seam.
+  'user-questions',
+
+  // Product decision: not wanted, or replaced by the scoped adapters.
   'fs-sandbox',
   'working-directory',
   'bash-sandbox',
@@ -159,8 +178,11 @@ describe('OurFairy v1 baseline composition', () => {
     // instead of reporting a boot that never mounted what the caller asked for.
     const run = runBackend(['boot-product', '--patch', join(sharedHome, 'unused.patch.yml')], keylessEnv)
     assert.notEqual(run.code, 0, describeRun('boot-product with --patch', run))
-    assert.match(run.stderr, /--patch applies to probe and start only/u,
-      `the refusal must name the flag's commands:\n${run.stderr}`)
+    assert.equal(
+      run.stderr,
+      "ourfairy-backend: --patch applies to probe and start only; 'boot-product' does not mount profile overlays\n",
+      `the refusal must be the launcher's exact message for boot-product:\n${run.stderr}`,
+    )
   })
 
   test('a requested turn without MINIMAX_CN_API_KEY fails loudly, naming the missing configuration', () => {

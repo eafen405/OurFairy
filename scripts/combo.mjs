@@ -28,25 +28,22 @@ import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { admitBundleDependencies, readCombo } from './ourfairy-composition.mjs'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(scriptDir, '..')
+
+/**
+ * Read combo.json. Owned by the composition module so the dependency direction
+ * stays one-way (`combo.mjs` -> composition); re-exported here because existing
+ * callers import it from this module.
+ */
+export { readCombo }
 
 /** Environment override per repository key; the default is combo.json's localPath. */
 const PATH_OVERRIDES = {
   ourfairy: 'OURFAIRY_REPO_DIR',
   dsh: 'OURFAIRY_DSH_DIR',
-}
-
-/** Read combo.json. */
-export function readCombo(root = repoRoot) {
-  const path = join(root, 'combo.json')
-  if (!existsSync(path)) throw new Error(`combo.json not found at ${path}`)
-  const parsed = JSON.parse(readFileSync(path, 'utf8'))
-  if (parsed === null || typeof parsed !== 'object' || typeof parsed.repos !== 'object') {
-    throw new Error(`${path} must be an object with a repos map`)
-  }
-  return { combo: parsed, path }
 }
 
 /** The repo holding combo.json resolves to this checkout, not to combo.json's canonical path. */
@@ -80,6 +77,25 @@ function revParse(path, ref) {
 function isAncestor(path, ancestor, descendant) {
   const result = spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd: path, encoding: 'utf8' })
   return result.status === 0
+}
+
+/**
+ * Whether a worktree counts as based on the integration tip.
+ *
+ * A merge commit does not exist while its own commit gate runs: HEAD is still
+ * the branch tip, which may predate the integration tip. The merge result
+ * descends from both parents, so an incoming `MERGE_HEAD` that is based on the
+ * tip gives the same guarantee.
+ * @param {string} path - repository to read refs from.
+ * @param {string} tip - integration tip commit.
+ * @returns {boolean}
+ */
+export function basedOnIntegration(path, tip) {
+  const head = revParse(path, 'HEAD')
+  if (head === undefined) return false
+  if (head === tip || isAncestor(path, tip, head)) return true
+  const incoming = revParse(path, 'MERGE_HEAD')
+  return incoming !== undefined && (incoming === tip || isAncestor(path, tip, incoming))
 }
 
 /**
@@ -120,7 +136,7 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
       // is an ancestor of HEAD (HEAD may be ahead of the tip with ticket commits,
       // which is the normal state of a ticket branch before it is merged back).
       const head = revParse(path, 'HEAD')
-      const ok = head !== undefined && (head === tip || isAncestor(path, tip, head))
+      const ok = basedOnIntegration(path, tip)
       const row = {
         ...base,
         expected: `based on ${entry.integrationBranch}`,
@@ -235,19 +251,38 @@ function scopeOf(name) {
 }
 
 /**
- * Every entry of a composed tree, including the rows nested in a group's
- * `config` list. The loader mounts group children the same way it mounts
- * top-level rows, so a package set comparison that walked only the top level
- * would miss them.
+ * The leaf rows of a composed tree.
+ *
+ * Group rows are containers, not rows to check: they are dropped, and their
+ * children are returned in their place. A child of a disabled group inherits
+ * that state (`disabled: true`), because the loader's effective state walks
+ * every ancestor group (`Entry.disabled`) while the composed rows keep only
+ * their own flag. Materializing it here lets a row-level check see that a row
+ * inside a disabled group is disabled at runtime.
+ *
+ * Idempotent: the result contains no group rows, so flattening it again returns
+ * the same rows.
  * @param {object[]} entries
  * @returns {object[]}
  */
 export function flattenEntries(entries) {
-  return entries.flatMap(entry => [
-    entry,
-    // The loader treats any truthy `group` with a list `config` as nesting.
-    ...(entry.group && Array.isArray(entry.config) ? flattenEntries(entry.config) : []),
-  ])
+  const leaves = []
+  const visit = (list, inheritedDisabled) => {
+    for (const entry of list) {
+      const disabled = inheritedDisabled || entry.disabled === true
+      if (entry.group) {
+        // The loader treats a truthy `group` as a container; its children are
+        // mounted in the container's place.
+        if (Array.isArray(entry.config)) visit(entry.config, disabled)
+      } else if (disabled && entry.disabled !== true) {
+        leaves.push({ ...entry, disabled: true })
+      } else {
+        leaves.push(entry)
+      }
+    }
+  }
+  visit(entries, false)
+  return leaves
 }
 
 /**
@@ -301,6 +336,30 @@ function installedBundle({ binName, bundlePackage, installAnchor, profileDir }) 
 }
 
 /**
+ * The failure line for one dependency the installed bundle may not declare.
+ *
+ * The worktree copy fails hard with the launcher's message; this copy is
+ * reported instead, because doctor's job is to collect failures rather than
+ * abort on the first one. The message names the installed manifest, the
+ * package, and the rule it broke.
+ * @param {string} manifestPath - the installed bundle's manifest.
+ * @param {string} containmentRoot - the profile's node_modules.
+ * @param {{name: string, specifier: unknown, target?: string, rule: 'file'|'containment'|'duplicate'}} refusal
+ * @returns {string}
+ */
+function installedAdmissionFailure(manifestPath, containmentRoot, { name, specifier, target, rule }) {
+  if (rule === 'file') {
+    return `${manifestPath} declares ${name} as ${JSON.stringify(specifier)};`
+      + ' an installed product package is linked, not fetched, so the bundle must declare each one as file:<path>'
+  }
+  if (rule === 'containment') {
+    return `${manifestPath} declares ${name} at ${target}, which is outside ${containmentRoot};`
+      + " an installed bundle may only link packages inside the profile's node_modules"
+  }
+  return `${manifestPath} declares ${name} twice: once as a bundle/probe entry and once in dependencies`
+}
+
+/**
  * Compare the bundle's patch rows with the product packages it declares and
  * with the packages the generated profile installs.
  *
@@ -351,6 +410,25 @@ export function verifyBundlePackages({ binName, bundlePackage, probePackage, ins
 
   const manifest = boot.readProfileManifest(binName, layer.packageDir)
   const declared = Object.keys(manifest.dependencies ?? {}).sort()
+  // The installed copy is the one a boot reads, so it gets the same three
+  // admission rules the launcher applies to the worktree copy. The containment
+  // root is the profile's node_modules: the installed bundle's `file:../x`
+  // declarations resolve to the sibling installed packages there. `declared`
+  // stays the manifest's dependency names, so a refused specifier is not also
+  // reported here as an undeclared or ghost package; later independent checks
+  // (a declared package no row mounts, an uninstalled package) may still report
+  // related facts about the same name.
+  const manifestPath = join(layer.packageDir, 'package.json')
+  const containmentRoot = join(profileDir, 'node_modules')
+  const { refused } = admitBundleDependencies({
+    dependencies: manifest.dependencies,
+    bundleDir: layer.packageDir,
+    containmentRoot,
+    entries: [bundlePackage, probePackage],
+  })
+  for (const refusal of refused) {
+    failures.push(installedAdmissionFailure(manifestPath, containmentRoot, refusal))
+  }
   const rows = flattenEntries(boot.composeEntries([layer.patches]))
   // Product rows share a scope with the bundle's own package or with a declared
   // package. Taking that scope from the data, not from a package list, is what
@@ -417,8 +495,9 @@ export function verifyBundlePackages({ binName, bundlePackage, probePackage, ins
  * `evaluatePluginCompatibility` judges only dsh peers (`@deepseek-ai/dsh` and
  * `@deepseek-ai/dsh-*`); a product package's other peers are declarations for
  * readers and pnpm, not inputs to this runtime decision. The bundle and the
- * probe are included: they declare no peers, so the judgement is a no-op for
- * them, but a reader sees every installed product package accounted for.
+ * probe are included: the bundle declares no peers, and the probe declares one
+ * `@ourfairy/*` peer, which this judgement ignores because it judges only dsh
+ * peers; a reader still sees every installed product package accounted for.
  * @param {{
  *   binName: string,
  *   bundlePackage: string,
@@ -478,13 +557,15 @@ const SESSION_HISTORY_EXPORT = '@deepseek-ai/dsh-agent/session-history'
  * Every required native capability that is not mounted, plus the public
  * history export when it does not resolve.
  *
- * @param {object[]} rows - the composed profile rows, as dsh's loader returns them.
+ * @param {object[]} rows - the composed profile rows, as dsh's loader returns them;
+ *   rows nested in a group's `config` are mounted too, so the lookup flattens,
+ *   including the disabled state inherited from an ancestor group.
  * @param {(specifier: string) => string} resolveExport - resolves from the dsh installation.
  * @returns {string[]} one message per missing, disabled, or drifted capability.
  */
 export function nativeCapabilityFailures(rows, resolveExport) {
   const failures = []
-  const mounted = new Map(rows.map(row => [row.id, row]))
+  const mounted = new Map(flattenEntries(rows).map(row => [row.id, row]))
   for (const { row: id, name } of REQUIRED_NATIVE_ROWS) {
     const entry = mounted.get(id)
     if (entry === undefined) {
@@ -537,7 +618,9 @@ export function verifyInstalledNativeCapabilities({ binName, bundlePackage, inst
     return { ok: false, checked: [], failures: [`${bundlePackage} was not loaded from ${profileDir}: ${reason};`
       + ` run 'npm run backend:start -- --reinstall'`] }
   }
-  const rows = boot.composeEntries([...profile.layers.map(entry => entry.patches), profile.patches])
+  // Flattened rows are what the check consumes: the installed layer's rows can
+  // be nested in a group, and a disabled group must reach its children.
+  const rows = flattenEntries(boot.composeEntries([...profile.layers.map(entry => entry.patches), profile.patches]))
   const failures = nativeCapabilityFailures(rows, specifier => createRequire(installAnchor).resolve(specifier))
   return {
     ok: failures.length === 0,

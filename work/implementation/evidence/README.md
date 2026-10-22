@@ -91,6 +91,15 @@
 | [105-overlay](105-overlay/README.md) | #105 经 profile overlay 证明投递/群组/scoped provider 行可寻址、可替换，以及非法 config 的加载期失败 |
 | [106-closeout](106-closeout/README.md) | #106 版本组合、最终两轴评审、证据索引与子票收口 |
 
+## 传输层拆包（规格 #131）
+
+| 目录 | 内容 |
+| --- | --- |
+| [138-http-package](138-http-package/README.md) | #138 产品传输信封落地 `@ourfairy/dsh-http`，identity 路由改名 `./routes`，bundle 挂行 |
+| [139-consumers-core](139-consumers-core/README.md) | #139 chat、gateway、sessions 改依赖新包（sessions 保留 `/owner`） |
+| [140-consumers-attachments-speech](140-consumers-attachments-speech/README.md) | #140 attachments、speech 改依赖新包 |
+| [141-contract-closeout](141-contract-closeout/README.md) | #141 删除 identity 的 `./http` 兼容出口，证据索引与全量门禁 |
+
 ## 原生能力收敛（规格 #71）
 
 | 目录 | 内容 |
@@ -108,6 +117,44 @@
 | 目录 | 内容 |
 | --- | --- |
 | [123-client-merge](123-client-merge/README.md) | #123 客户端合仓：快照导入、来源校验、构建与测试证据 |
+
+## 仓库环境
+
+| 目录 | 内容 |
+| --- | --- |
+| [repo-environment-2026-10-22](repo-environment-2026-10-22/README.md) | CI runner、dsh 测试路径与启动失败等待修复 |
+
+## 业务库公开面收敛（规格 #132）
+
+| 目录 | 内容 |
+| --- | --- |
+| [143-public-surface](143-public-surface/README.md) | #143 store 公开面从 24 个方法收窄到 19 个：删四个零生产调用的方法，`readDelivery` 转私有 |
+| [144-schema-modules](144-schema-modules/README.md) | #144 五组 DDL 常量搬进 `src/schema/` 下的领域模块，存下的 schema 一字不变 |
+| [145-closeout](145-closeout/README.md) | #145 证据索引登记、两轴复核（Standards + Spec）、可执行声称检查与全量门禁 |
+
+## inject 对齐（规格 #133）
+
+| 目录 | 内容 |
+| --- | --- |
+| [133-inject-truth](133-inject-truth/README.md) | #151/#152/#153 chat 的 inject 与实际依赖对齐：声明收敛、README 传输契约/运行时语义分节、合并树门禁与夹具归属收口 |
+
+## 组合层分组（规格 #134）
+
+| 目录 | 内容 |
+| --- | --- |
+| [134-bundle-groups](134-bundle-groups/README.md) | #159–#162 组合层显式化内核与插件：收口记录与零语义变化对照；逐票证据见 [#159](134-bundle-groups/01-native-group-aware.md)、[#161](134-bundle-groups/02-bundle-groups.md)、[#160](134-bundle-groups/03-absence-attribution.md) |
+
+## 包清单真实性（规格 #136）
+
+| 目录 | 内容 |
+| --- | --- |
+| [136-closeout](136-closeout/README.md) | #148–#150：peer 与 license 声明对齐、内核包 README、`files` 存在性检查 |
+
+## 启动器拆分（规格 #137）
+
+| 目录 | 内容 |
+| --- | --- |
+| [137-launcher-split](137-launcher-split/README.md) | spec #137 证据索引：组合层独立成零 spawn 模块、统一错误契约与 bundle manifest 准入规则单份（#155–#158），含合并 tip 门禁与可执行声称复核 |
 
 ## Triage 修复
 

@@ -39,14 +39,13 @@ import net from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { after, test } from 'node:test'
+import { isolatedEnv, layoutOf } from '../scripts/ourfairy-composition.mjs'
 import {
-  describeRun, httpJson, makeHome, messageBlocks, readReport, registerUser, removeHome, repoRoot,
+  dshDir, describeRun, httpJson, makeHome, messageBlocks, readReport, registerUser, removeHome, repoRoot,
   runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay,
 } from './helpers/backend.mjs'
 
 const password = 'row-addressability-password'
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
 const dshBin = join(dshDir, 'apps', 'cli', 'lib', 'bin.js')
 const recordingFixture = fileURLToPath(new URL('./fixtures/recording-bash-provider.mjs', import.meta.url))
 
@@ -200,18 +199,13 @@ async function startDirect(home, overlay) {
   mkdirSync(join(home, 'user-home'), { recursive: true })
   const child = spawn(process.execPath, [dshBin, '--profile', 'ourfairy', '--patch', overlay], {
     cwd: home,
-    env: {
-      ...process.env,
-      HOME: join(home, 'user-home'),
-      DSH_HOME: join(home, 'dsh-home'),
-      OURFAIRY_HOME: home,
-      OURFAIRY_PORT: String(port),
-      OURFAIRY_PHAETHON_PASSWORD: password,
-      XDG_CACHE_HOME: join(home, 'cache'),
-      XDG_CONFIG_HOME: join(home, 'config'),
-      XDG_DATA_HOME: join(home, 'data'),
-      XDG_STATE_HOME: join(home, 'state'),
-    },
+    env: isolatedEnv(layoutOf(home), {
+      root: repoRoot,
+      extra: {
+        OURFAIRY_PORT: String(port),
+        OURFAIRY_PHAETHON_PASSWORD: password,
+      },
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   const logs = { stdout: '', stderr: '' }
@@ -667,14 +661,15 @@ for (const scenario of INVALID_CONFIGS) {
     const home = freshHome(`ourfairy-row-address-invalid-${scenario.row}-`)
     const overlay = writeOverlay(home, [{ id: scenario.row, config: scenario.config }], `invalid-${scenario.row}.patch.yml`)
     try {
-      // The launcher waits for the probe's ready report; bound that wait so the
-      // load failure is observed promptly instead of after the default two minutes.
+      // Keep a ceiling for a broken boot; a failed report should end the wait.
       const run = await runBackendAsync([...startArgs([overlay]), '--ready-timeout-ms', '30000'], {
         OURFAIRY_HOME: home,
         OURFAIRY_PHAETHON_PASSWORD: password,
       })
       assert.notEqual(run.code, 0,
         `a start with ${scenario.why} must fail during load: ${describeRun('start', run)}`)
+      assert.match(run.stderr, /reported a failed readiness check/u,
+        `the failed report must end readiness waiting: ${run.stderr}`)
       assert.doesNotMatch(run.stdout, /"ready":\s*true/u,
         `the failed start must not report readiness: ${run.stdout}`)
       assert.equal(run.stdout.includes('listeningPorts'), false,

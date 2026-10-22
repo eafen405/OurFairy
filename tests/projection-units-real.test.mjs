@@ -19,13 +19,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
-import { describeRun, makeHome, registerUser, removeHome, repoRoot, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { dshDir, describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 // Registers Node resolution for the pinned dsh checkout before the product
 // modules below are loaded (they are dynamic imports for that reason).
 import './helpers/dsh-peers.mjs'
 
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const { startMockLlmServer } = await import(join(combo.repos.dsh.localPath, 'packages/test-support/llm-mock-server/lib/index.js'))
+const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
 const units = await import('../backend/chat/src/units.mjs')
 const expected = JSON.parse(readFileSync(new URL('./fixtures/projection-real-expected.json', import.meta.url), 'utf8'))
 
@@ -90,7 +89,10 @@ function assertSameProjection(events, sessionId, running = false) {
   const transcriptState = events.reduce(units.transcriptDefinition.apply, units.transcriptDefinition.init({ id: sessionId }, 0))
   const workState = events.reduce(units.workDefinition.apply, units.workDefinition.init({ id: sessionId }, 0))
   const work = units.tasksAndActivityAt(workState, ctx, sessionId, running, events.at(-1)?.seq ?? -1)
-  assert.deepEqual(stable(units.transcriptAt(transcriptState)), expected.transcript, 'transcript must match the frozen rows')
+  assert.deepEqual(stable(units.transcriptAt(transcriptState)), expected.transcript,
+    `transcript must match the frozen rows; turn endings: ${JSON.stringify(
+      events.filter(event => event.type === 'turn/end').map(event => event.data.reason),
+    )}`)
   assert.deepEqual(work, expected.work, 'tasks and activity must match the frozen values')
   return { transcriptState, workState, work }
 }

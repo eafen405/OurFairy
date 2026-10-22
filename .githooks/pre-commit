@@ -4,5 +4,6 @@ set -eu
 cd "$(git rev-parse --show-toplevel)"
 # Tests inspect companion repositories; do not pin their Git commands to this worktree.
 unset $(git rev-parse --local-env-vars)
-npm test
-npm run combo:verify
+# The split between the Markdown-only gate and the full suite lives in
+# scripts/precommit.mjs, where tests pin it; this hook only runs it.
+exec node scripts/precommit.mjs

@@ -1,0 +1,26 @@
+{
+  "parent": 131,
+  "title": "后端传输层独立：把产品 HTTP 工具箱从 identity 拆成 @ourfairy/dsh-http",
+  "children": [
+    {
+      "file": "01-http-package.md",
+      "issue": 138,
+      "title": "传输工具箱新包：@ourfairy/dsh-http 落地、identity 路由独立、bundle 挂行"
+    },
+    {
+      "file": "02-consumers-core.md",
+      "issue": 139,
+      "title": "消费方迁移（一）：chat、gateway、sessions 改用 dsh-http"
+    },
+    {
+      "file": "03-consumers-attachments-speech.md",
+      "issue": 140,
+      "title": "消费方迁移（二）：attachments、speech 改用 dsh-http"
+    },
+    {
+      "file": "04-contract-closeout.md",
+      "issue": 141,
+      "title": "契约收口：删除 identity 的 http 兼容出口并跑全量门禁"
+    }
+  ]
+}

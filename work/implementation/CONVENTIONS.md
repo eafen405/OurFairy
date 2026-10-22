@@ -42,6 +42,9 @@ git -C /home/eafen405/projects/deepseek-harness worktree add \
 
 规则：
 
+- 开工前先跑 `npm run specs:status`：一次给出每张 spec 的分支 tip、是否已推送、是否已落地、遗留的
+  worktree，以及落地分支本身有没有未推送提交。开工与收口都以这份输出为准，不用 `git log --all`
+  逐个分支反推。
 - 开工前确认 worktree 基线是目标集成分支的最新提交；不是则先 `git merge` 集成分支最新提交再开始。
 - **合并前**再把集成分支 tip 合进自己的票分支，解决冲突后报告，不要等 Lead 替你解冲突。
 - 每张票只写自己声明过的写范围；跨票公共文件由 Lead 协调。
@@ -53,7 +56,9 @@ git -C /home/eafen405/projects/deepseek-harness worktree add \
 - **pnpm 必须用 corepack 固定版本**：`corepack pnpm@11.28.5 <cmd>`（`PATH` 上的 pnpm 来自 Windows，勿用）。
 - **Node、JDK 与 Android SDK 的版本要求**见根 [`README.md`](../../README.md) 的「先决条件」；构建客户端还要准备 `android/local.properties` 与 `android/app/google-services.json`（同节）。
 - **Gradle 走 `android/` 里的 wrapper**，不另装；改过 `android/` 源码后重新构建即可。
-- **gh CLI** 已登录，git 走 HTTPS（credential helper 已配）。
+- **gh CLI** 已登录；`origin` 的 fetch 走 HTTPS、push 走 SSH（`git@github.com:`）。ssh 必须非交互：
+  `~/.ssh/config` 里 `Host github.com` 已设 `BatchMode yes`；若在别的机器上仍会挂起，用
+  `GIT_SSH_COMMAND='ssh -o BatchMode=yes' git push`。
 
 ### 3.1 Android 构建实测结论
 
@@ -90,6 +95,9 @@ OurFairy 侧怎么跑测试、怎么起后端，见根 [`README.md`](../../READM
 
 - **只做本票范围。** 发现范围外问题时不要顺手扩散改动：记到 issue tracker（建票方式见
   `docs/agents/issue-tracker.md`）或本票证据目录的未完成项里，并通知 Lead。
+
+`work/tmp/` 只放可丢弃的运行日志与临时输出；带结论、下次还要读的分析进 `docs/decisions/` 或
+`work/implementation/notes/` 并提交，否则会随清理一起消失。
 
 编码与验证规则见 `CODING_STANDARDS.md`。
 

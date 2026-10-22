@@ -1,0 +1,21 @@
+{
+  "parent": 136,
+  "title": "产品包清单真实性：peer、files 与缺失字段的一致性",
+  "children": [
+    {
+      "file": "01-peer-declarations.md",
+      "issue": 148,
+      "title": "产品包 peer 声明对齐真实 import"
+    },
+    {
+      "file": "02-license.md",
+      "issue": 149,
+      "title": "产品包许可字段一致：search 与 spaces"
+    },
+    {
+      "file": "03-kernel-readmes.md",
+      "issue": 150,
+      "title": "内核包 README 与 files 存在性检查"
+    }
+  ]
+}

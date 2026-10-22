@@ -138,6 +138,22 @@ test('stopping a reply and stopping its real background process are independent,
   await until(() => projection(alice, sessionId), p => p.replyStatus === 0 && p.tasks[0].report.status >= 3, 'cancel/report settled')
 })
 
+test('stopping the same real job twice reports requested first and already-finished after it settles', async () => {
+  // A fresh session keeps this case independent of the tasks other cases leave
+  // behind: the projection's only task is the one this case starts.
+  const sessionId = (await request('/sessions/create', alice.token)).session.id
+  const task = await startJob(alice, sessionId, 'printf running; sleep 30; printf must-not-run')
+  await until(() => request('/chat/jobs/output', alice.token, { sessionId, taskId: task.taskId, from: 0 }),
+    response => response.output.next > 0, 'the real job started writing before the stop')
+
+  const first = await request('/chat/jobs/stop', alice.token, { sessionId, taskId: task.taskId })
+  assert.equal(first.outcome, 1, 'a running job reports that cancellation was requested')
+  await until(() => projection(alice, sessionId), p => p.tasks[0].status === 4, 'the stopped job settled')
+
+  const second = await request('/chat/jobs/stop', alice.token, { sessionId, taskId: task.taskId })
+  assert.equal(second.outcome, 2, 'the same job reports already-finished after it settled')
+})
+
 test('producer-side loss exposes missing output rather than treating a terminal status as complete output', async () => {
   const sessionId = (await request('/sessions/create', alice.token)).session.id
   const task = await startJob(alice, sessionId, `node -e "process.stdout.write('你'.repeat(120000))"; sleep .3; printf END`)

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "OurFairy owned file spaces and the scoped filesystem, sandbox, shell and working-directory providers.",
+  "license": "UNLICENSED",
   "type": "module",
   "main": "./src/index.mjs",
   "files": [

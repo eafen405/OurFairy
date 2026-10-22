@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "OurFairy conversation search over the native session query index, scoped to the authenticated owner.",
+  "license": "UNLICENSED",
   "type": "module",
   "main": "./src/index.mjs",
   "files": ["src", "README.md", "locale/*.json"],

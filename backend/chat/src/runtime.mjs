@@ -117,7 +117,7 @@ export class SessionRuntime {
         agentCtx.on('agent/pre-step', async ({ messages, step }, next) => {
           if (step === 1 && messages.some(message => (message.content ?? []).some(block => block.type === 'image'))) {
             const shared = selection.current
-            const info = await this.ctx.get('llm').resolveModelInfo(shared.provider, shared.model)
+            const info = await this.ctx.llm.resolveModelInfo(shared.provider, shared.model)
             // Only an explicit negative declaration is a refusal; an adapter that
             // declares nothing keeps the native behaviour of sending the image.
             if (info.inputModalities !== undefined && !info.inputModalities.includes('image')) {

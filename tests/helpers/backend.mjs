@@ -6,18 +6,35 @@
  * assembled by hand here.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import http from 'node:http'
+import { readCombo, repoPath } from '../../scripts/combo.mjs'
 
 /** Absolute path of this ticket worktree (the repository under test). */
 export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
+/** Companion checkout selected by the same resolver as the launcher. */
+export const dshDir = repoPath(readCombo(repoRoot).combo, 'dsh', repoRoot)
+
 /** Path of the product launcher every test drives. */
 export const backendScript = join(repoRoot, 'scripts', 'ourfairy-backend.mjs')
+
+/**
+ * Directories of the packages under `backend/` that carry a manifest, as paths
+ * relative to the repository root (`backend/chat`).
+ * @param {{ exclude?: string[] }} [options] directory names to omit
+ * @returns {string[]}
+ */
+export function productPackageDirs({ exclude = [] } = {}) {
+  return readdirSync(join(repoRoot, 'backend'), { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && !exclude.includes(entry.name))
+    .map(entry => `backend/${entry.name}`)
+    .filter(dir => existsSync(join(repoRoot, dir, 'package.json')))
+}
 
 /**
  * A durable session-log artifact. The JSONL writer compresses by default, so
