@@ -132,6 +132,12 @@
 | [144-schema-modules](144-schema-modules/README.md) | #144 五组 DDL 常量搬进 `src/schema/` 下的领域模块，存下的 schema 一字不变 |
 | [145-closeout](145-closeout/README.md) | #145 证据索引登记、两轴复核（Standards + Spec）、可执行声称检查与全量门禁 |
 
+## inject 对齐（规格 #133）
+
+| 目录 | 内容 |
+| --- | --- |
+| [133-inject-truth](133-inject-truth/README.md) | #151/#152/#153 chat 的 inject 与实际依赖对齐：声明收敛、README 传输契约/运行时语义分节、合并树门禁与夹具归属收口 |
+
 ## 阶段整合与评审
 
 | 目录 | 内容 |
