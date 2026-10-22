@@ -89,7 +89,10 @@ function assertSameProjection(events, sessionId, running = false) {
   const transcriptState = events.reduce(units.transcriptDefinition.apply, units.transcriptDefinition.init({ id: sessionId }, 0))
   const workState = events.reduce(units.workDefinition.apply, units.workDefinition.init({ id: sessionId }, 0))
   const work = units.tasksAndActivityAt(workState, ctx, sessionId, running, events.at(-1)?.seq ?? -1)
-  assert.deepEqual(stable(units.transcriptAt(transcriptState)), expected.transcript, 'transcript must match the frozen rows')
+  assert.deepEqual(stable(units.transcriptAt(transcriptState)), expected.transcript,
+    `transcript must match the frozen rows; turn endings: ${JSON.stringify(
+      events.filter(event => event.type === 'turn/end').map(event => event.data.reason),
+    )}`)
   assert.deepEqual(work, expected.work, 'tasks and activity must match the frozen values')
   return { transcriptState, workState, work }
 }

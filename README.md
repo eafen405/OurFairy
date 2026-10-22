@@ -27,6 +27,7 @@
 | pnpm | 用 corepack 固定：`corepack pnpm@11.28.5` |
 | deepseek-harness 检出 | 路径与锁定提交见 [combo.json](combo.json) 的 `repos.dsh` |
 | Linux 沙箱 | bubblewrap（`bwrap`），并允许创建非特权用户命名空间 |
+| PDF 页面渲染 | Poppler（`poppler-utils` 提供的 `/usr/bin/pdftoppm`） |
 | JDK / Android SDK | 只在构建客户端时需要，见下文 |
 
 后端测试驱动的是**真实的** dsh 启动链路，所以那个检出必须先按 `combo.json` 的 `repos.dsh.requiredBuild`

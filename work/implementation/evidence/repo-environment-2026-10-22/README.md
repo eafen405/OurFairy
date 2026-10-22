@@ -16,6 +16,19 @@
   `tests/dsh-checkout.test.mjs` 将副本的 canonical dsh 路径改为不存在的位置，再通过环境变量
   选择实际检出，实际加载模型替身、sharp 并解析 cordis。
 
+## 远端首轮复核
+
+`345087d` 的运行 `39750416559`：沙箱探测、四条 dsh 构建均通过；全量 241/249，剩余 8 处失败。
+其中 4 处 PDF 渲染失败含 `renderer-unavailable`，runner 没有 `/usr/bin/pdftoppm`；workflow 补
+`poppler-utils` 并打印版本。另 3 处原生重试与 1 处真实投影快照失败，给断言补充公开 `turn/end`
+失败编码以继续定位，没有更改预期或跳过用例。
+
+复核时将锁定 dsh 独立检出、离线按锁安装并完成四条构建；LLM、pi-ai、重试、agent loop、mock
+server、Cordis 六个核心产物与原本地构建逐文件 SHA256 相同。pi-ai 官方 1.0.2 发布包应用仓库补丁后
+也与本地缓存逐文件相同。单个重试接口用例在 Node 24.18.0、24.21.0（这次 CI 实际版本）、24.22.0
+均通过；Node 24.22.0 + 干净 dsh + GitHub 环境标记 + 两核并发的 4 个失败文件共 19/19 通过。
+这些对比未复现远端剩余 4 处失败，不能据此断言根因。
+
 ## 启动失败与耗时归因
 
 `start` 原先只等待 `report.ok === true`。probe 已写出失败报告并退出后，启动器仍一直等到

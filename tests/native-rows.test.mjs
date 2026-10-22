@@ -70,6 +70,7 @@ async function until(port, token, sessionId, check, timeoutMs = 60000) {
     replyStatus: projection?.replyStatus, error: projection?.error,
     messages: projection?.messages?.map(message => [message.role, message.status, message.text.slice(0, 40)]),
     types: projection?.events?.map(event => event.type),
+    endings: projection?.events?.filter(event => event.type === 'turn/end').map(event => event.data.reason),
   })}`)
 }
 

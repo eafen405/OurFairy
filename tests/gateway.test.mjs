@@ -403,7 +403,9 @@ test('a route saved from the phone keeps the deployment retry policy the draft d
     await httpJson(port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'after-save', text: 'retry after the save' } })
     const projection = await settle(port, admin, session.id)
     assert.deepEqual(double.server.requests.map(request => request.behavior), ['rate_limit', 'success'],
-      'the saved route still executes the deployment retry policy; without it the turn ends on the 429')
+      `the saved route must execute the deployment retry policy; turn endings: ${JSON.stringify(
+        projection.events.filter(event => event.type === 'turn/end').map(event => event.data.reason),
+      )}`)
     assert.equal(projection.error, null)
     assert.deepEqual(projection.messages.filter(message => message.role === 2 && message.status === 2).map(message => message.text),
       ['recovered after the save'])
