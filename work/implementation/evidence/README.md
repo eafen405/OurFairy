@@ -156,6 +156,12 @@
 | --- | --- |
 | [137-launcher-split](137-launcher-split/README.md) | spec #137 证据索引：组合层独立成零 spawn 模块、统一错误契约与 bundle manifest 准入规则单份（#155–#158），含合并 tip 门禁与可执行声称复核 |
 
+## Triage 修复
+
+| 目录 | 内容 |
+| --- | --- |
+| [146-147-triage](146-147-triage/README.md) | #146 假模型分块解码致 8000 码点断言偶发 8001；#147 store 文件头错引 AGENTS.md |
+
 ## 阶段整合与评审
 
 | 目录 | 内容 |
