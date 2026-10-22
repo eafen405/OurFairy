@@ -19,12 +19,12 @@
  * a copy would look like from the authorities themselves.
  */
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { flattenEntries, readCombo, repoPath } from '../scripts/combo.mjs'
-import { repoRoot } from './helpers/backend.mjs'
+import { productPackageDirs, repoRoot } from './helpers/backend.mjs'
 
 const docPath = join(repoRoot, 'docs', 'architecture', 'dsh-ecosystem-boundary.md')
 const docRelative = 'docs/architecture/dsh-ecosystem-boundary.md'
@@ -221,10 +221,7 @@ test('every product package stays unpublished', () => {
   // Derived from the packages that exist under backend/, not from a list: the
   // bundle manifest owns the install set, and this check has to hold before and
   // after that set moves.
-  const manifests = readdirSync(join(repoRoot, 'backend'), { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
-    .map(entry => join('backend', entry.name, 'package.json'))
-    .filter(path => existsSync(join(repoRoot, path)))
+  const manifests = productPackageDirs().map(dir => join(dir, 'package.json'))
   assert.ok(manifests.length > 0, 'backend/ must contain product package manifests')
   const published = manifests.filter(path => JSON.parse(readFileSync(join(repoRoot, path), 'utf8')).private !== true)
   assert.deepEqual(

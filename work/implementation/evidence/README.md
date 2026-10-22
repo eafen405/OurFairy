@@ -144,6 +144,12 @@
 | --- | --- |
 | [134-bundle-groups](134-bundle-groups/README.md) | #159–#162 组合层显式化内核与插件：收口记录与零语义变化对照；逐票证据见 [#159](134-bundle-groups/01-native-group-aware.md)、[#161](134-bundle-groups/02-bundle-groups.md)、[#160](134-bundle-groups/03-absence-attribution.md) |
 
+## 包清单真实性（规格 #136）
+
+| 目录 | 内容 |
+| --- | --- |
+| [136-closeout](136-closeout/README.md) | #148–#150：peer 与 license 声明对齐、内核包 README、`files` 存在性检查 |
+
 ## 阶段整合与评审
 
 | 目录 | 内容 |
