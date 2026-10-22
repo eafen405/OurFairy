@@ -26,6 +26,7 @@
 | Node | `^22.19.0 \|\| >=24` |
 | pnpm | 用 corepack 固定：`corepack pnpm@11.28.5` |
 | deepseek-harness 检出 | 路径与锁定提交见 [combo.json](combo.json) 的 `repos.dsh` |
+| Linux 沙箱 | bubblewrap（`bwrap`），并允许创建非特权用户命名空间 |
 | JDK / Android SDK | 只在构建客户端时需要，见下文 |
 
 后端测试驱动的是**真实的** dsh 启动链路，所以那个检出必须先按 `combo.json` 的 `repos.dsh.requiredBuild`
@@ -41,7 +42,9 @@ npm run backend:doctor # 环境自检：工具链、profile 装配、包与行�
 npm run specs:status   # 每张 spec 的分支、推送、落地与 worktree 现状（--offline 跳过 tracker）
 ```
 
-`npm test` 不联网、不调用真实模型：它经启动器起真实后端，模型与网络走替身。约 1 分 40 秒。
+`npm test` 不联网、不调用真实模型：它经启动器起真实后端，模型与网络走替身。耗时随机器与并发负载
+变化，以测试输出的 `duration_ms` 为准；本次环境修复的测量见
+[验证记录](work/implementation/evidence/repo-environment-2026-10-22/README.md)。
 
 单独跑一个文件：
 

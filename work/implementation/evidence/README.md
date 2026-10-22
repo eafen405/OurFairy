@@ -109,6 +109,12 @@
 | --- | --- |
 | [123-client-merge](123-client-merge/README.md) | #123 客户端合仓：快照导入、来源校验、构建与测试证据 |
 
+## 仓库环境
+
+| 目录 | 内容 |
+| --- | --- |
+| [repo-environment-2026-10-22](repo-environment-2026-10-22/README.md) | CI runner、dsh 测试路径与启动失败等待修复 |
+
 ## 阶段整合与评审
 
 | 目录 | 内容 |
