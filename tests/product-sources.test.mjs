@@ -149,7 +149,7 @@ test('installed product files are isolated from their source and sibling profile
     // Keep source and profiles on one filesystem so cross-device copying
     // cannot hide pnpm's default hardlinks for file: dependencies.
     assert.equal(statSync(source).dev, statSync(installed(home)).dev)
-    const removed = before.replace("    - id: llm-retry\n      name: '@deepseek-ai/dsh-llm-retry'\n", '')
+    const removed = before.replace("        - id: llm-retry\n          name: '@deepseek-ai/dsh-llm-retry'\n", '')
     assert.notEqual(removed, before, 'the fixture must remove the native retry row')
     writeFileSync(installed(home), removed)
     assert.ok(readFileSync(source, 'utf8') === before, 'editing a profile must preserve the source retry row')
