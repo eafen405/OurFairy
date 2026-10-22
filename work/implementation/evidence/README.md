@@ -138,6 +138,12 @@
 | --- | --- |
 | [133-inject-truth](133-inject-truth/README.md) | #151/#152/#153 chat 的 inject 与实际依赖对齐：声明收敛、README 传输契约/运行时语义分节、合并树门禁与夹具归属收口 |
 
+## 组合层分组（规格 #134）
+
+| 目录 | 内容 |
+| --- | --- |
+| [134-bundle-groups](134-bundle-groups/README.md) | #159–#162 组合层显式化内核与插件：收口记录与零语义变化对照；逐票证据见 [#159](134-bundle-groups/01-native-group-aware.md)、[#161](134-bundle-groups/02-bundle-groups.md)、[#160](134-bundle-groups/03-absence-attribution.md) |
+
 ## 阶段整合与评审
 
 | 目录 | 内容 |

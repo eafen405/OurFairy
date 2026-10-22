@@ -13,23 +13,34 @@
  * missing instead of failing generically.
  */
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { nativeCapabilityFailures } from '../scripts/combo.mjs'
+import { nativeCapabilityFailures, flattenEntries } from '../scripts/combo.mjs'
 import { dshDir, describeRun, makeHome, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
 const installAnchor = join(dshDir, 'apps', 'cli', 'package.json')
 const dshRequire = createRequire(installAnchor)
 const boot = dshRequire('@deepseek-ai/dsh-app-boot')
+// The entry-list dialect and its YAML implementation, taken from the same
+// installation the boot reads them from: `!!js` scalars only round-trip
+// through the include's own schema.
+const bootRequire = createRequire(dshRequire.resolve('@deepseek-ai/dsh-app-boot'))
+const { entryListSchema } = bootRequire('@deepseek-ai/cordis-plugin-include')
+const yaml = bootRequire('js-yaml')
 const bundlePatch = join(repoRoot, combo.backend.bundlePathInRepo, 'cordis.patch.yml')
 const historyExport = '@deepseek-ai/dsh-agent/session-history'
 
-/** The rows the bundle mounts, read through dsh's own patch loader. */
+/**
+ * The capability rows the bundle mounts, read through dsh's own patch loader.
+ * `flattenEntries` returns the leaf rows, so a row inside a group is one row
+ * here just as it is one mounted row, and a disabled group's state is already
+ * on its children.
+ */
 function composedRows() {
-  return boot.composeEntries([boot.loadOverlayPatches('dsh', bundlePatch)])
+  return flattenEntries(boot.composeEntries([boot.loadOverlayPatches('dsh', bundlePatch)]))
 }
 
 /** Resolve the public export from the same installation the launcher boots. */
@@ -37,8 +48,46 @@ function resolveFromDsh(specifier) {
   return dshRequire.resolve(specifier)
 }
 
+/**
+ * Remove the row with `id` from an entry list, wherever it is mounted: a
+ * group's `config` nests rows exactly like the top level does. Returns whether
+ * the row was found, so a rename makes the caller fail instead of skipping.
+ */
+function removeRow(entries, id) {
+  const index = entries.findIndex(entry => entry.id === id)
+  if (index >= 0) {
+    entries.splice(index, 1)
+    return true
+  }
+  return entries.some(entry => entry.group && Array.isArray(entry.config) && removeRow(entry.config, id))
+}
+
 test('the shipped composition satisfies every required native capability', () => {
   assert.deepEqual(nativeCapabilityFailures(composedRows(), resolveFromDsh), [])
+})
+
+test('a required row nested in a group is still found', () => {
+  const nested = [{ id: 'kernel', name: 'cordis:group', group: true, config: composedRows() }]
+  assert.deepEqual(nativeCapabilityFailures(nested, resolveFromDsh), [])
+})
+
+test('a required row inside a disabled group is reported as disabled', () => {
+  const disabled = [{
+    id: 'plugins',
+    name: 'cordis:group',
+    group: true,
+    disabled: true,
+    config: composedRows(),
+  }]
+  const failures = nativeCapabilityFailures(disabled, resolveFromDsh)
+  const required = ['llm-retry', 'spill-local', 'spill-policy', 'subprocess']
+  assert.equal(failures.length, required.length,
+    `every required row inherits the group's disabled state; got ${JSON.stringify(failures)}`)
+  for (const id of required) {
+    const failure = failures.find(message => message.includes(`the ${id} row`))
+    assert.ok(failure !== undefined, `the ${id} row must be reported; got ${JSON.stringify(failures)}`)
+    assert.match(failure, /disabled/u, `the ${id} row must be reported as disabled; got ${failure}`)
+  }
 })
 
 test('a missing required row fails by row id, package, and remedy', () => {
@@ -101,10 +150,41 @@ test('doctor passes on the shipped composition and fails when a required row is 
     // run reuses this installation.
     const installedPatch = join(home, 'dsh-home', 'profiles', combo.backend.profileName,
       'node_modules', ...combo.backend.bundlePackage.split('/'), 'cordis.patch.yml')
-    const source = readFileSync(installedPatch, 'utf8')
-    const removed = source.replace(`    - id: llm-retry\n      name: '@deepseek-ai/dsh-llm-retry'\n`, '')
-    assert.notEqual(removed, source, 'the installed bundle must declare the llm-retry row for this test to remove it')
-    writeFileSync(installedPatch, removed)
+    const patches = boot.loadOverlayPatches('dsh', installedPatch)
+    // Nest the inserted rows in a group only when the bundle is still flat:
+    // after #161 the shipped insert already has the kernel/plugins groups, and
+    // wrapping those in a second `kernel` group would reuse the loader's entry
+    // id for both parent and child (a cyclic parent chain at boot).
+    const alreadyGrouped = patches.some(patch => Array.isArray(patch.insert)
+      && patch.insert.some(row => row.group === true))
+    const grouped = alreadyGrouped ? patches : patches.map(patch => Array.isArray(patch.insert)
+      ? { ...patch, insert: [{ id: 'kernel', name: 'cordis:group', group: true, config: patch.insert }] }
+      : patch)
+    const groupedIds = []
+    const collectIds = rows => rows.forEach(row => {
+      groupedIds.push(row.id)
+      if (Array.isArray(row.config)) collectIds(row.config)
+    })
+    grouped.forEach(patch => collectIds(patch.insert ?? []))
+    assert.equal(new Set(groupedIds).size, groupedIds.length,
+      `the mutated composition must not reuse a row id: ${JSON.stringify(groupedIds)}`)
+    // pnpm installs a `file:` package by hard-linking its files: writing the
+    // installed path in place would rewrite the worktree's own bundle. Replace
+    // the directory entry instead so the source inode stays untouched.
+    const replaceInstalledPatch = text => {
+      const temp = `${installedPatch}.next`
+      writeFileSync(temp, text)
+      renameSync(temp, installedPatch)
+    }
+    replaceInstalledPatch(yaml.dump(grouped, { schema: entryListSchema, noRefs: true }))
+    assert.equal(doctorCheck(runBackend(['doctor', '--json'], env)).ok, true,
+      'the check must pass with the required rows inside a group')
+
+    // Remove the row by id, wherever it is nested — not by matching its
+    // indentation, which grouping changes.
+    const removed = grouped.some(patch => Array.isArray(patch.insert) && removeRow(patch.insert, 'llm-retry'))
+    assert.ok(removed, 'the installed bundle must declare the llm-retry row for this test to remove it')
+    replaceInstalledPatch(yaml.dump(grouped, { schema: entryListSchema, noRefs: true }))
 
     const failed = doctorCheck(runBackend(['doctor', '--json'], env))
     assert.equal(failed.ok, false, `a profile without llm-retry must fail the check; doctor reported ${JSON.stringify(failed)}`)
