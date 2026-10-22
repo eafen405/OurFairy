@@ -45,9 +45,18 @@ async function note(user, sessionId, text) {
   }
   assert.fail('ordinary note did not finish')
 }
+/**
+ * Read one request body as one UTF-8 string, so a character split across socket
+ * chunks survives.
+ */
+async function readRequestBody(source) {
+  const chunks = []
+  for await (const chunk of source) chunks.push(chunk)
+  return Buffer.concat(chunks).toString('utf8')
+}
 before(async () => {
   model = http.createServer(async (req, res) => {
-    let data = ''; for await (const chunk of req) data += chunk
+    const data = await readRequestBody(req)
     const body = JSON.parse(data); modelRequests.push(body)
     const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
     const commandIndex = blocks.findLastIndex(c => c.type === 'text' && c.text.startsWith('{"name":'))
@@ -82,6 +91,24 @@ before(async () => {
 after(async () => {
   const run = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home })
   assert.equal(run.code, 0, describeRun('stop', run)); await new Promise(resolve => model.close(resolve)); removeHome(home)
+})
+test('the fake model decodes a request body split inside a multi-byte character', async () => {
+  const text = Array.from('消息预算😀'.repeat(2000)).slice(0, 8000).join('')
+  const body = JSON.stringify({ messages: [{ role: 'user', content: text }] })
+  const bytes = Buffer.from(body, 'utf8')
+  const at = bytes.indexOf(Buffer.from('😀', 'utf8'))
+  assert.ok(at > 0, 'the fixture must contain an emoji to split')
+  const received = await new Promise((resolve, reject) => {
+    const request = http.request({ host: '127.0.0.1', port: modelPort, method: 'POST', path: '/',
+      headers: { 'content-type': 'application/json' } }, response => {
+      response.resume()
+      response.on('end', () => resolve(modelRequests.at(-1)))
+    })
+    request.on('error', reject)
+    request.write(bytes.subarray(0, at + 1))
+    setTimeout(() => request.end(bytes.subarray(at + 1)), 25)
+  })
+  assert.equal(received.messages[0].content, text)
 })
 test('chat searches Chinese message excerpts then reads original event positions', async () => {
   aliceSession = (await request('/sessions/create', alice.token)).session.id
