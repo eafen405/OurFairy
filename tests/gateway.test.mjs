@@ -12,12 +12,28 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
+// Registers Node resolution for the pinned dsh checkout before the native
+// modules below are loaded; it must stay the first helper import of this file.
+import './helpers/dsh-peers.mjs'
 import {
-  dshDir, describeRun, httpJson, makeHome, readReport, removeHome, runBackendAsync, startArgs, startedPort,
+  dshDir, describeRun, httpJson, makeHome, readReport, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'gateway-password'
 const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
+const { loadOverlayPatches } = await import('@deepseek-ai/dsh-app-boot')
+const { flattenEntries } = await import('../scripts/combo.mjs')
+const { Config: PiAiConfig } = await import('@deepseek-ai/dsh-llm-pi-ai')
+// The phone-editable allowlist has one authority: the gateway service exports
+// the same set its route validator and save overlay use.
+const { PHONE_EDITABLE_MODEL_FIELDS } = await import('../backend/gateway/src/service.mjs')
+
+/**
+ * The native input modality list, read from the pinned dsh catalog module the
+ * gateway imports. The test must not keep its own copy: the point of the case
+ * below is that the gateway and this expectation move with upstream together.
+ */
+const { MODALITIES: NATIVE_MODALITIES } = await import('@deepseek-ai/dsh-llm-pi-ai/src/catalog.ts')
 
 const servers = []
 const homes = []
@@ -91,6 +107,41 @@ function minimaxRoute(baseURL, extra = {}) {
     models: [{ id: 'MiniMax-M3.1-Flash', name: 'MiniMax M3.1 Flash', contextWindow: 200000, input: ['text', 'image'] }],
     ...extra,
   }
+}
+
+/**
+ * The `llm-pi-ai` route dictionary the phone's last save persisted.
+ *
+ * Read from the profile's user layer with dsh's own patch loader, so the
+ * assertion sees the document that survives a restart rather than a value the
+ * gateway happened to echo. Parsing the YAML here would be a second reader of
+ * the same file and could agree with the writer while disagreeing with a boot.
+ * @param {string} home - the isolated OURFAIRY_HOME the launcher booted with.
+ * @returns {Record<string, any>} the saved providers dictionary.
+ */
+function savedProviders(home) {
+  const patchPath = join(home, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml')
+  const row = loadOverlayPatches('dsh', patchPath).find(entry => entry.id === 'llm-pi-ai')
+  assert.ok(row?.config?.providers !== undefined, `${patchPath} must carry the saved llm-pi-ai providers row`)
+  return row.config.providers
+}
+
+/**
+ * One model entry of the deployment bundle exactly as the native schema
+ * resolves it — the "previous entry" a phone save starts from. Resolving the
+ * declaration instead of reading the live gateway means the expectation comes
+ * from the deployment layer, not from the value under test.
+ * @param {string} provider - route key in the bundle's `llm-pi-ai` row.
+ * @param {string} id - model id to return.
+ * @returns {Record<string, any>} the resolved model entry.
+ */
+function declaredModel(provider, id) {
+  const bundle = join(repoRoot, 'backend', 'v1-bundle', 'cordis.patch.yml')
+  const rows = flattenEntries(loadOverlayPatches('dsh', bundle).flatMap(entry => entry.insert ?? []))
+  const row = rows.find(entry => entry.id === 'llm-pi-ai')
+  const declared = row.config.providers[provider].models.find(model => model.id === id)
+  const resolved = PiAiConfig({ providers: { [provider]: { models: [declared] } } })
+  return resolved.providers.get()[provider].models[0]
 }
 
 /** One valid 16 kHz mono PCM WAV the speech route accepts. */
@@ -238,6 +289,71 @@ test('an invalid configuration is refused with the reason, and nothing is persis
     assert.deepEqual(state.saved, { selection: false, routes: false, asr: false }, 'a refused write persists nothing')
     assert.deepEqual(state.routes.map(route => route.provider), ['deepseek-official', 'minimax-cn'],
       'a refused write leaves the deployment route in place')
+  } finally {
+    await stop(home)
+  }
+})
+
+test('the gateway accepts every native input modality', async () => {
+  const home = freshHome()
+  const double = await modelDouble()
+  const { port } = await boot(home, double.env)
+  try {
+    const admin = await signIn(port)
+    assert.ok(Array.isArray(NATIVE_MODALITIES) && NATIVE_MODALITIES.length > 0,
+      'the pinned dsh catalog must export a non-empty MODALITIES runtime list')
+    // Each native modality is submitted on its own route draft, so a refusal
+    // names the modality the gateway failed to accept rather than one of many.
+    for (const modality of NATIVE_MODALITIES) {
+      const saved = await httpJson(port, '/gateway/route', { token: admin, expect: false, body: {
+        provider: 'native-modalities',
+        api: 'openai-completions',
+        baseURL: 'https://native.example/v1',
+        models: [{ id: `native-${modality}`, name: `Native ${modality}`, input: [modality] }],
+      } })
+      assert.equal(saved.status, 200, `native modality "${modality}" must be accepted: ${saved.text}`)
+      assert.deepEqual(saved.json.route.models[0].input, [modality],
+        'the read-back echoes the modality the gateway accepted')
+    }
+
+    // A value outside the native list is still refused, with the route error
+    // code. Picking it from a pool rather than hard-coding one keeps a future
+    // native modality from being asserted as invalid.
+    const unsupported = ['audio', 'video', 'pdf'].find(modality => !NATIVE_MODALITIES.includes(modality))
+    assert.ok(unsupported !== undefined,
+      'the native list now covers every probe value; choose a value outside it')
+    const refused = await httpJson(port, '/gateway/route', { token: admin, expect: false, body: {
+      provider: 'native-modalities',
+      api: 'openai-completions',
+      baseURL: 'https://native.example/v1',
+      models: [{ id: 'unsupported', name: 'Unsupported', input: [unsupported] }],
+    } })
+    assert.equal(refused.status, 400, refused.text)
+    assert.equal(refused.json.error.code, 'gateway/invalid-route')
+  } finally {
+    await stop(home)
+  }
+})
+
+test('consecutive selection saves commit in submission order', async () => {
+  const home = freshHome()
+  const double = await modelDouble()
+  const { port } = await boot(home, double.env)
+  try {
+    const admin = await signIn(port)
+    // The gateway submits these two saves in this order; each response means
+    // that save's write settled. The native entry serializes overlapping saves
+    // (its own suite covers that); at this HTTP seam the deterministic
+    // submission order is the awaited pair, and the last one must win.
+    const first = await httpJson(port, '/gateway/selection', { token: admin,
+      body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'low' } })
+    assert.equal(first.selection.reasoningEffort, 'low', 'the first save is echoed as submitted')
+    const second = await httpJson(port, '/gateway/selection', { token: admin,
+      body: { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'high' } })
+    assert.equal(second.selection.reasoningEffort, 'high', 'the second save is echoed as submitted')
+    const state = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
+    assert.equal(state.selection.reasoningEffort, 'high',
+      'the last submitted selection save must be the effective one')
   } finally {
     await stop(home)
   }
@@ -427,6 +543,60 @@ test('a route saved from the phone keeps the deployment retry policy the draft d
     assert.deepEqual(double.server.requests.map(request => request.behavior).slice(-2), ['rate_limit', 'success'],
       'the saved route keeps the deployment retry policy across a restart')
     assert.equal(projection.error, null)
+  } finally {
+    await stop(home)
+  }
+})
+
+test('a route saved from the phone keeps model fields the draft does not edit', async () => {
+  const home = freshHome()
+  const double = await modelDouble()
+  const { port } = await boot(home, { ...double.env, MINIMAX_API_KEY: 'mock-key' })
+  try {
+    const admin = await signIn(port)
+    // The deployment's own entry is the "previous entry" the save starts from.
+    // Its fields outside the phone's editable set are the expectation; when the
+    // deployment (or upstream) adds another one, this list grows by itself.
+    const previous = declaredModel('minimax-cn', 'MiniMax-M3.1-Flash')
+    const unedited = Object.entries(previous).filter(([field]) => !PHONE_EDITABLE_MODEL_FIELDS.has(field))
+    assert.ok(unedited.length >= 2, `the deployment model must declare fields the phone cannot edit; got ${JSON.stringify(previous)}`)
+
+    // The draft supplies `maxTokens` and omits the deployment's `contextWindow`:
+    // supplied fields overwrite, omitted ones are cleared rather than inherited.
+    const first = minimaxRoute(`${double.server.baseURL}/v1`)
+    first.models = [{ id: 'MiniMax-M3.1-Flash', name: 'MiniMax M3.1 Flash', maxTokens: 8192, input: ['text', 'image'] }]
+    await httpJson(port, '/gateway/route', { token: admin, body: first })
+
+    const saved = savedProviders(home)['minimax-cn']
+    assert.equal(saved.retryPolicy, undefined,
+      'the route-level deployment retry policy stays in the deployment layer; a save must not copy it into the user layer')
+    const [savedModel] = saved.models
+    assert.equal(savedModel.contextWindow, undefined, 'an editable field the draft omits is cleared, not inherited from the previous entry')
+    assert.equal(savedModel.maxTokens, 8192, 'an editable field the draft supplies overwrites the previous entry')
+    for (const [field, value] of unedited) {
+      assert.deepEqual(savedModel[field], value,
+        `model field "${field}" the draft does not edit must survive the save unchanged`)
+    }
+
+    // A second save: `maxTokens` is now omitted too, so the previous user-layer
+    // value must be cleared as well, and a brand-new model id has no previous
+    // entry to inherit deployment fields from.
+    const second = minimaxRoute(`${double.server.baseURL}/v1`)
+    second.models = [
+      { id: 'MiniMax-M3.1-Flash', name: 'MiniMax M3.1 Flash', input: ['text', 'image'] },
+      { id: 'MiniMax-other', name: 'Other', input: ['text'] },
+    ]
+    await httpJson(port, '/gateway/route', { token: admin, body: second })
+
+    const resaved = savedProviders(home)['minimax-cn']
+    const [resavedModel, addedModel] = resaved.models
+    assert.equal(resavedModel.maxTokens, undefined, 'a field the previous user-layer entry declared is cleared when the draft omits it')
+    for (const [field, value] of unedited) {
+      assert.deepEqual(resavedModel[field], value,
+        `model field "${field}" the draft does not edit must survive a later save unchanged`)
+    }
+    assert.deepEqual(addedModel, { id: 'MiniMax-other', name: 'Other', input: ['text'] },
+      'a new model id is stored exactly as the draft declares it, with no deployment fields borrowed from a sibling')
   } finally {
     await stop(home)
   }

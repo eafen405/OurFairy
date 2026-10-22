@@ -1,6 +1,6 @@
 # dsh 生态边界：并行传输与保留的产品实现
 
-2026-10-19。本文是 [#73 dsh 插件生态兼容](https://github.com/eafen405/OurFairy/issues/73) 的子票 [#97](https://github.com/eafen405/OurFairy/issues/97) 交付的书面边界：产品以 dsh profile 的插件组合运行，但有几处刻意不接入原生接缝，或保留原生能力更弱处的产品实现。本文记录这些例外、它们各自缺什么、为什么这样选，以及什么条件下重新评估。
+2026-10-19。本文是 [#73 dsh 插件生态兼容](https://github.com/eafen405/OurFairy/issues/73) 的子票 [#97](https://github.com/eafen405/OurFairy/issues/97) 交付的书面边界：产品以 dsh profile 的插件组合运行，但有几处刻意不接入原生接缝，或保留原生能力更弱处的产品实现。本文记录这些例外、它们各自缺什么、为什么这样选，以及什么条件下重新评估。2026-10-21 增补「原生语义漂移」一节（[#135](https://github.com/eafen405/OurFairy/issues/135) 收口），记录六处翻译守卫及其失效检查；前文保留原样。
 
 本文不列行清单和包清单。行集合的唯一权威是 `backend/v1-bundle/cordis.patch.yml`（loader
 实际读取的文件），产品包集合的唯一权威是 `backend/v1-bundle/package.json`；缺席行的期望
@@ -166,7 +166,22 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 检查：`tests/attachments.test.mjs` 的
 `unfinished and foreign receipts never grant message or download access, including identical stored bytes`。
 
-## 4. 不在范围
+## 4. 原生语义漂移
+
+产品在六处把原生值翻译成产品值：任务状态、停止结果、路由保存的模型字段、选型写入、输入模态与请求幂等。这些翻译规则如果各自复制一份原生清单，上游改动时产品通常不报错，而是给出看起来正常的结果。下表逐项记录上游变化、产品处理方式，以及上游变化时会失败的具体测试。处理方式分三类：允许列表（只覆盖产品有权写的字段）、改用原生入口（顺序交给上游）、测试期对账加运行期显式未知或响亮失败。前两类在构造上不会漏；后一类没有编译期保证——原生词表是导出的类型声明，不进入运行时，编译器无法替产品核对运行时映射表，所以对账放在测试期，运行期对未知值不再猜测。
+
+| 上游变化 | 产品处理 | 上游变化时失败的检查（失效即失败） |
+| --- | --- | --- |
+| 原生任务状态词表（`JobStatus`，导出类型）增删成员 | 运行期把无法映射的状态显式记为未知（wire 0），活动摘要把未知当作不可收敛而不是非终态；测试期读取 pinned dsh 的声明，与投影映射逐项对账并点名差异成员 | `tests/native-job-status.test.mjs`：`native job status vocabulary matches the projection`。没有它时，未知状态以 `undefined` 漏进投影，终态任务不收敛、活动摘要可能在任务仍执行时报告安静，且没有异常或日志 |
+| 原生停止结果词表（`JobRegistry.kill` 的返回类型）新增第三种返回值 | 只映射已知值（`requested` → 1、`already-finished` → 2）；未知值抛 5xx 产品错误并带上原始值；测试期对账原生返回类型 | `tests/native-job-stop-outcome.test.mjs`：`native job stop outcome vocabulary matches the adapter`。没有它时，任何非 `requested` 的返回值都被折成 2（已结束），手机无法区分真的结束与未知 |
+| 上游给模型条目新增手机不编辑的部署自有字段 | 允许列表：以先前条目为底，只覆盖手机可编辑的那组模型字段，其余字段默认保留 | `tests/gateway.test.mjs`：`a route saved from the phone keeps model fields the draft does not edit`。没有它时，上游每新增一个部署自有字段，手机保存一次路由就把它静默抹掉 |
+| 选型写入绕过原生保存入口（改回直接写设置行） | 选型写入走原生默认模型保存入口，不再直接改写设置；网关保留自己的校验与「没有配置编辑器时 503」的拒绝。产品测试固定的是**调用路径**：原生入口收到完整选择、不经过 `settings().mutate`，无编辑器时 503 且不调用原生保存。背景（不是本行检查的对象）：重叠保存的串行化是原生服务自己的契约，由上游默认模型服务的测试 `serializes overlapping saves and continues after a rejected write` 固定 | `tests/gateway-service.test.mjs`：`a selection save goes through the native default-model entry`（断言原生 `saveSelection` 收到完整选择、`settings().mutate` 未被调用）；`tests/gateway-service.test.mjs`：`a selection save refuses when the profile cannot be edited`（503 且原生保存未调用）；`tests/gateway.test.mjs`：`consecutive selection saves commit in submission order`（按提交顺序完成两次保存时，最后提交的值生效，是顺序写入的 last-wins 行为，不是重叠保存的串行化证明）。没有前两条时，改回直接写设置行不会被任何测试发现——顺序等待的 HTTP 保存对两种写法都是绿的 |
+| 原生运行时输入模态列表增删成员 | 网关直接导入原生列表作为唯一权威，不维护本地集合；测试逐项提交原生列表里的每个模态并断言回显 | `tests/gateway.test.mjs`：`the gateway accepts every native input modality`。没有它时，本地列表落后于上游，手机提交新模态会得到误导性的 400「不认识的模态」 |
+| 上游改变 transcript 受理锚点的行为，或同标识重发走到锚点之外的路径 | 幂等按外部行为固定：同一请求标识连续两次发送只产生一条消息且受理序号相同，内容不同仍 409；守卫是行为断言，不把内部锚点当作契约 | `tests/remote-chat.test.mjs`：`the same request id sent twice in a row produces one message`。没有它时，锚点行为变化会让同标识重发变成第二条消息，而并发重试与重启用例仍可能通过 |
+
+本节引用的检查标题同时登记在 `tests/ecosystem-boundary.test.mjs` 的引用清单里：测试改名或删除会让本节的声称失败。
+
+## 5. 不在范围
 
 | 事项 | 现在的可执行事实 | 失效即失败的检查 |
 | --- | --- | --- |
@@ -178,12 +193,12 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 Android 客户端在本仓库 `android/`，本文不对其代码做检查声明；本仓库能固定的是它会调用的 HTTP/SSE
 形状与上述路由集合。
 
-## 5. 维护规则
+## 6. 维护规则
 
 - 行与包只有一个权威：`backend/v1-bundle/cordis.patch.yml` 与
   `backend/v1-bundle/package.json`。本文提到「bundle 挂载的产品包」时指这两处，不复制。
-- 本文的每个例外都附一个检查；删除或改名检查时，同一次改动必须改写或删除对应声称
+- 本文的每个例外与每条语义守卫都附一个检查；删除或改名检查时，同一次改动必须改写或删除对应声称
   （`CODING_STANDARDS.md`）。`tests/ecosystem-boundary.test.mjs` 会把本文引用的检查
-  与真实测试标题对账，也会把本文与 bundle 的行/包集合对账。
+  与真实测试标题对账（含 4 节引用的各条），也会把本文与 bundle 的行/包集合对账。
 - 边界变化（例如开始使用 Remote，或换掉 scoped provider）是一次架构决定，应先改检查与
   ADR，再改本文，而不是让文档先漂移。

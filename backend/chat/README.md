@@ -97,7 +97,9 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 `/chat/jobs/output` 接受绝对 UTF-8 字节偏移 `from`，chunks 保留原生
 `{at,text,channel?,gapBefore?}`；`next` 与 `earliest` 指向原生输出环，`gapBefore` 标记源侧
 丢失。终止状态不代表输出完整。`/chat/jobs/stop` 返回数字 `outcome`：0 不可用、1 已请求取消、
-2 已结束。
+2 已结束。只映射原生 `JobRegistry.kill` 的 `requested`（1）与 `already-finished`（2）；原生返回
+其它值时是 500 `chat/unknown-stop-outcome`，消息带原始值，不会折叠成 2。映射表与原生返回类型的
+对账见 `tests/native-job-stop-outcome.test.mjs`。
 
 ## 运行时语义（服务端如何产生这些值）
 
@@ -271,10 +273,14 @@ spill 文件，贡献返回空；声明它会让所有 chat 路由等待一个�
 | `node --test tests/remote-chat.test.mjs` | 传输契约 | 路由、SSE、鉴权、错误。 |
 | `node --test tests/reconnect.test.mjs` | 传输契约 | 断线补齐的线上语义。 |
 | `node --test tests/jobs.test.mjs` | 跨两侧（传输契约为主；含折叠观察） | 任务端点与任务折叠。 |
+| `node --test tests/native-job-status.test.mjs tests/native-job-stop-outcome.test.mjs` | 运行时语义 | 原生任务状态与停止返回值的逐项对账。 |
 | `node --test tests/spill-read.test.mjs` | 运行时语义 | 本会话 spill 目录授权。 |
 | `node --test tests/gateway.test.mjs`（图片能力用例） | 运行时语义 | `llm` 声明的图片能力检查。 |
 | `node scripts/bench-projection.mjs --label after-upgrade --out /tmp/projection-upgrade.json` | 运行时语义 | 投影成本。 |
 
 若 registry 接口、事件形状或 `stateOf` 消失，插件会在 `inject`/`stateOf` 处失败、相关测试
-报错，不能靠保留第二套 fold 绕过。行为测试与基准通过只证明当前组合兼容，不能当作长期兼容
-承诺。
+报错，不能靠保留第二套 fold 绕过。两条对账用例 `native job status vocabulary matches the
+projection` 与 `native job stop outcome vocabulary matches the adapter` 分别读取 pinned dsh 的
+任务状态声明与停止返回类型，与产品的映射逐项比较；上游增删状态或返回值时它们先失败并点名成员，
+而不是让 `undefined` 或「已结束」静默进入投影（运行期对未知值分别显式记为未知与 5xx 响亮失败）。
+行为测试与基准通过只证明当前组合兼容，不能当作长期兼容承诺。

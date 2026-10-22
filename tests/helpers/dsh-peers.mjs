@@ -26,10 +26,17 @@ import { dshDir, repoRoot } from './backend.mjs'
  */
 const anchors = {
   '@deepseek-ai/cordis': join(dshDir, 'vendor', 'cordis', 'package.json'),
+  '@deepseek-ai/dsh-app-boot': join(dshDir, 'packages', 'boot', 'app-boot', 'package.json'),
   '@deepseek-ai/dsh-session': join(dshDir, 'packages', 'core', 'session', 'package.json'),
   '@deepseek-ai/dsh-session-projection': join(dshDir, 'packages', 'session', 'session-projection', 'package.json'),
   '@deepseek-ai/dsh-llm': join(dshDir, 'packages', 'llm', 'llm', 'package.json'),
+  '@deepseek-ai/dsh-llm-pi-ai': join(dshDir, 'packages', 'llm', 'llm-pi-ai', 'package.json'),
+  '@deepseek-ai/dsh-llm-mock-server': join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'package.json'),
   '@deepseek-ai/dsh-agent': join(dshDir, 'packages', 'core', 'agent', 'package.json'),
+  '@deepseek-ai/dsh-jobs': join(dshDir, 'packages', 'jobs', 'jobs', 'package.json'),
+  '@deepseek-ai/schemastery': join(dshDir, 'vendor', 'schemastery', 'package.json'),
+  '@ourfairy/dsh-identity': join(repoRoot, 'backend', 'identity', 'package.json'),
+  '@ourfairy/dsh-http': join(repoRoot, 'backend', 'http', 'package.json'),
   '@ourfairy/dsh-sessions': join(repoRoot, 'backend', 'sessions', 'package.json'),
   zod: join(dshDir, 'package.json'),
 }

@@ -1,0 +1,110 @@
+# 06 / #167 请求幂等：同标识连续重发只产生一条消息
+
+父规格：[#135 原生语义漂移守卫](https://github.com/eafen405/OurFairy/issues/135)；
+票面副本：[work/tickets/135/06-idempotent-resend.md](../../../../tickets/135/06-idempotent-resend.md)。
+
+## 改了什么
+
+只有测试，没有生产代码改动。
+
+- `tests/remote-chat.test.mjs` 新增一条行为断言
+  `the same request id sent twice in a row produces one message`。它从产品 HTTP 端点进入
+  （`/chat/send`、`/chat/read`），顺序发送同一 `{sessionId, requestId, text}` 两次：
+  - 两次都是 200，且第二份 receipt 与第一份**整体相等**（`deepEqual`，含 `acceptedSeq`），
+    另单独断言 `acceptedSeq` 相等；
+  - 读回投影里该 `requestId` 的 role 1 消息恰好一条，且 `messageId` 等于 receipt 的 `messageId`；
+  - 同一标识改文本仍 409 且 `error.code === 'chat/request-conflict'`；
+  - 冲突被拒后再读，该标识仍只有一条用户消息（拒绝路径不写入）；
+  - 用例结束前等到 `replyStatus === 0`，让被受理的那一轮回复落定，避免下一条用例的
+    session artifact 快照被仍在写入的回复扰动（见「全量入口」）。
+- 没有断言 transcript 单元内部的 `receipts` 映射，只断言端点返回与读回投影。
+
+既有并发重试 + 重启用例 `a stable send is durably accepted once across concurrent retries and backend restart`
+未改动。
+
+## 红 / 绿
+
+工作目录 `.worktrees/167-idempotent-resend`，分支 `ticket/167-idempotent-resend`，
+基线 `integration/spec-135`（`28e8d32`）。
+
+```bash
+node --test tests/remote-chat.test.mjs
+```
+
+结果：9 个用例全绿（新增用例 267 ms）。摘要：
+
+```text
+✔ a stable send is durably accepted once across concurrent retries and backend restart
+✔ the same request id sent twice in a row produces one message
+✔ all remote paths reject anonymous and foreign owners, including administrator, before cold resume
+✔ SSE preserves every text prefix and disconnecting observation leaves the backend reply running
+✔ a stop settles the visible prefix as interrupted and does not cancel the next reply
+✔ a failed model attempt retains its exact partial text after a cold restart
+✔ the deployment owner identity is separate from a chat attempt to edit the persona
+✔ stopping the current reply preserves accepted queued input for the next wake
+✔ stopping before visible output records interruption rather than a failed reply
+ℹ tests 9  ℹ pass 9  ℹ fail 0
+```
+
+没有观察到红：当前发送路径已经满足票面要求，因此按票面「否则不改生产代码」处理。
+
+## 敏感性检查（临时移除 receipt 短路）
+
+把 `backend/chat/src/service.mjs` 里 `if (found === null) {` 临时改成 `if (true) {`，
+即跳过「命中 receipt 就直接返回」的短路，让每次重发都重新 followup：
+
+```bash
+node --test --test-name-pattern="the same request id sent twice in a row produces one message" \
+  tests/remote-chat.test.mjs
+```
+
+结果：红。投影里同一 `requestId` 出现两条 role 1 消息，断言在 `2 !== 1` 处失败：
+
+```text
+✖ the same request id sent twice in a row produces one message
+  AssertionError [ERR_ASSERTION]: [{"messageId":"59da…","seq":7,"requestId":"alice-sequential-resend",
+    "role":1,"status":2,"text":"这一条只应出现一次","attachments":[]},
+    {"messageId":"66ef…","seq":11,"requestId":"alice-sequential-resend",
+    "role":1,"status":1,"text":"这一条只应出现一次","attachments":[]}]
+  2 !== 1
+  at tests/remote-chat.test.mjs:104
+```
+
+随后 `git checkout -- backend/chat/src/service.mjs` 恢复，`git diff --exit-code` 确认与 HEAD
+逐字节一致（工作区只剩 `tests/remote-chat.test.mjs` 一处修改）。恢复后重跑
+`node --test tests/remote-chat.test.mjs` 再次全绿。
+
+结论：这条断言确实盯着「receipt 去重锚点」——锚点不再短路时它会红，且红的方式正是
+「同一标识产生两条消息」。
+
+## 全量入口
+
+功能提交 `40ad8e3`（后 amend 为 `6818be7`）经仓库 pre-commit 钩子
+（`.githooks/pre-commit`：`npm test` + `npm run combo:verify`）通过，退出码 0，未使用
+`--no-verify`。
+
+合并 `integration/spec-135`（该分支已先合入 `40ad8e3`）得到 `4c3e01e`。对合并提交的 amend
+第一次在钩子里变红，失败的是既有用例
+`all remote paths reject anonymous and foreign owners, including administrator, before cold resume`：
+它的 `artifacts()` 快照在两次拒绝调用之间发生变化。原因是本票新用例结束时没有等被受理的那一轮
+回复落定，回复仍在写 alice 的 session artifact——这是新用例引入的测试隔离问题，不是产品缺陷。
+修在 `7f3d979`：新用例末尾等待 `replyStatus === 0` 且出现 role 2 消息后才返回，幂等断言未改。
+
+修完后钩子仍两次变红，失败的都是与本票无关的用例，且各自在隔离运行时通过：
+
+| 重跑 | 失败用例 | 隔离复跑 |
+| --- | --- | --- |
+| 1 | `speech proxy uses configured provider, returns editable text, and reports actual failures`（`speech/timeout`） | `node --test tests/speech.test.mjs` 2/2 通过 |
+| 2 | `read intervals have inclusive original positions, omit tool results, and bound message text`（`8001 !== 8000`）与 `stopping the current reply preserves accepted queued input for the next wake`（`2 !== 1`） | 各自 `--test-name-pattern` 复跑通过；`node --test tests/conversation-search.test.mjs` 6/6 通过 |
+
+两次失败时宿主 `load average` 为 23–42（32 核，同仓库其他票的 worktree 并行在跑），属负载导致的
+时序 flake；第 3 次重跑通过：`npm test` 235/235，`npm run combo:verify` 输出
+`combo: combination verified`。全程未使用 `--no-verify`，原始输出未入库（证据协议）。
+
+随后 `integration/spec-135` 又前进到 `98f6d3b`（并入 #163、#164）。本分支再次合入该 tip 得到
+`01d0dde`，无冲突；合并后 `node --test tests/remote-chat.test.mjs` 9/9 通过。合并进来的
+`units.mjs` 改动只涉及任务状态（`taskStatusOf`），未触及 `receipts` / `receiptFrom`。
+
+## 未完成项
+
+- 无。票面要求的三项（顺序重发一条消息、改文本 409、敏感性）都已覆盖，未改生产代码。
