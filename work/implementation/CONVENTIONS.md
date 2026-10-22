@@ -33,7 +33,7 @@
 ```bash
 # OurFairy 侧（本仓库，含 android/ 客户端）
 git -C /home/eafen405/projects/OurFairy worktree add \
-  /home/eafen405/projects/OurFairy/.worktrees/<NN>-<slug> -b ticket/<NN>-<slug> integration/ourfairy-v1
+  /home/eafen405/projects/OurFairy/.worktrees/<NN>-<slug> -b ticket/<NN>-<slug> main
 
 # dsh 侧（仅当该票要改 dsh）
 git -C /home/eafen405/projects/deepseek-harness worktree add \

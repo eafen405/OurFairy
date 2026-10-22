@@ -122,7 +122,10 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
       rows.push({ ...base, expected: entry.productCommit ?? entry.integrationBranch, actual: null, ok: false, failure })
       continue
     }
+    // A PR checkout is a detached merge commit with no local branch; the
+    // remote-tracking ref carries the same tip and is what CI has.
     const tip = revParse(path, entry.integrationBranch)
+      ?? revParse(path, `origin/${entry.integrationBranch}`)
     if (tip === undefined) {
       const failure = `${key}: branch ${entry.integrationBranch} not found in ${path};`
         + ` run 'git -C ${path} fetch ${entry.remoteName ?? 'origin'} ${entry.integrationBranch}'`
