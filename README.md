@@ -38,6 +38,7 @@
 npm test            # 全量：node --test "tests/**/*.test.mjs"
 npm run combo:verify   # 版本组合：本仓库、dsh、客户端来源三条
 npm run backend:doctor # 环境自检：工具链、profile 装配、包与行、插件兼容、原生能力
+npm run specs:status   # 每张 spec 的分支、推送、落地与 worktree 现状（--offline 跳过 tracker）
 ```
 
 `npm test` 不联网、不调用真实模型：它经启动器起真实后端，模型与网络走替身。约 1 分 40 秒。
@@ -58,8 +59,16 @@ node --test tests/chat-read-window.test.mjs
 npm run hooks:install   # git config core.hooksPath .githooks
 ```
 
-之后每次提交先跑 `npm test` 再跑 `npm run combo:verify`，任一失败即阻止提交。检查针对当前工作树，
-未暂存的改动同样会影响结果。
+之后每次提交都会过一道门禁，按改动内容分流（`scripts/precommit.mjs`）：只改 Markdown 时跑
+`tests/docs.test.mjs` 与 `npm run combo:verify`，其余改动跑 `npm test` 与 `npm run combo:verify`。
+任一失败即阻止提交；检查针对当前工作树，未暂存的改动同样会影响结果。全量 `npm test` 仍在交付前与
+CI 上跑，钩子只是不再让每条证据提交都等它。
+
+### CI
+
+`.github/workflows/check.yml` 在 push 到 `main` 或 `integration/**`、以及每个 PR 上跑同一道全量门禁：
+按 `combo.json` 的锁检出并构建 dsh，再跑 `npm test` 与 `npm run combo:verify`。本地钩子可以被
+`--no-verify` 跳过，服务器上的这次不会。
 
 ## 跑后端
 
