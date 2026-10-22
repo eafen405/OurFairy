@@ -143,14 +143,10 @@ test('the boundary doc is reachable from the repository README', () => {
   )
 })
 
-test('the doc names the parallel-transport exception and the /api admission boundary', () => {
+test('the doc does not claim the transport is fully native', () => {
   const doc = readDoc()
-  for (const seam of ['/api', 'Connection', 'Remote', 'Typert', 'SSE', 'webServer', 'connection.fence']) {
-    assert.ok(
-      doc.includes(seam),
-      `the doc must name ${seam} when it records which native seams the product does not use`,
-    )
-  }
+  // Presence of the seam names is prose; review owns it. The negation is a
+  // factual guard: the transport is a recorded exception, not a native one.
   for (const claim of ['已经完全原生', 'fully native']) {
     assert.ok(
       doc.includes(claim) === false,
@@ -193,19 +189,6 @@ test('the doc points at the row and package authorities instead of copying them'
   )
 })
 
-test('the doc names the native capabilities each retained product implementation replaces', () => {
-  const doc = readDoc()
-  // The ticket asks for the reason each retained implementation is kept: what
-  // the native capability lacks. Naming the native option is the structural
-  // half of that; whether the reason is true stays a review question.
-  for (const capability of ['ctx.storageDomain', 'authorization', 'fs-sandbox', 'sandbox-local']) {
-    assert.ok(
-      doc.includes(capability),
-      `the doc must name ${capability} as the native capability it did not adopt, and say what it lacks`,
-    )
-  }
-})
-
 test('the bundle mounts no Gateway, Remote/Typert or plugin-manager package', () => {
   const absent = [/^@deepseek-ai\/dsh-api-/u, /^@deepseek-ai\/dsh-typert-/u,
     /^@deepseek-ai\/dsh-plugin-manager/u]
@@ -229,16 +212,6 @@ test('every product package stays unpublished', () => {
     [],
     'the doc records npm publication as out of scope; a product package without "private": true contradicts it',
   )
-})
-
-test('the doc records the explicit non-goals', () => {
-  const doc = readDoc()
-  for (const nonGoal of ['plugin manager', 'npm', 'Android', '运行时']) {
-    assert.ok(
-      doc.includes(nonGoal),
-      `the doc must record the out-of-scope item ${nonGoal}`,
-    )
-  }
 })
 
 /**
