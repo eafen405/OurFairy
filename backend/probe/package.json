@@ -16,5 +16,10 @@
   ],
   "peerDependencies": {
     "@ourfairy/dsh-identity": "^0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@ourfairy/dsh-identity": {
+      "optional": true
+    }
   }
 }
