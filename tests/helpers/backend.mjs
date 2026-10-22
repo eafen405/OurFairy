@@ -6,7 +6,7 @@
  * assembled by hand here.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -76,6 +76,13 @@ export function makeHome(prefix = 'ourfairy-home-') {
 
 /** Remove an isolated home created by {@link makeHome}. */
 export function removeHome(path) {
+  if (process.env.OURFAIRY_DEBUG_RETRY === '1') {
+    for (const file of readdirSync(join(path, 'logs'))) {
+      for (const line of readFileSync(join(path, 'logs', file), 'utf8').split('\n')) {
+        if (line.includes('[DEBUG-retry-20261022]')) console.error(line)
+      }
+    }
+  }
   rmSync(path, { recursive: true, force: true })
 }
 

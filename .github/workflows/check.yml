@@ -80,6 +80,13 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Diagnose the retry difference
+        continue-on-error: true
+        run: |
+          node --test --test-name-pattern='a route saved from the phone' tests/gateway.test.mjs || true
+          OURFAIRY_DEBUG_RETRY=1 NODE_OPTIONS="--import=$PWD/tests/helpers/ci-retry-debug.mjs" \
+            node --test --test-name-pattern='a route saved from the phone' tests/gateway.test.mjs
+
       - name: Full suite and combination
         run: |
           set -euo pipefail
