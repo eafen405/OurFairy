@@ -53,7 +53,8 @@ node --test --test-name-pattern='a route saved from the phone' tests/gateway.tes
 反馈循环在修复前连续两次失败：doctor 用例通过，网关用例实际请求只有 `['rate_limit']`，
 应为 `['rate_limit', 'success']`，与 CI 相同。安装文件与源文件的 `dev`、`ino` 相同，链接数为 2。
 本机封装命令和输出留在忽略目录 `work/tmp/repo-env/`：`.repro-retry-interaction.mjs`、
-`repro-retry-interaction-red.log`、`repro-retry-interaction-red-repeat.log`。
+`repro-retry-interaction-red.log`、`repro-retry-interaction-red-repeat.log`。本地原检出设备号为 2096，
+临时目录为 72；同盘复现中的源与安装文件设备号均为 72，解释了原布局为何没有暴露硬链接传播。
 
 启动器现在显式使用 `--package-import-method copy`；安装方式也纳入现有内容哈希，使旧的安装戳失效。
 固定 pnpm 的 hoisted linker 在普通 install 乃至 `--force` 后仍可能保留旧的本地文件内容，最小
@@ -110,6 +111,7 @@ npm run specs:status -- --offline
 
 定向路径/依赖检查 19/19，通过；新增启动终态检查 2/2，通过。前一阶段 `npm test` 249/249、
 0 失败、0 跳过，用时 83.159 秒；`npm run combo:verify` 三项均通过。
+profile 隔离修复后的完整提交门禁为 250/250，0 失败、0 跳过，用时 83.340 秒，组合校验三项通过。
 原始日志留在忽略目录 `work/tmp/repo-env/`，不入库。远端验证使用专用修复分支的 `check` workflow。
 
 ## 范围外状态
