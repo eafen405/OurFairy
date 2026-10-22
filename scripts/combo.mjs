@@ -80,6 +80,25 @@ function isAncestor(path, ancestor, descendant) {
 }
 
 /**
+ * Whether a worktree counts as based on the integration tip.
+ *
+ * A merge commit does not exist while its own commit gate runs: HEAD is still
+ * the branch tip, which may predate the integration tip. The merge result
+ * descends from both parents, so an incoming `MERGE_HEAD` that is based on the
+ * tip gives the same guarantee.
+ * @param {string} path - repository to read refs from.
+ * @param {string} tip - integration tip commit.
+ * @returns {boolean}
+ */
+export function basedOnIntegration(path, tip) {
+  const head = revParse(path, 'HEAD')
+  if (head === undefined) return false
+  if (head === tip || isAncestor(path, tip, head)) return true
+  const incoming = revParse(path, 'MERGE_HEAD')
+  return incoming !== undefined && (incoming === tip || isAncestor(path, tip, incoming))
+}
+
+/**
  * Verify the locked combination.
  * @returns {{ok: boolean, rows: object[], failures: string[]}}
  */
@@ -117,7 +136,7 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
       // is an ancestor of HEAD (HEAD may be ahead of the tip with ticket commits,
       // which is the normal state of a ticket branch before it is merged back).
       const head = revParse(path, 'HEAD')
-      const ok = head !== undefined && (head === tip || isAncestor(path, tip, head))
+      const ok = basedOnIntegration(path, tip)
       const row = {
         ...base,
         expected: `based on ${entry.integrationBranch}`,

@@ -153,3 +153,20 @@ test('the landing branch having unpushed commits is reported, and rendered', () 
   assert.match(render(report), new RegExp(`${LANDING_BRANCH} is 1 ahead`, 'u'))
   assert.match(render(report), /need attention/u)
 })
+
+test('a branch that exists only on origin is reported instead of vanishing', () => {
+  const root = fixture()
+  commitOn(root, 'integration/spec-903', 'work/implementation/evidence/903-closeout/README.md')
+  git(root, ['push', '--quiet', 'origin', 'integration/spec-903'])
+  // The local branch is gone; only origin still has it, as after a cleanup or a fresh clone.
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  git(root, ['branch', '--quiet', '-D', 'integration/spec-903'])
+
+  assert.ok(collect({ root, offline: true }).rows.some(row => row.spec === 903),
+    'the spec set must include a branch that only origin carries')
+
+  const row = specStatus(903, { root, worktrees: [] })
+  assert.equal(row.state, 'orphan')
+  assert.equal(row.defect, true, 'a spec whose only branch is remote is work a reader must act on')
+  assert.equal(row.branch, null)
+})
