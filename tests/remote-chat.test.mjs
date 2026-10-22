@@ -4,10 +4,9 @@ import { join } from 'node:path'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { before, after, test } from 'node:test'
-import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, repoRoot, startArgs, startedPort } from './helpers/backend.mjs'
+import { dshDir, describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const { startMockLlmServer } = await import(join(combo.repos.dsh.localPath, 'packages/test-support/llm-mock-server/lib/index.js'))
+const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
 const home = makeHome('ourfairy-chat-')
 const password = 'test-chat-password'
 const answer = '# Fairy\n\n你好，**世界**。\n```js\n1 + 1\n```\n最后。'
