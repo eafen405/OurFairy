@@ -13,12 +13,10 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import {
-  describeRun, httpJson, makeHome, readReport, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
+  dshDir, describeRun, httpJson, makeHome, readReport, removeHome, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'gateway-password'
-const combo = JSON.parse(await import('node:fs').then(fs => fs.readFileSync(join(repoRoot, 'combo.json'), 'utf8')))
-const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
 const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
 
 const servers = []

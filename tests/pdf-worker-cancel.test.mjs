@@ -16,10 +16,8 @@ import { mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync } from 'no
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
-import { repoRoot } from './helpers/backend.mjs'
+import { dshDir, repoRoot } from './helpers/backend.mjs'
 
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const dshDir = combo.repos.dsh.localPath
 const dshRequire = createRequire(join(dshDir, 'packages/subprocess/subprocess-local/package.json'))
 
 // The product module's dsh peers resolve inside the installed profile, not in

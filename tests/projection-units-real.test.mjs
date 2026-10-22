@@ -19,13 +19,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
-import { describeRun, makeHome, registerUser, removeHome, repoRoot, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { dshDir, describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 // Registers Node resolution for the pinned dsh checkout before the product
 // modules below are loaded (they are dynamic imports for that reason).
 import './helpers/dsh-peers.mjs'
 
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const { startMockLlmServer } = await import(join(combo.repos.dsh.localPath, 'packages/test-support/llm-mock-server/lib/index.js'))
+const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
 const units = await import('../backend/chat/src/units.mjs')
 const expected = JSON.parse(readFileSync(new URL('./fixtures/projection-real-expected.json', import.meta.url), 'utf8'))
 

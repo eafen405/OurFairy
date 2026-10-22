@@ -31,6 +31,15 @@ jobs:
         with:
           node-version: 24
 
+      - name: Prepare the Linux sandbox
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq bubblewrap
+          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent -- true
+
       # combo:verify resolves the integration branch as a local ref.
       - name: Materialize the integration branch
         run: |
