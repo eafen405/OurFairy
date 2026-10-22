@@ -11,8 +11,9 @@
  */
 import { Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { bearerToken } from '@ourfairy/dsh-http/http'
 import { IdentityError, IdentityStore, PHAETHON_SHORT_ID } from './store.mjs'
-import { bearerToken, identityHandlers, IDENTITY_PATHS } from './http.mjs'
+import { identityHandlers, IDENTITY_PATHS } from './routes.mjs'
 import { identityInterfaces } from './interfaces.mjs'
 import { ownerOf } from './owner.mjs'
 

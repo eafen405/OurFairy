@@ -5,9 +5,8 @@ import { deflateSync } from 'node:zlib'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
-import { describeRun, leadingJsonObject, makeHome, messageBlocks, registerUser, removeHome, runBackendAsync, repoRoot, startArgs, startedPort } from './helpers/backend.mjs'
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json')))
-const sharp = createRequire(join(combo.repos.dsh.localPath, 'packages/attachment/attachment-local/package.json'))('sharp')
+import { dshDir, describeRun, leadingJsonObject, makeHome, messageBlocks, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+const sharp = createRequire(join(dshDir, 'packages/attachment/attachment-local/package.json'))('sharp')
 const home = makeHome('ourfairy-pdf-'), password = 'attachment-password'
 let model, port, admin, alice, bob
 async function start() {

@@ -16,13 +16,11 @@ import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { readFileSync } from 'node:fs'
 import {
-  describeRun, makeHome, readReport, removeHome, repoRoot, runBackend, runBackendAsync, writeOverlay,
+  dshDir, describeRun, makeHome, readReport, removeHome, runBackend, runBackendAsync, writeOverlay,
 } from './helpers/backend.mjs'
 
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json')))
-const { startMockLlmServer } = await import(join(combo.repos.dsh.localPath, 'packages/test-support/llm-mock-server/lib/index.js'))
+const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
 const password = 'scoped-rows-password'
 const homes = []
 const servers = []

@@ -66,6 +66,8 @@ const PROBE_PACKAGE = COMBINATION.probePackage
 const BUNDLE_DIR = COMBINATION.bundlePathInRepo
 const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
 const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
+// Profiles are mutable snapshots; file: hardlinks would also change the worktree.
+const PROFILE_IMPORT_METHOD = 'copy'
 
 function fail(message, code = 1) {
   process.stderr.write(`ourfairy-backend: ${message}\n`)
@@ -253,6 +255,7 @@ function readPackageManifest(dir, path) {
 /** Content hash of the product sources, so a stale linked profile is reinstalled. */
 function productSourceHash() {
   const hash = createHash('sha256')
+  hash.update(PROFILE_IMPORT_METHOD)
   for (const relativePath of productSources()) {
     hash.update(relativePath)
     hash.update(readFileSync(join(repoRoot, relativePath)))
@@ -286,7 +289,10 @@ function installProfile(layout, options) {
   const hash = productSourceHash()
   const stamped = existsSync(stampPath) ? readFileSync(stampPath, 'utf8').trim() : undefined
   if (!options.reinstall && existsSync(linked) && stamped === hash) return 'cached'
-  const result = spawnSync(PNPM[0], [...PNPM[1], 'install', '--ignore-scripts', '--store-dir', layout.pnpmStore], {
+  // pnpm's hoisted linker can keep old file: contents on install, even with --force.
+  // Rebuild invalidated snapshots while retaining the lockfile and download store.
+  rmSync(join(layout.profileDir, 'node_modules'), { recursive: true, force: true })
+  const result = spawnSync(PNPM[0], [...PNPM[1], 'install', '--ignore-scripts', '--package-import-method', PROFILE_IMPORT_METHOD, '--store-dir', layout.pnpmStore], {
     cwd: layout.profileDir,
     env: isolatedEnv(layout),
     encoding: 'utf8',
@@ -640,12 +646,18 @@ async function commandStart(layout, options) {
     ready: false,
   })
 
-  const ready = await waitFor(() => readJson(reportPath)?.ok === true, options.readyTimeoutMs)
+  await waitFor(() => readJson(reportPath)?.ok !== undefined || !isAlive(child.pid), options.readyTimeoutMs)
+  const report = readJson(reportPath)
+  const ready = report?.ok === true && isAlive(child.pid)
   if (!ready) {
+    const reason = report?.ok === false
+      ? 'reported a failed readiness check'
+      : !isAlive(child.pid)
+        ? 'exited before reporting ready'
+        : `did not report ready within ${options.readyTimeoutMs}ms`
     try { process.kill(-child.pid, 'SIGKILL') } catch { try { process.kill(child.pid, 'SIGKILL') } catch { /* already gone */ } }
-    const report = readJson(reportPath)
     rmSync(layout.statePath, { force: true })
-    fail(`backend (pid ${child.pid}) did not report ready within ${options.readyTimeoutMs}ms;`
+    fail(`backend (pid ${child.pid}) ${reason};`
       + ` probe report: ${report === undefined ? 'not written' : JSON.stringify(report.failures ?? report)}`
       + `\nlog ${logFile}:\n${tail(logFile)}`)
   }
