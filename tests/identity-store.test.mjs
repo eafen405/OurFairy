@@ -184,7 +184,7 @@ describe('identity rules checked in the store, without unique indexes', () => {
     assert.equal(replacement.user.shortId, 3, 'a deleted identity keeps its number out of circulation')
   })
 
-  test('a removed user no longer signs in, authenticates, or appears in a listing', () => {
+  test('a removed user no longer signs in or authenticates', () => {
     const token = store.signIn({ name: 'widget', password: MEMBER_PASSWORD }).token
     assert.ok(store.authenticate(token) !== undefined)
 
@@ -192,8 +192,6 @@ describe('identity rules checked in the store, without unique indexes', () => {
     assert.throws(() => store.signIn({ name: 'widget', password: MEMBER_PASSWORD }),
       error => error.code === 'identity/bad-credentials' && error.status === 401)
     assert.equal(store.authenticate(token), undefined, 'a removed user must not authenticate')
-    assert.equal(store.userByName('widget'), undefined)
-    assert.deepEqual(store.listUsers().map(user => user.shortId), [PHAETHON_SHORT_ID], 'listing hides removed identities')
   })
 
   test('a removed name stays reserved', () => {

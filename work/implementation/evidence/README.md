@@ -124,6 +124,14 @@
 | --- | --- |
 | [repo-environment-2026-10-22](repo-environment-2026-10-22/README.md) | CI runner、dsh 测试路径与启动失败等待修复 |
 
+## 业务库公开面收敛（规格 #132）
+
+| 目录 | 内容 |
+| --- | --- |
+| [143-public-surface](143-public-surface/README.md) | #143 store 公开面从 24 个方法收窄到 19 个：删四个零生产调用的方法，`readDelivery` 转私有 |
+| [144-schema-modules](144-schema-modules/README.md) | #144 五组 DDL 常量搬进 `src/schema/` 下的领域模块，存下的 schema 一字不变 |
+| [145-closeout](145-closeout/README.md) | #145 证据索引登记、两轴复核（Standards + Spec）、可执行声称检查与全量门禁 |
+
 ## 阶段整合与评审
 
 | 目录 | 内容 |
