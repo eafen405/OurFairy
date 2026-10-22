@@ -96,6 +96,9 @@ OurFairy 侧怎么跑测试、怎么起后端，见根 [`README.md`](../../READM
 - **只做本票范围。** 发现范围外问题时不要顺手扩散改动：记到 issue tracker（建票方式见
   `docs/agents/issue-tracker.md`）或本票证据目录的未完成项里，并通知 Lead。
 
+`work/tmp/` 只放可丢弃的运行日志与临时输出；带结论、下次还要读的分析进 `docs/decisions/` 或
+`work/implementation/notes/` 并提交，否则会随清理一起消失。
+
 编码与验证规则见 `CODING_STANDARDS.md`。
 
 ## 7. 沟通
