@@ -33,6 +33,7 @@ import net from 'node:net'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 import { flattenEntries, packageOf, readCombo, repoPath } from '../scripts/combo.mjs'
+import { isolatedEnv as compositionEnv, layoutOf } from '../scripts/ourfairy-composition.mjs'
 import {
   copyProductRepo, describeRun, httpJson, makeHome, readReport, removeHome, repoRoot,
 } from './helpers/backend.mjs'
@@ -74,25 +75,15 @@ function isolatedCopy(label) {
   return { root, home }
 }
 
-/** Every harness-written cache and the import anchor stay inside the isolated home. */
+/**
+ * Every harness-written cache and the import anchor stay inside the isolated
+ * home. The layout and the environment are the composition's, so this test
+ * cannot drift from what the launcher hands the boot; only the worktree root is
+ * supplied here because the shared corepack cache lives in the real worktree,
+ * not in the copied product repository.
+ */
 function isolatedEnv(home, extra = {}) {
-  return {
-    ...process.env,
-    HOME: join(home, 'user-home'),
-    DSH_HOME: join(home, 'dsh-home'),
-    OURFAIRY_HOME: home,
-    XDG_CACHE_HOME: join(home, 'cache'),
-    XDG_CONFIG_HOME: join(home, 'config'),
-    XDG_DATA_HOME: join(home, 'data'),
-    XDG_STATE_HOME: join(home, 'state'),
-    npm_config_cache: join(home, 'cache', 'npm'),
-    npm_config_store_dir: join(home, 'pnpm-store'),
-    PNPM_HOME: join(home, 'pnpm-home'),
-    // Shared tool cache, not product state: the launcher uses the same one so
-    // repeated installs do not re-extract the corepack archive per test.
-    COREPACK_HOME: join(repoRoot, '.corepack'),
-    ...extra,
-  }
+  return compositionEnv(layoutOf(home, repoRoot), { root: repoRoot, extra })
 }
 
 /** Write the bundle-only profile project (manifest, pnpm settings, empty user layer). */

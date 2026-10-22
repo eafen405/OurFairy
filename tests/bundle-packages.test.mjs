@@ -20,6 +20,7 @@ import { existsSync, globSync, mkdirSync, readdirSync, readFileSync, rmSync, sta
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { readCombo, repoPath } from '../scripts/combo.mjs'
+import { isolatedEnv, layoutOf } from '../scripts/ourfairy-composition.mjs'
 import { copyProductRepo, describeRun, makeHome, productPackageDirs, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
 
 const roots = []
@@ -84,13 +85,24 @@ function appendPatch(root, patch) {
 
 test('the bundle rows, its declared packages, and the installed profile agree', () => {
   const { root, home } = isolatedRun()
-  const { check } = doctor({ root, home })
+  const { check, checks } = doctor({ root, home })
   assert.equal(check?.ok, true, `the shipped bundle must be internally consistent: ${JSON.stringify(check)}`)
   // The check reports where each declared package is mounted, including the
   // package that contributes two rows.
   for (const needle of ['@ourfairy/dsh-spaces', 'sandbox-policy', 'spaces']) {
     assert.ok(check.detail.includes(needle), `the check must report ${needle}: ${check.detail}`)
   }
+  // The first doctor installs the profile; a second one on the same home must
+  // reuse that install and report which mode it used.
+  assert.ok(
+    checks.get('profile project linked')?.detail.endsWith('(installed)'),
+    `the first doctor must report an installed profile: ${JSON.stringify(checks.get('profile project linked'))}`,
+  )
+  const cached = doctor({ root, home })
+  assert.ok(
+    cached.checks.get('profile project linked')?.detail.endsWith('(cached)'),
+    `a second doctor on the same home must report the cached install: ${JSON.stringify(cached.checks.get('profile project linked'))}`,
+  )
 
   const expected = [
     '@ourfairy/dsh-v1-bundle',
@@ -238,19 +250,14 @@ test('the installed copy boots with no product source tree behind it', () => {
     cwd: home,
     encoding: 'utf8',
     timeout: 300_000,
-    env: {
-      ...process.env,
-      HOME: join(home, 'user-home'),
-      DSH_HOME: join(home, 'dsh-home'),
-      OURFAIRY_HOME: home,
-      OURFAIRY_PORT: '0',
-      OURFAIRY_PROBE_REPORT: reportPath,
-      OURFAIRY_PROBE_MODE: 'boot',
-      XDG_CACHE_HOME: join(home, 'cache'),
-      XDG_CONFIG_HOME: join(home, 'config'),
-      XDG_DATA_HOME: join(home, 'data'),
-      XDG_STATE_HOME: join(home, 'state'),
-    },
+    env: isolatedEnv(layoutOf(home), {
+      root,
+      extra: {
+        OURFAIRY_PORT: '0',
+        OURFAIRY_PROBE_REPORT: reportPath,
+        OURFAIRY_PROBE_MODE: 'boot',
+      },
+    }),
   })
   assert.equal(result.status, 0, describeRun('installed-copy boot', result))
   const report = JSON.parse(readFileSync(reportPath, 'utf8'))
@@ -301,4 +308,71 @@ test('a product row nested in a group is part of the package set', () => {
   for (const needle of ['@ourfairy/dsh-nested', 'nested-product-row']) {
     assert.ok(check.detail.includes(needle), `the failure must name ${needle}: ${check.detail}`)
   }
+})
+
+test('installed bundle admission violations fail the check and name the package and rule', () => {
+  const { root, home } = isolatedRun()
+  // The first doctor installs the profile and writes the source-hash stamp.
+  const installed = doctor({ root, home })
+  assert.equal(installed.check.ok, true, `the shipped profile must install cleanly first: ${JSON.stringify(installed.check)}`)
+
+  // Mutate the INSTALLED copy, not the worktree: the source hash is unchanged,
+  // so every later doctor reuses this copy instead of reinstalling over it. That
+  // is the manifest combo.mjs reads, so the check must apply the same three
+  // admission rules the launcher applies to the worktree copy.
+  const manifestPath = join(profileDir(home), 'node_modules', '@ourfairy', 'dsh-v1-bundle', 'package.json')
+  const original = readFileSync(manifestPath, 'utf8')
+  const { combo } = readCombo(root)
+  const bundlePackage = combo.backend.bundlePackage
+  const cases = [
+    {
+      label: 'a non-file: specifier',
+      name: '@ourfairy/dsh-registry',
+      specifier: '^1.0.0',
+      needles: ['file:', 'an installed product package is linked, not fetched'],
+    },
+    {
+      label: 'a target outside the containment root',
+      name: '@ourfairy/dsh-outside',
+      specifier: 'file:../../../../outside-product',
+      needles: ["an installed bundle may only link packages inside the profile's node_modules"],
+    },
+    {
+      label: 'a duplicate of the bundle entry',
+      name: bundlePackage,
+      specifier: 'file:../v1-bundle',
+      needles: ['twice: once as a bundle/probe entry and once in dependencies'],
+    },
+  ]
+  try {
+    for (const { label, name, specifier, needles } of cases) {
+      const mutated = JSON.parse(original)
+      mutated.dependencies[name] = specifier
+      writeFileSync(manifestPath, `${JSON.stringify(mutated, undefined, 2)}\n`)
+
+      const { check } = doctor({ root, home })
+      assert.equal(check.ok, false, `${label} in the installed manifest must fail the check: ${JSON.stringify(check)}`)
+      for (const needle of [name, manifestPath, ...needles]) {
+        assert.ok(check.detail.includes(needle), `${label} must name ${needle}: ${check.detail}`)
+      }
+      // The declared set still comes from the installed manifest's dependency
+      // names, so the violation must not also report the package as undeclared.
+      assert.equal(
+        check.detail.includes(`does not declare ${name}`),
+        false,
+        `${label} must not also report a declaration mismatch: ${check.detail}`,
+      )
+      assert.equal(
+        JSON.parse(readFileSync(manifestPath, 'utf8')).dependencies[name],
+        specifier,
+        'doctor must reuse the installed copy, not reinstall over the mutated manifest',
+      )
+      writeFileSync(manifestPath, original)
+    }
+  } finally {
+    writeFileSync(manifestPath, original)
+  }
+
+  const restored = doctor({ root, home })
+  assert.equal(restored.check.ok, true, `restoring the installed manifest must restore the check: ${JSON.stringify(restored.check)}`)
 })

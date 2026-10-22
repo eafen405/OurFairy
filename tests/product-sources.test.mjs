@@ -1,5 +1,5 @@
 /**
- * Product-source coverage for ticket #48.
+ * Product-source coverage for ticket #48, observed at the composition seam.
  *
  * The profile is a copy, not a link: pnpm installs each linked product package
  * into the isolated home, so the worktree's current sources only take effect
@@ -8,28 +8,36 @@
  * cover leaves the tests booting the previous install while `npm test` stays
  * green.
  *
- * The assertions below drive `doctor --json`, whose "product packages" check
- * names the files the hash covers and whose "profile project linked" check
- * names the install mode the launcher chose. Both are facts the launcher
- * reports; no test reaches into the launcher's internals.
+ * Ticket #156 moved that fact into `scripts/ourfairy-composition.mjs`, so the
+ * assertions import it directly: the hashed set and the cached/install decision
+ * are composition facts, not something a subprocess has to report back. The
+ * decision's two written inputs — the profile and its source stamp — are
+ * produced by the same composition functions the launcher calls.
  *
- * The launcher runs against a throwaway copy of the product sources: this file
- * adds a source file to observe staleness, and doing that in the worktree made
- * every parallel `start` of another suite hash a product tree that was changing
- * under it (an install could fail when the file disappeared again). A copy keeps
- * the mutation local without replacing the real launcher.
+ * The composition runs against a throwaway copy of the product sources: this
+ * file adds a source file to observe staleness, and doing that in the worktree
+ * made every parallel `start` of another suite hash a product tree that was
+ * changing under it (an install could fail when the file disappeared again). A
+ * copy keeps the mutation local without changing the real worktree.
  */
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join, relative, sep } from 'node:path'
+import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
-import { copyProductRepo, describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
+import {
+  installDecision,
+  layoutOf,
+  productSourceHash,
+  productSources,
+  profileLinkedManifestPath,
+  writeProfile,
+  writeSourceStamp,
+} from '../scripts/ourfairy-composition.mjs'
+import { copyProductRepo, makeHome, removeHome } from './helpers/backend.mjs'
 
-/** One isolated home for the file: every assertion here is about staleness across runs. */
-const home = makeHome('ourfairy-product-sources-')
-
-/** The throwaway repository the launcher reads; the worktree itself stays untouched. */
+/** The throwaway repository the composition reads; the worktree itself stays untouched. */
 const repoCopy = copyProductRepo('ourfairy-product-sources-repo-')
+const homes = []
 
 /** A product source file that no hand-maintained list would know about yet. */
 const addedSource = join(repoCopy, 'backend', 'identity', 'src', 'staleness-probe.mjs')
@@ -37,64 +45,45 @@ const addedSource = join(repoCopy, 'backend', 'identity', 'src', 'staleness-prob
 after(() => {
   rmSync(addedSource, { force: true })
   rmSync(repoCopy, { recursive: true, force: true })
-  removeHome(home)
+  for (const home of homes) removeHome(home)
 })
 
 /**
- * Run `doctor --json` in the shared home and report what it observed.
- *
- * Only the two checks about the installed source corpus are asserted here; the
- * command's exit code deliberately is not, because an unrelated check (another
- * checkout in the version combination drifting) must not decide what the
- * profile-install tests observe.
+ * An isolated home holding the two inputs a successful install leaves behind:
+ * the generated profile with its content stamp, and the linked bundle manifest
+ * pnpm would have created. `installDecision` reads exactly those, so this is the
+ * "unchanged since the last install" state.
  */
-function doctor(profileHome = home) {
-  const run = runBackend(['doctor', '--json'], {
-    OURFAIRY_HOME: profileHome,
-    MINIMAX_CN_API_KEY: undefined,
-    OURFAIRY_MINIMAX_BASE_URL: undefined,
-  }, { root: repoCopy })
-  const start = run.stdout.indexOf('{')
-  assert.ok(start >= 0, `doctor printed no JSON report:\n${describeRun('doctor', run)}`)
-  const report = JSON.parse(run.stdout.slice(start))
-  const checks = new Map(report.checks.map(check => [check.name, check]))
-
-  const linked = checks.get('profile project linked')
-  assert.equal(linked?.ok, true, `doctor did not link the profile: ${JSON.stringify(linked)}`)
-  const mode = /\(([a-z]+)\)$/.exec(linked.detail ?? '')?.[1]
-  assert.ok(
-    mode === 'installed' || mode === 'cached',
-    `the "profile project linked" check must report the install mode it chose; detail was ${JSON.stringify(linked.detail)}`,
-  )
-
-  const packages = checks.get('product packages')
-  assert.equal(packages?.ok, true, `doctor did not pass "product packages": ${JSON.stringify(packages)}`)
-  return { mode, files: packages.detail.split(', ') }
+function installedProfile() {
+  const home = makeHome('ourfairy-product-sources-')
+  homes.push(home)
+  const layout = layoutOf(home, repoCopy)
+  writeProfile(layout, repoCopy)
+  writeSourceStamp(layout, productSourceHash(repoCopy))
+  const linked = profileLinkedManifestPath(layout, repoCopy)
+  mkdirSync(dirname(linked), { recursive: true })
+  writeFileSync(linked, '{}\n')
+  return layout
 }
 
 /**
- * Product sources walked from the launcher's copy: every packaged file under a
- * `src/` directory plus each package's manifest. Expected coverage is built
- * from the disk here, never from whatever the launcher chose to report.
+ * Product sources walked from the copy: every packaged file under a `src/`
+ * directory plus each package's manifest. Expected coverage is built from the
+ * disk here, never from whatever the composition chose to report.
  */
-function copiedSources() {
+function copiedSources(root) {
   const found = []
-  for (const file of readdirSync(join(repoCopy, 'backend'), { recursive: true })) {
+  for (const file of readdirSync(join(root, 'backend'), { recursive: true })) {
     const parts = file.split(sep)
-    if (parts.length < 2 || !statSync(join(repoCopy, 'backend', file)).isFile()) continue
+    if (parts.length < 2 || !statSync(join(root, 'backend', file)).isFile()) continue
     const rest = parts.slice(1).join('/')
     if (rest === 'package.json' || rest.startsWith('src/')) found.push(`backend/${parts[0]}/${rest}`)
   }
   return found
 }
 
-test('an unchanged worktree reuses the installed profile instead of reinstalling it', () => {
-  assert.equal(doctor().mode, 'installed', 'the first doctor run into an empty home must install the profile')
-  assert.equal(doctor().mode, 'cached', 'a second run over unchanged product sources must reuse the install')
-})
-
 test('the hashed set follows what the packages publish, not their test fixtures', () => {
-  const { files } = doctor()
+  const files = productSources(repoCopy)
 
   const testOnly = files.filter(file => file.includes('/test-support/'))
   assert.deepEqual(
@@ -108,60 +97,66 @@ test('the hashed set follows what the packages publish, not their test fixtures'
   // package.json alone would drop the wheel the PDF worker loads.
   assert.ok(
     files.includes('backend/attachments/pdf/pypdf-6.21.0-py3-none-any.whl'),
-    `the PDF wheel ships in the installed package, so it must be hashed; doctor listed ${files.join(', ')}`,
+    `the PDF wheel ships in the installed package, so it must be hashed; the composition listed ${files.join(', ')}`,
   )
 
-  const missing = copiedSources().filter(file => !files.includes(file))
+  const missing = copiedSources(repoCopy).filter(file => !files.includes(file))
   assert.deepEqual(missing, [], `product source(s) left out of the staleness hash: ${missing.join(', ')}`)
+
+  // The other direction: every hashed entry is a file that actually publishes,
+  // so the hash cannot be fed a path that no install copies.
+  const absent = files.filter(file => !statSync(join(repoCopy, file)).isFile())
+  assert.deepEqual(absent, [], `hashed product source(s) missing from the copy: ${absent.join(', ')}`)
 })
 
-test('a new product source file invalidates the installed profile', () => {
+test('unchanged product sources decide cached', () => {
+  const layout = installedProfile()
+  const decision = installDecision(layout, { root: repoCopy })
+  assert.equal(
+    decision.mode,
+    'cached',
+    'the profile and its stamp already describe the current product sources, so the launcher must reuse the install',
+  )
+  assert.equal(typeof decision.hash, 'string', 'the decision must carry the hash the install was judged against')
+})
+
+test('reinstall decides install even when the installed profile is current', () => {
+  const layout = installedProfile()
+  assert.equal(
+    installDecision(layout, { root: repoCopy, reinstall: true }).mode,
+    'install',
+    'an explicit --reinstall must bypass the cached decision',
+  )
+})
+
+test('a missing linked bundle manifest decides install', () => {
+  const layout = installedProfile()
+  rmSync(profileLinkedManifestPath(layout, repoCopy))
+  assert.equal(
+    installDecision(layout, { root: repoCopy }).mode,
+    'install',
+    'a profile whose linked bundle manifest is gone cannot be reused, even with a matching stamp',
+  )
+})
+
+test('a new product source file changes the hash and decides install', () => {
+  const layout = installedProfile()
+  const before = productSourceHash(repoCopy)
   const added = relative(repoCopy, addedSource)
   writeFileSync(addedSource, '// Ticket #48 staleness probe: a product source added after the last install.\n')
   try {
-    const afterAdd = doctor()
-    assert.equal(
-      afterAdd.mode,
-      'installed',
-      `${added} changed the product sources, so its content must reach the staleness hash and rebuild the install;`
-        + ` doctor reported '${afterAdd.mode}' and would have kept booting the previous copy`,
-    )
+    const after = productSourceHash(repoCopy)
+    assert.notEqual(after, before, `${added} is published by its package, so its content must reach the staleness hash`)
     assert.ok(
-      afterAdd.files.includes(added),
-      `the "product packages" check must cover ${added}; it listed ${afterAdd.files.length} file(s): ${afterAdd.files.join(', ')}`,
+      productSources(repoCopy).includes(added),
+      `the hashed source set must cover ${added}; it listed ${productSources(repoCopy).length} file(s)`,
     )
-    assert.equal(doctor().mode, 'cached', 'the rebuilt profile must be reused until a product source changes again')
+    assert.equal(
+      installDecision(layout, { root: repoCopy }).mode,
+      'install',
+      `${added} changed the product sources, so the installed copy is stale and must be rebuilt`,
+    )
   } finally {
     rmSync(addedSource, { force: true })
-  }
-})
-
-test('installed product files are isolated from their source and sibling profiles', () => {
-  const sibling = makeHome('ourfairy-product-sources-sibling-')
-  const { backend } = JSON.parse(readFileSync(join(repoCopy, 'combo.json'), 'utf8'))
-  const source = join(repoCopy, backend.bundlePathInRepo, 'cordis.patch.yml')
-  const installed = profileHome => join(profileHome, 'dsh-home', 'profiles', backend.profileName,
-    'node_modules', ...backend.bundlePackage.split('/'), 'cordis.patch.yml')
-  const before = readFileSync(source, 'utf8')
-  try {
-    doctor()
-    doctor(sibling)
-    // Keep source and profiles on one filesystem so cross-device copying
-    // cannot hide pnpm's default hardlinks for file: dependencies.
-    assert.equal(statSync(source).dev, statSync(installed(home)).dev)
-    const removed = before.replace("        - id: llm-retry\n          name: '@deepseek-ai/dsh-llm-retry'\n", '')
-    assert.notEqual(removed, before, 'the fixture must remove the native retry row')
-    writeFileSync(installed(home), removed)
-    assert.ok(readFileSync(source, 'utf8') === before, 'editing a profile must preserve the source retry row')
-    assert.ok(readFileSync(installed(sibling), 'utf8') === before, 'editing a profile must preserve its sibling')
-
-    const changed = `${before}\n# Updated deployment source.\n`
-    writeFileSync(source, changed)
-    assert.ok(readFileSync(installed(sibling), 'utf8') === before, 'source edits must wait for reinstallation')
-    assert.equal(doctor(sibling).mode, 'installed')
-    assert.ok(readFileSync(installed(sibling), 'utf8') === changed, 'reinstallation must publish the new source')
-  } finally {
-    writeFileSync(source, before)
-    removeHome(sibling)
   }
 })

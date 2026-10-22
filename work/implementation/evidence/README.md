@@ -150,6 +150,12 @@
 | --- | --- |
 | [136-closeout](136-closeout/README.md) | #148–#150：peer 与 license 声明对齐、内核包 README、`files` 存在性检查 |
 
+## 启动器拆分（规格 #137）
+
+| 目录 | 内容 |
+| --- | --- |
+| [137-launcher-split](137-launcher-split/README.md) | spec #137 证据索引：组合层独立成零 spawn 模块、统一错误契约与 bundle manifest 准入规则单份（#155–#158），含合并 tip 门禁与可执行声称复核 |
+
 ## 阶段整合与评审
 
 | 目录 | 内容 |

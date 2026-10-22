@@ -2,6 +2,12 @@
 /**
  * OurFairy v1 backend launcher.
  *
+ * This is the process layer: argv parsing, the dsh checkout, subprocesses,
+ * command implementations, and dispatch. Everything that can be decided by
+ * reading the checkout — the recorded combination, the isolated layout, the
+ * product package inventory, the profile and its staleness decision, the boot
+ * overlays — lives in the sibling `ourfairy-composition.mjs`.
+ *
  * Every command drives the real dsh CLI entry (`apps/cli/lib/bin.js`) with the
  * pinned `ourfairy` profile — no plugin is assembled by hand. The profile and
  * all data live under an isolated OURFAIRY_HOME (default `<worktree>/.ourfairy`);
@@ -29,49 +35,55 @@
  *
  * Missing required configuration is a hard failure naming the variable or path
  * and the command that fixes it.
+ *
+ * Importing this module runs nothing: `main(argv)` returns the exit code and the
+ * `import.meta.main` guard at the bottom is the only place it is called, so a
+ * test can import the launcher without parsing argv, reading combo.json,
+ * printing, or exiting.
  */
-import { createHash } from 'node:crypto'
-import { globSync, openSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { openSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
-import { readCombo, repoPath, verifyBundlePackages, verifyCombination, verifyInstalledNativeCapabilities, verifyPluginCompatibility } from './combo.mjs'
+import { repoPath, verifyBundlePackages, verifyCombination, verifyInstalledNativeCapabilities, verifyPluginCompatibility } from './combo.mjs'
+import {
+  assertIsolatedHome,
+  bootPatches,
+  installDecision,
+  isolatedEnv,
+  layoutOf as compositionLayoutOf,
+  PROFILE_IMPORT_METHOD,
+  productSources,
+  profileLinkedManifestPath,
+  readCombination,
+  readCombo,
+  writeProfile,
+  writeSourceStamp,
+} from './ourfairy-composition.mjs'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-/**
- * The pinned combination, read once from combo.json.
- *
- * Profile name, package names, repo-relative paths, and the pnpm pin all come
- * from the recorded combination: hardcoding them here would make combo.json's
- * pins decorative, so a recorded version could drift from what actually runs
- * without anything failing.
- */
-function readCombination() {
-  const { combo, path } = readCombo(repoRoot)
-  const backend = combo.backend ?? {}
-  for (const field of ['profileName', 'bundlePackage', 'probePackage', 'bundlePathInRepo', 'probePathInRepo', 'pnpmPin', 'nodeRange']) {
-    if (typeof backend[field] !== 'string' || backend[field] === '') {
-      fail(`${path} backend.${field} must be a non-empty string; the launcher reads its pins from combo.json`)
-    }
-  }
-  return backend
+/** The pinned pnpm invocation the combination records. */
+function pnpmInvocation(combination) {
+  return ['corepack', [`pnpm@${combination.pnpmPin}`]]
 }
 
-const COMBINATION = readCombination()
-const PROFILE_NAME = COMBINATION.profileName
-const BUNDLE_PACKAGE = COMBINATION.bundlePackage
-const PROBE_PACKAGE = COMBINATION.probePackage
-const BUNDLE_DIR = COMBINATION.bundlePathInRepo
-const PROBE_DIR = join(repoRoot, COMBINATION.probePathInRepo)
-const PNPM = ['corepack', [`pnpm@${COMBINATION.pnpmPin}`]]
-// Profiles are mutable snapshots; file: hardlinks would also change the worktree.
-const PROFILE_IMPORT_METHOD = 'copy'
+/**
+ * Raise one launcher failure.
+ *
+ * Internal failures throw instead of exiting: `doctor` wraps each check in
+ * `try/catch` and records what it caught, so a check that exits the process
+ * could never appear in its report. The CLI boundary in `main` turns a throw
+ * into the launcher's stderr prefix and non-zero exit.
+ */
+function fail(message) {
+  throw new Error(message)
+}
 
-function fail(message, code = 1) {
-  process.stderr.write(`ourfairy-backend: ${message}\n`)
-  process.exit(code)
+/** The CLI boundary: one failure message with the launcher prefix, then the exit code. */
+function cliFailure(error) {
+  process.stderr.write(`ourfairy-backend: ${error instanceof Error ? error.message : String(error)}\n`)
+  return 1
 }
 
 function parseArgv(argv) {
@@ -105,28 +117,9 @@ function parseArgv(argv) {
   return options
 }
 
-/** Resolved isolated layout; every durable path lives under `home`. */
+/** The isolated layout for one invocation: the composition's shape, this run's home. */
 function layoutOf(options) {
-  const home = resolve(options.home ?? process.env.OURFAIRY_HOME ?? join(repoRoot, '.ourfairy'))
-  return {
-    home,
-    dshHome: join(home, 'dsh-home'),
-    userHome: join(home, 'user-home'),
-    runDir: join(home, 'run'),
-    logDir: join(home, 'logs'),
-    pnpmStore: join(home, 'pnpm-store'),
-    profileDir: join(home, 'dsh-home', 'profiles', PROFILE_NAME),
-    statePath: join(home, 'run', 'backend.json'),
-  }
-}
-
-/** Refuse a home that would write into the host's real home tree. */
-function assertIsolatedHome(layout) {
-  const host = homedir()
-  if (layout.home === '/' || layout.home === host || host.startsWith(layout.home + sep)) {
-    fail(`refusing OURFAIRY_HOME=${layout.home}: it is the host home (${host}) or an ancestor of it.`
-      + ` Backend state must stay isolated; unset OURFAIRY_HOME to use ${join(repoRoot, '.ourfairy')}.`)
-  }
+  return compositionLayoutOf(options.home ?? process.env.OURFAIRY_HOME, repoRoot)
 }
 
 function git(args, cwd) {
@@ -134,7 +127,7 @@ function git(args, cwd) {
 }
 
 /** Locate the pinned dsh installation, refusing a drifted commit unless allowed. */
-function resolveDsh(options) {
+function resolveDsh(options, combination) {
   const { combo } = readCombo(repoRoot)
   const dir = repoPath(combo, 'dsh')
   if (!existsSync(join(dir, '.git'))) {
@@ -142,7 +135,8 @@ function resolveDsh(options) {
   }
   const bin = join(dir, 'apps', 'cli', 'lib', 'bin.js')
   if (!existsSync(bin)) {
-    fail(`dsh CLI build missing at ${bin}; run '${PNPM[0]} ${PNPM[1].join(' ')} run build:lib:host' in ${dir}`)
+    const [command, args] = pnpmInvocation(combination)
+    fail(`dsh CLI build missing at ${bin}; run '${command} ${args.join(' ')} run build:lib:host' in ${dir}`)
   }
   const head = git(['rev-parse', 'HEAD'], dir)
   const locked = combo.repos.dsh.productCommit
@@ -154,147 +148,25 @@ function resolveDsh(options) {
 }
 
 /**
- * The product packages the profile installs, derived from the bundle manifest.
+ * Link the product packages into the profile, reinstalling when their content
+ * moved.
  *
- * The bundle's `dependencies` are the product package inventory: every entry is
- * a product package the bundle mounts, declared as `file:<path relative to the
- * bundle directory>`. The launcher resolves each specifier from the bundle's
- * own directory — exactly how pnpm resolves it when the bundle is installed —
- * so adding a product package is one manifest edit and no launcher change. The
- * probe is the one package the bundle never mounts: combo.json names it
- * separately.
- * @returns {{name: string, dir: string}[]} package name plus repo-relative directory.
+ * The composition decides (`cached` / `install`); executing pnpm and recording
+ * the hash the install was built from are the process layer's half.
  */
-function productPackages() {
-  const bundleDir = join(repoRoot, BUNDLE_DIR)
-  const manifest = readPackageManifest(BUNDLE_DIR, join(bundleDir, 'package.json'))
-  const packages = [{ name: BUNDLE_PACKAGE, dir: BUNDLE_DIR }, { name: PROBE_PACKAGE, dir: COMBINATION.probePathInRepo }]
-  for (const [name, specifier] of Object.entries(manifest.dependencies ?? {})) {
-    if (typeof specifier !== 'string' || !specifier.startsWith('file:')) {
-      fail(`${BUNDLE_DIR}/package.json declares ${name} as ${JSON.stringify(specifier)};`
-        + ' the launcher links product packages from this checkout, so the bundle must declare each one as file:<path>')
-    }
-    const dir = relative(repoRoot, resolve(bundleDir, specifier.slice('file:'.length)))
-    // The staleness hash lists repo-relative sources; a package outside the
-    // repository could change without the hash noticing, which is the stale
-    // install the hash exists to prevent.
-    if (dir === '' || dir.startsWith('..') || isAbsolute(dir)) {
-      fail(`${BUNDLE_DIR}/package.json declares ${name} at ${resolve(bundleDir, specifier.slice('file:'.length))},`
-        + ' which is outside this repository; product packages live under backend/')
-    }
-    if (packages.some(entry => entry.name === name)) {
-      fail(`${BUNDLE_DIR}/package.json declares ${name} twice: once as a bundle/probe entry and once in dependencies`)
-    }
-    packages.push({ name, dir })
-  }
-  return packages
-}
-
-/**
- * Every file the profile install copies out of the worktree, repo-relative.
- *
- * pnpm copies a `file:` package into the profile by its `files` declaration,
- * so that declaration — not a list kept here — is what decides the install's
- * contents. Deriving the set from it is what makes adding a source file safe:
- * a new file under `src/` is published, so it reaches the hash by itself. The
- * packages walked are the ones the profile installs, themselves read from the
- * bundle manifest.
- */
-function productSources() {
-  const sources = new Set()
-  for (const { dir } of productPackages()) {
-    const manifestPath = join(repoRoot, dir, 'package.json')
-    // npm always ships package.json, whether `files` names it or not.
-    sources.add(join(dir, 'package.json'))
-    for (const entry of readPackageManifest(dir, manifestPath).files) {
-      for (const published of publishedEntries(dir, entry)) sources.add(published)
-    }
-  }
-  return [...sources].sort()
-}
-
-/**
- * Expand one `files` entry to the repo-relative files it publishes.
- *
- * The entry is a path or an npm-style glob (`locale/*.json`); a directory
- * publishes every file beneath it. Node's own resolver reads the glob, so the
- * launcher carries no wildcard logic of its own. An entry matching nothing
- * publishes nothing, so it contributes nothing — npm silently skips it the
- * same way.
- * @param {string} dir - repo-relative package directory.
- * @param {string} entry - one `files` entry.
- * @returns {string[]}
- */
-function publishedEntries(dir, entry) {
-  const base = join(repoRoot, dir)
-  return globSync(entry, { cwd: base }).flatMap((match) => {
-    const absolute = join(base, match)
-    if (!statSync(absolute).isDirectory()) return [join(dir, match)]
-    // Recursive listing yields directory names too; only files carry content.
-    return readdirSync(absolute, { recursive: true })
-      .map(file => join(dir, match, file))
-      .filter(file => statSync(join(repoRoot, file)).isFile())
-  })
-}
-
-/** Read a linked package's manifest, refusing one that names no published files. */
-function readPackageManifest(dir, path) {
-  let manifest
-  try {
-    manifest = JSON.parse(readFileSync(path, 'utf8'))
-  } catch (error) {
-    fail(`cannot read ${dir}/package.json, which declares what the profile install copies: ${error.message}`)
-  }
-  if (!Array.isArray(manifest.files) || manifest.files.length === 0) {
-    fail(`${dir}/package.json declares no "files" list; the staleness hash derives the installed product sources from it,`
-      + ' and an unlisted package would hash nothing')
-  }
-  return manifest
-}
-
-/** Content hash of the product sources, so a stale linked profile is reinstalled. */
-function productSourceHash() {
-  const hash = createHash('sha256')
-  hash.update(PROFILE_IMPORT_METHOD)
-  for (const relativePath of productSources()) {
-    hash.update(relativePath)
-    hash.update(readFileSync(join(repoRoot, relativePath)))
-  }
-  return hash.digest('hex')
-}
-
-const profileManifest = () => ({
-  name: `dsh-profile-${PROFILE_NAME}`,
-  private: true,
-  dependencies: Object.fromEntries(productPackages().map(({ name, dir }) => [name, `file:${join(repoRoot, dir)}`])),
-  dsh: { profile: { bundles: [BUNDLE_PACKAGE] } },
-})
-
-/** Write the isolated profile project (manifest, pnpm settings, empty user layer). */
-function writeProfile(layout) {
-  mkdirSync(layout.profileDir, { recursive: true })
-  writeFileSync(join(layout.profileDir, 'package.json'), `${JSON.stringify(profileManifest(), undefined, 2)}\n`)
-  writeFileSync(join(layout.profileDir, 'pnpm-workspace.yaml'), 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n')
-  const userLayer = join(layout.profileDir, 'cordis.patch.yml')
-  if (!existsSync(userLayer)) {
-    writeFileSync(userLayer, '# OurFairy v1 profile user layer. The product composition comes from the bundle;\n# this file exists so a machine-local override has a supported place to live.\n[]\n')
-  }
-}
-
-/** Link the product packages into the profile, reinstalling when their content moved. */
-function installProfile(layout, options) {
-  writeProfile(layout)
-  const linked = join(layout.profileDir, 'node_modules', BUNDLE_PACKAGE.split('/').join(sep), 'package.json')
-  const stampPath = join(layout.profileDir, '.ourfairy-source-hash')
-  const hash = productSourceHash()
-  const stamped = existsSync(stampPath) ? readFileSync(stampPath, 'utf8').trim() : undefined
-  if (!options.reinstall && existsSync(linked) && stamped === hash) return 'cached'
+function installProfile(layout, options, combination) {
+  writeProfile(layout, repoRoot)
+  const decision = installDecision(layout, { root: repoRoot, reinstall: options.reinstall })
+  if (decision.mode === 'cached') return 'cached'
+  const linked = profileLinkedManifestPath(layout, repoRoot)
+  const [command, args] = pnpmInvocation(combination)
   // pnpm's hoisted linker can keep old file: contents on install, even with --force.
   // Rebuild invalidated snapshots while retaining the lockfile and download store.
   rmSync(join(layout.profileDir, 'node_modules'), { recursive: true, force: true })
-  const result = spawnSync(PNPM[0], [...PNPM[1], 'install', '--ignore-scripts', '--package-import-method', PROFILE_IMPORT_METHOD, '--store-dir', layout.pnpmStore], {
+  const result = spawnSync(command, [...args, 'install', '--ignore-scripts',
+    '--package-import-method', PROFILE_IMPORT_METHOD, '--store-dir', layout.pnpmStore], {
     cwd: layout.profileDir,
-    env: isolatedEnv(layout),
+    env: isolatedEnv(layout, { root: repoRoot }),
     encoding: 'utf8',
     timeout: 300_000,
   })
@@ -305,76 +177,25 @@ function installProfile(layout, options) {
     fail(`profile install reported success but ${linked} is missing;`
       + ` the product bundle would be silently skipped instead of failing the boot`)
   }
-  writeFileSync(stampPath, `${hash}\n`)
+  writeSourceStamp(layout, decision.hash)
   return 'installed'
-}
-
-/**
- * Child environment for every process the launcher spawns on the product's
- * behalf (the profile install and the real CLI boot).
- *
- * `HOME` and every tool cache are pinned inside the isolated home: the browser
- * session cookie, `~/.cache/pnpm`, the pnpm store and the durable dsh home must
- * all land under `OURFAIRY_HOME`, otherwise a boot quietly writes to the host's
- * real home and the isolation claim is false.
- */
-function isolatedEnv(layout, extra = {}) {
-  return {
-    ...process.env,
-    HOME: layout.userHome,
-    DSH_HOME: layout.dshHome,
-    OURFAIRY_HOME: layout.home,
-    XDG_CACHE_HOME: join(layout.home, 'cache'),
-    XDG_CONFIG_HOME: join(layout.home, 'config'),
-    XDG_DATA_HOME: join(layout.home, 'data'),
-    XDG_STATE_HOME: join(layout.home, 'state'),
-    // pnpm's own cache and store ARE product-run state: they hold what this
-    // checkout installed, so they stay inside the isolated home.
-    npm_config_cache: join(layout.home, 'cache', 'npm'),
-    npm_config_store_dir: layout.pnpmStore,
-    PNPM_HOME: join(layout.home, 'pnpm-home'),
-    // Corepack's cache is a TOOL cache, not product state: it holds downloaded
-    // toolchain archives. It is SHARED across isolated homes on purpose —
-    // rebuilding it per home re-extracts ~98MB (measured: 0.36s warm vs 2.74s
-    // cold, and whole tests went from ~1s to 35-42s). It stays inside the
-    // repository rather than the host home, so "never writes the host's real
-    // home" still holds; the deliberate tradeoff is recorded in
-    // work/implementation/evidence/01-baseline/README.md.
-    COREPACK_HOME: join(repoRoot, '.corepack'),
-    ...extra,
-  }
 }
 
 function childEnv(layout, { reportPath, mode, holdMs }) {
   const env = isolatedEnv(layout, {
-    OURFAIRY_PROBE_REPORT: reportPath,
-    OURFAIRY_PROBE_MODE: mode,
+    root: repoRoot,
+    extra: {
+      OURFAIRY_PROBE_REPORT: reportPath,
+      OURFAIRY_PROBE_MODE: mode,
+    },
   })
   if (holdMs !== undefined) env.OURFAIRY_PROBE_HOLD_MS = String(holdMs)
   return env
 }
 
-function overlayPath() {
-  const path = join(PROBE_DIR, 'overlay.patch.yml')
-  if (!existsSync(path)) fail(`probe overlay missing at ${path}`)
-  return path
-}
-
-/**
- * The overlays one boot applies: the probe overlay under test, then every
- * caller-supplied `--patch` file in argv order. dsh applies later overlays
- * last, so a test row sits above the product profile it extends without the
- * test having to know where that profile lives.
- * @param {{patches: string[]}} options
- * @returns {string[]}
- */
-function bootPatches(options) {
-  return [overlayPath(), ...options.patches]
-}
-
 /** {@link bootPatches} in the dsh CLI's repeatable `--patch <path>` form. */
 function patchArgs(options) {
-  return bootPatches(options).flatMap(path => ['--patch', path])
+  return bootPatches(options, repoRoot).flatMap(path => ['--patch', path])
 }
 
 function readJson(path) {
@@ -398,14 +219,14 @@ function augmentReport(reportPath, facts) {
 }
 
 /** Boot the real CLI with the probe overlay and return its exit code. */
-function commandProbe(layout, options) {
-  assertIsolatedHome(layout)
-  const dsh = resolveDsh(options)
-  const installMode = installProfile(layout, options)
+function commandProbe(layout, options, combination) {
+  assertIsolatedHome(layout, repoRoot)
+  const dsh = resolveDsh(options, combination)
+  const installMode = installProfile(layout, options, combination)
   const reportPath = options.report ?? join(layout.runDir, 'probe-report.json')
   rmSync(reportPath, { force: true })
   const mode = options.turn ? 'turn' : 'boot'
-  const result = spawnSync(process.execPath, [dsh.bin, '--profile', PROFILE_NAME, ...patchArgs(options)], {
+  const result = spawnSync(process.execPath, [dsh.bin, '--profile', combination.profileName, ...patchArgs(options)], {
     cwd: repoRoot,
     env: childEnv(layout, { reportPath, mode }),
     encoding: 'utf8',
@@ -422,7 +243,7 @@ function commandProbe(layout, options) {
     dshDrifted: dsh.drifted,
     profileDir: layout.profileDir,
     installMode,
-    overlaysApplied: bootPatches(options),
+    overlaysApplied: bootPatches(options, repoRoot),
     isolatedHome: layout.home,
     reportPath,
   })
@@ -446,10 +267,10 @@ function commandProbe(layout, options) {
  * has a listening port. The boot is then stopped and the port's release is
  * checked, so the command leaves nothing running behind it.
  */
-async function commandBootProduct(layout, options) {
-  assertIsolatedHome(layout)
-  const dsh = resolveDsh(options)
-  const installMode = installProfile(layout, options)
+async function commandBootProduct(layout, options, combination) {
+  assertIsolatedHome(layout, repoRoot)
+  const dsh = resolveDsh(options, combination)
+  const installMode = installProfile(layout, options, combination)
   const reportPath = options.report ?? join(layout.runDir, 'product-boot-report.json')
   rmSync(reportPath, { force: true })
   mkdirSync(layout.logDir, { recursive: true })
@@ -457,7 +278,7 @@ async function commandBootProduct(layout, options) {
   const logFile = join(layout.logDir, `product-boot-${new Date().toISOString().replaceAll(':', '-')}.log`)
   const fd = openSync(logFile, 'a')
   // No --patch: this boot is the product composition exactly as it ships.
-  const child = spawn(process.execPath, [dsh.bin, '--profile', PROFILE_NAME], {
+  const child = spawn(process.execPath, [dsh.bin, '--profile', combination.profileName], {
     cwd: repoRoot,
     env: childEnv(layout, { reportPath, mode: 'product' }),
     detached: true,
@@ -610,10 +431,10 @@ function tail(path, lines = 20) {
   return readFileSync(path, 'utf8').split('\n').slice(-lines).join('\n')
 }
 
-async function commandStart(layout, options) {
-  assertIsolatedHome(layout)
-  const dsh = resolveDsh(options)
-  const installMode = installProfile(layout, options)
+async function commandStart(layout, options, combination) {
+  assertIsolatedHome(layout, repoRoot)
+  const dsh = resolveDsh(options, combination)
+  const installMode = installProfile(layout, options, combination)
   const existing = readState(layout)
   if (existing !== undefined && isAlive(existing.pid)) {
     fail(`backend already running with pid ${existing.pid} (started ${existing.startedAt}); run 'stop' first`)
@@ -624,7 +445,7 @@ async function commandStart(layout, options) {
   rmSync(reportPath, { force: true })
   const logFile = join(layout.logDir, `backend-${new Date().toISOString().replaceAll(':', '-')}.log`)
   const fd = openSync(logFile, 'a')
-  const child = spawn(process.execPath, [dsh.bin, '--profile', PROFILE_NAME, ...patchArgs(options)], {
+  const child = spawn(process.execPath, [dsh.bin, '--profile', combination.profileName, ...patchArgs(options)], {
     cwd: repoRoot,
     env: childEnv(layout, { reportPath, mode: 'hold', holdMs: options.holdMs }),
     detached: true,
@@ -641,7 +462,7 @@ async function commandStart(layout, options) {
     dshHead: dsh.head,
     dshLocked: dsh.locked,
     installMode,
-    overlaysApplied: bootPatches(options),
+    overlaysApplied: bootPatches(options, repoRoot),
     ports: [],
     ready: false,
   })
@@ -671,7 +492,7 @@ async function commandStart(layout, options) {
     dshHome: layout.dshHome,
     dshHead: dsh.head,
     installMode,
-    overlaysApplied: bootPatches(options),
+    overlaysApplied: bootPatches(options, repoRoot),
     listeningPorts: ports,
     logFile,
   }
@@ -772,8 +593,7 @@ function nodeSatisfies(range, version) {
   return false
 }
 
-function commandDoctor(layout, options) {
-  assertIsolatedHome(layout)
+function commandDoctor(layout, options, combination) {
   const checks = []
   const check = (name, run) => {
     try {
@@ -786,18 +606,38 @@ function commandDoctor(layout, options) {
   const must = (condition, message) => {
     if (!condition) throw new Error(message)
   }
+  const report = () => {
+    const failed = checks.filter(entry => !entry.ok)
+    const lines = checks.map(entry => `${entry.ok ? 'ok  ' : 'FAIL'}  ${entry.name}: ${entry.detail}`)
+    process.stdout.write(options.json
+      ? `${JSON.stringify({ ok: failed.length === 0, checks }, undefined, 2)}\n`
+      : `ourfairy-backend doctor\n${lines.join('\n')}\n${failed.length === 0 ? 'doctor: all checks passed' : `doctor: ${failed.length} check(s) failed`}\n`)
+    return failed.length === 0 ? 0 : 1
+  }
+
+  // Isolation is the first recorded check, and a failure stops the report
+  // there: every later check may write (corepack's cache, the profile install),
+  // so recording it and returning is what keeps an unsafe home from being
+  // touched while still producing a normal report.
+  check('isolated home', () => {
+    assertIsolatedHome(layout, repoRoot)
+    return layout.home
+  })
+  if (!checks[0].ok) return report()
 
   check('node version', () => {
-    must(nodeSatisfies(COMBINATION.nodeRange, process.versions.node),
-      `node ${process.versions.node} does not satisfy ${COMBINATION.nodeRange} (combo.json backend.nodeRange)`)
-    return `${process.versions.node} satisfies ${COMBINATION.nodeRange}`
+    const { nodeRange } = readCombination(repoRoot)
+    must(nodeSatisfies(nodeRange, process.versions.node),
+      `node ${process.versions.node} does not satisfy ${nodeRange} (combo.json backend.nodeRange)`)
+    return `${process.versions.node} satisfies ${nodeRange}`
   })
   check('corepack pnpm pin available', () => {
     // Must run under the same environment the profile install uses: with the
     // ambient environment this check would read the host's corepack cache and
     // silently disagree with what `installProfile` actually does.
-    const result = spawnSync(PNPM[0], [...PNPM[1], '--version'], { encoding: 'utf8', env: isolatedEnv(layout) })
-    must(result.status === 0, `${PNPM[0]} ${PNPM[1].join(' ')} failed: ${result.stderr || result.error?.message}`)
+    const [command, args] = pnpmInvocation(combination)
+    const result = spawnSync(command, [...args, '--version'], { encoding: 'utf8', env: isolatedEnv(layout, { root: repoRoot }) })
+    must(result.status === 0, `${command} ${args.join(' ')} failed: ${result.stderr || result.error?.message}`)
     return `${result.stdout.trim()} (COREPACK_HOME=${join(repoRoot, '.corepack')})`
   })
   check('combo combination', () => {
@@ -806,7 +646,7 @@ function commandDoctor(layout, options) {
     return result.rows.map(row => `${row.key}@${String(row.actual).slice(0, 12)}`).join(', ')
   })
   check('dsh CLI build', () => {
-    const dsh = resolveDsh(options)
+    const dsh = resolveDsh(options, combination)
     return `${dsh.bin} (${dsh.head.slice(0, 12)})`
   })
   check('product packages', () => {
@@ -814,14 +654,10 @@ function commandDoctor(layout, options) {
     // declarations the profile install copies, read from the packages the
     // bundle declares, so a package added to the install without a
     // published-file list fails while deriving it.
-    return productSources().join(', ')
-  })
-  check('isolated home', () => {
-    must(layout.home !== '/' && layout.home !== homedir(), 'OURFAIRY_HOME points at the host home')
-    return layout.home
+    return productSources(repoRoot).join(', ')
   })
   check('profile project linked', () => {
-    const mode = installProfile(layout, options)
+    const mode = installProfile(layout, options, combination)
     return `${layout.profileDir} (${mode})`
   })
   check('bundle packages', () => {
@@ -830,14 +666,14 @@ function commandDoctor(layout, options) {
     // profile installed, reading the rows through dsh's own patch loader.
     const result = verifyBundlePackages({
       binName: 'dsh',
-      bundlePackage: BUNDLE_PACKAGE,
+      bundlePackage: combination.bundlePackage,
       // The probe is the one installed product package the bundle never
       // mounts; naming it keeps the installed-set comparison from reporting it.
-      probePackage: PROBE_PACKAGE,
+      probePackage: combination.probePackage,
       // dsh resolves a bundle against its own installation first, then the
       // profile; the app's package.json is the installation anchor both sides
       // name.
-      installAnchor: join(resolveDsh(options).dir, 'apps', 'cli', 'package.json'),
+      installAnchor: join(resolveDsh(options, combination).dir, 'apps', 'cli', 'package.json'),
       profileDir: layout.profileDir,
     })
     must(result.failures.length === 0, result.failures.join('; '))
@@ -851,8 +687,8 @@ function commandDoctor(layout, options) {
     // against, so a green result says what it was green against.
     const result = verifyPluginCompatibility({
       binName: 'dsh',
-      bundlePackage: BUNDLE_PACKAGE,
-      installAnchor: join(resolveDsh(options).dir, 'apps', 'cli', 'package.json'),
+      bundlePackage: combination.bundlePackage,
+      installAnchor: join(resolveDsh(options, combination).dir, 'apps', 'cli', 'package.json'),
       profileDir: layout.profileDir,
     })
     must(result.failures.length === 0, result.failures.join('; '))
@@ -862,10 +698,10 @@ function commandDoctor(layout, options) {
   check('native capabilities', () => {
     // The installed profile, read through dsh's own loader: what a boot would
     // mount, not a second parse of the bundle this launcher also reads.
-    const dsh = resolveDsh(options)
+    const dsh = resolveDsh(options, combination)
     const result = verifyInstalledNativeCapabilities({
       binName: 'dsh',
-      bundlePackage: BUNDLE_PACKAGE,
+      bundlePackage: combination.bundlePackage,
       installAnchor: join(dsh.dir, 'apps', 'cli', 'package.json'),
       profileDir: layout.profileDir,
     })
@@ -879,36 +715,48 @@ function commandDoctor(layout, options) {
       ? `DEEPSEEK_BASE_URL=${base}` : `OURFAIRY_MINIMAX_BASE_URL=${base}`
   })
 
-  const failed = checks.filter(entry => !entry.ok)
-  const lines = checks.map(entry => `${entry.ok ? 'ok  ' : 'FAIL'}  ${entry.name}: ${entry.detail}`)
-  process.stdout.write(options.json
-    ? `${JSON.stringify({ ok: failed.length === 0, checks }, undefined, 2)}\n`
-    : `ourfairy-backend doctor\n${lines.join('\n')}\n${failed.length === 0 ? 'doctor: all checks passed' : `doctor: ${failed.length} check(s) failed`}\n`)
-  return failed.length === 0 ? 0 : 1
+  return report()
 }
 
-const options = parseArgv(process.argv)
-const layout = layoutOf(options)
-if (process.argv[2] === '--help' || options.command === 'help' || options.command === undefined) {
-  process.stdout.write('usage: ourfairy-backend <probe|boot-product|start|stop|status|doctor> [--turn] [--report <path>] [--home <dir>] [--json] [--reinstall] [--allow-drift] [--patch <path>]...\n')
-  process.exit(options.command === undefined ? 2 : 0)
-}
-// Only the overlay boots apply `--patch`. Accepting it silently elsewhere would
-// report a fixture that never mounted, which is the failure this flag exists to
-// make impossible: boot-product's contract is the product profile with no overlay.
-if (options.patches.length > 0 && options.command !== 'start' && options.command !== 'probe') {
-  fail(`--patch applies to probe and start only; '${options.command}' does not mount profile overlays`)
-}
+/**
+ * Run one launcher invocation and return its exit code.
+ *
+ * This is the only entry point; it owns argv, the CLI boundary, and dispatch.
+ * It never calls `process.exit`, so an importing test process keeps its exit
+ * code to itself.
+ * @param {string[]} argv - the full process argv (`[node, script, ...args]`).
+ * @returns {Promise<number>}
+ */
+export async function main(argv) {
+  try {
+    // The pins are read before argv, as the launcher always did: a broken
+    // combination is a configuration failure, not a usage error.
+    const combination = readCombination(repoRoot)
+    const options = parseArgv(argv)
+    const layout = layoutOf(options)
+    if (argv[2] === '--help' || options.command === 'help' || options.command === undefined) {
+      process.stdout.write('usage: ourfairy-backend <probe|boot-product|start|stop|status|doctor> [--turn] [--report <path>] [--home <dir>] [--json] [--reinstall] [--allow-drift] [--patch <path>]...\n')
+      return options.command === undefined ? 2 : 0
+    }
+    // Only the overlay boots apply `--patch`. Accepting it silently elsewhere would
+    // report a fixture that never mounted, which is the failure this flag exists to
+    // make impossible: boot-product's contract is the product profile with no overlay.
+    if (options.patches.length > 0 && options.command !== 'start' && options.command !== 'probe') {
+      fail(`--patch applies to probe and start only; '${options.command}' does not mount profile overlays`)
+    }
 
-const exitCode = await (async () => {
-  switch (options.command) {
-    case 'probe': return commandProbe(layout, options)
-    case 'boot-product': return commandBootProduct(layout, options)
-    case 'start': return await commandStart(layout, options)
-    case 'stop': return await commandStop(layout, options)
-    case 'status': return commandStatus(layout, options)
-    case 'doctor': return commandDoctor(layout, options)
-    default: fail(`unknown command ${JSON.stringify(options.command)}; expected probe|boot-product|start|stop|status|doctor`)
+    switch (options.command) {
+      case 'probe': return commandProbe(layout, options, combination)
+      case 'boot-product': return await commandBootProduct(layout, options, combination)
+      case 'start': return await commandStart(layout, options, combination)
+      case 'stop': return await commandStop(layout, options)
+      case 'status': return commandStatus(layout, options)
+      case 'doctor': return commandDoctor(layout, options, combination)
+      default: fail(`unknown command ${JSON.stringify(options.command)}; expected probe|boot-product|start|stop|status|doctor`)
+    }
+  } catch (error) {
+    return cliFailure(error)
   }
-})()
-process.exit(exitCode)
+}
+
+if (import.meta.main) process.exit(await main(process.argv))
