@@ -31,7 +31,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(scriptDir, '..')
 
 /** The landing branch every spec is measured against. */
-export const LANDING_BRANCH = 'integration/ourfairy-v1'
+export const LANDING_BRANCH = 'main'
 
 /** States that need a human. Everything else is either in progress or finished. */
 export const DEFECTS = Object.freeze(['unpushed', 'orphan', 'stale-worktree'])

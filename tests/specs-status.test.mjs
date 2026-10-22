@@ -47,7 +47,11 @@ function fixture() {
   writeFileSync(join(root, 'combo.json'), '{}\n')
   git(root, ['add', '.'])
   git(root, ['commit', '--quiet', '-m', 'initial'])
-  git(root, ['branch', LANDING_BRANCH])
+  // The landing branch may be the fixture's own default branch (main); only a
+  // separate landing ref has to be created.
+  if (git(root, ['rev-parse', '--abbrev-ref', 'HEAD']) !== LANDING_BRANCH) {
+    git(root, ['branch', LANDING_BRANCH])
+  }
   // A bare origin holding the landing branch, so "pushed" has something to compare with.
   const origin = `${root}-origin.git`
   roots.push(origin)

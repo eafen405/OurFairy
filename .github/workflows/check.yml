@@ -41,12 +41,6 @@ jobs:
           bwrap --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent -- true
           pdftoppm -v
 
-      # combo:verify resolves the integration branch as a local ref.
-      - name: Materialize the integration branch
-        run: |
-          git branch --list integration/ourfairy-v1 | grep -q . \
-            || git branch integration/ourfairy-v1 origin/integration/ourfairy-v1
-
       # The backend tests drive the real dsh launcher, so the companion checkout
       # has to exist at the commit combo.json locks, with the four builds that
       # combo.json names. OURFAIRY_DSH_DIR points the launcher and combo:verify
