@@ -1,6 +1,6 @@
 # 仓库环境修复（2026-10-22）
 
-范围：CI runner 装配、测试依赖路径与启动失败等待。基线 `379d29c`；dsh 仍锁
+范围：CI runner 装配、测试依赖路径、profile 文件隔离与启动失败等待。基线 `379d29c`；dsh 仍锁
 `42133b30ad953649b6929078deda84d73cd89e1f`。本轮不改产品接口或数据结构。
 
 ## CI 失败与修复
@@ -27,7 +27,43 @@
 server、Cordis 六个核心产物与原本地构建逐文件 SHA256 相同。pi-ai 官方 1.0.2 发布包应用仓库补丁后
 也与本地缓存逐文件相同。单个重试接口用例在 Node 24.18.0、24.21.0（这次 CI 实际版本）、24.22.0
 均通过；Node 24.22.0 + 干净 dsh + GitHub 环境标记 + 两核并发的 4 个失败文件共 19/19 通过。
-这些对比未复现远端剩余 4 处失败，不能据此断言根因。
+这些对比当时未复现远端剩余 4 处失败，后续定位见下一节。
+
+## 剩余重试失败的根因
+
+`f5a8b20` 的运行 `39757165090` 为 245/249，PDF 已全部通过；仍有 3 处原生重试与 1 处真实投影
+失败。错误编码分别为 `RATE_LIMIT`、`SERVER`、`TRANSPORT`，但没有原生重试事件。
+
+临时诊断提交 `e98b18c` 的运行 `39759715005` 给出了关键对照：同一 runner 上，单跑网关重试
+用例在未加诊断、加诊断时都通过；紧随其后的全量仍是相同 4 处失败。实际加载的上述六个核心
+产物 SHA256 与本地一致，单例的正常策略与监听器也可达。临时诊断在本次修复中移除。
+
+根因是 pnpm 11.28.5 对 `file:` 目录依赖默认使用硬链接。`native-capabilities.test.mjs`
+为检查 doctor，从安装后的 bundle 中删除 `llm-retry` 行；当源文件与安装目录在同一文件系统时，
+它们可共享 inode，该写入同时删除了仓库源文件及其他 profile 中的重试行。后续启动实际没有挂载
+重试插件，故错误分类正确却没有恢复。本机原检出和临时 home 的布局掩盖了这一问题。
+
+最小复现只需在同一个临时仓库中依次运行两个现有测试，不需要并发或改变 dsh：
+
+```sh
+node --test --test-name-pattern='doctor passes on the shipped composition' tests/native-capabilities.test.mjs
+node --test --test-name-pattern='a route saved from the phone' tests/gateway.test.mjs
+```
+
+反馈循环在修复前连续两次失败：doctor 用例通过，网关用例实际请求只有 `['rate_limit']`，
+应为 `['rate_limit', 'success']`，与 CI 相同。安装文件与源文件的 `dev`、`ino` 相同，链接数为 2。
+本机封装命令和输出留在忽略目录 `work/tmp/repo-env/`：`.repro-retry-interaction.mjs`、
+`repro-retry-interaction-red.log`、`repro-retry-interaction-red-repeat.log`。
+
+启动器现在显式使用 `--package-import-method copy`；安装方式也纳入现有内容哈希，使旧的安装戳失效。
+固定 pnpm 的 hoisted linker 在普通 install 乃至 `--force` 后仍可能保留旧的本地文件内容，最小
+单包实验也复现了这一点。因此仅在内容哈希失效或显式 `--reinstall` 时重建该 profile 的
+`node_modules`，保留锁文件、下载存储和用户配置；哈希命中仍直接复用。
+
+新增回归测试 `tests/product-sources.test.mjs` 的
+`installed product files are isolated from their source and sibling profiles`，把源和两个 profile
+置于同一文件系统，检查安装副本的修改不传播到源或另一个 profile，源修改在重装前不可见、重装后
+真正进入副本。它在修复前失败；修复后该文件 4/4 通过，原始双测试反馈循环也通过。
 
 ## 启动失败与耗时归因
 
@@ -66,12 +102,13 @@ server、Cordis 六个核心产物与原本地构建逐文件 SHA256 相同。pi
 ```sh
 node --test tests/dsh-checkout.test.mjs tests/pdf-worker-cancel.test.mjs tests/model-double.test.mjs tests/projection-units.test.mjs
 node --test tests/start-readiness.test.mjs tests/row-addressability.test.mjs
+node --test tests/product-sources.test.mjs
 npm test
 npm run combo:verify
 npm run specs:status -- --offline
 ```
 
-定向路径/依赖检查 19/19，通过；新增启动终态检查 2/2，通过。最终 `npm test` 249/249、
+定向路径/依赖检查 19/19，通过；新增启动终态检查 2/2，通过。前一阶段 `npm test` 249/249、
 0 失败、0 跳过，用时 83.159 秒；`npm run combo:verify` 三项均通过。
 原始日志留在忽略目录 `work/tmp/repo-env/`，不入库。远端验证使用专用修复分支的 `check` workflow。
 

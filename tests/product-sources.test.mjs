@@ -20,7 +20,7 @@
  * the mutation local without replacing the real launcher.
  */
 import assert from 'node:assert/strict'
-import { readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
 import { copyProductRepo, describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
@@ -48,9 +48,9 @@ after(() => {
  * checkout in the version combination drifting) must not decide what the
  * profile-install tests observe.
  */
-function doctor() {
+function doctor(profileHome = home) {
   const run = runBackend(['doctor', '--json'], {
-    OURFAIRY_HOME: home,
+    OURFAIRY_HOME: profileHome,
     MINIMAX_CN_API_KEY: undefined,
     OURFAIRY_MINIMAX_BASE_URL: undefined,
   }, { root: repoCopy })
@@ -133,5 +133,35 @@ test('a new product source file invalidates the installed profile', () => {
     assert.equal(doctor().mode, 'cached', 'the rebuilt profile must be reused until a product source changes again')
   } finally {
     rmSync(addedSource, { force: true })
+  }
+})
+
+test('installed product files are isolated from their source and sibling profiles', () => {
+  const sibling = makeHome('ourfairy-product-sources-sibling-')
+  const { backend } = JSON.parse(readFileSync(join(repoCopy, 'combo.json'), 'utf8'))
+  const source = join(repoCopy, backend.bundlePathInRepo, 'cordis.patch.yml')
+  const installed = profileHome => join(profileHome, 'dsh-home', 'profiles', backend.profileName,
+    'node_modules', ...backend.bundlePackage.split('/'), 'cordis.patch.yml')
+  const before = readFileSync(source, 'utf8')
+  try {
+    doctor()
+    doctor(sibling)
+    // Keep source and profiles on one filesystem so cross-device copying
+    // cannot hide pnpm's default hardlinks for file: dependencies.
+    assert.equal(statSync(source).dev, statSync(installed(home)).dev)
+    const removed = before.replace("    - id: llm-retry\n      name: '@deepseek-ai/dsh-llm-retry'\n", '')
+    assert.notEqual(removed, before, 'the fixture must remove the native retry row')
+    writeFileSync(installed(home), removed)
+    assert.ok(readFileSync(source, 'utf8') === before, 'editing a profile must preserve the source retry row')
+    assert.ok(readFileSync(installed(sibling), 'utf8') === before, 'editing a profile must preserve its sibling')
+
+    const changed = `${before}\n# Updated deployment source.\n`
+    writeFileSync(source, changed)
+    assert.ok(readFileSync(installed(sibling), 'utf8') === before, 'source edits must wait for reinstallation')
+    assert.equal(doctor(sibling).mode, 'installed')
+    assert.ok(readFileSync(installed(sibling), 'utf8') === changed, 'reinstallation must publish the new source')
+  } finally {
+    writeFileSync(source, before)
+    removeHome(sibling)
   }
 })

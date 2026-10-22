@@ -86,6 +86,7 @@ npm run backend:doctor
 隔离 home 默认落在 `<worktree>/.ourfairy`，可用 `OURFAIRY_HOME` 覆盖；引擎自己的 home 在其下的
 `dsh-home`（`DSH_HOME`）。改了产品包内容后启动器会按内容哈希自动重装 profile；要强制重装加
 `-- --reinstall`；要看机器可读的自检结果用 `-- --json`。
+产品包以独立副本安装，修改一个 profile 的文件不会改动仓库或其他 profile。
 
 ## 构建客户端
 
