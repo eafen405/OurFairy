@@ -12,11 +12,12 @@ default file/shell/sandbox rows with host-wide access. The scoped
 
 ## Row set and package set
 
-`cordis.patch.yml` is the row set: it is the file the profile loads. Its section
-comments group the rows — session/model/prompt core, model-request recovery and
-tool-result retention, durable session base, process-local support services, the
-HTTP carrier and identity paths, owned sessions and chat, the scoped file/shell
-adapters, and attachments/speech.
+`cordis.patch.yml` is the row set: it is the file the profile loads. Its
+top-level `insert` is two loader-native groups. `kernel` holds what one boot
+needs to establish a session, run a model turn, and raise the Web carrier and
+its connection; `plugins` holds the product capabilities and the native tool and
+support rows that exist only for them. The split rule and each row's segment sit
+in that file, next to the rows.
 
 Read that file for the inventory. The row ids and their packages have one
 authority, and it is the file the loader reads; a hand-kept table here listed
@@ -41,11 +42,8 @@ not publish.
 
 `FORBIDDEN_ROW_IDS` in
 [`tests/baseline-boot.test.mjs`](../../tests/baseline-boot.test.mjs) is the list of
-row ids the boot test asserts absent from the live composition.
-
-v1 keeps skills, goals, subagents, telemetry, web and workflow tooling, plan mode
-and MCP resources out; the remainder of that list are the unscoped file, shell
-and sandbox defaults the scoped adapters replace.
+row ids the boot test asserts absent from the live composition. The comments
+beside that list give the reason for each group; read them there.
 
 ## Consuming it
 
@@ -64,20 +62,15 @@ Chinese substring matching, and the `@ourfairy/dsh-search` tools restrict native
 SQL results to ids from the caller's own session headers. See
 [`backend/search/README.md`](../search/README.md) for interval semantics and rebuild.
 
-**The model route starts from the bundle's declared pair, then belongs to Phaethon.** The
-`agent-default-model` row is the sole declaration of the combination's initial
-shared selection (`minimax-cn`/`MiniMax-M3.1-Flash` at `max` thinking
-effort): `combo.json` carries no provider/model copy and `doctor` has no
-comparison check. The product chat runtime and the probe both read
+**The model route starts from the bundle's initial selection, then belongs to Phaethon.** The
+`agent-default-model` row supplies that selection. The product chat runtime and the probe both read
 `agentDefaultModel.currentSelection()` at the start of a turn; the probe also
 writes that selection into its boot report (`report.model`), so changing this row
 changes what the probe observes. A selection Phaethon saves through the gateway
 (`/gateway/selection`) takes effect from each conversation's next reply without
-editing this file. The MiniMax route reuses dsh's installed `minimax-cn` provider:
-this bundle only narrows it to the model the deployment uses, declares its 1M
-context, image input and adaptive thinking, and names `MINIMAX_CN_API_KEY`. The
-official DeepSeek route stays mounted as a switchable alternative and is not
-selected.
+editing this file. The row configures the provider route, model capabilities and
+credential reference for the deployment. The official DeepSeek route stays
+mounted as a switchable alternative.
 
 **Model recovery and tool-result retention are native rows.** `llm-retry` re-runs a
 failed model step inside the same open turn, and each provider profile owns the

@@ -12,6 +12,6 @@
 - 对已定身份及空间规则，指出现有文件/sandbox 适配研究还缺哪些启动接线或入口覆盖证据；只列影响实施先后的缺口，不展开新的通用权限框架。
 - 输出模块 Interface、依赖顺序和可验证的最小纵向路径建议；明确必须先改原生的内容与可并行适配的内容。具体 fork/目录组织给出适用条件，不擅自迁移仓库。
 
-先读 docs/backend-skeleton-proposal.md、docs/research/session-owner-execution.md、dsh-sandbox-reuse.md、message-model.md 及旧地图最终决议。初始 dsh 基线 d743267388641bc76f17c45ce8b4c231aed1d32c；旧 Fairybot 基线 095efdd84fd7ab2215a0b5b03369aac4f1303108，实际引用固定提交。
+先读 docs/archive/backend-skeleton-proposal.md、docs/research/session-owner-execution.md、dsh-sandbox-reuse.md、message-model.md 及旧地图最终决议。初始 dsh 基线 d743267388641bc76f17c45ce8b4c231aed1d32c；旧 Fairybot 基线 095efdd84fd7ab2215a0b5b03369aac4f1303108，实际引用固定提交。
 
 完成标准：单份带源码引用的研究报告，含依赖闭包、改动传播表、建议与未验证条件；能给后续实施路线决策提供输入，不能以“尚未产品实现”为由无限扩展研究。

@@ -2,13 +2,13 @@
   "name": "@ourfairy/dsh-identity",
   "version": "0.1.0",
   "private": true,
-  "description": "OurFairy identity module: users, short numbers, invites, and sessions in the business SQLite store, with the product's own request paths and Connection's second-credential admission.",
+  "description": "OurFairy identity module: users, short numbers, invites, and sessions in the business SQLite store, with its own /identity/* routes and session tokens that admit dsh /api.",
   "type": "module",
   "license": "UNLICENSED",
   "main": "./src/index.mjs",
   "exports": {
     ".": "./src/index.mjs",
-    "./http": "./src/http.mjs",
+    "./routes": "./src/routes.mjs",
     "./owner": "./src/owner.mjs",
     "./locale/*.json": "./locale/*.json"
   },
@@ -19,6 +19,7 @@
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.5-alpha.1",
-    "@deepseek-ai/schemastery": "^3.18.5-alpha.1"
+    "@deepseek-ai/schemastery": "^3.18.5-alpha.1",
+    "@ourfairy/dsh-http": "^0.1.0"
   }
 }

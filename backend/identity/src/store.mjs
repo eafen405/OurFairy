@@ -25,6 +25,11 @@ import {
   sessionTokenDigest,
   verifyPassword,
 } from './codes.mjs'
+import { DELIVERIES_SCHEMA } from './schema/deliveries.mjs'
+import { GROUPS_SCHEMA } from './schema/groups.mjs'
+import { INDEXES_SCHEMA } from './schema/indexes.mjs'
+import { UPLOADS_SCHEMA } from './schema/uploads.mjs'
+import { USERS_SCHEMA } from './schema/users.mjs'
 
 /** The Phaethon short number: the deployment's first identity, reserved by rule. */
 export const PHAETHON_SHORT_ID = 1
@@ -32,124 +37,16 @@ export const PHAETHON_SHORT_ID = 1
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
 const SCHEMA_VERSION = 6
 
-/** Users, invites and sessions. Primary keys and the lookup indexes the queries use, nothing else. */
-const TABLE_DDL = {
-  users: `CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  short_id INTEGER NOT NULL,
-  name TEXT NOT NULL,
-  is_admin INTEGER NOT NULL DEFAULT 0,
-  password TEXT,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-)`,
-  invites: `CREATE TABLE IF NOT EXISTS invites (
-  code TEXT PRIMARY KEY,
-  created_by INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  redeemed_by INTEGER,
-  redeemed_at INTEGER,
-  deleted_at INTEGER
-)`,
-  sessions: `CREATE TABLE IF NOT EXISTS sessions (
-  digest TEXT PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  revoked_at INTEGER,
-  deleted_at INTEGER
-)`,
-}
-
-const INDEX_DDL = `
-CREATE INDEX IF NOT EXISTS sessions_by_user ON sessions(user_id);
-CREATE INDEX IF NOT EXISTS users_by_short_id ON users(short_id);
-CREATE INDEX IF NOT EXISTS users_by_name ON users(name);
-`
-
-/** Group ownership and membership; uniqueness is checked inside the transactions. */
-const GROUP_SCHEMA = `
-CREATE TABLE IF NOT EXISTS groups (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  owner_short_id INTEGER NOT NULL,
-  created_by INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-);
-CREATE TABLE IF NOT EXISTS group_members (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  group_id INTEGER NOT NULL,
-  user_short_id INTEGER NOT NULL,
-  created_by INTEGER NOT NULL,
-  updated_by INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-);
-CREATE INDEX IF NOT EXISTS groups_by_owner ON groups(owner_short_id);
-CREATE INDEX IF NOT EXISTS group_members_by_user ON group_members(user_short_id);
-CREATE INDEX IF NOT EXISTS group_members_by_group ON group_members(group_id);
-`
-
-/** Upload lifecycle only; native session messages own admitted references. */
-const UPLOAD_SCHEMA = `
-CREATE TABLE IF NOT EXISTS uploads (
-  upload_id TEXT PRIMARY KEY,
-  owner_short_id INTEGER NOT NULL,
-  session_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  mime TEXT NOT NULL,
-  size INTEGER NOT NULL,
-  sha256 TEXT NOT NULL,
-  status INTEGER NOT NULL DEFAULT 0, -- 0 uploading, 1 complete, 2 expired
-  offset INTEGER NOT NULL DEFAULT 0,
-  original_ref TEXT,
-  image_ref TEXT,
-  expires_at INTEGER NOT NULL,
-  created_by INTEGER NOT NULL,
-  updated_by INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-);
-`
-
-/** Delivery coordination only; the native log is the delivered-content authority. */
-const DELIVERY_SCHEMA = `
-CREATE TABLE IF NOT EXISTS deliveries (
-  delivery_id TEXT PRIMARY KEY,
-  sender_short_id INTEGER NOT NULL,
-  sender_session_id TEXT NOT NULL,
-  recipient_short_id INTEGER NOT NULL,
-  recipient_session_id TEXT NOT NULL,
-  text TEXT NOT NULL,
-  attachments_json TEXT NOT NULL DEFAULT '[]',
-  status INTEGER NOT NULL DEFAULT 0, -- 0 ready coordination, 1 durably delivered, 2 preparing files
-  message_id TEXT,
-  accepted_seq INTEGER,
-  created_by INTEGER NOT NULL,
-  updated_by INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
-);
-`
-
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
-${Object.values(TABLE_DDL).join(';\n')};
-${INDEX_DDL}
-${GROUP_SCHEMA}
-${UPLOAD_SCHEMA}
-${DELIVERY_SCHEMA}
+${USERS_SCHEMA}
+${INDEXES_SCHEMA}
+${GROUPS_SCHEMA}
+${UPLOADS_SCHEMA}
+${DELIVERIES_SCHEMA}
 `
 
 /** Error carrying the HTTP status a request path answers with. */
@@ -194,12 +91,14 @@ function assertPassword(password) {
 /** The identity module's persistent business state. */
 export class IdentityStore {
   #db
+  #now
   #sessionTtlMilliseconds
 
   constructor({ path, sessionTtlDays = 30, now = () => Date.now() } = {}) {
     if (typeof path !== 'string' || path === '') {
       throw new IdentityError(500, 'identity/misconfigured', 'the identity store needs a database path')
     }
+    this.#now = now
     mkdirSync(dirname(path), { recursive: true })
     this.#db = new DatabaseSync(path)
     try {
@@ -211,7 +110,6 @@ export class IdentityStore {
       throw error
     }
     this.#sessionTtlMilliseconds = sessionTtlDays * DAY_MILLISECONDS
-    this.now = now
   }
 
   /**
@@ -260,7 +158,8 @@ export class IdentityStore {
       .run('schema_version', String(SCHEMA_VERSION))
   }
 
-  readDelivery(id) {
+  /** One delivery row; the package's own reads, never a published operation. */
+  #readDelivery(id) {
     const row = this.#db.prepare('SELECT * FROM deliveries WHERE delivery_id = ? AND deleted_at IS NULL').get(id)
     return row && { deliveryId: row.delivery_id, senderShortId: row.sender_short_id, senderSessionId: row.sender_session_id,
       recipientShortId: row.recipient_short_id, sessionId: row.recipient_session_id, text: row.text,
@@ -268,7 +167,7 @@ export class IdentityStore {
   }
   prepareDelivery(row) {
     return this.#transaction(() => {
-      const existing = this.readDelivery(row.deliveryId)
+      const existing = this.#readDelivery(row.deliveryId)
       if (existing) {
         if (existing.senderShortId !== row.senderShortId || existing.senderSessionId !== row.senderSessionId
           || existing.recipientShortId !== row.recipientShortId || existing.text !== row.text
@@ -277,33 +176,33 @@ export class IdentityStore {
         }
         return existing
       }
-      const now = this.now()
+      const now = this.#now()
       this.#db.prepare(`INSERT INTO deliveries
         (delivery_id,sender_short_id,sender_session_id,recipient_short_id,recipient_session_id,text,attachments_json,status,created_by,updated_by,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(row.deliveryId,row.senderShortId,row.senderSessionId,row.recipientShortId,
           row.sessionId,row.text,JSON.stringify(row.files ?? []),(row.files?.length ? 2 : 0),row.senderShortId,row.senderShortId,now,now)
-      return this.readDelivery(row.deliveryId)
+      return this.#readDelivery(row.deliveryId)
     })
   }
   /** Persist each immutable file before moving on; null entries alone are retried. */
   prepareDeliveryFile(id, index, prepared) {
     return this.#transaction(() => {
-      const row = this.readDelivery(id)
+      const row = this.#readDelivery(id)
       row.files[index].prepared = prepared
       const status = row.files.every(file => file.prepared !== null) ? 0 : 2
       this.#db.prepare(`UPDATE deliveries SET attachments_json = ?, status = ?,
         updated_by = sender_short_id, updated_at = ? WHERE delivery_id = ? AND deleted_at IS NULL`)
-        .run(JSON.stringify(row.files),status,this.now(),id)
-      return this.readDelivery(id)
+        .run(JSON.stringify(row.files),status,this.#now(),id)
+      return this.#readDelivery(id)
     })
   }
   pendingDeliveries() {
     return this.#db.prepare('SELECT delivery_id FROM deliveries WHERE status = 0 AND deleted_at IS NULL ORDER BY created_at,delivery_id')
-      .all().map(row => this.readDelivery(row.delivery_id))
+      .all().map(row => this.#readDelivery(row.delivery_id))
   }
   completeDelivery(id, { messageId, acceptedSeq }) {
     this.#db.prepare('UPDATE deliveries SET status = 1, message_id = ?, accepted_seq = ?, updated_by = sender_short_id, updated_at = ? WHERE delivery_id = ? AND deleted_at IS NULL')
-      .run(messageId,acceptedSeq,this.now(),id)
+      .run(messageId,acceptedSeq,this.#now(),id)
   }
 
   /** Insert an opaque upload receipt after the staging file exists. */
@@ -330,7 +229,7 @@ export class IdentityStore {
     if (entries.some(([key]) => !Object.hasOwn(columns, key))) throw new Error('unknown upload lifecycle field')
     const values = entries.map(([key, value]) => key === 'original' || key === 'image' ? value === null ? null : JSON.stringify(value) : value)
     this.#db.prepare(`UPDATE uploads SET ${entries.map(([key]) => columns[key] + ' = ?').join(', ')},
-      updated_by = owner_short_id, updated_at = ? WHERE upload_id = ? AND deleted_at IS NULL`).run(...values,this.now(),id)
+      updated_by = owner_short_id, updated_at = ? WHERE upload_id = ? AND deleted_at IS NULL`).run(...values,this.#now(),id)
   }
 
   /** A group's public state; membership is read from the same business store. */
@@ -362,7 +261,7 @@ export class IdentityStore {
         throw new IdentityError(403, 'groups/forbidden', 'only Phaethon may create a group')
       }
       if (!this.userByShortId(ownerShortId)) throw new IdentityError(404, 'groups/unknown-user', 'no active user has that short number')
-      const now = this.now()
+      const now = this.#now()
       const info = this.#db.prepare('INSERT INTO groups (name, owner_short_id, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
         .run(groupName, ownerShortId, callerShortId, now, now)
       const groupId = Number(info.lastInsertRowid)
@@ -387,7 +286,7 @@ export class IdentityStore {
         throw new IdentityError(409, 'groups/owner-required', 'the designated group owner must remain a member')
       }
       const member = this.#db.prepare('SELECT * FROM group_members WHERE group_id = ? AND user_short_id = ?').get(groupId, userShortId)
-      const now = this.now()
+      const now = this.#now()
       if (action === 1 && !member) {
         this.#db.prepare('INSERT INTO group_members (group_id, user_short_id, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
           .run(groupId, userShortId, callerShortId, callerShortId, now, now)
@@ -430,7 +329,7 @@ export class IdentityStore {
       if (existing !== undefined && existing.deleted_at === null) {
         if (password !== undefined && password !== '' && existing.password === null) {
           this.#db.prepare('UPDATE users SET password = ?, updated_at = ? WHERE id = ?')
-            .run(hashPassword(assertPassword(password)), this.now(), existing.id)
+            .run(hashPassword(assertPassword(password)), this.#now(), existing.id)
           return { user: publicUser(this.#db.prepare('SELECT * FROM users WHERE id = ?').get(existing.id)), created: false }
         }
         return { user: publicUser(existing), created: false }
@@ -442,7 +341,7 @@ export class IdentityStore {
       if (this.#db.prepare('SELECT 1 FROM users WHERE name = ?').get(login) !== undefined) {
         throw new IdentityError(409, 'identity/name-taken', 'that name is already registered')
       }
-      const now = this.now()
+      const now = this.#now()
       const info = this.#db.prepare(
         'INSERT INTO users (short_id, name, is_admin, password, created_at, updated_at) VALUES (?, ?, 1, ?, ?, ?)',
       ).run(PHAETHON_SHORT_ID, login, password === undefined || password === '' ? null : hashPassword(assertPassword(password)), now, now)
@@ -457,17 +356,6 @@ export class IdentityStore {
     return row === undefined ? undefined : publicUser(row)
   }
 
-  /** One user by login name. */
-  userByName(name) {
-    const row = this.#db.prepare('SELECT * FROM users WHERE name = ? AND deleted_at IS NULL').get(String(name ?? '').trim())
-    return row === undefined ? undefined : publicUser(row)
-  }
-
-  /** Every live user in short-number order. */
-  listUsers() {
-    return this.#db.prepare('SELECT * FROM users WHERE deleted_at IS NULL ORDER BY short_id').all().map(publicUser)
-  }
-
   /** Mint one invite code for an administrator. */
   createInvite(adminShortId) {
     return this.#transaction(() => {
@@ -477,23 +365,11 @@ export class IdentityStore {
         throw new IdentityError(403, 'identity/forbidden', 'only Phaethon may create invites')
       }
       const code = mintInviteCode()
-      const now = this.now()
+      const now = this.#now()
       this.#db.prepare('INSERT INTO invites (code, created_by, created_at, updated_at) VALUES (?, ?, ?, ?)')
         .run(code, admin.id, now, now)
       return { code, createdAt: now }
     })
-  }
-
-  /** One invite's state, without exposing who redeemed it. */
-  inviteState(code) {
-    const row = this.#db.prepare('SELECT * FROM invites WHERE code = ? AND deleted_at IS NULL').get(canonicalInviteCode(code))
-    if (row === undefined) return undefined
-    return {
-      code: row.code,
-      createdAt: row.created_at,
-      redeemed: row.redeemed_by !== null,
-      redeemedAt: row.redeemed_at,
-    }
   }
 
   /**
@@ -513,7 +389,7 @@ export class IdentityStore {
       if (this.#db.prepare('SELECT 1 FROM users WHERE name = ?').get(login) !== undefined) {
         throw new IdentityError(409, 'identity/name-taken', 'that name is already registered')
       }
-      const now = this.now()
+      const now = this.#now()
       // Allocation reads every row, deleted ones included, so a removed identity's
       // short number is never handed out a second time.
       const next = this.#db.prepare('SELECT COALESCE(MAX(short_id), 0) + 1 AS value FROM users').get()
@@ -537,7 +413,7 @@ export class IdentityStore {
     if (row === undefined || row.password === null || !verifyPassword(String(password ?? ''), row.password)) {
       throw new IdentityError(401, 'identity/bad-credentials', 'name and password do not match an identity')
     }
-    const now = this.now()
+    const now = this.#now()
     return { user: publicUser(row), token: this.#mintSession(row.id, now) }
   }
 
@@ -551,26 +427,17 @@ export class IdentityStore {
     `).get(sessionTokenDigest(token))
     if (row === undefined) return undefined
     if (row.revoked_at !== null) return undefined
-    if (row.expires_at <= this.now()) return undefined
+    if (row.expires_at <= this.#now()) return undefined
     return publicUser(row)
   }
 
   /** Revoke one session token; answers whether a live session was revoked. */
   signOut(token) {
-    const now = this.now()
+    const now = this.#now()
     const info = this.#db.prepare(
       'UPDATE sessions SET revoked_at = ?, updated_at = ? WHERE digest = ? AND revoked_at IS NULL AND deleted_at IS NULL',
     ).run(now, now, sessionTokenDigest(token))
     return info.changes > 0
-  }
-
-  /** Live session count for one short number. */
-  liveSessionCount(shortId) {
-    const user = this.#db.prepare('SELECT id FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(shortId))
-    if (user === undefined) return 0
-    return Number(this.#db.prepare(
-      'SELECT COUNT(*) AS value FROM sessions WHERE user_id = ? AND deleted_at IS NULL AND revoked_at IS NULL AND expires_at > ?',
-    ).get(user.id, this.now()).value)
   }
 
   /** Mint and store one session for a user row id. */

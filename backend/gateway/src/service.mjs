@@ -12,6 +12,49 @@
  */
 import { Service } from '@deepseek-ai/cordis'
 
+/**
+ * The native catalog owns the modality vocabulary. Importing the runtime value
+ * instead of keeping a local set means an upstream modality is accepted here
+ * without a product edit.
+ *
+ * There is deliberately no fallback list. The load is a separate function so a
+ * test can exercise the failure without a full boot: it names both the module
+ * specifier and the peer whose absence caused it.
+ */
+const NATIVE_CATALOG_MODULE = '@deepseek-ai/dsh-llm-pi-ai/src/catalog.ts'
+
+/**
+ * Load the native modality list from the catalog module.
+ * @param {string} specifier - the catalog module specifier to import.
+ * @returns {Promise<string[]>} the native modality list.
+ */
+export async function loadNativeModalities(specifier = NATIVE_CATALOG_MODULE) {
+  try {
+    const { MODALITIES } = await import(specifier)
+    if (!Array.isArray(MODALITIES) || MODALITIES.length === 0) {
+      throw new Error(`"${specifier}" exports no MODALITIES list`)
+    }
+    return MODALITIES
+  } catch (error) {
+    const peer = specifier.split('/').slice(0, 2).join('/')
+    throw new Error(`cannot load the native input modality list from "${specifier}";`
+      + ` install the ${peer} peer at the pinned dsh version (${error?.message ?? String(error)})`,
+    { cause: error })
+  }
+}
+
+// The import is caught so the failure can be thrown from the service
+// constructor: a module-scope throw is reported by the loader only as "failed
+// to import", while a construction failure carries this message into the boot
+// diagnostic.
+let MODALITIES
+let catalogFailure
+try {
+  MODALITIES = await loadNativeModalities()
+} catch (error) {
+  catalogFailure = error
+}
+
 
 /** One refusal with the HTTP status and product error code the route answers with. */
 export class GatewayError extends Error {
@@ -26,11 +69,12 @@ export class GatewayError extends Error {
 /** A provider route key is the same grammar the credential seam uses for its id half. */
 const PROVIDER_ID = /^[a-z][a-z0-9-]*$/
 
-/** Fields a shared model entry may declare. */
-const MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input'])
-
-/** Input modalities this product declares; the adapter still owns the endpoint's truth. */
-const MODALITIES = new Set(['text', 'image'])
+/**
+ * Model fields the phone may edit. This is the one authority for the allowlist:
+ * the route validator, the change projection and the previous-entry overlay all
+ * read it, and the test that derives the deployment-owned fields imports it.
+ */
+export const PHONE_EDITABLE_MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input'])
 
 /** Draft fields outside `models` reshape every model on the route. */
 const ROUTE_WIDE_FIELDS = ['api', 'baseURL', 'apiKeyEnv']
@@ -55,7 +99,7 @@ function onlyFields(object, allowed, label) {
 /** Validate one model entry; unknown fields are refused rather than silently dropped. */
 function modelEntry(entry, index) {
   if (!isPlainObject(entry)) throw invalid(`models[${index}] must be an object`)
-  onlyFields(entry, MODEL_FIELDS, `models[${index}]`)
+  onlyFields(entry, PHONE_EDITABLE_MODEL_FIELDS, `models[${index}]`)
   if (typeof entry.id !== 'string' || entry.id.trim() === '') throw invalid(`models[${index}].id must be a non-empty string`)
   if (entry.name !== undefined && (typeof entry.name !== 'string' || entry.name.trim() === '')) throw invalid(`models[${index}].name must be a non-empty string`)
   for (const field of ['contextWindow', 'maxTokens']) {
@@ -66,7 +110,7 @@ function modelEntry(entry, index) {
   if (entry.input !== undefined) {
     if (!Array.isArray(entry.input) || entry.input.length === 0) throw invalid(`models[${index}].input must be a non-empty array`)
     for (const modality of entry.input) {
-      if (!MODALITIES.has(modality)) throw invalid(`models[${index}].input does not know modality "${String(modality)}"`)
+      if (!MODALITIES.includes(modality)) throw invalid(`models[${index}].input does not know modality "${String(modality)}"`)
     }
   }
   return { ...entry }
@@ -108,7 +152,7 @@ export function affectedModels(previous, next) {
   for (const field of ROUTE_WIDE_FIELDS) {
     if (previous[field] !== next[field]) return null
   }
-  const project = model => JSON.stringify(Object.fromEntries(Object.entries(model).filter(([key]) => MODEL_FIELDS.has(key))))
+  const project = model => JSON.stringify(Object.fromEntries(Object.entries(model).filter(([key]) => PHONE_EDITABLE_MODEL_FIELDS.has(key))))
   const changed = new Set()
   const before = new Map((previous.models ?? []).map(model => [model.id, model]))
   const after = new Map((next.models ?? []).map(model => [model.id, model]))
@@ -119,12 +163,15 @@ export function affectedModels(previous, next) {
 }
 
 /**
- * Carry the deployment-owned model fields (thinking capability, wire compat)
- * from the stored profile onto a draft that no longer names them: the phone
- * edits ids, labels, windows and modalities, and saving must not silently strip
- * the thinking configuration the bundle declared.
+ * Overlay the phone-editable fields of a draft model onto the previous entry of
+ * the same id. Every other field the previous entry carries — thinking
+ * capability, wire compat, and any field upstream adds later — stays as the
+ * deployment declared it, so a save cannot silently drop a field the phone has
+ * no way to send. A draft that omits an editable field clears it, matching the
+ * phone's "blank means unset" drafts; a model id with no previous entry is
+ * stored exactly as the draft declares it.
  */
-function keepDeploymentFields(previous, draft) {
+function overlayPhoneEditableModelFields(previous, draft) {
   if (previous === undefined || !Array.isArray(draft.models)) return draft
   const before = new Map((previous.models ?? []).map(model => [model.id, model]))
   return {
@@ -132,11 +179,12 @@ function keepDeploymentFields(previous, draft) {
     models: draft.models.map(model => {
       const prior = before.get(model.id)
       if (prior === undefined) return model
-      return {
-        ...model,
-        ...prior.reasoningEfforts === undefined ? {} : { reasoningEfforts: prior.reasoningEfforts },
-        ...prior.compat === undefined ? {} : { compat: prior.compat },
+      const merged = { ...prior }
+      for (const field of PHONE_EDITABLE_MODEL_FIELDS) {
+        if (model[field] === undefined) delete merged[field]
+        else merged[field] = model[field]
       }
+      return merged
     }),
   }
 }
@@ -145,10 +193,11 @@ function keepDeploymentFields(previous, draft) {
 export class GatewayService extends Service {
   constructor(ctx) {
     super(ctx, 'ourfairyGateway')
+    if (catalogFailure !== undefined) throw catalogFailure
   }
 
-  /** The native settings service, or a named refusal when the profile cannot be edited. */
-  settings() {
+  /** The native settings service; refuses when this deployment mounts no configuration editor. */
+  requireConfigurationEditor() {
     const settings = this.ctx.get('settings')
     if (settings === undefined) {
       throw new GatewayError(503, 'gateway/configuration-unavailable',
@@ -158,7 +207,7 @@ export class GatewayService extends Service {
   }
 
   rows() {
-    return this.settings().describe()
+    return this.requireConfigurationEditor().describe()
   }
 
   row(namespace) {
@@ -272,7 +321,7 @@ export class GatewayService extends Service {
 
   /** Read the shared configuration, live usage and the editability facts behind them. */
   async read() {
-    // A deployment without the editor answers 503 from settings(); reaching here
+    // A deployment without the editor answers 503 from requireConfigurationEditor(); reaching here
     // means the editor is mounted, so only per-row presence can differ.
     const capability = { selection: this.row('agent-default-model') !== undefined,
       routes: this.row('llm-pi-ai') !== undefined, asr: this.row('speech') !== undefined }
@@ -332,11 +381,22 @@ export class GatewayService extends Service {
     if (reasoningEffort !== undefined && (typeof reasoningEffort !== 'string' || reasoningEffort === '')) {
       throw new GatewayError(400, 'gateway/invalid-selection', 'reasoningEffort must be a non-empty string when present')
     }
-    await this.edit(() => this.settings().mutate('agent-default-model', [
-      { op: 'set', path: ['provider'], value: provider },
-      { op: 'set', path: ['model'], value: model },
-      reasoningEffort === undefined ? { op: 'unset', path: ['reasoningEffort'] } : { op: 'set', path: ['reasoningEffort'], value: reasoningEffort },
-    ]))
+    // The native entry serializes saves in submission order and keeps the
+    // composition entry when no configuration editor is mounted. That silent
+    // no-op must not become a successful save here: the settings service itself
+    // injects configEditor, so its absence is the editor's absence.
+    this.requireConfigurationEditor()
+    // Omitting the effort follows the composition default, the value the old
+    // field-level unset resolved to. The native entry stores a complete
+    // selection, so resolve that default from the same settings row instead of
+    // dropping the field; a selection equal to the composition still removes
+    // the profile row, which is what clears the override.
+    const effort = reasoningEffort ?? this.row('agent-default-model')?.base?.reasoningEffort
+    await this.edit(() => this.ctx.agentDefaultModel.saveSelection({
+      provider,
+      model,
+      ...(effort === undefined ? {} : { reasoningEffort: effort }),
+    }))
     return { selection: this.ctx.agentDefaultModel.currentSelection(), applies: 'next-turn' }
   }
 
@@ -363,13 +423,13 @@ export class GatewayService extends Service {
       throw new GatewayError(400, 'gateway/invalid-route', `provider "${provider}" is owned by another adapter and is not editable here`)
     }
     const previous = this.providerProfile(provider)
-    const profile = keepDeploymentFields(previous, routeDraft(body))
+    const profile = overlayPhoneEditableModelFields(previous, routeDraft(body))
     const affected = affectedModels(previous, profile)
     await this.guard(provider, affected, () => this.edit(() =>
       // The whole dictionary is written from the resolved values: a field path
       // write would merge into the raw row, which still holds the bundle's
       // environment expressions, and those must never reach the profile.
-      this.settings().mutate('llm-pi-ai', [{
+      this.requireConfigurationEditor().mutate('llm-pi-ai', [{
         op: 'set', path: ['providers'], value: { ...this.providers(), [provider]: profile },
       }])))
     const selection = this.ctx.agentDefaultModel.currentSelection()
@@ -390,7 +450,7 @@ export class GatewayService extends Service {
     await this.guard(provider, null, () => this.edit(() => {
       const providers = this.providers()
       delete providers[provider]
-      return this.settings().mutate('llm-pi-ai', [{ op: 'set', path: ['providers'], value: providers }])
+      return this.requireConfigurationEditor().mutate('llm-pi-ai', [{ op: 'set', path: ['providers'], value: providers }])
     }))
     return { provider }
   }
@@ -418,7 +478,7 @@ export class GatewayService extends Service {
       }
       fields.apiKeyEnv = input.apiKeyEnv
     }
-    await this.edit(() => this.settings().update('speech', fields))
+    await this.edit(() => this.requireConfigurationEditor().update('speech', fields))
     return { asr: await this.asrView() }
   }
 }

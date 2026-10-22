@@ -1,3 +1,5 @@
+> 2026-10-20 状态：日期化记录。本文记录 2026-10-14 的判断，不描述当前实现。
+
 # Android / vivo 通知结论审计
 
 审计日期：2026-10-14。对象：`domestic-android-notification-vivopush-revival.md` 与 `docs/decisions/.tmp-q4-brief.md`。本审计独立读取 Android Developers 官方中国镜像正文、vivo 开放平台 `webapi/doc/info?id=…` 正文，不以旧研究的引用互相证明。未修改旧研究、未实机测试、未注册开发者账号。

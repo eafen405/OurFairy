@@ -15,13 +15,9 @@
  * so a hook registered at evaluation time cannot answer for it.
  */
 import { createRequire, registerHooks } from 'node:module'
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { repoRoot } from './backend.mjs'
-
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const dshRoot = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
+import { dshDir, repoRoot } from './backend.mjs'
 
 /**
  * Each package's own manifest anchors Node's lookup, so a subpath export
@@ -29,13 +25,20 @@ const dshRoot = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
  * `exports` map instead of a hand-written file path.
  */
 const anchors = {
-  '@deepseek-ai/cordis': join(dshRoot, 'vendor', 'cordis', 'package.json'),
-  '@deepseek-ai/dsh-session': join(dshRoot, 'packages', 'core', 'session', 'package.json'),
-  '@deepseek-ai/dsh-session-projection': join(dshRoot, 'packages', 'session', 'session-projection', 'package.json'),
-  '@deepseek-ai/dsh-llm': join(dshRoot, 'packages', 'llm', 'llm', 'package.json'),
-  '@deepseek-ai/dsh-agent': join(dshRoot, 'packages', 'core', 'agent', 'package.json'),
+  '@deepseek-ai/cordis': join(dshDir, 'vendor', 'cordis', 'package.json'),
+  '@deepseek-ai/dsh-app-boot': join(dshDir, 'packages', 'boot', 'app-boot', 'package.json'),
+  '@deepseek-ai/dsh-session': join(dshDir, 'packages', 'core', 'session', 'package.json'),
+  '@deepseek-ai/dsh-session-projection': join(dshDir, 'packages', 'session', 'session-projection', 'package.json'),
+  '@deepseek-ai/dsh-llm': join(dshDir, 'packages', 'llm', 'llm', 'package.json'),
+  '@deepseek-ai/dsh-llm-pi-ai': join(dshDir, 'packages', 'llm', 'llm-pi-ai', 'package.json'),
+  '@deepseek-ai/dsh-llm-mock-server': join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'package.json'),
+  '@deepseek-ai/dsh-agent': join(dshDir, 'packages', 'core', 'agent', 'package.json'),
+  '@deepseek-ai/dsh-jobs': join(dshDir, 'packages', 'jobs', 'jobs', 'package.json'),
+  '@deepseek-ai/schemastery': join(dshDir, 'vendor', 'schemastery', 'package.json'),
+  '@ourfairy/dsh-identity': join(repoRoot, 'backend', 'identity', 'package.json'),
+  '@ourfairy/dsh-http': join(repoRoot, 'backend', 'http', 'package.json'),
   '@ourfairy/dsh-sessions': join(repoRoot, 'backend', 'sessions', 'package.json'),
-  zod: join(dshRoot, 'package.json'),
+  zod: join(dshDir, 'package.json'),
 }
 
 /** The first two path segments of a specifier: the package a bare request names. */

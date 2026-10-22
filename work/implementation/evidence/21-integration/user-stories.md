@@ -9,7 +9,7 @@
 | 3 | 作为用户，我希望拥有按注册顺序分配的简短用户编号，以便 Fairy 能明确指定投递对象。 | #26 [03-identity](../03-identity/README.md) |
 | 4 | 作为法厄同，我希望自己的用户编号为 1，并由 Fairy 称呼为“主人”，以便身份与既定角色一致。 | #26 [03-identity](../03-identity/README.md)、#28 [05-remote-chat-backend](../05-remote-chat-backend/README.md) |
 | 5 | 作为用户，我希望在同一个 APK 中看到符合自身身份的入口，以便无需维护不同客户端。 | #26 [03-identity](../03-identity/README.md)、#43 [20-gateway](../20-gateway/README.md) |
-| 6 | 作为法厄同，我希望在网关中对话，管理共用供应商、模型和 ASR 连接配置，并让所有会话从下一轮回复采用选定模型，以便维护系统且不打断正在执行的回复。 | #43 [20-gateway](../20-gateway/README.md) |
+| 6 | 作为法厄同，我希望在网关管理共用供应商、模型和 ASR 连接配置，并让所有会话从下一轮回复采用选定模型，以便维护系统且不打断正在执行的回复。 | #43 [20-gateway](../20-gateway/README.md) |
 | 7 | 作为代理人，我希望通过对话使用 Fairy，以便不必接触系统管理配置。 | #26 [03-identity](../03-identity/README.md)、#43 [20-gateway](../20-gateway/README.md) |
 | 8 | 作为用户，我希望系统管理者也不能凭管理身份读取我的个人内容，以便管理与个人隐私分别受到约束。 | #27 [04-owned-sessions-backend](../04-owned-sessions-backend/README.md) |
 | 9 | 作为用户，我希望共享模型配置时仍保持自己的上下文独立，以便他人的对话不混入我的会话。 | #27 [04-owned-sessions-backend](../04-owned-sessions-backend/README.md) |

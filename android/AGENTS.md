@@ -1,6 +1,6 @@
 # OurFairy Android
 
-这是 OurFairy 的 Android 客户端。产品规则、术语与版本组合参见相邻 `../OurFairy/` 的 `AGENTS.md`、`CODING_STANDARDS.md`、`GLOSSARY.md`；跨仓集成时再读取 `work/implementation/CONVENTIONS.md` 和 `combo.json`。
+这是 OurFairy 的 Android 客户端，位于本仓库 `android/` 目录，与后端同处一个提交版本。产品规格、术语与版本组合参见仓库根的 [AGENTS.md](../AGENTS.md)、[CODING_STANDARDS.md](../CODING_STANDARDS.md)、[GLOSSARY.md](../GLOSSARY.md) 与 [README.md](../README.md)；客户端专有的词另见 [客户端词汇表](GLOSSARY.md)，版本组合的权威是 [combo.json](../combo.json)。
 
 ## 实现
 
@@ -14,7 +14,7 @@
 
 根主题是 `ui/fairy/FairyAppTheme.kt` 的 Material 3 Expressive 主题。沿用 Fairy 视觉、现有窗口和折叠配置组，使用 expressive motion、较大圆角及整行点击区域。
 
-显示偏好只由 `DisplayPreferencesStore` 管理。按当前页面需要扩展本地偏好。
+显示偏好只由 `data/datastore/DisplayPreferences.kt` 的 `DisplayPreferencesStore` 管理，界面入口在 `ui/identity/RemoteDisplayPreferences.kt`。按当前页面需要扩展本地偏好。
 
 ## 验证
 

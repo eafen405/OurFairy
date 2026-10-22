@@ -1,0 +1,19 @@
+{
+  "name": "@ourfairy/dsh-http",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OurFairy product HTTP transport envelope: the bounded JSON request reader, the bearer credential parser, the JSON response writer, and the POST wrapper every product route shares.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./http": "./src/http.mjs",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "locale/*.json"
+  ]
+}

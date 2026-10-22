@@ -1,0 +1,21 @@
+{
+  "parent": 132,
+  "title": "收窄业务库公开面：删除零调用方法、DDL 常量按领域归位",
+  "children": [
+    {
+      "file": "01-public-surface.md",
+      "issue": 143,
+      "title": "公开面收窄：删除四个零生产调用的公开方法，readDelivery 转私有"
+    },
+    {
+      "file": "02-schema-modules.md",
+      "issue": 144,
+      "title": "DDL 常量按领域归位：五组 DDL 搬进 src/schema/ 下的领域模块"
+    },
+    {
+      "file": "03-closeout.md",
+      "issue": 145,
+      "title": "收口：证据索引、两轴复核与全量门禁"
+    }
+  ]
+}

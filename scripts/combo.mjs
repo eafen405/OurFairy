@@ -16,8 +16,8 @@
  *     HEAD is the branch tip or an ancestor of it, i.e. that the worktree really
  *     is based on the combination.
  *
- * The research upstream SHA is reported separately and is never a product
- * deliverable.
+ * The research upstream baselines are not part of the combination; they live in
+ * docs/research/README.md.
  *
  * Usage:
  *   node scripts/combo.mjs verify [--json] [--allow-drift]
@@ -99,7 +99,6 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
       path,
       branch: entry.integrationBranch,
       lock: entry.lock ?? 'commit',
-      researchUpstreamSha: entry.researchUpstreamSha ?? null,
     }
     if (!existsSync(join(path, '.git'))) {
       const failure = `${key}: checkout missing at ${path}${envName === undefined ? '' : ` (override ${envName})`}`
@@ -146,7 +145,6 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
       ...base,
       expected: locked,
       actual: tip,
-      productHasOwnCommits: entry.researchUpstreamSha !== null && tip !== entry.researchUpstreamSha,
       ok,
     }
     if (!ok) {
@@ -180,7 +178,6 @@ function androidSourceRow(root, source) {
     key: 'android source',
     role: source?.role ?? null,
     path,
-    branch: source?.branch ?? null,
     lock: 'declaration',
     expected,
   }
@@ -213,8 +210,7 @@ function resultLabel(row) {
   if (row.lock === 'integration-branch') {
     return `ok (worktree ${row.headIsTip ? 'is the integration tip' : 'is based on the integration tip'})`
   }
-  return `ok${row.researchUpstreamSha !== null && !row.productHasOwnCommits
-    ? ' (research upstream only; no product commits yet)' : ''}`
+  return 'ok'
 }
 
 /**
@@ -239,19 +235,38 @@ function scopeOf(name) {
 }
 
 /**
- * Every entry of a composed tree, including the rows nested in a group's
- * `config` list. The loader mounts group children the same way it mounts
- * top-level rows, so a package set comparison that walked only the top level
- * would miss them.
+ * The leaf rows of a composed tree.
+ *
+ * Group rows are containers, not rows to check: they are dropped, and their
+ * children are returned in their place. A child of a disabled group inherits
+ * that state (`disabled: true`), because the loader's effective state walks
+ * every ancestor group (`Entry.disabled`) while the composed rows keep only
+ * their own flag. Materializing it here lets a row-level check see that a row
+ * inside a disabled group is disabled at runtime.
+ *
+ * Idempotent: the result contains no group rows, so flattening it again returns
+ * the same rows.
  * @param {object[]} entries
  * @returns {object[]}
  */
 export function flattenEntries(entries) {
-  return entries.flatMap(entry => [
-    entry,
-    // The loader treats any truthy `group` with a list `config` as nesting.
-    ...(entry.group && Array.isArray(entry.config) ? flattenEntries(entry.config) : []),
-  ])
+  const leaves = []
+  const visit = (list, inheritedDisabled) => {
+    for (const entry of list) {
+      const disabled = inheritedDisabled || entry.disabled === true
+      if (entry.group) {
+        // The loader treats a truthy `group` as a container; its children are
+        // mounted in the container's place.
+        if (Array.isArray(entry.config)) visit(entry.config, disabled)
+      } else if (disabled && entry.disabled !== true) {
+        leaves.push({ ...entry, disabled: true })
+      } else {
+        leaves.push(entry)
+      }
+    }
+  }
+  visit(entries, false)
+  return leaves
 }
 
 /**
@@ -483,13 +498,15 @@ const SESSION_HISTORY_EXPORT = '@deepseek-ai/dsh-agent/session-history'
  * Every required native capability that is not mounted, plus the public
  * history export when it does not resolve.
  *
- * @param {object[]} rows - the composed profile rows, as dsh's loader returns them.
+ * @param {object[]} rows - the composed profile rows, as dsh's loader returns them;
+ *   rows nested in a group's `config` are mounted too, so the lookup flattens,
+ *   including the disabled state inherited from an ancestor group.
  * @param {(specifier: string) => string} resolveExport - resolves from the dsh installation.
  * @returns {string[]} one message per missing, disabled, or drifted capability.
  */
 export function nativeCapabilityFailures(rows, resolveExport) {
   const failures = []
-  const mounted = new Map(rows.map(row => [row.id, row]))
+  const mounted = new Map(flattenEntries(rows).map(row => [row.id, row]))
   for (const { row: id, name } of REQUIRED_NATIVE_ROWS) {
     const entry = mounted.get(id)
     if (entry === undefined) {
@@ -542,7 +559,9 @@ export function verifyInstalledNativeCapabilities({ binName, bundlePackage, inst
     return { ok: false, checked: [], failures: [`${bundlePackage} was not loaded from ${profileDir}: ${reason};`
       + ` run 'npm run backend:start -- --reinstall'`] }
   }
-  const rows = boot.composeEntries([...profile.layers.map(entry => entry.patches), profile.patches])
+  // Flattened rows are what the check consumes: the installed layer's rows can
+  // be nested in a group, and a disabled group must reach its children.
+  const rows = flattenEntries(boot.composeEntries([...profile.layers.map(entry => entry.patches), profile.patches]))
   const failures = nativeCapabilityFailures(rows, specifier => createRequire(installAnchor).resolve(specifier))
   return {
     ok: failures.length === 0,
@@ -555,7 +574,7 @@ function printTable(rows) {
   const header = ['row', 'branch', 'expected', 'actual', 'result']
   const cells = rows.map((row) => [
     row.key,
-    row.branch,
+    row.branch === null || row.branch === undefined ? '-' : String(row.branch),
     row.expected === null || row.expected === undefined ? '-' : String(row.expected).slice(0, 16),
     row.actual === null || row.actual === undefined ? 'MISSING' : String(row.actual).slice(0, 16),
     resultLabel(row),
@@ -570,26 +589,23 @@ function printShow(combo) {
   for (const [key, entry] of Object.entries(combo.repos)) {
     lines.push(`${key} (${entry.role}, lock: ${entry.lock ?? 'commit'})`)
     lines.push(`  path                  ${repoPath(combo, key)}`)
-    lines.push(`  fork remote           ${entry.remoteName ?? 'origin'} ${entry.remoteUrl ?? ''}`.trimEnd())
+    if (entry.remoteUrl !== undefined) {
+      lines.push(`  fork remote           ${entry.remoteName ?? 'origin'} ${entry.remoteUrl}`)
+    }
     lines.push(`  integration branch    ${entry.integrationBranch}`)
     lines.push(entry.productCommit === undefined || entry.productCommit === null
       ? '  productCommit         (self repository: the integration branch tip is the lock)'
       : `  productCommit         ${entry.productCommit}`)
-    lines.push(`  researchUpstreamSha   ${entry.researchUpstreamSha ?? '(not applicable)'}`
-      + `${entry.researchUpstreamRef === undefined ? '' : ` @ ${entry.researchUpstreamRef}`}`)
   }
   if (combo.androidSource !== undefined) {
     const source = combo.androidSource
     lines.push(`android source (${source.role}, lock: declaration)`)
-    lines.push(`  repository            ${source.repository}`)
-    lines.push(`  remote                ${source.remoteUrl}`)
-    lines.push(`  branch                ${source.branch}`)
     lines.push(`  commit                ${source.commit}`)
     lines.push(`  declaration           ${resolve(repoRoot, source.declaration)}`)
-    lines.push(`  note                  ${source.note}`)
   }
   lines.push(`backend                 profile ${combo.backend.profileName}; bundle ${combo.backend.bundlePackage} (${combo.backend.bundlePathInRepo})`)
   lines.push(`launcher                ${combo.backend.launcher}; ${combo.backend.pnpmInvocation}`)
+  lines.push('research baseline       docs/research/README.md (upstream SHAs, not product commits)')
   return lines.join('\n')
 }
 

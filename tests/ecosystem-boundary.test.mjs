@@ -112,6 +112,27 @@ const CITED_CHECKS = [
     'agentless filesystem and script Interface calls refuse instead of inheriting a default user'],
   ['tests/attachments.test.mjs',
     'unfinished and foreign receipts never grant message or download access, including identical stored bytes'],
+  // The six native-semantic guards (spec #135, closeout #169). Each is a
+  // vocabulary or behavior translation whose drift would otherwise be silent;
+  // the doc records the upstream change and the test that fails on it.
+  ['tests/native-job-status.test.mjs',
+    'native job status vocabulary matches the projection'],
+  ['tests/native-job-stop-outcome.test.mjs',
+    'native job stop outcome vocabulary matches the adapter'],
+  ['tests/gateway.test.mjs',
+    'a route saved from the phone keeps model fields the draft does not edit'],
+  // The selection save's call path is pinned at the service seam; the booted
+  // case below only fixes sequential last-wins, not overlapping serialization.
+  ['tests/gateway-service.test.mjs',
+    'a selection save goes through the native default-model entry'],
+  ['tests/gateway-service.test.mjs',
+    'a selection save refuses when the profile cannot be edited'],
+  ['tests/gateway.test.mjs',
+    'consecutive selection saves commit in submission order'],
+  ['tests/gateway.test.mjs',
+    'the gateway accepts every native input modality'],
+  ['tests/remote-chat.test.mjs',
+    'the same request id sent twice in a row produces one message'],
 ]
 
 test('the boundary doc is reachable from the repository README', () => {
