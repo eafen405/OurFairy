@@ -1,5 +1,5 @@
 /** Narrow product routes over native Agent/SessionQuery, without the upstream controller. */
-import { postHandler } from '@ourfairy/dsh-identity/http'
+import { postHandler } from '@ourfairy/dsh-http/http'
 import { RemoteChat } from './service.mjs'
 import { SessionRuntime } from './runtime.mjs'
 import { ChatRuntimeFacade } from './runtime-facade.mjs'

@@ -1,3 +1,5 @@
+> 2026-10-20 状态：已过期。现行状态见[证据索引](../evidence/README.md)（T7–T9 已分别在 #30、#31、#32 关闭）；本文保留 T7–T9 阶段当时的交接记录，不描述当前实现。
+
 # T7–T9 handoff — stop after the reviewed stage
 
 Authorized stage: T7/#30, T8/#31 and T9/#32, one independent two-axis

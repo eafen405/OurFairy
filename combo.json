@@ -1,17 +1,12 @@
 {
   "schemaVersion": 1,
   "product": "OurFairy v1",
-  "description": "The version combination the OurFairy v1 backend is built and tested against: the OurFairy integration branch, the exact commit of the dsh fork, and the imported Android client's source declaration. A worktree obtains the same combination by branching from the OurFairy integrationBranch tip and running scripts/combo.mjs verify.",
   "repos": {
     "ourfairy": {
       "role": "product",
       "lock": "integration-branch",
       "localPath": "/home/eafen405/projects/OurFairy",
-      "remoteName": "origin",
-      "remoteUrl": "https://github.com/eafen405/OurFairy.git",
-      "integrationBranch": "integration/ourfairy-v1",
-      "researchUpstreamSha": null,
-      "note": "Self repository: verify asserts the current worktree HEAD is the integration branch tip or an ancestor of it. Product modules live under backend/, launchers under scripts/."
+      "integrationBranch": "integration/ourfairy-v1"
     },
     "dsh": {
       "role": "backend-harness",
@@ -20,26 +15,20 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/deepseek-harness.git",
       "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "5b8ec0f175d3d7ba0fc7f120165d5cad6fd81aaf",
-      "researchUpstreamSha": "d743267388641bc76f17c45ce8b4c231aed1d32c",
-      "researchUpstreamRef": "origin/master",
+      "productCommit": "42133b30ad953649b6929078deda84d73cd89e1f",
       "requiredBuild": [
         "corepack pnpm@11.28.5 install",
         "corepack pnpm@11.28.5 run build:lib:host",
         "corepack pnpm@11.28.5 run build:lib:client",
         "corepack pnpm@11.28.5 run build:native-system"
       ],
-      "note": "productCommit is the fork integration branch tip. It carries durable session ownership, first-class delivery of a peer Session message, and the admission generalization for a registered second credential. All four requiredBuild commands must run: build:lib:host builds the CLI and host libraries, build:lib:client emits the client-face Node loader entries that the connection row imports, and build:native-system builds the flock addon the durable JSONL writer requires."
+      "note": "All four requiredBuild commands must run: build:lib:host builds the CLI and host libraries, build:lib:client emits the client-face Node loader entries the connection row imports, and build:native-system builds the flock addon the durable JSONL writer requires."
     }
   },
   "androidSource": {
     "role": "android-client",
-    "repository": "eafen405/rikkahub",
-    "remoteUrl": "https://github.com/eafen405/rikkahub.git",
-    "branch": "product/ourfairy-v1",
     "commit": "460109d1b89b824a2ddb7f3201d8d3f7af7e02ce",
-    "declaration": "android/ourfairy-source.json",
-    "note": "The Android client was imported as a snapshot at this commit and no longer follows upstream. The in-repo declaration android/ourfairy-source.json is what verify compares against this record."
+    "declaration": "android/ourfairy-source.json"
   },
   "backend": {
     "profileName": "ourfairy",
@@ -50,29 +39,6 @@
     "launcher": "scripts/ourfairy-backend.mjs",
     "nodeRange": "^22.19.0 || >=24",
     "pnpmPin": "11.28.5",
-    "pnpmInvocation": "corepack pnpm@11.28.5",
-    "isolatedHomeEnv": "OURFAIRY_HOME",
-    "isolatedHomeDefault": "<worktree>/.ourfairy",
-    "dshHomeEnv": "DSH_HOME",
-    "dshHomeDefault": "<OURFAIRY_HOME>/dsh-home"
-  },
-  "androidToolchain": {
-    "androidHome": "/home/eafen405/Android/Sdk",
-    "platforms": [
-      "android-37.2"
-    ],
-    "buildTools": [
-      "37.0.0"
-    ],
-    "ndk": "28.2.13676358",
-    "cmake": true,
-    "java": "Temurin 21 (/home/eafen405/.local/bin/java)",
-    "gradle": "wrapper (cache /home/eafen405/.gradle)",
-    "localProperties": "sdk.dir=/home/eafen405/Android/Sdk (not committed; written in android/)",
-    "firstApkBuildTicket": 26,
-    "measuredNotes": [
-      "An android/ Gradle build auto-installs platform android-37.2 (compileSdk 37 resolves to 37.2), not android-37.0; recorded from the measured build output.",
-      "build-tools 37.0.0 and NDK 28.2.13676358 are the installed versions."
-    ]
+    "pnpmInvocation": "corepack pnpm@11.28.5"
   }
 }

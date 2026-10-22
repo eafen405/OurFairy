@@ -1,0 +1,87 @@
+name: check
+
+# The repository's only gate used to be a local pre-commit hook. In the 131–137
+# wave it was bypassed with `--no-verify` 27 times, and three of six integration
+# branches never left the machine, so nothing ran at all. This workflow runs the
+# same full gate on the server, where a bypassed hook cannot reach.
+on:
+  push:
+    branches:
+      - main
+      - 'integration/**'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # combo:verify compares HEAD with the integration branch, so the
+          # history and the remote branch refs have to be present.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Prepare Linux runtime dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq bubblewrap poppler-utils
+          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent -- true
+          pdftoppm -v
+
+      # combo:verify resolves the integration branch as a local ref.
+      - name: Materialize the integration branch
+        run: |
+          git branch --list integration/ourfairy-v1 | grep -q . \
+            || git branch integration/ourfairy-v1 origin/integration/ourfairy-v1
+
+      # The backend tests drive the real dsh launcher, so the companion checkout
+      # has to exist at the commit combo.json locks, with the four builds that
+      # combo.json names. OURFAIRY_DSH_DIR points the launcher and combo:verify
+      # at this clone instead of combo.json's local path.
+      - name: Check out the locked dsh combination
+        run: |
+          set -euo pipefail
+          locked=$(node -p "require('./combo.json').repos.dsh.productCommit")
+          git clone --quiet --branch product/ourfairy-v1 --single-branch \
+            "$(node -p "require('./combo.json').repos.dsh.remoteUrl")" "$RUNNER_TEMP/dsh"
+          actual=$(git -C "$RUNNER_TEMP/dsh" rev-parse HEAD)
+          if [ "$actual" != "$locked" ]; then
+            echo "::error::dsh product/ourfairy-v1 is $actual but combo.json locks $locked; update combo.json when the combination intentionally moves"
+            exit 1
+          fi
+          echo "OURFAIRY_DSH_DIR=$RUNNER_TEMP/dsh" >> "$GITHUB_ENV"
+
+      - name: Build the locked dsh combination
+        working-directory: ${{ runner.temp }}/dsh
+        run: |
+          set -euo pipefail
+          corepack enable
+          for step in \
+            "corepack pnpm@11.28.5 install" \
+            "corepack pnpm@11.28.5 run build:lib:host" \
+            "corepack pnpm@11.28.5 run build:lib:client" \
+            "corepack pnpm@11.28.5 run build:native-system"
+          do
+            echo "::group::$step"
+            $step
+            echo "::endgroup::"
+          done
+
+      - name: Full suite and combination
+        run: |
+          set -euo pipefail
+          npm test
+          npm run combo:verify

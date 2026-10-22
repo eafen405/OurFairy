@@ -1,3 +1,5 @@
+> 2026-10-20 状态：已过期。现行状态见[证据索引](../evidence/README.md)（T7–T9 已分别在 #30、#31、#32 关闭）；本文保留 T7–T9 阶段当时的计划记录，不描述当前实现。
+
 # T7–T9 stage
 
 Authorized scope: T7/#30, T8/#31 and T9/#32, then one independent two-axis staged code review, bounded corrections, publication and cleanup. Stop before T10 or any other ticket.

@@ -16,12 +16,10 @@ import { readFileSync, statSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { after, test } from 'node:test'
 import {
-  describeRun, httpJson, makeHome, removeHome, repoRoot, runBackendAsync, startArgs, startedPort, writeOverlay,
+  dshDir, describeRun, httpJson, makeHome, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay,
 } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'native-rows-password'
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
 const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
 
 const servers = []
@@ -72,6 +70,7 @@ async function until(port, token, sessionId, check, timeoutMs = 60000) {
     replyStatus: projection?.replyStatus, error: projection?.error,
     messages: projection?.messages?.map(message => [message.role, message.status, message.text.slice(0, 40)]),
     types: projection?.events?.map(event => event.type),
+    endings: projection?.events?.filter(event => event.type === 'turn/end').map(event => event.data.reason),
   })}`)
 }
 

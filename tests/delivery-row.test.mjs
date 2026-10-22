@@ -9,19 +9,16 @@
  * semantics with the row mounted.
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { after, test } from 'node:test'
 import {
-  describeRun, httpJson, makeHome, removeHome, repoRoot, runBackendAsync, startArgs, startedPort, writeOverlay,
+  dshDir, describeRun, httpJson, makeHome, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay,
 } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'delivery-row-password'
 const PENDING_TEXT = 'Pending behind the failing business update'
 const DISABLED_ATTEMPT = 'Never delivered while the row is disabled'
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
 const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
 
 const servers = []
