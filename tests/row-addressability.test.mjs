@@ -41,7 +41,7 @@ import { fileURLToPath } from 'node:url'
 import { after, test } from 'node:test'
 import { isolatedEnv, layoutOf } from '../scripts/ourfairy-composition.mjs'
 import {
-  dshDir, describeRun, httpJson, makeHome, messageBlocks, readReport, registerUser, removeHome,
+  dshDir, describeRun, httpJson, makeHome, messageBlocks, readReport, registerUser, removeHome, repoRoot,
   runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay,
 } from './helpers/backend.mjs'
 
