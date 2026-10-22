@@ -34,7 +34,7 @@ export const repoRoot = resolve(scriptDir, '..')
 export const LANDING_BRANCH = 'integration/ourfairy-v1'
 
 /** States that need a human. Everything else is either in progress or finished. */
-export const DEFECTS = Object.freeze(['unpushed', 'stale-worktree'])
+export const DEFECTS = Object.freeze(['unpushed', 'orphan', 'stale-worktree'])
 
 /**
  * Run a command, returning trimmed stdout or undefined when it fails.
@@ -94,9 +94,13 @@ export function specsInCheckout(root) {
       if (entry.isDirectory() && /^\d+$/u.test(entry.name)) specs.add(Number(entry.name))
     }
   }
-  const branches = git(root, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/integration/']) ?? ''
+  const branches = git(root, ['for-each-ref', '--format=%(refname:short)',
+    'refs/heads/integration/', 'refs/remotes/origin/integration/']) ?? ''
   for (const branch of branches.split('\n')) {
-    const match = /^integration\/spec-(\d+)$/u.exec(branch.trim())
+    // A spec branch that exists only on origin is still a spec this checkout
+    // knows about; without this, a completed-but-unfetched spec disappears from
+    // the report and the command still prints "no spec needs attention".
+    const match = /^(?:origin\/)?integration\/spec-(\d+)$/u.exec(branch.trim())
     if (match !== null) specs.add(Number(match[1]))
   }
   return specs
@@ -138,14 +142,20 @@ export function specStatus(spec, context) {
   const branch = `integration/spec-${spec}`
   const local = git(root, ['rev-parse', '--verify', `refs/heads/${branch}`])
   const hasBranch = local !== undefined
-  const remote = hasBranch ? git(root, ['rev-parse', '--verify', `refs/remotes/origin/${branch}`]) : undefined
+  const remote = git(root, ['rev-parse', '--verify', `refs/remotes/origin/${branch}`])
+  const orphan = !hasBranch && remote !== undefined
   const pushed = hasBranch && remote !== undefined && remote === local
-  const landed = hasBranch && git(root, ['merge-base', '--is-ancestor', branch, LANDING_BRANCH]) !== undefined
+  // The landing fact follows whichever ref exists: a remote-only branch can be
+  // landed on origin even when this checkout never fetched the local branch.
+  const landedRef = hasBranch ? branch : orphan ? `refs/remotes/origin/${branch}` : undefined
+  const landed = landedRef !== undefined
+    && git(root, ['merge-base', '--is-ancestor', landedRef, LANDING_BRANCH]) !== undefined
   const leftover = context.worktrees.filter(path => worktreeNamesSpec(path, spec))
   const tracked = tracker?.get(spec)
 
   let state = 'planned'
   if (hasBranch) state = pushed ? (landed ? 'landed' : 'in-flight') : 'unpushed'
+  else if (orphan) state = landed ? 'landed' : 'orphan'
   if (landed && leftover.length > 0) state = 'stale-worktree'
 
   return {
