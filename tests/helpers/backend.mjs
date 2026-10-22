@@ -12,9 +12,13 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import http from 'node:http'
+import { readCombo, repoPath } from '../../scripts/combo.mjs'
 
 /** Absolute path of this ticket worktree (the repository under test). */
 export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
+
+/** Companion checkout selected by the same resolver as the launcher. */
+export const dshDir = repoPath(readCombo(repoRoot).combo, 'dsh', repoRoot)
 
 /** Path of the product launcher every test drives. */
 export const backendScript = join(repoRoot, 'scripts', 'ourfairy-backend.mjs')
