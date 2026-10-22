@@ -9,13 +9,10 @@
  * did not throw.
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { describeRun, DURABLE_LOG, makeHome, readReport, removeHome, repoRoot, runBackendAsync } from './helpers/backend.mjs'
+import { dshDir, describeRun, DURABLE_LOG, makeHome, readReport, removeHome, runBackendAsync } from './helpers/backend.mjs'
 
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
 const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
 
 const home = makeHome('ourfairy-model-double-')

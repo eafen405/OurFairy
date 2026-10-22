@@ -1,0 +1,9 @@
+{
+  "parent": 133,
+  "title": "chat 的 inject 与实际依赖对齐：删残留、显式化隐性依赖",
+  "children": [
+    { "file": "01-inject-alignment.md", "issue": 151, "title": "chat inject 对齐：删残留、声明 llm、注明排序与可选依赖" },
+    { "file": "02-readme-contracts.md", "issue": 152, "title": "chat README 分侧：传输契约与运行时语义，并标注升级复核归属" },
+    { "file": "03-closeout.md", "issue": 153, "title": "spec 133 收口：夹具归属、全量门禁与证据" }
+  ]
+}

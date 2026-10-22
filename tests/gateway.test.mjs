@@ -16,12 +16,13 @@ import { after, test } from 'node:test'
 // modules below are loaded; it must stay the first helper import of this file.
 import './helpers/dsh-peers.mjs'
 import {
-  describeRun, httpJson, makeHome, readReport, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
+  dshDir, describeRun, httpJson, makeHome, readReport, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'gateway-password'
-const { startMockLlmServer } = await import('@deepseek-ai/dsh-llm-mock-server')
+const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
 const { loadOverlayPatches } = await import('@deepseek-ai/dsh-app-boot')
+const { flattenEntries } = await import('../scripts/combo.mjs')
 const { Config: PiAiConfig } = await import('@deepseek-ai/dsh-llm-pi-ai')
 // The phone-editable allowlist has one authority: the gateway service exports
 // the same set its route validator and save overlay use.
@@ -136,7 +137,8 @@ function savedProviders(home) {
  */
 function declaredModel(provider, id) {
   const bundle = join(repoRoot, 'backend', 'v1-bundle', 'cordis.patch.yml')
-  const row = loadOverlayPatches('dsh', bundle).flatMap(entry => entry.insert ?? []).find(entry => entry.id === 'llm-pi-ai')
+  const rows = flattenEntries(loadOverlayPatches('dsh', bundle).flatMap(entry => entry.insert ?? []))
+  const row = rows.find(entry => entry.id === 'llm-pi-ai')
   const declared = row.config.providers[provider].models.find(model => model.id === id)
   const resolved = PiAiConfig({ providers: { [provider]: { models: [declared] } } })
   return resolved.providers.get()[provider].models[0]
@@ -517,7 +519,9 @@ test('a route saved from the phone keeps the deployment retry policy the draft d
     await httpJson(port, '/chat/send', { token: admin, body: { sessionId: session.id, requestId: 'after-save', text: 'retry after the save' } })
     const projection = await settle(port, admin, session.id)
     assert.deepEqual(double.server.requests.map(request => request.behavior), ['rate_limit', 'success'],
-      'the saved route still executes the deployment retry policy; without it the turn ends on the 429')
+      `the saved route must execute the deployment retry policy; turn endings: ${JSON.stringify(
+        projection.events.filter(event => event.type === 'turn/end').map(event => event.data.reason),
+      )}`)
     assert.equal(projection.error, null)
     assert.deepEqual(projection.messages.filter(message => message.role === 2 && message.status === 2).map(message => message.text),
       ['recovered after the save'])

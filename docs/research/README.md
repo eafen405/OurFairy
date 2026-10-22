@@ -29,6 +29,7 @@
 | [client-access-seams.md](client-access-seams.md) | 2026-10-14 | 客户端接入、认证与 HTTP/WS 载体接缝地图：admission 闸门与认证链路的源码实读。 |
 | [domestic-android-background-delivery.md](domestic-android-background-delivery.md) | 2026-10-14 | 国内 Android 后台消息通道核查：无 Google 依赖的前台服务、vivo 推送与 UnifiedPush 的能力边界。 |
 | [domestic-android-notification-vivopush-revival.md](domestic-android-notification-vivopush-revival.md) | 2026-10-14 | vivo S50 通知通道能力边界的旧研究，部分结论已被[通知审计](android-notification-audit.md)纠正。 |
+| [dsh-bundle-group-composition.md](dsh-bundle-group-composition.md) | 2026-10-21 | dsh 组合 group 化：bundle 拆 kernel / plugins 的可行性与受影响检查，以及四个缺席行的归因。 |
 | [dsh-event-consumption-audit.md](dsh-event-consumption-audit.md) | 2026-10-14 | dsh 事件消费研究的源码复核：纠正单传输、`throughSeq`、token 兑换与授权等误判。 |
 | [dsh-event-consumption.md](dsh-event-consumption.md) | 2026-10-14 | dsh 事件消费、jobs 与客户端补取的事实层旧研究，结论已被[源码复核](dsh-event-consumption-audit.md)取代。 |
 | [dsh-ownership-seams.md](dsh-ownership-seams.md) | 2026-10-14 | dsh 会话归属与正式投递的原生改动地图：header、归属核对点与投递记录格式。 |

@@ -183,7 +183,7 @@ native job registry's `readAt`, `get` and `kill`.
 - **Why.** The product projection folds `jobs/lifecycle`, `jobs/report`, inbox
   splices and turn ends into a durable per-session task list
   ([`backend/chat/src/units.mjs`](../../backend/chat/src/units.mjs), and the
-  "后台任务" section of [`backend/chat/README.md`](../../backend/chat/README.md)).
+  "后台任务折叠" section of [`backend/chat/README.md`](../../backend/chat/README.md)).
   That fold survives a restart and keeps task identities tied to the registry
   generation, so an old task id stays unavailable instead of resolving to a new
   same-named job; output reads use absolute UTF-8 offsets and an explicit
