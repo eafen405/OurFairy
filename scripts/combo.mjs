@@ -232,19 +232,38 @@ function scopeOf(name) {
 }
 
 /**
- * Every entry of a composed tree, including the rows nested in a group's
- * `config` list. The loader mounts group children the same way it mounts
- * top-level rows, so a package set comparison that walked only the top level
- * would miss them.
+ * The leaf rows of a composed tree.
+ *
+ * Group rows are containers, not rows to check: they are dropped, and their
+ * children are returned in their place. A child of a disabled group inherits
+ * that state (`disabled: true`), because the loader's effective state walks
+ * every ancestor group (`Entry.disabled`) while the composed rows keep only
+ * their own flag. Materializing it here lets a row-level check see that a row
+ * inside a disabled group is disabled at runtime.
+ *
+ * Idempotent: the result contains no group rows, so flattening it again returns
+ * the same rows.
  * @param {object[]} entries
  * @returns {object[]}
  */
 export function flattenEntries(entries) {
-  return entries.flatMap(entry => [
-    entry,
-    // The loader treats any truthy `group` with a list `config` as nesting.
-    ...(entry.group && Array.isArray(entry.config) ? flattenEntries(entry.config) : []),
-  ])
+  const leaves = []
+  const visit = (list, inheritedDisabled) => {
+    for (const entry of list) {
+      const disabled = inheritedDisabled || entry.disabled === true
+      if (entry.group) {
+        // The loader treats a truthy `group` as a container; its children are
+        // mounted in the container's place.
+        if (Array.isArray(entry.config)) visit(entry.config, disabled)
+      } else if (disabled && entry.disabled !== true) {
+        leaves.push({ ...entry, disabled: true })
+      } else {
+        leaves.push(entry)
+      }
+    }
+  }
+  visit(entries, false)
+  return leaves
 }
 
 /**
@@ -457,8 +476,9 @@ export function verifyBundlePackages({ binName, bundlePackage, probePackage, ins
  * `evaluatePluginCompatibility` judges only dsh peers (`@deepseek-ai/dsh` and
  * `@deepseek-ai/dsh-*`); a product package's other peers are declarations for
  * readers and pnpm, not inputs to this runtime decision. The bundle and the
- * probe are included: they declare no peers, so the judgement is a no-op for
- * them, but a reader sees every installed product package accounted for.
+ * probe are included: the bundle declares no peers, and the probe declares one
+ * `@ourfairy/*` peer, which this judgement ignores because it judges only dsh
+ * peers; a reader still sees every installed product package accounted for.
  * @param {{
  *   binName: string,
  *   bundlePackage: string,
@@ -518,13 +538,15 @@ const SESSION_HISTORY_EXPORT = '@deepseek-ai/dsh-agent/session-history'
  * Every required native capability that is not mounted, plus the public
  * history export when it does not resolve.
  *
- * @param {object[]} rows - the composed profile rows, as dsh's loader returns them.
+ * @param {object[]} rows - the composed profile rows, as dsh's loader returns them;
+ *   rows nested in a group's `config` are mounted too, so the lookup flattens,
+ *   including the disabled state inherited from an ancestor group.
  * @param {(specifier: string) => string} resolveExport - resolves from the dsh installation.
  * @returns {string[]} one message per missing, disabled, or drifted capability.
  */
 export function nativeCapabilityFailures(rows, resolveExport) {
   const failures = []
-  const mounted = new Map(rows.map(row => [row.id, row]))
+  const mounted = new Map(flattenEntries(rows).map(row => [row.id, row]))
   for (const { row: id, name } of REQUIRED_NATIVE_ROWS) {
     const entry = mounted.get(id)
     if (entry === undefined) {
@@ -577,7 +599,9 @@ export function verifyInstalledNativeCapabilities({ binName, bundlePackage, inst
     return { ok: false, checked: [], failures: [`${bundlePackage} was not loaded from ${profileDir}: ${reason};`
       + ` run 'npm run backend:start -- --reinstall'`] }
   }
-  const rows = boot.composeEntries([...profile.layers.map(entry => entry.patches), profile.patches])
+  // Flattened rows are what the check consumes: the installed layer's rows can
+  // be nested in a group, and a disabled group must reach its children.
+  const rows = flattenEntries(boot.composeEntries([...profile.layers.map(entry => entry.patches), profile.patches]))
   const failures = nativeCapabilityFailures(rows, specifier => createRequire(installAnchor).resolve(specifier))
   return {
     ok: failures.length === 0,

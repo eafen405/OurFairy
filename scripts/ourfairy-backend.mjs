@@ -52,6 +52,7 @@ import {
   installDecision,
   isolatedEnv,
   layoutOf as compositionLayoutOf,
+  PROFILE_IMPORT_METHOD,
   productSources,
   profileLinkedManifestPath,
   readCombination,
@@ -159,7 +160,11 @@ function installProfile(layout, options, combination) {
   if (decision.mode === 'cached') return 'cached'
   const linked = profileLinkedManifestPath(layout, repoRoot)
   const [command, args] = pnpmInvocation(combination)
-  const result = spawnSync(command, [...args, 'install', '--ignore-scripts', '--store-dir', layout.pnpmStore], {
+  // pnpm's hoisted linker can keep old file: contents on install, even with --force.
+  // Rebuild invalidated snapshots while retaining the lockfile and download store.
+  rmSync(join(layout.profileDir, 'node_modules'), { recursive: true, force: true })
+  const result = spawnSync(command, [...args, 'install', '--ignore-scripts',
+    '--package-import-method', PROFILE_IMPORT_METHOD, '--store-dir', layout.pnpmStore], {
     cwd: layout.profileDir,
     env: isolatedEnv(layout, { root: repoRoot }),
     encoding: 'utf8',
@@ -462,12 +467,18 @@ async function commandStart(layout, options, combination) {
     ready: false,
   })
 
-  const ready = await waitFor(() => readJson(reportPath)?.ok === true, options.readyTimeoutMs)
+  await waitFor(() => readJson(reportPath)?.ok !== undefined || !isAlive(child.pid), options.readyTimeoutMs)
+  const report = readJson(reportPath)
+  const ready = report?.ok === true && isAlive(child.pid)
   if (!ready) {
+    const reason = report?.ok === false
+      ? 'reported a failed readiness check'
+      : !isAlive(child.pid)
+        ? 'exited before reporting ready'
+        : `did not report ready within ${options.readyTimeoutMs}ms`
     try { process.kill(-child.pid, 'SIGKILL') } catch { try { process.kill(child.pid, 'SIGKILL') } catch { /* already gone */ } }
-    const report = readJson(reportPath)
     rmSync(layout.statePath, { force: true })
-    fail(`backend (pid ${child.pid}) did not report ready within ${options.readyTimeoutMs}ms;`
+    fail(`backend (pid ${child.pid}) ${reason};`
       + ` probe report: ${report === undefined ? 'not written' : JSON.stringify(report.failures ?? report)}`
       + `\nlog ${logFile}:\n${tail(logFile)}`)
   }

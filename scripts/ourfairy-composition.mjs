@@ -27,6 +27,9 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 /** The repository this module lives in; the default root of every function. */
 const repoRoot = resolve(import.meta.dirname, '..')
 
+/** pnpm's import mode for profile installs: copies, never hardlinks into the worktree. */
+export const PROFILE_IMPORT_METHOD = 'copy'
+
 /** Read combo.json. */
 export function readCombo(root = repoRoot) {
   const path = join(root, 'combo.json')
@@ -293,6 +296,8 @@ export function readPackageManifest(dir, root = repoRoot) {
  */
 export function productSourceHash(root = repoRoot) {
   const hash = createHash('sha256')
+  // Profiles are mutable snapshots; file: hardlinks would also change the worktree.
+  hash.update(PROFILE_IMPORT_METHOD)
   for (const relativePath of productSources(root)) {
     hash.update(relativePath)
     hash.update(readFileSync(join(root, relativePath)))

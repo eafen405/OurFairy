@@ -19,12 +19,12 @@
  * a copy would look like from the authorities themselves.
  */
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { flattenEntries, readCombo, repoPath } from '../scripts/combo.mjs'
-import { repoRoot } from './helpers/backend.mjs'
+import { productPackageDirs, repoRoot } from './helpers/backend.mjs'
 
 const docPath = join(repoRoot, 'docs', 'architecture', 'dsh-ecosystem-boundary.md')
 const docRelative = 'docs/architecture/dsh-ecosystem-boundary.md'
@@ -112,6 +112,27 @@ const CITED_CHECKS = [
     'agentless filesystem and script Interface calls refuse instead of inheriting a default user'],
   ['tests/attachments.test.mjs',
     'unfinished and foreign receipts never grant message or download access, including identical stored bytes'],
+  // The six native-semantic guards (spec #135, closeout #169). Each is a
+  // vocabulary or behavior translation whose drift would otherwise be silent;
+  // the doc records the upstream change and the test that fails on it.
+  ['tests/native-job-status.test.mjs',
+    'native job status vocabulary matches the projection'],
+  ['tests/native-job-stop-outcome.test.mjs',
+    'native job stop outcome vocabulary matches the adapter'],
+  ['tests/gateway.test.mjs',
+    'a route saved from the phone keeps model fields the draft does not edit'],
+  // The selection save's call path is pinned at the service seam; the booted
+  // case below only fixes sequential last-wins, not overlapping serialization.
+  ['tests/gateway-service.test.mjs',
+    'a selection save goes through the native default-model entry'],
+  ['tests/gateway-service.test.mjs',
+    'a selection save refuses when the profile cannot be edited'],
+  ['tests/gateway.test.mjs',
+    'consecutive selection saves commit in submission order'],
+  ['tests/gateway.test.mjs',
+    'the gateway accepts every native input modality'],
+  ['tests/remote-chat.test.mjs',
+    'the same request id sent twice in a row produces one message'],
 ]
 
 test('the boundary doc is reachable from the repository README', () => {
@@ -200,10 +221,7 @@ test('every product package stays unpublished', () => {
   // Derived from the packages that exist under backend/, not from a list: the
   // bundle manifest owns the install set, and this check has to hold before and
   // after that set moves.
-  const manifests = readdirSync(join(repoRoot, 'backend'), { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
-    .map(entry => join('backend', entry.name, 'package.json'))
-    .filter(path => existsSync(join(repoRoot, path)))
+  const manifests = productPackageDirs().map(dir => join(dir, 'package.json'))
   assert.ok(manifests.length > 0, 'backend/ must contain product package manifests')
   const published = manifests.filter(path => JSON.parse(readFileSync(join(repoRoot, path), 'utf8')).private !== true)
   assert.deepEqual(

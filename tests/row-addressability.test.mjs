@@ -41,13 +41,11 @@ import { fileURLToPath } from 'node:url'
 import { after, test } from 'node:test'
 import { isolatedEnv, layoutOf } from '../scripts/ourfairy-composition.mjs'
 import {
-  describeRun, httpJson, makeHome, messageBlocks, readReport, registerUser, removeHome, repoRoot,
+  dshDir, describeRun, httpJson, makeHome, messageBlocks, readReport, registerUser, removeHome,
   runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay,
 } from './helpers/backend.mjs'
 
 const password = 'row-addressability-password'
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
 const dshBin = join(dshDir, 'apps', 'cli', 'lib', 'bin.js')
 const recordingFixture = fileURLToPath(new URL('./fixtures/recording-bash-provider.mjs', import.meta.url))
 
@@ -663,14 +661,15 @@ for (const scenario of INVALID_CONFIGS) {
     const home = freshHome(`ourfairy-row-address-invalid-${scenario.row}-`)
     const overlay = writeOverlay(home, [{ id: scenario.row, config: scenario.config }], `invalid-${scenario.row}.patch.yml`)
     try {
-      // The launcher waits for the probe's ready report; bound that wait so the
-      // load failure is observed promptly instead of after the default two minutes.
+      // Keep a ceiling for a broken boot; a failed report should end the wait.
       const run = await runBackendAsync([...startArgs([overlay]), '--ready-timeout-ms', '30000'], {
         OURFAIRY_HOME: home,
         OURFAIRY_PHAETHON_PASSWORD: password,
       })
       assert.notEqual(run.code, 0,
         `a start with ${scenario.why} must fail during load: ${describeRun('start', run)}`)
+      assert.match(run.stderr, /reported a failed readiness check/u,
+        `the failed report must end readiness waiting: ${run.stderr}`)
       assert.doesNotMatch(run.stdout, /"ready":\s*true/u,
         `the failed start must not report readiness: ${run.stdout}`)
       assert.equal(run.stdout.includes('listeningPorts'), false,

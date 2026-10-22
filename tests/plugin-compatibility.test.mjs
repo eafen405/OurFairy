@@ -23,7 +23,7 @@ import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'no
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { readCombo, repoPath } from '../scripts/combo.mjs'
-import { copyProductRepo, describeRun, makeHome, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
+import { copyProductRepo, describeRun, makeHome, productPackageDirs, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
 
 const roots = []
 const homes = []
@@ -117,10 +117,8 @@ test('a product package peer the pinned dsh does not satisfy fails naming the pa
 
 test('every product package declares an explicit semver peer range, not the workspace protocol', () => {
   const offenders = []
-  for (const entry of readdirSync(join(repoRoot, 'backend'), { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue
-    const path = join('backend', entry.name, 'package.json')
-    if (!existsSync(join(repoRoot, path))) continue
+  for (const dir of productPackageDirs()) {
+    const path = join(dir, 'package.json')
     const peers = JSON.parse(readFileSync(join(repoRoot, path), 'utf8')).peerDependencies ?? {}
     for (const [name, range] of Object.entries(peers)) {
       if (typeof range !== 'string' || !/^\^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(range)) {
@@ -143,10 +141,7 @@ test('every product package declares an explicit semver peer range, not the work
  * machinery, not a product package; the bundle already complies.
  */
 test('every product package ships a description and an exported English locale', () => {
-  const packageDirs = readdirSync(join(repoRoot, 'backend'), { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && entry.name !== 'probe')
-    .map(entry => join('backend', entry.name))
-    .filter(dir => existsSync(join(repoRoot, dir, 'package.json')))
+  const packageDirs = productPackageDirs({ exclude: ['probe'] })
   assert.ok(packageDirs.length > 0, 'backend/ must contain product packages with manifests')
 
   const failures = []

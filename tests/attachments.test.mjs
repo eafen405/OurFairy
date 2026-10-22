@@ -2,10 +2,8 @@ import assert from 'node:assert/strict'
 import { before, after, test } from 'node:test'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { readFileSync } from 'node:fs'
-import { describeRun, leadingJsonObject, makeHome, messageBlocks, registerUser, removeHome, repoRoot, runBackendAsync, startArgs, startedPort, toolResultBlocks } from './helpers/backend.mjs'
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json')))
-const { startMockLlmServer } = await import(join(combo.repos.dsh.localPath, 'packages/test-support/llm-mock-server/lib/index.js'))
+import { dshDir, describeRun, leadingJsonObject, makeHome, messageBlocks, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks } from './helpers/backend.mjs'
+const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
 const home = makeHome('ourfairy-attachments-'), password = 'attachment-password'
 let model, port, admin, alice, bob
 async function start() {

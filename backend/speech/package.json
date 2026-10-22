@@ -15,7 +15,7 @@
     "locale/*.json"
   ],
   "peerDependencies": {
-    "@ourfairy/dsh-identity": "^0.1.0",
+    "@ourfairy/dsh-http": "^0.1.0",
     "@deepseek-ai/schemastery": "^3.18.5-alpha.1"
   },
   "description": "OurFairy speech-to-text transcription of uploaded audio through the configured ASR route."

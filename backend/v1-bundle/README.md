@@ -12,11 +12,12 @@ default file/shell/sandbox rows with host-wide access. The scoped
 
 ## Row set and package set
 
-`cordis.patch.yml` is the row set: it is the file the profile loads. Its section
-comments group the rows — session/model/prompt core, model-request recovery and
-tool-result retention, durable session base, process-local support services, the
-HTTP carrier and identity paths, owned sessions and chat, the scoped file/shell
-adapters, and attachments/speech.
+`cordis.patch.yml` is the row set: it is the file the profile loads. Its
+top-level `insert` is two loader-native groups. `kernel` holds what one boot
+needs to establish a session, run a model turn, and raise the Web carrier and
+its connection; `plugins` holds the product capabilities and the native tool and
+support rows that exist only for them. The split rule and each row's segment sit
+in that file, next to the rows.
 
 Read that file for the inventory. The row ids and their packages have one
 authority, and it is the file the loader reads; a hand-kept table here listed
@@ -41,11 +42,8 @@ not publish.
 
 `FORBIDDEN_ROW_IDS` in
 [`tests/baseline-boot.test.mjs`](../../tests/baseline-boot.test.mjs) is the list of
-row ids the boot test asserts absent from the live composition.
-
-v1 keeps skills, goals, subagents, telemetry, web and workflow tooling, plan mode
-and MCP resources out; the remainder of that list are the unscoped file, shell
-and sandbox defaults the scoped adapters replace.
+row ids the boot test asserts absent from the live composition. The comments
+beside that list give the reason for each group; read them there.
 
 ## Consuming it
 
