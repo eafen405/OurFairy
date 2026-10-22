@@ -21,15 +21,17 @@
  * copy keeps the mutation local without changing the real worktree.
  */
 import assert from 'node:assert/strict'
-import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
 import {
+  copyProfileTemplate,
   installDecision,
   layoutOf,
   productSourceHash,
   productSources,
   profileLinkedManifestPath,
+  profileTemplateDir,
   writeProfile,
   writeSourceStamp,
 } from '../scripts/ourfairy-composition.mjs'
@@ -159,4 +161,41 @@ test('a new product source file changes the hash and decides install', () => {
   } finally {
     rmSync(addedSource, { force: true })
   }
+})
+
+/** A home holding a written profile and, optionally, a published template. */
+function templateFixture() {
+  const home = makeHome('ourfairy-template-')
+  homes.push(home)
+  const layout = layoutOf(home, repoCopy)
+  writeProfile(layout, repoCopy)
+  const hash = productSourceHash(repoCopy)
+  const template = profileTemplateDir(repoCopy, hash)
+  mkdirSync(join(template, 'node_modules', '@ourfairy', 'dsh-identity'), { recursive: true })
+  writeFileSync(join(template, 'node_modules', '@ourfairy', 'dsh-identity', 'marker.txt'), 'template\n')
+  writeFileSync(join(template, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
+  return { home, layout, hash, template }
+}
+
+test('a published template is copied instead of installed, and cached only with a stamp', () => {
+  const { layout, hash, template } = templateFixture()
+
+  assert.deepEqual(installDecision(layout, { root: repoCopy }), { mode: 'copy', hash, template },
+    'no stamp plus a same-hash template must copy')
+  copyProfileTemplate(layout, template)
+  assert.equal(readFileSync(join(layout.profileDir, 'node_modules', '@ourfairy', 'dsh-identity', 'marker.txt'), 'utf8'), 'template\n')
+  assert.equal(readFileSync(join(layout.profileDir, 'pnpm-lock.yaml'), 'utf8'), 'lockfileVersion: 9\n')
+
+  // The copy is independent of the template in both directions.
+  writeFileSync(join(layout.profileDir, 'node_modules', '@ourfairy', 'dsh-identity', 'marker.txt'), 'edited\n')
+  assert.equal(readFileSync(join(template, 'node_modules', '@ourfairy', 'dsh-identity', 'marker.txt'), 'utf8'), 'template\n')
+
+  // With the linked bundle manifest and a matching stamp the home is cached.
+  const linked = profileLinkedManifestPath(layout, repoCopy)
+  mkdirSync(dirname(linked), { recursive: true })
+  writeFileSync(linked, '{}\n')
+  writeSourceStamp(layout, hash)
+  assert.equal(installDecision(layout, { root: repoCopy }).mode, 'cached')
+  assert.equal(installDecision(layout, { root: repoCopy, reinstall: true }).mode, 'install',
+    '--reinstall must still perform a real install')
 })

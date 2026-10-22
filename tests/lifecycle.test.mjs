@@ -155,7 +155,8 @@ test('doctor --json records a profile install failure instead of dying', () => {
     // pnpm cannot use a regular file as its store directory, so the install
     // fails inside the "profile project linked" check.
     writeFileSync(join(installHome, 'pnpm-store'), 'not a directory\n')
-    const run = runBackend(['doctor', '--json'], { ...env, OURFAIRY_HOME: installHome })
+    const run = runBackend(['doctor', '--json'],
+      { ...env, OURFAIRY_HOME: installHome, OURFAIRY_NO_TEMPLATE: '1' })
     let report
     assert.doesNotThrow(() => {
       report = JSON.parse(run.stdout)

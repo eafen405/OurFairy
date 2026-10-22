@@ -49,12 +49,14 @@ import { repoPath, verifyBundlePackages, verifyCombination, verifyInstalledNativ
 import {
   assertIsolatedHome,
   bootPatches,
+  copyProfileTemplate,
   installDecision,
   isolatedEnv,
   layoutOf as compositionLayoutOf,
   PROFILE_IMPORT_METHOD,
   productSources,
   profileLinkedManifestPath,
+  publishProfileTemplate,
   readCombination,
   readCombo,
   writeProfile,
@@ -156,9 +158,27 @@ function resolveDsh(options, combination) {
  */
 function installProfile(layout, options, combination) {
   writeProfile(layout, repoRoot)
-  const decision = installDecision(layout, { root: repoRoot, reinstall: options.reinstall })
+  // OURFAIRY_NO_TEMPLATE forces a real install: the install-failure test needs
+  // pnpm to run, and an operator debugging a template wants the same.
+  const decision = installDecision(layout, {
+    root: repoRoot,
+    reinstall: options.reinstall,
+    template: process.env.OURFAIRY_NO_TEMPLATE !== '1',
+  })
   if (decision.mode === 'cached') return 'cached'
   const linked = profileLinkedManifestPath(layout, repoRoot)
+  if (decision.mode === 'copy') {
+    // The installed tree is a pure function of the product-source hash, so a
+    // shared template is copied instead of paying pnpm again (tens of seconds
+    // per test home against tens of milliseconds for the copy).
+    copyProfileTemplate(layout, decision.template)
+    if (!existsSync(linked)) {
+      fail(`profile template ${decision.template} is missing ${linked};`
+        + ' delete it and rerun to install a fresh copy')
+    }
+    writeSourceStamp(layout, decision.hash)
+    return 'copied'
+  }
   const [command, args] = pnpmInvocation(combination)
   // pnpm's hoisted linker can keep old file: contents on install, even with --force.
   // Rebuild invalidated snapshots while retaining the lockfile and download store.
@@ -177,6 +197,7 @@ function installProfile(layout, options, combination) {
     fail(`profile install reported success but ${linked} is missing;`
       + ` the product bundle would be silently skipped instead of failing the boot`)
   }
+  publishProfileTemplate(layout, decision.hash)
   writeSourceStamp(layout, decision.hash)
   return 'installed'
 }

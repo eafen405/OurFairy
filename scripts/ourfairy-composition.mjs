@@ -20,9 +20,9 @@
  * copy while the launcher uses the worktree.
  */
 import { createHash } from 'node:crypto'
-import { existsSync, globSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, globSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 /** The repository this module lives in; the default root of every function. */
 const repoRoot = resolve(import.meta.dirname, '..')
@@ -339,24 +339,86 @@ export function profileLinkedManifestPath(layout, root = repoRoot) {
 }
 
 /**
- * Decide whether the installed profile can be reused: `{ mode, hash }`.
+ * Where the shared, read-only template of one installed profile lives.
+ *
+ * The name carries both the product-source hash and the pinned pnpm version:
+ * a template built by another pnpm layout must never be copied into a profile
+ * this launcher will later install into.
+ * @param {string} [root] - repository root.
+ * @param {string} hash - product-source hash the template was built from.
+ * @returns {string}
+ */
+export function profileTemplateDir(root = repoRoot, hash) {
+  return join(root, '.ourfairy-template', `${hash}-${readCombination(root).pnpmPin}`)
+}
+
+/**
+ * Decide whether the installed profile can be reused: `{ mode, hash, template? }`.
  *
  * The decision compares the current product-source content hash with the stamp
  * written after the last successful install and requires the linked bundle
- * manifest to still exist. The hash is returned with the decision so the
- * process layer can stamp the install it is about to perform without hashing
- * the sources a second time. Executing pnpm belongs to the process layer, which
- * owns subprocesses.
+ * manifest to still exist. When this home has no stamp but a template for the
+ * same hash exists, the template is copied instead of rereading pnpm: the
+ * installed tree is a pure function of the hash, and copying it costs far less
+ * than a second install. The hash is returned so the process layer can stamp
+ * what it performed without hashing twice. Executing pnpm, and copying, belong
+ * to the process layer, which owns subprocesses and file mutation.
  * @param {{home: string, profileDir: string}} layout
- * @param {{root?: string, reinstall?: boolean}} [options]
- * @returns {{mode: 'cached'|'install', hash: string}}
+ * @param {{root?: string, reinstall?: boolean, template?: boolean}} [options]
+ * @returns {{mode: 'cached'|'copy'|'install', hash: string, template?: string}}
  */
-export function installDecision(layout, { root = repoRoot, reinstall = false } = {}) {
+export function installDecision(layout, { root = repoRoot, reinstall = false, template = true } = {}) {
   const stampPath = join(layout.profileDir, '.ourfairy-source-hash')
   const hash = productSourceHash(root)
   const stamped = existsSync(stampPath) ? readFileSync(stampPath, 'utf8').trim() : undefined
-  const mode = !reinstall && existsSync(profileLinkedManifestPath(layout, root)) && stamped === hash ? 'cached' : 'install'
-  return { mode, hash }
+  if (!reinstall && existsSync(profileLinkedManifestPath(layout, root)) && stamped === hash) {
+    return { mode: 'cached', hash }
+  }
+  const templateDir = profileTemplateDir(root, hash)
+  if (!reinstall && template && existsSync(join(templateDir, 'node_modules'))) {
+    return { mode: 'copy', hash, template: templateDir }
+  }
+  return { mode: 'install', hash }
+}
+
+/**
+ * Replace this profile's installed tree with a copy of a template.
+ *
+ * Only the installed artifacts move: the manifest is written from the current
+ * root by {@link writeProfile}, so copying the template's own manifest would
+ * reintroduce the builder's absolute `file:` paths.
+ * @param {{profileDir: string}} layout
+ * @param {string} template - directory holding `node_modules` and `pnpm-lock.yaml`.
+ */
+export function copyProfileTemplate(layout, template) {
+  rmSync(join(layout.profileDir, 'node_modules'), { recursive: true, force: true })
+  cpSync(join(template, 'node_modules'), join(layout.profileDir, 'node_modules'), { recursive: true })
+  const lock = join(template, 'pnpm-lock.yaml')
+  if (existsSync(lock)) cpSync(lock, join(layout.profileDir, 'pnpm-lock.yaml'))
+}
+
+/**
+ * Publish a successful install as the shared template for its hash.
+ *
+ * A concurrent publisher may win the rename; that is success, not a failure.
+ * The staging directory keeps a half-copied tree from ever being published.
+ * @param {{profileDir: string}} layout
+ * @param {string} hash - product-source hash the install was built from.
+ * @param {string} [root] - repository root.
+ * @returns {string} the template directory.
+ */
+export function publishProfileTemplate(layout, hash, root = repoRoot) {
+  const target = profileTemplateDir(root, hash)
+  if (existsSync(target)) return target
+  mkdirSync(dirname(target), { recursive: true })
+  const staging = `${target}.tmp-${process.pid}`
+  rmSync(staging, { recursive: true, force: true })
+  mkdirSync(staging, { recursive: true })
+  cpSync(join(layout.profileDir, 'node_modules'), join(staging, 'node_modules'), { recursive: true })
+  const lock = join(layout.profileDir, 'pnpm-lock.yaml')
+  if (existsSync(lock)) cpSync(lock, join(staging, 'pnpm-lock.yaml'))
+  try { renameSync(staging, target) } catch { rmSync(staging, { recursive: true, force: true }) }
+  return target
 }
 
 /** Record the product-source hash an install was built from. */
