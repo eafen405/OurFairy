@@ -56,7 +56,9 @@ git -C /home/eafen405/projects/deepseek-harness worktree add \
 - **pnpm 必须用 corepack 固定版本**：`corepack pnpm@11.28.5 <cmd>`（`PATH` 上的 pnpm 来自 Windows，勿用）。
 - **Node、JDK 与 Android SDK 的版本要求**见根 [`README.md`](../../README.md) 的「先决条件」；构建客户端还要准备 `android/local.properties` 与 `android/app/google-services.json`（同节）。
 - **Gradle 走 `android/` 里的 wrapper**，不另装；改过 `android/` 源码后重新构建即可。
-- **gh CLI** 已登录，git 走 HTTPS（credential helper 已配）。
+- **gh CLI** 已登录；`origin` 的 fetch 走 HTTPS、push 走 SSH（`git@github.com:`）。ssh 必须非交互：
+  `~/.ssh/config` 里 `Host github.com` 已设 `BatchMode yes`；若在别的机器上仍会挂起，用
+  `GIT_SSH_COMMAND='ssh -o BatchMode=yes' git push`。
 
 ### 3.1 Android 构建实测结论
 
