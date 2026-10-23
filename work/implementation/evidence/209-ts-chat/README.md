@@ -319,8 +319,10 @@ backend/chat/test-support/lost-event.ts(44,11): error TS6133: 'wrong' is declare
 ## 没有跑的
 
 - **没有主动跑全量 `npm test`**：票面「不跑全量」把全量留给 T6。本票主动跑的是上表列出的 16 个文件。
-  提交时仓库自带的 pre-commit 钩子若因为包 manifest 属于权威路径而判成 `full` 模式替本票跑一次全量，
-  那是**钩子**的行为，不构成本票的门禁。
+  提交时仓库自带的 pre-commit 钩子（`.githooks/pre-commit` → `node scripts/precommit.mjs`）因为
+  `backend/chat/package.json` 是权威路径而把门禁判成 `full` 模式，**替本票跑了一次全量**：
+  **293 tests / 293 pass / 0 fail**（`combo:verify` 也随之跑了一遍，ok）。那是**钩子**的行为，
+  不是本票的门禁，也不构成本票主动跑全量的记录。
 - **没有触发 CI**：没有 push。
 - **没有合入 `integration/spec-205`**：由 Lead 合。
 - 没有改 `combo.json`、Android 客户端、dsh 检出；没有加根 `devDependencies`、lockfile 或第二份
