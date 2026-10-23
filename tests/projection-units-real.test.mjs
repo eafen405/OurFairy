@@ -25,7 +25,7 @@ import { dshDir, describeRun, makeHome, registerUser, removeHome, runBackendAsyn
 import './helpers/dsh-peers.mjs'
 
 const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
-const units = await import('../backend/chat/src/units.mjs')
+const units = await import('../backend/chat/dist/units.js')
 const expected = JSON.parse(readFileSync(new URL('./fixtures/projection-real-expected.json', import.meta.url), 'utf8'))
 
 const home = makeHome('ourfairy-projection-units-')

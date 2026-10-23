@@ -16,7 +16,7 @@
  * state is plain JSON so the registry can checkpoint it. Durable state holds
  * log-derived facts only: job availability, the Agent's `running` status,
  * attempt text, `replyStatus`, `stopping` and `error` stay live in
- * `runtime.mjs` and are overlaid at read time.
+ * `runtime.ts` and are overlaid at read time.
  *
  * The native `inbox` projection owns pending messages. `ourfairyWork` keeps
  * only each pending message's id and source kind, because report consumption
@@ -30,7 +30,7 @@
  * at version 2 (the narrow pending id/kind index).
  *
  * This module is the only fold of a chat session: the read path
- * (`runtime.mjs`, `service.mjs`) takes durable values from these units and
+ * (`runtime.ts`, `service.ts`) takes durable values from these units and
  * overlays the live facts, so the former per-read full folds are gone.
  * `tests/projection-units.test.mjs` pins their output against expectations
  * frozen from those folds for fixed logs, including shapes the old fold
@@ -41,6 +41,55 @@
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import { assembleAssistantStream } from '@deepseek-ai/dsh-llm/assistant-stream'
 import { z } from 'zod'
+import type { Context } from '@deepseek-ai/cordis'
+import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
+import type { AssistantMessage, SessionEvent, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
+import type { JobView } from '@deepseek-ai/dsh-jobs'
+import type { AssistantStreamRecord, ContentBlock } from '@deepseek-ai/dsh-llm'
+// Type-only: the dsh context's own seams and the event and message-source
+// vocabularies other rows declare. The imports add no runtime dependency.
+import type {} from '@deepseek-ai/dsh-session-projection'
+import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-tool-jobs'
+import type {} from '@ourfairy/dsh-attachments'
+
+/**
+ * One attachment the product admitted on a message, as the attachments row
+ * reports it.
+ *
+ * The shape is derived from the attachments service instead of restated here,
+ * so the attachments row stays the only authority on what an admitted
+ * attachment is.
+ */
+export type AttachmentInput = Awaited<ReturnType<Context['ourfairyAttachments']['inputs']>>[number]
+
+/**
+ * A message as the chat fold reads it: the native message plus the product's
+ * own fields on its source.
+ *
+ * The native `MessageSource` owns `kind`; the product writes `rpcId` and
+ * `attachments` into the same JSON source object, so one narrow view reads
+ * them without a second message type or a second fold.
+ */
+interface ProductMessage {
+  readonly id: string
+  readonly content?: readonly ContentBlock[]
+  readonly source: {
+    readonly kind?: string
+    readonly rpcId?: string
+    readonly attachments?: readonly AttachmentInput[]
+  }
+}
+
+/**
+ * The product's view of one native message.
+ *
+ * The native message is assignable to this view: the view only adds optional
+ * fields the product writes, so no cast is needed to read them.
+ */
+function productMessage(message: UserMessage | AssistantMessage): ProductMessage {
+  return message
+}
 
 /** Native job lifecycle status to the wire's numeric task status (README `任务状态`). */
 export const TASK_STATUS = Object.freeze({ running: 1, stopping: 2, completed: 3, killed: 4, failed: 5 })
@@ -51,18 +100,20 @@ export const TASK_STATUS = Object.freeze({ running: 1, stopping: 2, completed: 3
  * from the projection and hide an unconverged task, and guessing a terminal
  * number would claim a settlement that never happened.
  */
-export function taskStatusOf(status) {
-  return Object.hasOwn(TASK_STATUS, status) ? TASK_STATUS[status] : 0
+export function taskStatusOf(status: string): number {
+  // `Object.hasOwn` is the authority for "this table names the status"; the
+  // assertion only tells the compiler which member survived that check.
+  return Object.hasOwn(TASK_STATUS, status) ? TASK_STATUS[status as keyof typeof TASK_STATUS] : 0
 }
 
-const terminal = status => status >= 3
-const interruptedKind = kind => ['aborted', 'interrupted', 'forked'].includes(kind)
-const taskKey = (generation, id) => `${generation}/${id}`
+const terminal = (status: number) => status >= 3
+const interruptedKind = (kind: string) => ['aborted', 'interrupted', 'forked'].includes(kind)
+const taskKey = (generation: string, id: string) => `${generation}/${id}`
 
-const messageText = message => (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
-const attachmentsOf = message => (message.source?.attachments ?? []).map((item, index) => ({ index, type: item.image ? 2 : 1, name: item.name, mime: item.mime, bytes: item.original.bytes }))
+const messageText = (message: ProductMessage) => (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
+const attachmentsOf = (message: ProductMessage) => (message.source?.attachments ?? []).map((item, index) => ({ index, type: item.image ? 2 : 1, name: item.name, mime: item.mime, bytes: item.original.bytes }))
 /** The interrupted text blocks of one native Assistant stream, shared with the live attempt read. */
-export const attemptText = stream => assembleAssistantStream(stream).interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('')
+export const attemptText = (stream: readonly AssistantStreamRecord[]) => assembleAssistantStream(stream).interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('')
 
 /* ------------------------------------------------------------- transcript */
 
@@ -116,11 +167,28 @@ export const transcriptStateSchema = z.object({
   moves: z.array(moveSchema),
 })
 
+/** The transcript unit state, as the schema above declares it. */
+type TranscriptState = z.infer<typeof transcriptStateSchema>
+/** One transcript row, as the schema above declares it. */
+type TranscriptRow = z.infer<typeof transcriptRowSchema>
+
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** The human transcript rows plus the narrow receipts map a retry needs. */
+    ourfairyTranscript: TranscriptState
+    /** The task roster and its activity summary, folded in one pass. */
+    ourfairyWork: WorkState
+  }
+}
+
 /** One row's wire shape at the inclusive cut `cut`, in the old fold's field order. */
-function rowAtCut(row, cut) {
-  let transition = null
+function rowAtCut(row: TranscriptRow, cut: number) {
+  let transition: z.infer<typeof transitionSchema> | null = null
   for (let offset = row.transitions.length - 1; offset >= 0; offset--) {
-    if (row.transitions[offset].seq <= cut) { transition = row.transitions[offset]; break }
+    // The loop walks the array backwards from its own length, so the entry is
+    // always there.
+    const candidate = row.transitions[offset] as z.infer<typeof transitionSchema>
+    if (candidate.seq <= cut) { transition = candidate; break }
   }
   return {
     messageId: row.messageId,
@@ -136,32 +204,39 @@ function rowAtCut(row, cut) {
 /**
  * The transcript unit: messages the human saw, in first-appearance order (the
  * old Map fold's order, which is not seq order), plus the receipts map
- * `service.mjs` answers from without scanning the log.
+ * `service.ts` answers from without scanning the log.
  */
-export const transcriptDefinition = {
+export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', TranscriptState> = {
   key: 'ourfairyTranscript',
   stateVersion: 3,
   stateSchema: transcriptStateSchema,
   init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], moves: [] }),
   apply(state, event) {
     if (event.type === 'agent/inbox/spliced') {
-      const inserted = event.data.inserted.filter(message => message.source?.kind === 'user' && message.source.rpcId)
+      const inserted = event.data.inserted.filter(message => {
+        const view = productMessage(message)
+        return view.source?.kind === 'user' && view.source.rpcId
+      })
       if (inserted.length === 0) return state
       const rows = [...state.rows]
       const index = { ...state.index }
       const receipts = [...state.receipts]
       const moves = [...state.moves]
       for (const message of inserted) {
-        const requestId = message.source.rpcId
-        const text = messageText(message)
-        const attachments = attachmentsOf(message)
+        const view = productMessage(message)
+        // The filter above kept only messages whose `rpcId` is truthy, so it is
+        // a nonempty string here.
+        const requestId = view.source.rpcId as string
+        const text = messageText(view)
+        const attachments = attachmentsOf(view)
         const existing = index[message.id]
         if (existing === undefined) {
           index[message.id] = rows.length
           rows.push({ messageId: message.id, requestId, role: 1, text, attachments,
             first: { seq: event.seq, status: 1 }, transitions: [] })
         } else {
-          const row = rows[existing]
+          // `index` only holds positions of rows that exist.
+          const row = rows[existing] as TranscriptRow
           rows[existing] = { ...row, requestId, text, attachments,
             transitions: [...row.transitions, { seq: event.seq, status: 1, repositions: true }] }
           moves.push({ index: existing, seq: event.seq })
@@ -170,15 +245,16 @@ export const transcriptDefinition = {
         // the queued copy was later appended, replaced or discarded.
         if (!receipts.some(receipt => receipt.requestId === requestId)) {
           receipts.push({ requestId, messageId: message.id, acceptedSeq: event.seq, text,
-            uploadIds: (message.source.attachments ?? []).map(item => item.uploadId) })
+            uploadIds: (view.source.attachments ?? []).map(item => item.uploadId) })
         }
       }
       return { ...state, rows, index, receipts, moves }
     }
     if (event.type === 'user/message' && isAppendSurfaceEvent(event) && event.data.source?.kind === 'user') {
       const message = event.data
-      const fields = { requestId: message.source.rpcId ?? null, role: 1,
-        text: messageText(message), attachments: attachmentsOf(message) }
+      const view = productMessage(message)
+      const fields = { requestId: view.source.rpcId ?? null, role: 1,
+        text: messageText(view), attachments: attachmentsOf(view) }
       const existing = state.index[message.id]
       if (existing === undefined) {
         return appendRow(state, { messageId: message.id, ...fields,
@@ -188,9 +264,12 @@ export const transcriptDefinition = {
     }
     if ((event.type === 'assistant/message' || event.type === 'delivery/message') && isAppendSurfaceEvent(event)) {
       const message = event.data.message
+      const view = productMessage(message)
       const fields = { requestId: null, role: 2,
-        text: messageText(message), attachments: attachmentsOf(message) }
-      const status = event.data.interrupted ? 3 : 2
+        text: messageText(view), attachments: attachmentsOf(view) }
+      // `interrupted` is the assistant event's own field; a delivered message
+      // carries none, so it reads as not interrupted.
+      const status = (event.data as { interrupted?: true }).interrupted ? 3 : 2
       const existing = state.index[message.id]
       if (existing === undefined) {
         return appendRow(state, { messageId: message.id, ...fields,
@@ -223,7 +302,8 @@ export const transcriptDefinition = {
       // attempt keeps its own seq.
       const rows = [...state.rows]
       for (const index of indices) {
-        const row = rows[index]
+        // The index came from `attemptsByTurn`, which only holds row positions.
+        const row = rows[index] as TranscriptRow
         rows[index] = { ...row, transitions: [...row.transitions,
           { seq: event.seq, status: interrupted ? 3 : 4, repositions: false }] }
       }
@@ -234,26 +314,28 @@ export const transcriptDefinition = {
 }
 
 /** Append a brand-new row; its first appearance anchors the order. */
-function appendRow(state, row) {
+function appendRow(state: TranscriptState, row: TranscriptRow): TranscriptState {
   return { ...state, rows: [...state.rows, row], index: { ...state.index, [row.messageId]: state.rows.length } }
 }
 
 /** Record one later event's transition for an existing row, keeping its first appearance. */
-function recordTransition(state, index, fields, transition) {
+function recordTransition(state: TranscriptState, index: number, fields: Partial<TranscriptRow>, transition: z.infer<typeof transitionSchema>): TranscriptState {
   const rows = [...state.rows]
-  const row = rows[index]
+  // The index came from `state.index`, which only holds positions of rows that
+  // exist.
+  const row = rows[index] as TranscriptRow
   rows[index] = { ...row, ...fields, transitions: [...row.transitions, transition] }
   const moves = transition.repositions ? [...state.moves, { index, seq: transition.seq }] : state.moves
   return { ...state, rows, moves }
 }
 
 /** First index in ascending `items` whose extracted key is at least `target`. */
-function firstAtLeast(items, keyOf, target) {
+function firstAtLeast<T>(items: readonly T[], keyOf: (item: T) => number, target: number): number {
   let low = 0
   let high = items.length
   while (low < high) {
     const middle = (low + high) >> 1
-    if (keyOf(items[middle]) < target) low = middle + 1
+    if (keyOf(items[middle] as T) < target) low = middle + 1
     else high = middle
   }
   return low
@@ -269,15 +351,19 @@ function firstAtLeast(items, keyOf, target) {
  * @param cut - inclusive `throughSeq`; the default reads the current end.
  * @param fromSeq - inclusive lower bound on the row's `seq` at `cut`.
  */
-export function transcriptAt(state, cut = Infinity, fromSeq = 0) {
+export function transcriptAt(state: TranscriptState, cut = Infinity, fromSeq = 0) {
   const start = firstAtLeast(state.rows, row => row.first.seq, fromSeq)
   const end = firstAtLeast(state.rows, row => row.first.seq, cut === Infinity ? Infinity : cut + 1)
-  const movedIntoWindow = new Set()
+  const movedIntoWindow = new Set<number>()
   const firstMove = firstAtLeast(state.moves, move => move.seq, fromSeq)
   for (let offset = firstMove; offset < state.moves.length; offset++) {
-    const move = state.moves[offset]
+    // The loop walks the array forwards from its own length, so the entry is
+    // always there.
+    const move = state.moves[offset] as z.infer<typeof moveSchema>
     if (move.seq > cut) break
-    const row = state.rows[move.index]
+    // The move index came from `state.index`, which only holds positions of
+    // rows that exist.
+    const row = state.rows[move.index] as TranscriptRow
     // Rows whose first appearance is already in the window are emitted by the
     // slice below; only an earlier row moved forward needs this path.
     if (row.first.seq >= fromSeq) continue
@@ -285,7 +371,7 @@ export function transcriptAt(state, cut = Infinity, fromSeq = 0) {
   }
   const moved = [...movedIntoWindow].sort((left, right) => left - right)
   const visible = start < end ? Array.from({ length: end - start }, (_, offset) => start + offset) : []
-  return [...moved, ...visible].map(index => rowAtCut(state.rows[index], cut))
+  return [...moved, ...visible].map(index => rowAtCut(state.rows[index] as TranscriptRow, cut))
 }
 
 /**
@@ -294,7 +380,7 @@ export function transcriptAt(state, cut = Infinity, fromSeq = 0) {
  * @param requestId - the client-generated request identity.
  * @returns `{receipt,text,uploadIds}`, or null for an unseen request id.
  */
-export function receiptFrom(state, requestId) {
+export function receiptFrom(state: TranscriptState, requestId: string) {
   const receipt = state.receipts.find(item => item.requestId === requestId)
   if (receipt === undefined) return null
   return { receipt: { sessionId: state.sessionId, requestId, messageId: receipt.messageId, acceptedSeq: receipt.acceptedSeq },
@@ -352,21 +438,32 @@ export const workStateSchema = z.object({
   activity: activitySchema,
 })
 
-const emptyActivity = () => ({ episode: null, completed: null, delivery: null, executing: false, parked: false,
+/** The work unit state, as the schema above declares it. */
+type WorkState = z.infer<typeof workStateSchema>
+/** One task row, as the schema above declares it. */
+type JobRow = z.infer<typeof jobRowSchema>
+/** One activity episode entry, as the schema above declares it. */
+type ActivityEntry = z.infer<typeof activityEntrySchema>
+/** The activity summary, as the schema above declares it. */
+type Activity = z.infer<typeof activitySchema>
+
+const emptyActivity = (): Activity => ({ episode: null, completed: null, delivery: null, executing: false, parked: false,
   latestOutput: null, decisions: [], unavailable: [] })
 
 /** The roster after the folded prefix, with each row's report interpretation. */
-function rosterOf(state) {
-  return state.order.map(taskId => ({ ...state.rows[taskId], report: reportState(taskId, state) }))
+function rosterOf(state: WorkState) {
+  return state.order.map(taskId => ({ ...state.rows[taskId] as JobRow, report: reportState(taskId, state) }))
 }
 
 /** One report's state comes only from the native decision, inbox and turn records. */
-function reportState(taskId, state) {
+function reportState(taskId: string, state: WorkState) {
   const report = state.reports[taskId]
   if (report === undefined) return { status: 0 }
-  let value = { status: report.delivery === 'failed' ? 5 : ['wakeup', 'busy-context'].includes(report.delivery) ? 1 : 0,
+  let value: { status: number; messageId?: string | undefined; turn?: number | null | undefined } = { status: report.delivery === 'failed' ? 5 : ['wakeup', 'busy-context'].includes(report.delivery) ? 1 : 0,
     ...(report.messageId === undefined ? {} : { messageId: report.messageId }) }
-  const consumed = state.consumed[report.messageId]
+  // A report without a message id reads the consumed map's `undefined` key,
+  // which no consumed row uses.
+  const consumed = state.consumed[report.messageId as string]
   if (consumed !== undefined) {
     value = { ...value, ...consumed }
     const ending = state.endings[String(consumed.turn)]
@@ -385,8 +482,7 @@ function reportState(taskId, state) {
  * rather than closure variables so the registry can checkpoint it. Mutates the
  * copy it is handed.
  */
-function visitActivity(activity, sessionId, event, state) {
-  const data = event.data
+function visitActivity(activity: Activity, sessionId: string, event: SessionEvent, state: WorkState) {
   if (event.type === 'session/end-seed') {
     // Restored process-local work has no continuation guarantee; later real turns need their own episode.
     const lost = rosterOf(state).filter(row => ['running', 'stopping'].includes(row.status) || [1, 2].includes(row.report.status))
@@ -395,18 +491,21 @@ function visitActivity(activity, sessionId, event, state) {
     activity.decisions = []
     activity.parked = true
   }
-  if (event.type === 'agent/inbox/spliced' && data.inserted.some(message => message.source?.kind === 'user')) activity.parked = false
+  if (event.type === 'agent/inbox/spliced' && event.data.inserted.some(message => message.source?.kind === 'user')) activity.parked = false
   if (event.type === 'turn/start') { activity.executing = true; activity.parked = false }
-  else if (event.type === 'turn/end') { activity.executing = false; if (data.reason.kind !== 'completed') activity.parked = true }
+  else if (event.type === 'turn/end') { activity.executing = false; if (event.data.reason.kind !== 'completed') activity.parked = true }
   else if (event.type === 'jobs/lifecycle') {
-    const id = taskKey(data.generation, data.job.id)
-    if (data.phase === 'settled') { if (!activity.decisions.includes(id)) activity.decisions.push(id) }
-    else if (data.phase === 'removed') activity.decisions = activity.decisions.filter(item => item !== id)
+    const id = taskKey(event.data.generation, event.data.job.id)
+    if (event.data.phase === 'settled') { if (!activity.decisions.includes(id)) activity.decisions.push(id) }
+    else if (event.data.phase === 'removed') activity.decisions = activity.decisions.filter(item => item !== id)
   } else if (event.type === 'jobs/report') {
-    const id = taskKey(data.generation, data.jobId)
+    const id = taskKey(event.data.generation, event.data.jobId)
     activity.decisions = activity.decisions.filter(item => item !== id)
   }
-  const begin = seq => { activity.episode ??= { episodeId: `${sessionId}/${seq}`, startedSeq: seq } }
+  const begin = (seq: number): ActivityEntry => {
+    activity.episode ??= { episodeId: `${sessionId}/${seq}`, startedSeq: seq }
+    return activity.episode
+  }
   const pending = Object.values(state.pending).flat()
   const waking = !activity.parked && pending.some(message => message.kind === 'user')
   const working = activity.executing || waking || activity.decisions.length > 0
@@ -414,8 +513,8 @@ function visitActivity(activity, sessionId, event, state) {
       && (['running', 'stopping'].includes(row.status) || [1, 2].includes(row.report.status)))
   if (working) begin(event.seq)
   if (event.type === 'delivery/message') {
-    begin(event.seq)
-    activity.delivery = { episodeId: activity.episode.episodeId, seq: event.seq }
+    const episode = begin(event.seq)
+    activity.delivery = { episodeId: episode.episodeId, seq: event.seq }
     activity.latestOutput = event.seq
   } else if (event.type === 'assistant/message' || event.type === 'assistant/attempt') activity.latestOutput = event.seq
   if (activity.episode !== null && activity.latestOutput !== null && activity.latestOutput >= activity.episode.startedSeq) {
@@ -428,7 +527,7 @@ function visitActivity(activity, sessionId, event, state) {
 }
 
 /** Whether the work unit interprets an event at all; everything else keeps the state reference. */
-function workEventOf(event) {
+function workEventOf(event: SessionEvent): boolean {
   switch (event.type) {
     case 'jobs/lifecycle':
     case 'jobs/report':
@@ -450,7 +549,7 @@ function workEventOf(event) {
 /**
  * The shared task + activity unit: one fold, two read outputs.
  */
-export const workDefinition = {
+export const workDefinition: ProjectionDefinition<'ourfairyWork', WorkState> = {
   key: 'ourfairyWork',
   stateVersion: 2,
   stateSchema: workStateSchema,
@@ -458,15 +557,14 @@ export const workDefinition = {
     turn: null, activity: emptyActivity() }),
   apply(state, event) {
     if (!workEventOf(event)) return state
-    const data = event.data
     const next = { ...state, activity: { ...state.activity,
       episode: state.activity.episode === null ? null : { ...state.activity.episode },
       completed: state.activity.completed === null ? null : { ...state.activity.completed },
       delivery: state.activity.delivery === null ? null : { ...state.activity.delivery },
       decisions: [...state.activity.decisions], unavailable: [...state.activity.unavailable] } }
     if (event.type === 'jobs/lifecycle') {
-      const taskId = taskKey(data.generation, data.job.id)
-      if (data.phase === 'removed') {
+      const taskId = taskKey(event.data.generation, event.data.job.id)
+      if (event.data.phase === 'removed') {
         if (state.rows[taskId] !== undefined) {
           const rows = { ...next.rows }
           delete rows[taskId]
@@ -474,28 +572,28 @@ export const workDefinition = {
           next.order = next.order.filter(item => item !== taskId)
         }
       } else {
-        next.rows = { ...next.rows, [taskId]: { taskId, ...data.job, generation: data.generation } }
+        next.rows = { ...next.rows, [taskId]: { taskId, ...event.data.job, generation: event.data.generation } }
         if (state.rows[taskId] === undefined) next.order = [...state.order, taskId]
       }
     } else if (event.type === 'jobs/report') {
-      next.reports = { ...next.reports, [taskKey(data.generation, data.jobId)]: { ...data, scheduledTurn: next.turn } }
+      next.reports = { ...next.reports, [taskKey(event.data.generation, event.data.jobId)]: { ...event.data, scheduledTurn: next.turn } }
     } else if (event.type === 'turn/start') {
-      next.turn = data.turn
+      next.turn = event.data.turn
     } else if (event.type === 'turn/end') {
-      next.endings = { ...next.endings, [String(data.turn)]: data.reason.kind }
+      next.endings = { ...next.endings, [String(event.data.turn)]: event.data.reason.kind }
       next.turn = null
     } else if (event.type === 'agent/inbox/spliced') {
-      const queue = [...(next.pending[data.target] ?? [])]
-      const removed = queue.splice(data.start, data.removedCount ?? 0,
-        ...data.inserted.map(message => ({ id: message.id, kind: message.source?.kind ?? 'other' })))
-      next.pending = { ...next.pending, [data.target]: queue }
+      const queue = [...(next.pending[event.data.target] ?? [])]
+      const removed = queue.splice(event.data.start, event.data.removedCount ?? 0,
+        ...event.data.inserted.map(message => ({ id: message.id, kind: message.source?.kind ?? 'other' })))
+      next.pending = { ...next.pending, [event.data.target]: queue }
       for (const message of removed) {
         if (message.kind !== 'tool-jobs') continue
         next.consumed = { ...next.consumed,
-          [message.id]: data.outcome === 'canceled' ? { status: 4 } : { status: 2, turn: next.turn } }
+          [message.id]: event.data.outcome === 'canceled' ? { status: 4 } : { status: 2, turn: next.turn } }
       }
-    } else if (event.type === 'user/message' && data.source?.kind === 'tool-jobs') {
-      next.consumed = { ...next.consumed, [data.id]: { status: 2, turn: next.turn } }
+    } else if (event.type === 'user/message' && event.data.source?.kind === 'tool-jobs') {
+      next.consumed = { ...next.consumed, [event.data.id]: { status: 2, turn: next.turn } }
     }
     visitActivity(next.activity, next.sessionId, event, next)
     return next
@@ -503,8 +601,8 @@ export const workDefinition = {
 }
 
 /** Wire tasks: the folded roster enriched with the live registry's availability. */
-function tasksAt(state, ctx, sessionId) {
-  const live = new Map(ctx.jobs.list(sessionId).filter(job => job.owner === sessionId).map(job => [job.id, job]))
+function tasksAt(state: WorkState, ctx: Context, sessionId: string) {
+  const live = new Map<string, JobView>(ctx.jobs.list(sessionId as SessionId).filter(job => job.owner === sessionId).map(job => [job.id, job]))
   return rosterOf(state).map(row => {
     const job = row.generation === ctx.jobs.generation ? live.get(row.id) : undefined
     const available = job !== undefined
@@ -523,7 +621,7 @@ function tasksAt(state, ctx, sessionId) {
 }
 
 /** Read-time activity summary over the durable machine state, the live roster and `running`. */
-function activityAt(state, tasks, running, cut) {
+function activityAt(state: WorkState, tasks: ReturnType<typeof tasksAt>, running: boolean, cut: number) {
   const durable = state.activity
   const reasons = [
     ...(running ? [1] : []),
@@ -558,7 +656,7 @@ function activityAt(state, tasks, running, cut) {
  * @param cut - inclusive `throughSeq`, `-1` for an empty log. Required: an
  *   omitted cut would fabricate a `session/Infinity` episode.
  */
-export function tasksAndActivityAt(state, ctx, sessionId, running, cut) {
+export function tasksAndActivityAt(state: WorkState, ctx: Context, sessionId: string, running: boolean, cut: number) {
   const tasks = tasksAt(state, ctx, sessionId)
   return { tasks, activity: activityAt(state, tasks, running, cut) }
 }
@@ -569,6 +667,6 @@ export function tasksAndActivityAt(state, ctx, sessionId, running, cut) {
  * @param ctx - a context carrying the native `sessionProjections` service.
  * @returns the two registration disposers.
  */
-export function registerProjectionUnits(ctx) {
+export function registerProjectionUnits(ctx: Context) {
   return [ctx.sessionProjections.register(transcriptDefinition), ctx.sessionProjections.register(workDefinition)]
 }

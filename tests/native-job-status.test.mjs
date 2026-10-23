@@ -24,7 +24,7 @@ import { repoRoot } from './helpers/backend.mjs'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
 const dshRoot = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
-const units = await import('../backend/chat/src/units.mjs')
+const units = await import('../backend/chat/dist/units.js')
 
 /** The string-literal members of the pinned dsh `JobStatus` declaration. */
 function nativeJobStatuses() {
@@ -53,7 +53,7 @@ test('native job status vocabulary matches the projection', () => {
 })
 
 test('an unmapped native job status is an explicit unknown in /chat/jobs/output', async () => {
-  const { installJobs } = await import('../backend/chat/src/jobs.mjs')
+  const { installJobs } = await import('../backend/chat/dist/jobs.js')
   const native = { id: 'job-1', owner: 'session-1', kind: 'bash', label: 'unmapped status',
     status: 'paused', startedAt: 1, output: { earliest: 0, total: 0 } }
   const ctx = { jobs: {

@@ -9,6 +9,11 @@
  */
 import { realpathSync } from 'node:fs'
 import { sessionDir } from '@deepseek-ai/dsh-spill-local'
+import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the dsh context's own seams — the mounted spill store and the
+// product's space scope this contribution feeds.
+import type {} from '@deepseek-ai/dsh-spill'
+import type { OwnedSession } from '@ourfairy/dsh-spaces'
 
 /**
  * `<spill root>/session-<hash of this session>`, or `undefined` when there is
@@ -28,12 +33,15 @@ import { sessionDir } from '@deepseek-ai/dsh-spill-local'
  * (row id and package) via `tests/native-capabilities.test.mjs` and doctor; the
  * retrieval behavior is pinned by `tests/spill-read.test.mjs`.
  *
- * @param {object} ctx - the chat plugin context.
- * @param {object} session - the native Session the operation runs for.
- * @returns {string|undefined} the real path of that session's spill directory.
+ * @param ctx - the chat plugin context.
+ * @param session - the session the operation runs for.
+ * @returns the real path of that session's spill directory.
  */
-function spillDirectory(ctx, session) {
-  const root = ctx.get('spillStore')?.root
+function spillDirectory(ctx: Context, session: OwnedSession): string | undefined {
+  // The mounted store is the local implementation, the only one that publishes
+  // a root; the abstract spill service does not carry that field.
+  const store = ctx.get('spillStore') as { readonly root?: unknown } | undefined
+  const root = store?.root
   if (typeof root !== 'string' || typeof session?.id !== 'string') return undefined
   try { return realpathSync(sessionDir(root, session.id)) } catch { return undefined }
 }
@@ -41,9 +49,9 @@ function spillDirectory(ctx, session) {
 /**
  * Register the contribution. It grants the session directory only — never the
  * spill root, `DSH_HOME`, or the attachments data directory.
- * @param {object} ctx - a context that provides `ourfairySpaces`.
+ * @param ctx - a context that provides `ourfairySpaces`.
  */
-export function installSpillRead(ctx) {
+export function installSpillRead(ctx: Context): void {
   ctx.effect(() => ctx.ourfairySpaces.contributeReadonlyFiles(session => {
     const directory = spillDirectory(ctx, session)
     return directory === undefined ? [] : [directory]

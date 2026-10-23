@@ -3,24 +3,119 @@ import { randomUUID } from 'node:crypto'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { SessionHistoryGapError, createSessionHistorySeam } from '@deepseek-ai/dsh-agent/session-history'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
-import { attemptText, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.mjs'
-import { FAIRY_PERSONA } from './persona.mjs'
-import { SessionQueues } from './queues.mjs'
+import { attemptText, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.js'
+import { FAIRY_PERSONA } from './persona.js'
+import { SessionQueues } from './queues.js'
+import type { Context } from '@deepseek-ai/cordis'
+import type { Agent, ModelSelection, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
+import type { SessionHistorySeam } from '@deepseek-ai/dsh-agent/session-history'
+import type { OwnedSessionService } from '@ourfairy/dsh-sessions'
+// Type-only: the dsh context's own seams — the agent registry, the shared model
+// selection, the model registry, the session store, the persistence handle and
+// the projection registry.
+import type {} from '@deepseek-ai/dsh-agent-default-model'
+import type {} from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-session-persistence'
+import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
+import type { SessionProjectionStateMap } from '@deepseek-ai/dsh-session-projection'
+import type {} from '@ourfairy/dsh-sessions'
+
+/** The owner facts the owned-session service names a caller by. */
+export type SessionOwner = NonNullable<ReturnType<OwnedSessionService['authenticate']>>
+
+/**
+ * The session id one request names.
+ *
+ * A request body is untrusted JSON, so the id arrives as an unknown value. The
+ * owned-session service is the authority that refuses anything but a string
+ * before the runtime keys it, and the runtime keys that very string; one
+ * assertion marks the boundary instead of one per use.
+ *
+ * @param sessionId - the session id a request body carried.
+ * @returns the same value, typed as the session id the runtime keys.
+ */
+export function requestedSessionId(sessionId: unknown): SessionId {
+  return sessionId as SessionId
+}
+
+/** The observed event window of one live session. */
+interface ObservedWindow {
+  /** The seeded log prefix; null until the first read resolves. */
+  events: SessionEvent[] | null
+  /** The seq the window's append accepts next. */
+  nextSeq: number
+  /** Committed events that arrived before the seed resolved. */
+  buffer: SessionEvent[]
+  /** The in-flight seed, so one read pays for one log read. */
+  seeding: Promise<void> | null
+}
+
+/** The cut one observer reads at. */
+interface ProjectionRange {
+  /** How many events the observer's window keeps. */
+  readonly maxEvents: number
+  /** The cut this observer froze at its first projection. */
+  throughSeq?: number
+  /** The window this observer froze at its first projection. */
+  fromSeq?: number
+}
+
+/** One observer of one live session's published projections. */
+interface Observer extends ProjectionRange {
+  /** The listener a published projection reaches. */
+  readonly listener: ProjectionListener
+}
+
+/** The observed window once its seed resolved: the log prefix is present. */
+type SeededWindow = ObservedWindow & { events: SessionEvent[] }
+
+/** One observer's listener: a published projection, or the failure that replaced it. */
+export type ProjectionListener = (projection: ChatProjection | undefined, error?: Error) => void
+
+/** The wire task row the work unit publishes. */
+type WireTask = ReturnType<typeof tasksAndActivityAt>['tasks'][number]
+/** The wire activity summary the work unit publishes. */
+type WireActivity = ReturnType<typeof tasksAndActivityAt>['activity']
+/** The wire transcript row the transcript unit publishes. */
+type WireMessage = ReturnType<typeof transcriptAt>[number]
+
+/** One published projection: the durable unit state plus the live overlay. */
+export interface ChatProjection {
+  readonly sessionId: SessionId
+  readonly generation: string
+  readonly version: number
+  readonly cursor: number
+  readonly durableThroughSeq: number
+  readonly throughSeq: number
+  readonly fromSeq: number
+  readonly events: readonly SessionEvent[]
+  readonly hasMore: boolean
+  readonly beforeSeq: number | null
+  readonly tasks: WireTask[]
+  readonly activity: WireActivity
+  readonly messages: WireMessage[]
+  readonly attempt: { readonly attemptId: string; readonly revision: number; readonly text: string } | null
+  readonly settledAttempt: { readonly attemptId: string; readonly seq: number } | null
+  readonly replyStatus: number
+  readonly error: string | null | undefined
+}
 
 /**
  * One live chat session: the resumed native Agent plus the live inputs a
  * projection adds to the native Session events. Derived runtime state only.
  */
-class LiveSession {
+export class LiveSession {
   generation = randomUUID()
   version = 0
   durableThroughSeq = -1
-  settledAttempt = null
+  settledAttempt: { attemptId: string; seq: number } | null = null
   stopping = false
-  error = null
-  listeners = new Set()
+  error: string | null | undefined = null
+  listeners = new Set<Observer>()
   scheduled = false
-  agent = null
+  agent: Agent | null = null
   /**
    * The observed event window: `events` is null until the first read seeds it
    * with one log read; `nextSeq` is the seq its append accepts next; `buffer`
@@ -28,69 +123,74 @@ class LiveSession {
    * window means no read has needed the log yet, so a session that is only
    * written never pays for one.
    */
-  window = null
+  window: ObservedWindow | null = null
   /** Per-turn shared selection: refreshed at each turn start, never mid-turn. */
-  selection = null
+  selection: ModelSelectionRef | null = null
   /** Route this session's running turn is pinned to; undefined between turns. */
-  route = null
+  route: { provider: string; model: string } | null = null
   /** A turn began while a shared-configuration write was in flight; re-read it before the first request. */
   recheckSelection = false
 
-  get session() { return this.agent.session }
-  get sessionId() { return this.agent.id }
-  get status() { return this.agent.status }
+  get session(): Session { return (this.agent as Agent).session }
+  get sessionId(): SessionId { return (this.agent as Agent).id }
+  get status(): 'idle' | 'running' { return (this.agent as Agent).status }
 }
 
 /**
  * Owns every live chat session: opening it once, its ordered writes, its event
- * reads and its published projections. `jobs.mjs` receives this runtime
+ * reads and its published projections. `jobs.ts` receives this runtime
  * directly; the delivery row reaches it only through the `ourfairyChatRuntime`
  * service.
  */
 export class SessionRuntime {
-  #live = new Map()
-  #opening = new Map()
+  /** The host context this runtime reads; assigned by the constructor. */
+  declare ctx: Context
+  #live = new Map<SessionId, LiveSession>()
+  #opening = new Map<SessionId, Promise<LiveSession>>()
   #queues = new SessionQueues()
   /** Non-null while one shared-configuration write is in flight (admission barrier). */
-  #configWrite = null
+  #configWrite: Promise<void> | null = null
   /** Native Assistant fold and durable event cursor; one seam per runtime. */
-  #history
-  constructor(ctx) {
+  #history: SessionHistorySeam
+  constructor(ctx: Context) {
     this.ctx = ctx
     this.#history = createSessionHistorySeam(ctx)
     ctx.effect(() => () => this.#history[Symbol.dispose](), 'ourfairy-chat: native session history seam')
   }
 
-  live(sessionId) { return this.#live.get(sessionId) }
+  live(sessionId: SessionId): LiveSession | undefined { return this.#live.get(sessionId) }
 
   /** Authorize this owner, then return the one live session for `sessionId`. */
-  async open(owner, sessionId) {
+  async open(owner: SessionOwner, sessionId: unknown): Promise<LiveSession> {
     // The stored owner is checked even for a live Agent and before resume can repair/write.
     await this.ctx.ourfairySessions.read(owner, sessionId)
-    const live = this.#live.get(sessionId)
+    // The owned-session service above is the authority that the id is a string;
+    // the runtime keys that very string.
+    const key = sessionId as SessionId
+    const live = this.#live.get(key)
     if (live !== undefined) return live
-    let opening = this.#opening.get(sessionId)
+    let opening = this.#opening.get(key)
     if (opening === undefined) {
-      opening = this.runSession(sessionId, () => this.#resume(owner, sessionId))
-      this.#opening.set(sessionId, opening)
+      opening = this.runSession(key, () => this.#resume(owner, key))
+      this.#opening.set(key, opening)
     }
     try { return await opening } finally {
-      if (this.#opening.get(sessionId) === opening) this.#opening.delete(sessionId)
+      if (this.#opening.get(key) === opening) this.#opening.delete(key)
     }
   }
 
   /** Serialize work that writes one session. */
-  runSession(sessionId, work) { return this.#queues.runSession(sessionId, work) }
+  runSession<T>(sessionId: SessionId, work: () => Promise<T>): Promise<T> { return this.#queues.runSession(sessionId, work) }
   /** Serialize one outgoing delivery's preparation, apart from the target session's queue. */
-  runDelivery(deliveryId, work) { return this.#queues.runDelivery(deliveryId, work) }
+  runDelivery<T>(deliveryId: SessionId, work: () => Promise<T>): Promise<T> { return this.#queues.runDelivery(deliveryId, work) }
 
-  async #resume(owner, sessionId) {
+  async #resume(owner: SessionOwner, sessionId: SessionId) {
     const state = new LiveSession()
     await this.ctx.agents.resume({ resumeSessionId: sessionId,
       agentOptions: this.ctx.agentDefaultModel.currentSelection(),
       setup: (agentCtx, agent) => {
         state.agent = agent
-        const selection = { current: this.ctx.agentDefaultModel.currentSelection(), assembled: undefined }
+        const selection: ModelSelectionRef = { current: this.ctx.agentDefaultModel.currentSelection(), assembled: undefined }
         state.selection = selection
         installModelSelection(agentCtx, selection)
         agentCtx.systemPrompt.section({ name: 'ourfairy:persona', order: 0, text: FAIRY_PERSONA, interpolate: false })
@@ -99,7 +199,7 @@ export class SessionRuntime {
         const changed = () => this.changed(state)
         // A turn pins the shared selection read at its start: a running reply,
         // including its tool-continuation steps, never switches mid-turn.
-        agentCtx.on('session/event', (session, event) => {
+        agentCtx.on('session/event', (_session, event) => {
           this.#observe(state, event)
           if (event.type === 'turn/start') {
             selection.current = this.ctx.agentDefaultModel.currentSelection()
@@ -116,7 +216,9 @@ export class SessionRuntime {
         // otherwise downgrade the image to a text reference without failing.
         agentCtx.on('agent/pre-step', async ({ messages, step }, next) => {
           if (step === 1 && messages.some(message => (message.content ?? []).some(block => block.type === 'image'))) {
-            const shared = selection.current
+            // The shared selection is always a selection: the runtime sets it
+            // before the agent runs and only ever assigns another one.
+            const shared = selection.current as ModelSelection
             const info = await this.ctx.llm.resolveModelInfo(shared.provider, shared.model)
             // Only an explicit negative declaration is a refusal; an adapter that
             // declares nothing keeps the native behaviour of sending the image.
@@ -153,11 +255,11 @@ export class SessionRuntime {
           // The attempt's text comes from the native history seam, not a second fold here.
           changed()
         })
-        agentCtx.on('agent/error', ({ error }) => { state.error = error?.message ?? String(error); changed() })
+        agentCtx.on('agent/error', ({ error }) => { state.error = (error as { message?: string } | null | undefined)?.message ?? String(error); changed() })
         agentCtx.on('agent/status', ({ status }) => {
           if (status === 'idle') {
             state.stopping = false
-            this.barrier(state).then(changed, error => { state.error = error.message; changed() })
+            this.barrier(state).then(changed, error => { state.error = (error as { message?: string }).message; changed() })
           }
           changed()
         })
@@ -171,7 +273,7 @@ export class SessionRuntime {
   activeReplies() {
     return [...this.#live.values()]
       .filter(state => state.route !== null)
-      .map(state => ({ sessionId: state.sessionId, ...state.route }))
+      .map(state => ({ sessionId: state.sessionId, ...state.route as { provider: string; model: string } }))
   }
 
   /**
@@ -181,10 +283,10 @@ export class SessionRuntime {
    * @param refusal - maps the running replies to a refusal message, or undefined.
    * @param work - the settings write to perform.
    */
-  async withReplyGuard(refusal, work) {
+  async withReplyGuard(refusal: (replies: { sessionId: SessionId; provider: string; model: string }[]) => unknown, work: () => Promise<unknown>) {
     const previous = this.#configWrite
-    let release
-    const gate = new Promise(resolve => { release = resolve })
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
     const mine = previous === null ? gate : previous.then(() => gate)
     this.#configWrite = mine
     await previous
@@ -199,14 +301,14 @@ export class SessionRuntime {
   }
 
   /** One safe one-shot read of a session's event stream, shared with attachments. */
-  events(sessionId) { return readSessionEvents(this.ctx, sessionId) }
+  events(sessionId: SessionId) { return readSessionEvents(this.ctx, sessionId) }
 
   /**
    * Read the native Assistant baseline once: the live attempt's authoritative
    * text, or null once the fold lost continuity (a withdrawn attempt is correct,
    * a concatenation of two attempts is not).
    */
-  attemptOf(state) {
+  attemptOf(state: LiveSession) {
     const { baseline, needsResync } = this.#history.assistantStream(state.sessionId)
     const attempt = needsResync ? undefined : baseline.activeAttempt
     if (attempt === undefined) return null
@@ -221,7 +323,7 @@ export class SessionRuntime {
    * is reopened once from a fresh observation rather than folded as continuous
    * history. A second gap is a defect in the read, not a recoverable cut.
    */
-  async contiguousEvents(sessionId) {
+  async contiguousEvents(sessionId: SessionId) {
     for (let reopen = 0; reopen < 2; reopen++) {
       const read = await this.events(sessionId)
       const cursor = this.#history.eventCursor(-1)
@@ -242,7 +344,7 @@ export class SessionRuntime {
    * is an array slice; otherwise the native read handle returns exactly the
    * requested range. Paging never reads the whole log.
    */
-  async pageEvents(state, fromSeq, end) {
+  async pageEvents(state: LiveSession, fromSeq: number, end: number) {
     const seeded = state.window?.events
     if (seeded != null) return seeded.slice(fromSeq, end)
     const handle = await this.ctx.sessionPersistence.open(state.sessionId, 'read')
@@ -254,7 +356,7 @@ export class SessionRuntime {
     }
   }
 
-  async barrier(state) {
+  async barrier(state: LiveSession) {
     // Capture BEFORE await: later appended events are not claimed durable by this barrier.
     const through = state.session.seq - 1
     await this.ctx.sessions.flush(state.session)
@@ -265,10 +367,10 @@ export class SessionRuntime {
   }
 
   /** The only writer of `version`: record that published inputs changed, then publish. */
-  changed(state) { state.version++; this.publish(state) }
+  changed(state: LiveSession) { state.version++; this.publish(state) }
 
   /** Schedule one projection pass for the current listeners; does not change the version. */
-  publish(state) {
+  publish(state: LiveSession) {
     if (state.scheduled || state.listeners.size === 0) return
     state.scheduled = true
     queueMicrotask(async () => {
@@ -279,7 +381,9 @@ export class SessionRuntime {
           if (state.version !== projection.version) queueMicrotask(() => this.publish(state))
         }
       } catch (error) {
-        for (const observer of state.listeners) observer.listener(undefined, error)
+        // The observer decides what to do with the failure; it is the caught
+        // value as it is.
+        for (const observer of state.listeners) observer.listener(undefined, error as Error)
       } finally {
         state.scheduled = false
       }
@@ -291,7 +395,7 @@ export class SessionRuntime {
    * on every commit, so appending here is the only per-event window work; a
    * commit before the seed resolved waits in the buffer for the merge.
    */
-  #observe(state, event) {
+  #observe(state: LiveSession, event: SessionEvent) {
     const window = state.window
     if (window === null) return
     if (window.events === null) {
@@ -309,23 +413,25 @@ export class SessionRuntime {
    * The one observed window for this session, seeding it on first use. Every
    * observer formats its own slice of this window; the log is read once.
    */
-  async #windowOf(state) {
+  async #windowOf(state: LiveSession): Promise<SeededWindow> {
     let window = state.window
     if (window === null) {
       window = state.window = { events: null, nextSeq: 0, buffer: [], seeding: null }
     }
-    if (window.events !== null) return window
+    // The seed resolves with the log prefix in place, so the window is seeded
+    // from here on.
+    if (window.events !== null) return window as SeededWindow
     window.seeding ??= this.#seedWindow(state, window).catch(error => {
       // Drop the half-seeded window so a later read retries from the log.
       state.window = null
       throw error
     })
     await window.seeding
-    return window
+    return window as SeededWindow
   }
 
   /** One log read, merged with the commits that arrived while it was in flight. */
-  async #seedWindow(state, window) {
+  async #seedWindow(state: LiveSession, window: ObservedWindow) {
     const { events } = await this.contiguousEvents(state.sessionId)
     const seeded = [...events]
     let nextSeq = (seeded.at(-1)?.seq ?? -1) + 1
@@ -339,8 +445,8 @@ export class SessionRuntime {
     window.buffer = []
   }
 
-  /** One durable unit's current state; the units are registered by `index.mjs`. */
-  unitState(state, definition) {
+  /** One durable unit's current state; the units are registered by `index.ts`. */
+  unitState<K extends keyof SessionProjectionStateMap>(state: LiveSession, definition: ProjectionDefinition<K, SessionProjectionStateMap[K]>): SessionProjectionStateMap[K] {
     const unit = this.ctx.sessionProjections.stateOf(state.session, definition.key)
     if (unit === undefined) throw new Error(`chat projection "${definition.key}" is not registered`)
     return unit
@@ -350,7 +456,7 @@ export class SessionRuntime {
    * The committed cut this live session can serve. A seeded window is the
    * observed authority; before the first read the session's own sequence is.
    */
-  cursorOf(state) {
+  cursorOf(state: LiveSession) {
     const events = state.window?.events
     if (events != null) return events.at(-1)?.seq ?? -1
     return state.session.seq - 1
@@ -361,7 +467,7 @@ export class SessionRuntime {
    * opening observer freezes `throughSeq`/`fromSeq`; later snapshots keep that
    * cut and include its `fromSeq` through the current cursor.
    */
-  async projection(state, range) {
+  async projection(state: LiveSession, range: ProjectionRange): Promise<ChatProjection> {
     const window = await this.#windowOf(state)
     const attempt = this.attemptOf(state)
     const cursor = this.cursorOf(state)
@@ -385,20 +491,20 @@ export class SessionRuntime {
   }
 
   /** Register one observer after its initial barrier; returns the unsubscribe. */
-  subscribe(state, maxEvents, listener) {
-    const observer = { listener, maxEvents }
+  subscribe(state: LiveSession, maxEvents: number, listener: ProjectionListener) {
+    const observer: Observer = { listener, maxEvents }
     state.listeners.add(observer)
     this.publish(state)
     return () => state.listeners.delete(observer)
   }
 
   /** Queue one user message on the live agent. */
-  followup(state, message) { state.agent.followup(message) }
+  followup(state: LiveSession, message: UserMessage) { (state.agent as Agent).followup(message) }
 
   /** Ask the live agent to stop the current reply, keeping accepted queued input. */
-  stop(state) {
+  stop(state: LiveSession) {
     state.stopping = state.status === 'running'
-    state.agent.cancel({ kind: 'user' }, { keepInbox: true })
+    ;(state.agent as Agent).cancel({ kind: 'user' }, { keepInbox: true })
     this.changed(state)
   }
 }

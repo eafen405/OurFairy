@@ -18,7 +18,7 @@ import { test } from 'node:test'
 // module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
 
-const units = await import('../backend/chat/src/units.mjs')
+const units = await import('../backend/chat/dist/units.js')
 
 const job = (overrides = {}) => ({ id: 'job-1', owner: 'session-1', kind: 'task', label: 'work',
   startedAt: 10, output: { earliest: 0, total: 0 }, ...overrides })

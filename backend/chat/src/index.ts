@@ -1,12 +1,29 @@
 /** Narrow product routes over native Agent/SessionQuery, without the upstream controller. */
 import { postHandler } from '@ourfairy/dsh-http/http'
-import { RemoteChat } from './service.mjs'
-import { SessionRuntime } from './runtime.mjs'
-import { ChatRuntimeFacade } from './runtime-facade.mjs'
-import { installJobs } from './jobs.mjs'
-import { registerProjectionUnits } from './units.mjs'
-import { installSpillRead } from './spill-read.mjs'
+import { RemoteChat } from './service.js'
+import { SessionRuntime } from './runtime.js'
+import { ChatRuntimeFacade } from './runtime-facade.js'
+import { installJobs } from './jobs.js'
+import { registerProjectionUnits } from './units.js'
+import { installSpillRead } from './spill-read.js'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
+import type { Context } from '@deepseek-ai/cordis'
+import type { ServerResponse } from 'node:http'
+import type { ChatObserver, ChatRequest } from './service.js'
+import type { SessionOwner } from './runtime.js'
+// Type-only: the dsh context's own seams — the web server's route registry and
+// the carrier's trust fence.
+import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-client-connection'
+
+/**
+ * The seams the other product rows consume: the chat service and the narrow
+ * runtime facade. They are type-only re-exports, so the package's runtime
+ * surface is unchanged while the context augmentations they declare reach the
+ * rows that read them.
+ */
+export type { RemoteChat } from './service.js'
+export type { ChatRuntimeFacade } from './runtime-facade.js'
 
 export const name = 'ourfairy-chat'
 /**
@@ -20,7 +37,7 @@ export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairyS
   // work before that factory is available. Chat never reads `ctx.agentLoop`.
   'agentLoop',
   'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'llm', 'sessionPersistence', 'jobs', 'sessionProjections']
-export function apply(ctx) {
+export function apply(ctx: Context): void {
   // Every registered unit folds on the native event drive, once per session and
   // shared by every observer; `register` installs its own effect on this fiber.
   registerProjectionUnits(ctx)
@@ -29,10 +46,11 @@ export function apply(ctx) {
   const chat = new RemoteChat(ctx, runtime)
   const { jobOutput, jobStop } = installJobs(ctx, runtime)
   installSpillRead(ctx)
-  const register = (path, handle, respond) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,
+  const register = (path: string, handle: (owner: SessionOwner, body: ChatRequest) => Promise<unknown>, respond?: (response: ServerResponse, result: unknown) => void) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,
     handler: postHandler({ fence: request => ctx.connection.fence(request), HttpError: SessionScopeError,
       codePrefix: 'chat', internalMessage: 'remote chat request failed',
-      handle: async (body, request) => handle(chat.caller(request), body), respond }),
+      handle: async (body, request) => handle(chat.caller(request), body),
+      ...respond !== undefined ? { respond } : {} }),
   }), `ourfairy-chat: ${path}`)
   register('/chat/send', async (owner, body) => ({ ok: true, receipt: await chat.send(owner, body) }))
   register('/chat/receipt', async (owner, body) => ({ ok: true, receipt: await chat.receipt(owner, body) }))
@@ -42,7 +60,10 @@ export function apply(ctx) {
   register('/chat/stop', async (owner, body) => { await chat.stop(owner, body); return { ok: true } })
   register('/chat/jobs/output', async (owner, body) => ({ ok: true, output: await jobOutput(owner, body) }))
   register('/chat/jobs/stop', async (owner, body) => ({ ok: true, outcome: await jobStop(owner, body) }))
-  register('/chat/observe', (owner, body) => chat.observe(owner, body), (response, subscribe) => {
+  register('/chat/observe', (owner, body) => chat.observe(owner, body), (response, result) => {
+    // The route's handler returns the observer; the transport envelope types
+    // every route result as unknown.
+    const subscribe = result as ChatObserver
     response.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-accel-buffering': 'no' })
     response.flushHeaders()
     const unsubscribe = subscribe((projection, error) => {

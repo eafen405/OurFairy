@@ -214,7 +214,7 @@ test('simultaneous senders and recipient primary creation preserve both deliveri
 test('failed native durability checkpoint never confirms and stable retry recovers the same message', async () => {
   const target = (await request('/sessions/primary', bob.token)).session.id
   await stopBackend()
-  const fixture = new URL('../backend/chat/test-support/fail-outlets.mjs',import.meta.url).pathname
+  const fixture = new URL('../backend/chat/test-support/fail-outlets.ts',import.meta.url).pathname
   const layer = writeOverlay(home,[{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failFlush:true}}]}],'flush-failure.patch.yml')
   await startBackend([layer])
   await request('/chat/read',bob.token,{sessionId:target}) // ensure the recipient is live
@@ -234,7 +234,7 @@ test('failed native durability checkpoint never confirms and stable retry recove
 test('notification outlet failure preserves durable delivery and successful sender confirmation', async () => {
   const target = (await request('/sessions/primary', bob.token)).session.id
   await stopBackend()
-  const fixture = new URL('../backend/chat/test-support/fail-outlets.mjs',import.meta.url).pathname
+  const fixture = new URL('../backend/chat/test-support/fail-outlets.ts',import.meta.url).pathname
   const layer = writeOverlay(home,[{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failNotification:true}}]}],'notification-failure.patch.yml')
   await startBackend([layer])
   const args = {recipientShortId:bob.user.shortId,text:'Notification trouble does not retract this'}

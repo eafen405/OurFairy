@@ -18,6 +18,12 @@
         "208-ts-spaces-attachments"
       ],
       "note": "#208 T3：spaces 与 attachments 迁 .ts（包内原子）、pdf worker 搬到包根 assets/ 并随包发布、文件权限与沙箱行为不变"
+    },
+    {
+      "dirs": [
+        "209-ts-chat"
+      ],
+      "note": "#209 T4：chat 迁 .ts（包内原子，1400 行最大包）、投影单元的 SessionProjectionStateMap 声明、test-support 夹具的 noEmit 工程与类型剥离路线、运算符与字面量的机械复查"
     }
   ]
 }

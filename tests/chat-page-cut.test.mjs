@@ -16,7 +16,7 @@ import { test } from 'node:test'
 // Registers Node resolution for the pinned dsh checkout before product modules load.
 import './helpers/dsh-peers.mjs'
 
-const { SessionRuntime } = await import('../backend/chat/src/runtime.mjs')
+const { SessionRuntime } = await import('../backend/chat/dist/runtime.js')
 
 /** One committed event at `seq`. */
 const at = seq => ({ seq, type: 'test/event', data: {} })

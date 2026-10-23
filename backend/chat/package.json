@@ -5,12 +5,16 @@
   "type": "module",
   "description": "OurFairy remote chat: authenticated send, read, page and SSE observe routes over dsh Agent sessions.",
   "license": "UNLICENSED",
-  "main": "./src/index.mjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.mjs",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./locale/*.json": "./locale/*.json"
   },
-  "files": ["src", "README.md", "locale/*.json"],
+  "files": ["dist/**/*.js", "dist/**/*.d.ts", "README.md", "locale/*.json"],
   "dependencies": {
     "zod": "^4.4.3"
   },

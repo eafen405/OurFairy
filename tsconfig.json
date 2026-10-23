@@ -10,6 +10,8 @@
     { "path": "./backend/sessions/tsconfig.test-support.json" },
     { "path": "./backend/spaces" },
     { "path": "./backend/spaces/tsconfig.test-support.json" },
-    { "path": "./backend/attachments" }
+    { "path": "./backend/attachments" },
+    { "path": "./backend/chat" },
+    { "path": "./backend/chat/tsconfig.test-support.json" }
   ]
 }
