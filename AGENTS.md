@@ -24,6 +24,11 @@
 
 编写或审查代码时读 `CODING_STANDARDS.md`；实施或交付证据时从 `work/implementation/CONVENTIONS.md` 进入（协作、证据与版本组合协议），按指针读取当前任务所需内容。
 
+### 验证节奏
+
+- **按改动面跑测试。** 迁移、重构与普通改动先跑与改动相关的测试文件；全量 `npm test` 与 `npm run combo:verify` 留到收口、合并与交付前，不每步跑。最终集成状态必须跑全量，不能省。
+- **CI 低频。** 这是个人项目，CI 的必要性低于本地门禁；不为每次小改动触发全量 CI，收口或合并时跑一次即可。
+
 ## Agent skills
 
 ### Issue tracker
