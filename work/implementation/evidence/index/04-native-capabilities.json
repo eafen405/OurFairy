@@ -1,0 +1,47 @@
+{
+  "title": "原生能力收敛（规格 #71）",
+  "entries": [
+    {
+      "dirs": [
+        "81-pdf-subprocess"
+      ],
+      "note": "#81 PDF worker 经原生 subprocess 服务，bwrap 网络显式化"
+    },
+    {
+      "dirs": [
+        "82-native-rows"
+      ],
+      "note": "#82 原生模型重试与大工具结果 spill"
+    },
+    {
+      "dirs": [
+        "83-spill-read"
+      ],
+      "note": "#83 被 spill 的结果由本会话只读取回，其他会话与用户被拒绝"
+    },
+    {
+      "dirs": [
+        "84-history-seam"
+      ],
+      "note": "#84 dsh fork 暴露 Host 可调用的 assistant 基线与事件 cursor 接缝"
+    },
+    {
+      "dirs": [
+        "85-history-adapter"
+      ],
+      "note": "#85 断线重连/live 历史改用原生 assistant 基线与事件 cursor"
+    },
+    {
+      "dirs": [
+        "86-upgrade-review"
+      ],
+      "note": "#86 原生能力升级依赖记录、保留实现理由与 doctor 缺项检查"
+    },
+    {
+      "dirs": [
+        "87-closeout"
+      ],
+      "note": "#87 版本组合、最终验收、评审处理与 #71 交接"
+    }
+  ]
+}

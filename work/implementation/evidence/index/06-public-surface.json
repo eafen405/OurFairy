@@ -1,0 +1,23 @@
+{
+  "title": "业务库公开面收敛（规格 #132）",
+  "entries": [
+    {
+      "dirs": [
+        "143-public-surface"
+      ],
+      "note": "#143 store 公开面从 24 个方法收窄到 19 个：删四个零生产调用的方法，`readDelivery` 转私有"
+    },
+    {
+      "dirs": [
+        "144-schema-modules"
+      ],
+      "note": "#144 五组 DDL 常量搬进 `src/schema/` 下的领域模块，存下的 schema 一字不变"
+    },
+    {
+      "dirs": [
+        "145-closeout"
+      ],
+      "note": "#145 证据索引登记、两轴复核（Standards + Spec）、可执行声称检查与全量门禁"
+    }
+  ]
+}

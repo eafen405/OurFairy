@@ -1,0 +1,71 @@
+{
+  "title": "插件生态（规格 #73）",
+  "entries": [
+    {
+      "dirs": [
+        "96-bundle-authority"
+      ],
+      "note": "#96 bundle 成为产品包集合的唯一权威"
+    },
+    {
+      "dirs": [
+        "97-boundary-doc"
+      ],
+      "note": "#97 并行传输例外与保留产品实现的书面边界"
+    },
+    {
+      "dirs": [
+        "98-compat"
+      ],
+      "note": "#98 产品包声明明确 dsh 兼容范围并由 doctor 校验"
+    },
+    {
+      "dirs": [
+        "99-delivery"
+      ],
+      "note": "#99 投递成为独立产品行，chat 只暴露窄运行时服务"
+    },
+    {
+      "dirs": [
+        "100-groups"
+      ],
+      "note": "#100 群组工具成为独立产品行"
+    },
+    {
+      "dirs": [
+        "101-scoped-rows"
+      ],
+      "note": "#101 文件系统、sandbox、bash、工作目录 provider 各自成行"
+    },
+    {
+      "dirs": [
+        "102-config"
+      ],
+      "note": "#102 产品行声明 Config 并在加载期以行名和字段失败"
+    },
+    {
+      "dirs": [
+        "103-model"
+      ],
+      "note": "#103 共享模型初始声明只保留在 bundle，探针读取 `agentDefaultModel`"
+    },
+    {
+      "dirs": [
+        "104-bundle-only"
+      ],
+      "note": "#104 只声明 bundle 的 profile 可安装、启动并服务认证后的产品请求"
+    },
+    {
+      "dirs": [
+        "105-overlay"
+      ],
+      "note": "#105 经 profile overlay 证明投递/群组/scoped provider 行可寻址、可替换，以及非法 config 的加载期失败"
+    },
+    {
+      "dirs": [
+        "106-closeout"
+      ],
+      "note": "#106 版本组合、最终两轴评审、证据索引与子票收口"
+    }
+  ]
+}

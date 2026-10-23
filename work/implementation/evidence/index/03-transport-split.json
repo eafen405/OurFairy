@@ -1,0 +1,29 @@
+{
+  "title": "传输层拆包（规格 #131）",
+  "entries": [
+    {
+      "dirs": [
+        "138-http-package"
+      ],
+      "note": "#138 产品传输信封落地 `@ourfairy/dsh-http`，identity 路由改名 `./routes`，bundle 挂行"
+    },
+    {
+      "dirs": [
+        "139-consumers-core"
+      ],
+      "note": "#139 chat、gateway、sessions 改依赖新包（sessions 保留 `/owner`）"
+    },
+    {
+      "dirs": [
+        "140-consumers-attachments-speech"
+      ],
+      "note": "#140 attachments、speech 改依赖新包"
+    },
+    {
+      "dirs": [
+        "141-contract-closeout"
+      ],
+      "note": "#141 删除 identity 的 `./http` 兼容出口，证据索引与全量门禁"
+    }
+  ]
+}

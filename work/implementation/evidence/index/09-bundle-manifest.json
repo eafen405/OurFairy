@@ -1,0 +1,11 @@
+{
+  "title": "包清单真实性（规格 #136）",
+  "entries": [
+    {
+      "dirs": [
+        "136-closeout"
+      ],
+      "note": "#148–#150：peer 与 license 声明对齐、内核包 README、`files` 存在性检查"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "title": "inject 对齐（规格 #133）",
+  "entries": [
+    {
+      "dirs": [
+        "133-inject-truth"
+      ],
+      "note": "#151/#152/#153 chat 的 inject 与实际依赖对齐：声明收敛、README 传输契约/运行时语义分节、合并树门禁与夹具归属收口"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "title": "组合层分组（规格 #134）",
+  "entries": [
+    {
+      "dirs": [
+        "134-bundle-groups"
+      ],
+      "note": "#159–#162 组合层显式化内核与插件：收口记录与零语义变化对照；逐票证据见 [#159](134-bundle-groups/01-native-group-aware.md)、[#161](134-bundle-groups/02-bundle-groups.md)、[#160](134-bundle-groups/03-absence-attribution.md)"
+    }
+  ]
+}

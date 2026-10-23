@@ -1,0 +1,11 @@
+{
+  "title": "启动器拆分（规格 #137）",
+  "entries": [
+    {
+      "dirs": [
+        "137-launcher-split"
+      ],
+      "note": "spec #137 证据索引：组合层独立成零 spawn 模块、统一错误契约与 bundle manifest 准入规则单份（#155–#158），含合并 tip 门禁与可执行声称复核"
+    }
+  ]
+}
