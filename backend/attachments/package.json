@@ -5,13 +5,19 @@
   "type": "module",
   "description": "OurFairy attachment lifecycle: uploads, expiry and message-qualified access over the native attachment store.",
   "license": "UNLICENSED",
-  "main": "./src/index.mjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.mjs",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
-    "src",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "assets/pdf-worker.py",
     "README.md",
     "pdf",
     "locale/*.json"

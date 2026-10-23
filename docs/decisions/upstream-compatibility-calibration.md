@@ -25,7 +25,7 @@
 
 调查采用 [combo.json](../../combo.json) 当时锁定的 dsh 产品提交 `fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee`，对照研究上游 `d743267388641bc76f17c45ce8b4c231aed1d32c`；OurFairy 为 `902bc11a0f12fe936bde430b1b11ba06719b0d06`。本节为静态源码调查，实际运行证据见下文。
 
-- 身份、邀请、授权、空间规则及投递协调已经主要在 OurFairy 中实现。源码入口：[身份](../../backend/identity/src/index.ts)、[会话](../../backend/sessions/src/service.ts)、[空间](../../backend/spaces/src/index.mjs)、[投递](../../backend/delivery/src/index.mjs)。
+- 身份、邀请、授权、空间规则及投递协调已经主要在 OurFairy 中实现。源码入口：[身份](../../backend/identity/src/index.ts)、[会话](../../backend/sessions/src/service.ts)、[空间](../../backend/spaces/src/index.ts)、[投递](../../backend/delivery/src/index.mjs)。
 - dsh fork 的改动涉及会话归属 header、正式投递消息、第二凭据接入、任务持久事实和中文子串搜索。正式投递扩大了 assistant 消息来源类型，涉及模型回放、查询及导出等消费者。依据：[消息来源类型](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/llm/llm/src/message.ts)、[会话表面](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/core/session/src/surface.ts)、[凭据接入](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/client/connection/src/rpc-host.ts)、[任务完成接线](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/jobs/tool-jobs/src/index.ts)。
 - 上游会话表面使用有限事件集合，自定义事件能否被保存与能否进入模型历史是不同能力。依据：[原上游表面投影](https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/packages/core/session/src/surface.ts)、[事件兼容规则](https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/packages/core/session/src/known-event-types.ts)。外置方案需要分别验证持久化、授权、模型历史和恢复。
 - 产品使用显式 [bundle](../../backend/v1-bundle/cordis.patch.yml)。维护成本也包含随上游核对装配和配置联动，不能仅以 Git 补丁数量衡量。

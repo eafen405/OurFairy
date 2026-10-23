@@ -9,7 +9,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { buildBwrapArgv } from '../backend/spaces/src/bwrap.mjs'
+import { buildBwrapArgv } from '../backend/spaces/dist/bwrap.js'
 
 const profile = network => ({ workspaceRoot: '/tmp/workspace', writable: true, readRoots: [], network })
 

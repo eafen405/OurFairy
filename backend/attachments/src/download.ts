@@ -2,12 +2,17 @@
  * The original-bytes download responder, as a factory the composition mounts
  * and a test drives directly. Client close cancels a pending source read and a
  * backpressure wait, and the file source is released on every path.
+ *
+ * @module @ourfairy/dsh-attachments/src/download
  */
 import { once } from 'node:events'
+import type { ServerResponse } from 'node:http'
+import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentInput } from './service.js'
 
 /** Build the `(res, input) => Promise<void>` responder for `/attachments/download`. */
-export function createDownloadResponder({ attachments }) {
-  return async (res, input) => {
+export function createDownloadResponder({ attachments }: { readonly attachments: AttachmentStore }) {
+  return async (res: ServerResponse, input: AttachmentInput): Promise<void> => {
     const controller = new AbortController()
     const close = () => controller.abort()
     res.once('close', close)
@@ -24,7 +29,7 @@ export function createDownloadResponder({ attachments }) {
       res.end()
     } catch (error) {
       if (!res.headersSent && !res.destroyed) throw error
-      res.destroy(error)
+      res.destroy(error as Error)
     } finally {
       res.off('close', close)
       await iterator.return?.()

@@ -1,32 +1,98 @@
 // fd-bound operations adapted from Fairybot processing/fs-provider.ts.
-import { constants } from 'node:fs'
-import { link as fsLink, lstat as fsLstat, mkdir as fsMkdir, open as fsOpen, readdir as fsReaddir, readlink as fsReadlink, realpath as fsRealpath, rename as fsRename, rm as fsRm } from 'node:fs/promises'
+import { constants, type BigIntStats } from 'node:fs'
+import { link as fsLink, lstat as fsLstat, mkdir as fsMkdir, open as fsOpen, readdir as fsReaddir, readlink as fsReadlink, realpath as fsRealpath, rename as fsRename, rm as fsRm, type FileHandle } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 import { LocalFileSystem } from '@deepseek-ai/dsh-fs-local'
-import { FsError, FsVersion } from '@deepseek-ai/dsh-fs'
-import { pathInside } from './scope.mjs'
+import type { Config as LocalConfig } from '@deepseek-ai/dsh-fs-local'
+import { FsError, FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
+import type { FsDirEntry, FsEditOutcome, FsEditRequest, FsInfo, FsPathInfo, FsTarget, FsWriteIntent, FsWriteOutcome } from '@deepseek-ai/dsh-fs'
+import type { Context } from '@deepseek-ai/cordis'
+import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import type { SessionId } from '@deepseek-ai/dsh-session'
+import { pathInside, type SpaceScope } from './scope.js'
+
 const O_PATH = 0o10000000, O_CLOEXEC = 0o2000000
+
+/**
+ * The errno one filesystem call failed with.
+ *
+ * The pre-migration code read `error.code` straight off the caught value, so
+ * this reads the same property the same way: a thrown `null` still fails here
+ * exactly as it did before.
+ */
+function errorCode(error: unknown): string | undefined {
+  return (error as { code?: string }).code
+}
+
+/** What one resolved target is allowed to touch, for one session. */
+interface Grant {
+  /** The session the target was resolved for. */
+  sessionId?: SessionId
+  /** The roots the session may read. */
+  readRoots: string[]
+  /** The roots the session may write. */
+  writeRoots: string[]
+  /** The resource directories the session owns. */
+  resourceDirs: string[]
+}
+
+/** One opened leaf file, bound to an authorized root. */
+interface BoundLeaf {
+  handle: FileHandle
+  fdPath: string
+  real: string
+}
+
+/** One opened parent directory, bound to an authorized root. */
+interface BoundParent {
+  handle: FileHandle
+  fdPath: string
+  name: string
+  boundPath: string
+  lockKey: string
+}
+
+/** One existing leaf opened for a write. */
+interface LeafForWrite {
+  meta: FileHandle
+  read: FileHandle | undefined
+  version: FsVersion
+  mode: number
+}
+
+/** The product's scoped filesystem: every path is opened inside the session's roots. */
 export default class ScopedFileSystem extends LocalFileSystem {
   static inject = ['ourfairySpaces']
   // The row's own config is the native local filesystem config: cwd and the diff basis bound.
-  static Config = LocalFileSystem.Config
-  grants = new Map()
-  writeLocks = new Map()
-  procFdDir = process.platform === 'linux' ? '/proc/self/fd' : undefined
-  diffBasisMaxBytes = 10 * 1024 * 1024
-  constructor(ctx, config) {
+  static override Config = LocalFileSystem.Config
+
+  /** The scope every path of this provider is checked against. */
+  readonly scope: SpaceScope
+  /** The permissions each resolved target carries. */
+  readonly grants = new Map<string, Grant>()
+  /** The write tail per path, so two writes to one path stay ordered. */
+  readonly writeLocks = new Map<string, Promise<unknown>>()
+  /** The Linux descriptor directory the authorized open boundary needs. */
+  readonly procFdDir = process.platform === 'linux' ? '/proc/self/fd' : undefined
+  /** The exclusive byte limit on one overwrite-diff side. */
+  readonly diffBasisMaxBytes = 10 * 1024 * 1024
+
+  constructor(ctx: Context, config: LocalConfig) {
     super(ctx, config)
     this.scope = ctx.ourfairySpaces
   }
-  get sandboxMode() {
+
+  override get sandboxMode(): SandboxMode {
     return 'workspace-write'
   }
-  processPathFromHostPath(path) {
+
+  override processPathFromHostPath(hostPath: string): string | undefined {
     const session = this.scope.current()
-    return session && this.scope.readRoots(session).some((root) => pathInside(root, path)) ? path : undefined
+    return session && this.scope.readRoots(session).some((root) => pathInside(root, hostPath)) ? hostPath : undefined
   }
-  async resolve(path, opts) {
+
+  override async resolve(path: string, opts?: { cwd?: string; signal?: AbortSignal }): Promise<FsTarget> {
     const session = this.scope.requireCurrent()
     const roots = this.scope.readRoots(session)
     const target = await super.resolve(path, { ...opts, cwd: opts?.cwd ?? this.scope.privateRoot(session) })
@@ -35,10 +101,12 @@ export default class ScopedFileSystem extends LocalFileSystem {
       writeRoots: this.scope.writeRoots(session), resourceDirs: [] })
     return target
   }
-  liveRootsOf(grant) {
+
+  liveRootsOf(grant: Grant): string[] {
     return this.scope.readRoots(this.scope.session(grant.sessionId))
   }
-  async assertRead(target) {
+
+  async assertRead(target: FsTarget): Promise<Grant> {
     const session = this.scope.requireCurrent()
     const grant = this.grants.get(String(target.targetKey))
     if (!grant || !this.scope.readRoots(session).some((root) => pathInside(root, String(target.targetKey)))) throw new FsError('path outside authorized spaces', 'FS_PERMISSION_DENIED')
@@ -47,19 +115,25 @@ export default class ScopedFileSystem extends LocalFileSystem {
       sessionId: session.id
     }
   }
-  async assertWrite(target, op, policy) {
+
+  async assertWrite(target: FsTarget, _op: string, policy: SandboxExecutionPolicy | undefined): Promise<string> {
     const session = this.scope.requireCurrent()
     this.scope.validatePolicy(policy, session)
     const root = this.scope.writeRoots(session).find((root) => pathInside(root, String(target.targetKey)))
     if (!root) throw new FsError('path outside writable spaces', 'FS_PERMISSION_DENIED')
     return root
   }
-  remember(key, grant) {
-    if (this.grants.size >= 8192) this.grants.delete(this.grants.keys().next().value)
+
+  remember(key: string, grant: Grant): void {
+    if (this.grants.size >= 8192) {
+      const oldest = this.grants.keys().next().value
+      if (oldest !== undefined) this.grants.delete(oldest)
+    }
     this.grants.set(key, grant)
   }
-  mapOpenError(error, op, displayPath) {
-    const code = error.code
+
+  mapOpenError(error: unknown, op: string, displayPath: string): FsError {
+    const code = errorCode(error)
     if (code === 'ENOENT' || code === 'ENOTDIR') {
       return new FsError(`cannot ${op} "${displayPath}": not found`, 'FS_NOT_FOUND', { cause: error })
     }
@@ -73,7 +147,8 @@ export default class ScopedFileSystem extends LocalFileSystem {
     const message = error instanceof Error ? error.message : String(error)
     return new FsError(`cannot ${op} "${displayPath}": ${message}`, 'FS_IO_ERROR', { cause: error })
   }
-  async assertFdInside(handle, roots, op, displayPath) {
+
+  async assertFdInside(handle: FileHandle, roots: readonly string[] | undefined, op: string, displayPath: string): Promise<string> {
     const real = await fsReadlink(`${this.procFdDir}/${handle.fd}`)
     if (real.endsWith(' (deleted)')) {
       throw new FsError(`cannot ${op} "${displayPath}": not found`, 'FS_NOT_FOUND')
@@ -83,11 +158,12 @@ export default class ScopedFileSystem extends LocalFileSystem {
     }
     return real
   }
-  async openBoundLeaf(subject, displayPath, op, roots, flags) {
+
+  async openBoundLeaf(subject: string, displayPath: string, op: string, roots: readonly string[] | undefined, flags?: number): Promise<BoundLeaf> {
     if (this.procFdDir === undefined) {
       throw new FsError(`cannot ${op} "${displayPath}": authorized open boundary requires Linux /proc/self/fd`, 'FS_PERMISSION_DENIED')
     }
-    let handle
+    let handle: FileHandle
     try {
       handle = await fsOpen(subject, constants.O_RDONLY | constants.O_NOFOLLOW | O_CLOEXEC | (flags ?? 0))
     } catch (error) {
@@ -105,20 +181,21 @@ export default class ScopedFileSystem extends LocalFileSystem {
       throw error
     }
   }
-  async openBoundParent(subject, displayPath, op, root) {
+
+  async openBoundParent(subject: string, displayPath: string, op: string, root: string): Promise<BoundParent> {
     if (this.procFdDir === undefined) {
       throw new FsError(`cannot ${op} "${displayPath}": authorized open boundary requires Linux /proc/self/fd`, 'FS_PERMISSION_DENIED')
     }
     const name = basename(subject)
-    const missing = []
+    const missing: string[] = []
     let ancestor = dirname(subject)
-    let handle
+    let handle: FileHandle
     for (;;) {
       try {
         handle = await fsOpen(ancestor, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW | O_CLOEXEC)
         break
       } catch (error) {
-        const code = error.code
+        const code = errorCode(error)
         if (code === 'ENOTDIR') {
           const link = await fsLstat(ancestor).then((info) => info.isSymbolicLink(), () => false)
           if (link) {
@@ -142,7 +219,7 @@ export default class ScopedFileSystem extends LocalFileSystem {
         try {
           await fsMkdir(`${fdPath}/${seg}`)
         } catch (error) {
-          if (error.code !== 'EEXIST') throw this.mapOpenError(error, op, displayPath)
+          if (errorCode(error) !== 'EEXIST') throw this.mapOpenError(error, op, displayPath)
         }
         const next = await fsOpen(`${fdPath}/${seg}`, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW | O_CLOEXEC).catch((error) => {
           throw this.mapOpenError(error, op, displayPath) })
@@ -166,20 +243,23 @@ export default class ScopedFileSystem extends LocalFileSystem {
       throw error
     }
   }
-  mintTarget(key, displayPath) {
+
+  mintTarget(key: string, displayPath: string): FsTarget {
     return {
-      targetKey: key,
+      targetKey: FsTargetKey(key),
       displayPath
     }
   }
-  mintChildTarget(canonicalKey, displayPath, grant) {
+
+  mintChildTarget(canonicalKey: string, displayPath: string, grant: Grant): FsTarget {
     this.remember(canonicalKey, { readRoots: grant.readRoots,
       writeRoots: grant.writeRoots.filter((root) => pathInside(root, canonicalKey)),
       resourceDirs: grant.resourceDirs.filter((dir) => pathInside(dir, canonicalKey)),
       ...grant.sessionId === undefined ? {} : { sessionId: grant.sessionId } })
     return this.mintTarget(canonicalKey, displayPath)
   }
-  async withWriteLock(key, op) {
+
+  async withWriteLock<T>(key: string, op: () => Promise<T>): Promise<T> {
     const run = (this.writeLocks.get(key) ?? Promise.resolve()).then(op, op)
     const tail = run.then(() => undefined, () => undefined)
     this.writeLocks.set(key, tail)
@@ -187,27 +267,31 @@ export default class ScopedFileSystem extends LocalFileSystem {
       return await run
     } finally { if (this.writeLocks.get(key) === tail) this.writeLocks.delete(key) }
   }
-  pathTypeOf(info) {
+
+  pathTypeOf(info: BigIntStats): 'symlink' | 'file' | 'directory' | 'other' {
     if (info.isSymbolicLink()) return 'symlink'
     if (info.isFile()) return 'file'
     if (info.isDirectory()) return 'directory'
     return 'other'
   }
-  versionOf(info) {
+
+  versionOf(info: BigIntStats): FsVersion {
     return FsVersion(`${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`)
   }
-  async lstat(path, opts, signal) {
-    let target
+
+  override async lstat(path: string, opts?: { cwd?: string }, signal?: AbortSignal): Promise<FsPathInfo | undefined> {
+    const cwd = opts?.cwd
+    let target: FsTarget
     try {
-      target = await this.resolve(path, { ...opts?.cwd !== undefined ? { cwd: opts.cwd } : {},
+      target = await this.resolve(path, { ...cwd !== undefined ? { cwd } : {},
         ...signal !== undefined ? { signal } : {} })
     } catch (error) {
       if (error instanceof FsError && error.code === 'FS_NOT_FOUND') return undefined
       throw error
     }
-    const grant = await this.assertRead(target, 'lstat')
+    const grant = await this.assertRead(target)
     const openSubject = target.displayPath
-    let bound
+    let bound: BoundLeaf
     try {
       bound = await this.openBoundLeaf(openSubject, target.displayPath, 'lstat', this.liveRootsOf(grant), O_PATH)
     } catch (error) {
@@ -223,9 +307,10 @@ export default class ScopedFileSystem extends LocalFileSystem {
       }
     } finally { await bound.handle.close().catch(() => undefined) }
   }
-  async stat(target, signal) {
-    const grant = await this.assertRead(target, 'stat')
-    let bound
+
+  override async stat(target: FsTarget, signal?: AbortSignal): Promise<FsInfo | undefined> {
+    const grant = await this.assertRead(target)
+    let bound: BoundLeaf
     try {
       bound = await this.openBoundLeaf(String(target.targetKey), target.displayPath, 'stat', this.liveRootsOf(grant))
     } catch (error) {
@@ -236,17 +321,19 @@ export default class ScopedFileSystem extends LocalFileSystem {
       return await super.stat(this.mintTarget(bound.fdPath, target.displayPath), signal)
     } finally { await bound.handle.close().catch(() => undefined) }
   }
-  async readText(target, signal) {
-    const grant = await this.assertRead(target, 'read')
+
+  override async readText(target: FsTarget, signal?: AbortSignal): Promise<string> {
+    const grant = await this.assertRead(target)
     const bound = await this.openBoundLeaf(String(target.targetKey), target.displayPath, 'read', this.liveRootsOf(grant))
     try {
       return await super.readText(this.mintTarget(bound.fdPath, target.displayPath), signal)
     } finally { await bound.handle.close().catch(() => undefined) }
   }
-  async streamText(target, signal) {
-    const grant = await this.assertRead(target, 'read')
+
+  override async streamText(target: FsTarget, signal?: AbortSignal): Promise<AsyncIterable<string>> {
+    const grant = await this.assertRead(target)
     const bound = await this.openBoundLeaf(String(target.targetKey), target.displayPath, 'read', this.liveRootsOf(grant))
-    let iterable
+    let iterable: AsyncIterable<string>
     try {
       iterable = await super.streamText(this.mintTarget(bound.fdPath, target.displayPath), signal)
     } catch (error) {
@@ -261,22 +348,25 @@ export default class ScopedFileSystem extends LocalFileSystem {
     }
     return boundStream()
   }
-  async readBytes(target, signal, maxBytes) {
-    const grant = await this.assertRead(target, 'read')
+
+  override async readBytes(target: FsTarget, signal: AbortSignal | undefined, maxBytes: number): Promise<Uint8Array> {
+    const grant = await this.assertRead(target)
     const bound = await this.openBoundLeaf(String(target.targetKey), target.displayPath, 'read', this.liveRootsOf(grant))
     try {
       return await super.readBytes(this.mintTarget(bound.fdPath, target.displayPath), signal, maxBytes)
     } finally { await bound.handle.close().catch(() => undefined) }
   }
-  async readByteRange(target, range, signal) {
-    const grant = await this.assertRead(target, 'read')
+
+  override async readByteRange(target: FsTarget, range: { offset: number; length: number }, signal?: AbortSignal): Promise<Uint8Array> {
+    const grant = await this.assertRead(target)
     const bound = await this.openBoundLeaf(String(target.targetKey), target.displayPath, 'read', this.liveRootsOf(grant))
     try {
       return await super.readByteRange(this.mintTarget(bound.fdPath, target.displayPath), range, signal)
     } finally { await bound.handle.close().catch(() => undefined) }
   }
-  async listDir(target, signal) {
-    const grant = await this.assertRead(target, 'list')
+
+  override async listDir(target: FsTarget, signal?: AbortSignal): Promise<FsDirEntry[]> {
+    const grant = await this.assertRead(target)
     const roots = this.liveRootsOf(grant)
     const bound = await this.openBoundLeaf(String(target.targetKey), target.displayPath, 'list', roots)
     try {
@@ -285,7 +375,7 @@ export default class ScopedFileSystem extends LocalFileSystem {
       const dirReal = bound.real
       const entries = await fsReaddir(bound.fdPath, { withFileTypes: true }).catch((error) => {
         throw this.mapOpenError(error, 'list', target.displayPath) })
-      const result = []
+      const result: FsDirEntry[] = []
       for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
         if (signal?.aborted) throw new FsError('list aborted', 'FS_ABORTED')
         const displayChild = join(target.displayPath, entry.name)
@@ -325,12 +415,13 @@ export default class ScopedFileSystem extends LocalFileSystem {
       return result
     } finally { await bound.handle.close().catch(() => undefined) }
   }
-  async openLeafForWrite(leafPath, op, displayPath) {
-    let meta
+
+  async openLeafForWrite(leafPath: string, op: string, displayPath: string): Promise<LeafForWrite | undefined> {
+    let meta: FileHandle
     try {
       meta = await fsOpen(leafPath, O_PATH | constants.O_NOFOLLOW | O_CLOEXEC)
     } catch (error) {
-      const code = error.code
+      const code = errorCode(error)
       if (code === 'ENOENT' || code === 'ENOTDIR') return undefined
       throw this.mapOpenError(error, op, displayPath)
     }
@@ -342,11 +433,11 @@ export default class ScopedFileSystem extends LocalFileSystem {
       if (!info.isFile()) {
         throw new FsError(`cannot ${op} "${displayPath}": not a regular file`, 'FS_NOT_REGULAR_FILE')
       }
-      let read
+      let read: FileHandle | undefined
       try {
         read = await fsOpen(leafPath, constants.O_RDONLY | constants.O_NOFOLLOW | O_CLOEXEC)
       } catch (error) {
-        const code = error.code
+        const code = errorCode(error)
         if (code === 'ELOOP') {
           throw new FsError(`cannot ${op} "${displayPath}": symlink outside the authorized open boundary`, 'FS_PERMISSION_DENIED')
         }
@@ -367,21 +458,26 @@ export default class ScopedFileSystem extends LocalFileSystem {
       throw error
     }
   }
-  throwIfAborted(signal, verb) {
+
+  throwIfAborted(signal: AbortSignal | undefined, verb: string): void {
     if (signal?.aborted) throw new FsError(`${verb} aborted`, 'FS_ABORTED')
   }
-  normalizeLineEndings(content) {
+
+  normalizeLineEndings(content: string): string {
     return content.replaceAll('\r\n', '\n')
   }
-  detectLineEndings(raw) {
+
+  detectLineEndings(raw: string): 'CRLF' | 'LF' {
     const sample = raw.slice(0, 4096)
     const crlf = sample.split('\r\n').length - 1
     return crlf > sample.split('\n').length - 1 - crlf ? 'CRLF' : 'LF'
   }
-  restoreLineEndings(content, lineEndings) {
+
+  restoreLineEndings(content: string, lineEndings: 'CRLF' | 'LF'): string {
     return lineEndings === 'LF' ? content : this.normalizeLineEndings(content).split('\n').join('\r\n')
   }
-  async readBoundBasis(read, maxBytes, signal) {
+
+  async readBoundBasis(read: FileHandle, maxBytes: number, signal: AbortSignal | undefined): Promise<string | null> {
     this.throwIfAborted(signal, 'read')
     try {
       const info = await read.stat()
@@ -401,9 +497,10 @@ export default class ScopedFileSystem extends LocalFileSystem {
       throw error
     }
   }
-  async readBoundForEdit(read, displayPath, signal) {
+
+  async readBoundForEdit(read: FileHandle, displayPath: string, signal: AbortSignal | undefined): Promise<{ content: string; lineEndings: 'CRLF' | 'LF' }> {
     this.throwIfAborted(signal, 'edit')
-    let buffer
+    let buffer: Buffer
     try {
       buffer = await read.readFile(signal !== undefined ? { signal } : {})
     } catch (error) {
@@ -412,7 +509,7 @@ export default class ScopedFileSystem extends LocalFileSystem {
     }
     this.throwIfAborted(signal, 'edit')
     if (buffer.includes(0)) throw new FsError(`cannot edit "${displayPath}": binary file`, 'FS_NOT_TEXT')
-    let raw
+    let raw: string
     try {
       raw = new TextDecoder('utf-8', { fatal: true }).decode(buffer)
     } catch (error) {
@@ -424,7 +521,8 @@ export default class ScopedFileSystem extends LocalFileSystem {
       lineEndings: this.detectLineEndings(raw)
     }
   }
-  applyLiteralEditBound(content, oldString, newString, replaceAll, displayPath) {
+
+  applyLiteralEditBound(content: string, oldString: string, newString: string, replaceAll: boolean, displayPath: string): { content: string } {
     const oldNorm = this.normalizeLineEndings(oldString)
     if (oldNorm.length === 0) throw new FsError('old_string must be a non-empty string', 'FS_EDIT_NOT_FOUND')
     const newNorm = this.normalizeLineEndings(newString)
@@ -443,10 +541,11 @@ export default class ScopedFileSystem extends LocalFileSystem {
       content: content.split(oldNorm).join(newNorm)
     }
   }
-  async publishStaged(dirFdPath, leafPath, content, mode, createIfAbsent, signal, displayPath) {
+
+  async publishStaged(dirFdPath: string, leafPath: string, content: string, mode: number | undefined, createIfAbsent: boolean, signal: AbortSignal | undefined, displayPath: string): Promise<void> {
     this.throwIfAborted(signal, 'write')
     const tempPath = `${dirFdPath}/.${basename(leafPath)}.${process.pid}.${randomUUID()}.tmp`
-    let temp
+    let temp: FileHandle
     try {
       temp = await fsOpen(tempPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW | O_CLOEXEC, 0o600)
     } catch (error) {
@@ -466,9 +565,9 @@ export default class ScopedFileSystem extends LocalFileSystem {
         try {
           await fsLink(tempPath, leafPath)
         } catch (error) {
-          const existing = await fsLstat(leafPath).catch((metaError) => { const code = metaError.code
+          const existing = await fsLstat(leafPath).catch((metaError) => { const code = errorCode(metaError)
             if (code === 'ENOENT' || code === 'ENOTDIR') return undefined
-            throw new FsError(`cannot write "${displayPath}": ${metaError.message}`, 'FS_IO_ERROR', { cause: metaError
+            throw new FsError(`cannot write "${displayPath}": ${(metaError as Error).message}`, 'FS_IO_ERROR', { cause: metaError
             }) })
           if (existing !== undefined) {
             if (!existing.isFile()) {
@@ -478,25 +577,27 @@ export default class ScopedFileSystem extends LocalFileSystem {
             throw new FsError(`cannot overwrite existing "${displayPath}" without reading it first`, 'FS_NOT_OBSERVED', {
               cause: error })
           }
-          if (error.code === 'EEXIST') {
+          if (errorCode(error) === 'EEXIST') {
             throw new FsError(`cannot overwrite existing "${displayPath}" without reading it first`, 'FS_NOT_OBSERVED', {
               cause: error })
           }
           throw this.mapOpenError(error, 'write', displayPath)
         }
       } else {
-        await fsRename(tempPath, leafPath).catch((error) => { if (error.code === 'EISDIR') {
-            throw new FsError(`cannot write "${displayPath}": not a regular file`, 'FS_NOT_REGULAR_FILE', { cause: error
-            }) } throw this.mapOpenError(error, 'write', displayPath) })
+        await fsRename(tempPath, leafPath).catch((error) => { if (errorCode(error) === 'EISDIR') {
+          throw new FsError(`cannot write "${displayPath}": not a regular file`, 'FS_NOT_REGULAR_FILE', { cause: error
+          }) } throw this.mapOpenError(error, 'write', displayPath) })
       }
     } finally { await fsRm(tempPath, { force: true }).catch(() => undefined) }
   }
-  async probePublished(leafPath) {
+
+  async probePublished(leafPath: string): Promise<FsVersion> {
     const info = await fsLstat(leafPath, { bigint: true }).catch(() => undefined)
     if (info === undefined || !info.isFile()) return FsVersion(`missing:${leafPath}`)
     return this.versionOf(info)
   }
-  async writeText(target, content, expected, signal, sandboxPolicy) {
+
+  override async writeText(target: FsTarget, content: string, expected?: FsWriteIntent, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy): Promise<FsWriteOutcome> {
     const root = await this.assertWrite(target, 'write', sandboxPolicy)
     const bound = await this.openBoundParent(String(target.targetKey), target.displayPath, 'write', root)
     try {
@@ -516,7 +617,8 @@ export default class ScopedFileSystem extends LocalFileSystem {
             await leaf.meta.close().catch(() => undefined); await leaf.read?.close().catch(() => undefined) } } })
     } finally { await bound.handle.close().catch(() => undefined) }
   }
-  async editText(target, edit, expected, signal, sandboxPolicy) {
+
+  override async editText(target: FsTarget, edit: FsEditRequest, expected?: { version: FsVersion }, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy): Promise<FsEditOutcome> {
     const root = await this.assertWrite(target, 'edit', sandboxPolicy)
     const bound = await this.openBoundParent(String(target.targetKey), target.displayPath, 'edit', root)
     try {

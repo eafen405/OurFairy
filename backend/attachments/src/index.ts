@@ -1,12 +1,26 @@
-/** Authenticated upload/download routes and session-scoped native model/file integration. */
+/**
+ * Authenticated upload/download routes and session-scoped native model/file
+ * integration.
+ *
+ * @module @ourfairy/dsh-attachments
+ */
 import z from '@deepseek-ai/schemastery'
 import { postHandler, sendJson } from '@ourfairy/dsh-http/http'
-import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.mjs'
-import { installPdf } from './pdf.mjs'
-import { createDownloadResponder } from './download.mjs'
-import { SessionScopeError } from '@ourfairy/dsh-sessions'
-export { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES, uploadIdsOf } from './service.mjs'
-export { createDownloadResponder } from './download.mjs'
+import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.js'
+import { installPdf } from './pdf.js'
+import { createDownloadResponder } from './download.js'
+import { SessionScopeError, OwnedSessionService } from '@ourfairy/dsh-sessions'
+import type { Context } from '@deepseek-ai/cordis'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+// The dsh context's own seams: the carrier's trust fence and the web server's
+// route registry. The imports are type-only, so they add no runtime dependency.
+import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-host-webserver'
+
+/** The owner facts the owned-session service names a caller by. */
+type SessionOwner = NonNullable<ReturnType<OwnedSessionService['authenticate']>>
+export { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES, uploadIdsOf } from './service.js'
+export { createDownloadResponder } from './download.js'
 export const name = 'ourfairy-attachments'
 export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory', 'agents', 'tools', 'subprocess']
 
@@ -15,12 +29,20 @@ export const Config = z.object({
   root: z.string().required(),
 })
 
-export function apply(ctx, config) {
+/**
+ * Mount the attachment routes and the native model/file integration.
+ *
+ * @param ctx - the context the routes and the tools run in.
+ * @param config - the row config the loader validated.
+ */
+export function apply(ctx: Context, config: { readonly root: string }): void {
   const service = new AttachmentService(ctx, config)
   installPdf(ctx, service)
-  const register = (path, handler) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path, handler }), `ourfairy-attachments: ${path}`)
-  const json = (handle, respond) => postHandler({ fence: req => ctx.connection.fence(req), HttpError: SessionScopeError,
-    codePrefix: 'attachments', internalMessage: 'attachment request failed', handle: (body, req) => handle(service.caller(req), body), respond })
+  const register = (path: string, handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path, handler }), `ourfairy-attachments: ${path}`)
+  const json = (handle: (owner: SessionOwner, body: Record<string, unknown>) => Promise<unknown>, respond?: (response: ServerResponse, result: unknown) => void) =>
+    postHandler({ fence: req => ctx.connection.fence(req), HttpError: SessionScopeError,
+      codePrefix: 'attachments', internalMessage: 'attachment request failed', handle: (body, req) => handle(service.caller(req), body),
+      ...respond !== undefined ? { respond } : {} })
   register('/attachments/propose', json(async (owner, body) => ({ ok: true, upload: await service.propose(owner, body) })))
   register('/attachments/complete', json(async (owner, body) => ({ ok: true, upload: await service.complete(owner, body) })))
   register('/attachments/chunk', async (req, res) => {
@@ -31,7 +53,7 @@ export function apply(ctx, config) {
       if (req.headers['content-type']?.split(';')[0] !== 'application/octet-stream') throw new AttachmentError(415, 'attachments/unsupported-media-type', 'send original binary bytes')
       const offset = req.headers['x-upload-offset']
       if (typeof offset !== 'string' || !/^(0|[1-9]\d*)$/.test(offset)) throw new AttachmentError(400, 'attachments/invalid-request', 'provide a byte offset')
-      const chunks = []; let size = 0
+      const chunks: Buffer[] = []; let size = 0
       for await (const chunk of req) {
         size += chunk.length
         if (size > MAX_CHUNK_BYTES) throw new AttachmentError(413, 'attachments/too-large', 'chunk exceeds 256 KiB')
@@ -44,7 +66,10 @@ export function apply(ctx, config) {
         message: error instanceof SessionScopeError ? error.message : 'attachment upload failed' } })
     }
   })
-  register('/attachments/download', json((owner, body) => service.download(owner, body), createDownloadResponder(ctx)))
+  // The download route's handler returns the attachment input the responder
+  // writes; the transport envelope types every route result as unknown.
+  register('/attachments/download', json((owner, body) => service.download(owner, body),
+    createDownloadResponder(ctx) as (response: ServerResponse, result: unknown) => void))
   ctx.effect(() => ctx.ourfairySpaces.contributeReadonlyFiles(session => service.readonlyFiles(session)),
     'ourfairy-attachments: read-only files')
   // Each iterator pull must inherit the session: merely constructing the async
@@ -65,4 +90,11 @@ export function apply(ctx, config) {
     if (exec.agent) await service.refresh(exec.agent.session)
     return next()
   }, { global: true })
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The product's attachment service, as this package provides it. */
+    ourfairyAttachments: AttachmentService
+  }
 }

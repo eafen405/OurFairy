@@ -25,7 +25,7 @@ const dshRequire = createRequire(join(dshDir, 'packages/subprocess/subprocess-lo
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === '@deepseek-ai/dsh-tools') return { url: pathToFileURL(join(dshDir, 'packages/core/tools/lib/index.js')).href, shortCircuit: true }
-    if (specifier === '@ourfairy/dsh-spaces/bwrap') return { url: pathToFileURL(join(repoRoot, 'backend/spaces/src/bwrap.mjs')).href, shortCircuit: true }
+    if (specifier === '@ourfairy/dsh-spaces/bwrap') return { url: pathToFileURL(join(repoRoot, 'backend/spaces/dist/bwrap.js')).href, shortCircuit: true }
     return next(specifier, context)
   },
 })
@@ -34,7 +34,7 @@ test.after(() => hooks.deregister())
 async function load() {
   const { Context } = await import(pathToFileURL(dshRequire.resolve('@deepseek-ai/cordis')).href)
   const { default: LocalSubprocess } = await import(pathToFileURL(join(dshDir, 'packages/subprocess/subprocess-local/lib/index.js')).href)
-  const { installPdf } = await import(pathToFileURL(join(repoRoot, 'backend/attachments/src/pdf.mjs')).href)
+  const { installPdf } = await import(pathToFileURL(join(repoRoot, 'backend/attachments/dist/pdf.js')).href)
   const ctx = new Context()
   ctx.plugin(LocalSubprocess)
   for (let tick = 0; tick < 100 && ctx.subprocess === undefined; tick++) await new Promise(resolve => setTimeout(resolve, 10))
@@ -141,7 +141,7 @@ test('the PDF worker asks the service for a bounded stderr collector', async () 
   // The service has no discard mode: an unsupported string is collected with no
   // cap. Memory growth is not observable from outside, so the request itself is
   // the seam under test — the same kind of narrow seam as the network profile.
-  const { installPdf } = await import(pathToFileURL(join(repoRoot, 'backend/attachments/src/pdf.mjs')).href)
+  const { installPdf } = await import(pathToFileURL(join(repoRoot, 'backend/attachments/dist/pdf.js')).href)
   const agent = { session: {}, options: {} }
   let registered
   let spec

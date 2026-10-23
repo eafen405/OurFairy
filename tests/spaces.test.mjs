@@ -49,7 +49,7 @@ before(async () => {
   // than an assembled service.
   const overlay = writeOverlay(home, [{ insert: [{
     id: 'ourfairy-scope-contributor-fixtures',
-    name: fileURLToPath(new URL('../backend/spaces/test-support/scope-contributors.mjs', import.meta.url)),
+    name: fileURLToPath(new URL('../backend/spaces/test-support/scope-contributors.ts', import.meta.url)),
     config: { shortId: 1, reportPath: fixture.report,
       firstRoot: fixture.root('first-root'), firstFile: fixture.root('first-file'),
       secondRoot: fixture.root('second-root'), secondFile: fixture.root('second-file') },
