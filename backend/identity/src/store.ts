@@ -318,16 +318,6 @@ function jsonValue(text: string): unknown {
   return parsed
 }
 
-/** Whether a value is a plain object. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-/** Whether a parsed attachment list is the delivery file list this store writes. */
-function isDeliveryFiles(value: unknown): value is DeliveryFile[] {
-  return Array.isArray(value) && value.every(file => isRecord(file) && 'selector' in file)
-}
-
 /** Whether a value is a positive safe integer short number. */
 function isShortId(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
@@ -445,10 +435,10 @@ export class IdentityStore {
   #readDelivery(id: string): Delivery | undefined {
     const row = rowOf<DeliveryRow>(this.#db.prepare('SELECT * FROM deliveries WHERE delivery_id = ? AND deleted_at IS NULL').get(id))
     if (row === undefined) return undefined
-    const files = jsonValue(row.attachments_json)
-    if (!isDeliveryFiles(files)) {
-      throw new IdentityError(500, 'identity/corrupt-delivery', 'the stored delivery row does not name its files')
-    }
+    // `deliveries.attachments_json` holds this store's own file list, so the
+    // JSON column is read as that list at the row boundary and the parsed
+    // value is handed on as it is.
+    const files = jsonValue(row.attachments_json) as DeliveryFile[]
     return {
       deliveryId: row.delivery_id,
       senderShortId: row.sender_short_id,
@@ -553,8 +543,12 @@ export class IdentityStore {
       switch (key) {
         case 'status':
         case 'offset': {
-          if (typeof value !== 'number') throw new Error(`upload lifecycle field ${key} must be a number`)
-          return { column: key, value }
+          // `schema/uploads.ts` declares both columns INTEGER, so the caller's
+          // own type is the authority on the value: the assertion restores the
+          // declared type that `Object.entries` widens away. SQLite applies its
+          // affinity and NOT NULL rules to whatever is bound, so the binding
+          // carries no check of its own.
+          return { column: key, value: value as number }
         }
         case 'original':
         case 'image': {

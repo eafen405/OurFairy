@@ -79,13 +79,14 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3。
 - 身份模块的 `{kind: 'user', id}` 主体在 dsh 的 `PrincipalMap` 里没有对应项，按 dsh 自己的扩展点
   （`packages/api/remote-access` 也是这么合并非 owner 种类的）在产品包里补了 `user` 一项。
 
-### 行为面：迁移中收窄的三处边界
+### 行为面：迁移中收窄的一处边界
 
-这三处是「原来会静默继续、现在会明确失败」的地方，都是损坏数据或调用方给错类型的路径，正常路径不变：
+迁移中曾有三处「原来会静默继续、现在会明确失败」的地方，都是损坏数据或调用方给错类型的路径。
+其中两处经迁移评审判定违反本票「不改行为」的约定，已在同一分支回退（见末节「回退两处行为变化」），
+只剩一处：
 
-1. `updateUpload` 的 `status` / `offset` 必须是数字，否则抛错（原来把任何值交给 SQLite）。
-2. `#readDelivery` 读到的附件列表不是文件列表时抛 `identity/corrupt-delivery`（原来会带着垃圾继续）。
-3. `apply` 里某个路径没有对应 handler 时抛错（原来会把 `undefined` 注册给 carrier）。
+1. `apply` 里某个路径没有对应 handler 时抛错（原来会把 `undefined` 注册给 carrier）。这一处静态不可达：
+   `IDENTITY_PATHS` 与 handler 表在同一个包内共用同一组五个路径字符串，`handlers.get(path)` 取不到 `undefined`。
 
 另外两处是等价改写，不是行为变化：`pendingDeliveries` 过滤掉不可能存在的空行；
 `resume-empty` 夹具在 `stat` 拿不到行时抛错，与原来「读 `undefined` 的属性」同样落到夹具自己的 catch。
@@ -206,3 +207,115 @@ backend/sessions/test-support/persist-fixtures.ts(35,7): error TS2322:
   不应出现 `test-support/`；若将来有人把它写进 `files`，夹具就会随包发布。
 - **`SessionHeader.createdAt` 是必填**：dsh 的类型里它是必填数字，本票去掉了旧代码里的 `?? 0`；
   下一票若按旧习惯写 `?? 0`，TS 会报 TS2869。
+
+## 回退两处行为变化（fix(#207)）
+
+迁移评审核对 `integration/spec-205` 侧的合并结果时，发现迁移引入了两处**可观察的行为变化**，
+与本票「不改行为」的约定冲突。本节记录差异、证据、改法与回退后的验证。
+
+### 差异一：`updateUpload` 不该拒收非数字的 `status` / `offset`
+
+- 迁移前（`backend/identity/src/store.mjs` @ `0b816e441b`）：`updateUpload` 不做类型检查，值直接交给 SQLite。
+- 迁移后（提交 `e7e7b3abd1`）：`backend/identity/src/store.ts` 在绑定前加了运行期 `typeof value !== 'number'`，
+  抛 `Error: upload lifecycle field status must be a number`。
+- 这是**成功→失败**的翻转，不是文案差异：`'2'` 在迁移前会写进 INTEGER 列（SQLite 亲和性），
+  迁移后直接抛错。
+
+### 差异二：`#readDelivery` 不该新造错误码
+
+- 迁移前：`JSON.parse(row.attachments_json)` 原样返回。
+- 迁移后：读出的附件列表若不是文件列表，抛 `IdentityError(500, 'identity/corrupt-delivery')`。
+- 影响面：`backend/delivery/src/index.mjs:66` 的 `deliveries.pending()` 在每行 try/catch **之外**，
+  异常会穿过 `await recovery`（`index.mjs:72`）让**每一次**投递都失败；迁移前只是记一条 warning 继续。
+  同时给产品的错误码面新增了一个本票没要求的错误码。
+
+### 实证证据
+
+迁移评审提供的对照（同一个 SQLite 文件实测）：`{ status: '2' }` 迁移前成功并存成 `status = 2`、
+迁移后抛错；`{ status: 'abc' }` 迁移前存成 TEXT `'abc'`、迁移后抛错；`{ status: null }` 两边都抛
+`NOT NULL constraint failed: uploads.status`；`{ status: undefined }` 两边都抛 node:sqlite 的 `TypeError`。
+投递读：`attachments_json` 是合法 JSON 但不是文件列表时，迁移前 `pendingDeliveries()` **返回**该行，
+迁移后**抛** `identity/corrupt-delivery`；`attachments_json` 本身不是合法 JSON 时两边都抛 `SyntaxError`。
+
+### 改了什么
+
+`backend/identity/src/store.ts`（本票两个包中只有这一个文件被动）：
+
+1. `updateUpload`：删掉运行期 `typeof` 守卫；`status` / `offset` 的值改在**编译期边界**上收窄——
+   `src/schema/uploads.ts` 声明两列 INTEGER，调用方自己的类型是权威，`as number` 把 `Object.entries`
+   抹掉的声明类型还原回来（#201 允许在 DB 绑定边界用 `as`，理由写在代码注释里）。运行期不再检查，
+   SQLite 自己的亲和性、NOT NULL 约束与 node:sqlite 的 `TypeError` 全部按迁移前生效。
+2. `#readDelivery`：删掉 `isDeliveryFiles` 守卫与 `identity/corrupt-delivery` 错误码，
+   `JSON.parse` 的行为与迁移前逐字一致；随之失去用途的 `isDeliveryFiles` 与 `isRecord` 一并删除，不留死代码。
+
+未动的第三处：`backend/identity/src/index.ts:197` 的「路径没有 handler 就抛错」静态不可达，保留。
+
+### 回退后的验证
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run clean && npm run build` | 干净树编译通过，无输出 |
+| `node --test tests/{identity-store,identity-interfaces,owner-codec,owned-sessions,conversation-search,native-rows,identity-http,product-sources,bundle-packages,config-contracts,composition-module,launcher-import,bundle-manifest,dsh-checkout,docs}.test.mjs` | `ℹ tests 84  ℹ pass 84  ℹ fail 0` |
+| `npm run backend:doctor` | `doctor: all checks passed` |
+| `OURFAIRY_PORT=0 npm run backend:probe` | `ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)` |
+| `npm run combo:verify` | `combo: combination verified` |
+
+`backend:probe` 仍用 `OURFAIRY_PORT=0`：本机 3080 端口被一个与本票无关的 `dsh web` 占着。
+
+**旧新对照（回退后实测）**——脚本放在 `/tmp`（不入库），把迁移前的
+`backend/identity/src/store.mjs`（`git archive 0b816e441b backend/identity` 解到 `/tmp/old-identity`）
+与本票构建产物 `backend/identity/dist/store.js` 并排跑同一个 SQLite 文件：
+
+```
+=== updateUpload lifecycle binding ===
+OLD updateUpload({ status: "2" }): ok
+OLD   stored: status=2 (sqlite typeof integer)
+OLD updateUpload({ status: "abc" }): ok
+OLD   stored: status="abc" (sqlite typeof text)
+OLD updateUpload({ status: null }): threw Error: NOT NULL constraint failed: uploads.status
+OLD updateUpload({ status: undefined }): threw TypeError: Provided value cannot be bound to SQLite parameter 1.
+OLD updateUpload({ offset: "2" }): ok
+OLD   stored: offset=2 (sqlite typeof integer)
+OLD updateUpload({ offset: "abc" }): ok
+OLD   stored: offset="abc" (sqlite typeof text)
+OLD updateUpload({ offset: null }): threw Error: NOT NULL constraint failed: uploads.offset
+OLD updateUpload({ offset: undefined }): threw TypeError: Provided value cannot be bound to SQLite parameter 1.
+NEW updateUpload({ status: "2" }): ok
+NEW   stored: status=2 (sqlite typeof integer)
+NEW updateUpload({ status: "abc" }): ok
+NEW   stored: status="abc" (sqlite typeof text)
+NEW updateUpload({ status: null }): threw Error: NOT NULL constraint failed: uploads.status
+NEW updateUpload({ status: undefined }): threw TypeError: Provided value cannot be bound to SQLite parameter 1.
+NEW updateUpload({ offset: "2" }): ok
+NEW   stored: offset=2 (sqlite typeof integer)
+NEW updateUpload({ offset: "abc" }): ok
+NEW   stored: offset="abc" (sqlite typeof text)
+NEW updateUpload({ offset: null }): threw Error: NOT NULL constraint failed: uploads.offset
+NEW updateUpload({ offset: undefined }): threw TypeError: Provided value cannot be bound to SQLite parameter 1.
+
+=== pendingDeliveries read of a non-file-list attachments_json ===
+OLD attachments_json=null: pendingDeliveries() returned 1 row(s); files of d1 = null
+OLD attachments_json={"a":1}: pendingDeliveries() returned 2 row(s); files of d2 = {"a":1}
+OLD attachments_json=[: pendingDeliveries() threw SyntaxError: Unexpected end of JSON input
+NEW attachments_json=null: pendingDeliveries() returned 1 row(s); files of d1 = null
+NEW attachments_json={"a":1}: pendingDeliveries() returned 2 row(s); files of d2 = {"a":1}
+NEW attachments_json=[: pendingDeliveries() threw SyntaxError: Unexpected end of JSON input
+```
+
+回退前的同一脚本（把本票改动 stash 掉、重建 `dist` 后再跑）得到的 NEW 行是
+`Error: upload lifecycle field status must be a number` 与
+`IdentityError: the stored delivery row does not name its files`——即上表两列差异的机器证据。
+
+### 仍未回退的一处相邻差异（留给 Lead 裁决）
+
+`updateUpload` 的 `original` / `image` 分支还有一道**迁移新增**的运行期检查
+（`JSON.stringify(value) === undefined` 时抛 `upload lifecycle field original must be JSON`）。
+迁移前同一输入走的是 node:sqlite 的 `TypeError: Provided value cannot be bound to SQLite parameter 1.`：
+两边都失败，只是错误类型与文案不同，不是成功→失败的翻转，也不在本次两处回退的范围内，故未改动。实测：
+
+```
+OLD updateUpload({ original: undefined }): threw TypeError: Provided value cannot be bound to SQLite parameter 1.
+NEW updateUpload({ original: undefined }): threw Error: upload lifecycle field original must be JSON
+```
+
+要一并对齐的话，删掉那道检查即可——绑定层会自己抛 node:sqlite 的 `TypeError`。
