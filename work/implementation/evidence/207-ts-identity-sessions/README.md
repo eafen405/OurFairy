@@ -175,7 +175,9 @@ backend/sessions/test-support/persist-fixtures.ts(35,7): error TS2322:
 
 - **没有主动跑全量 `npm test`**：票面「不跑全量」把全量留给 T6。本票主动跑的是上表列出的相关文件。
   提交时仓库自带的 pre-commit 钩子会因为包 manifest 属于权威路径而判成 `full` 模式、替本票跑一次全量
-  （`node scripts/precommit.mjs --print` 输出 `"mode": "full"`），那次结果按钩子的行为记录，不构成本票的门禁。
+  （`node scripts/precommit.mjs --print` 输出 `"mode": "full"`）：**钩子那次** `npm test` 是
+  293 tests / 293 pass / 0 fail，`combo:verify` 是 `combo: combination verified`。
+  那是钩子的行为，不构成本票的门禁。
 - **没有触发 CI**：没有 push。
 - **没有合入 `integration/spec-205`**：由 Lead 合。
 - 没有改 `combo.json`、Android 客户端、dsh 检出；没有加根 `devDependencies`、lockfile 或第二份 TypeScript。
