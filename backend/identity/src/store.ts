@@ -15,7 +15,7 @@
  */
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite'
 import {
   canonicalInviteCode,
   hashPassword,
@@ -23,12 +23,12 @@ import {
   mintSessionToken,
   sessionTokenDigest,
   verifyPassword,
-} from './codes.mjs'
-import { DELIVERIES_SCHEMA } from './schema/deliveries.mjs'
-import { GROUPS_SCHEMA } from './schema/groups.mjs'
-import { INDEXES_SCHEMA } from './schema/indexes.mjs'
-import { UPLOADS_SCHEMA } from './schema/uploads.mjs'
-import { USERS_SCHEMA } from './schema/users.mjs'
+} from './codes.js'
+import { DELIVERIES_SCHEMA } from './schema/deliveries.js'
+import { GROUPS_SCHEMA } from './schema/groups.js'
+import { INDEXES_SCHEMA } from './schema/indexes.js'
+import { UPLOADS_SCHEMA } from './schema/uploads.js'
+import { USERS_SCHEMA } from './schema/users.js'
 
 /** The Phaethon short number: the deployment's first identity, reserved by rule. */
 export const PHAETHON_SHORT_ID = 1
@@ -50,7 +50,10 @@ ${DELIVERIES_SCHEMA}
 
 /** Error carrying the HTTP status a request path answers with. */
 export class IdentityError extends Error {
-  constructor(status, code, message) {
+  readonly status: number
+  readonly code: string
+
+  constructor(status: number, code: string, message: string) {
     super(message)
     this.name = 'IdentityError'
     this.status = status
@@ -58,8 +61,285 @@ export class IdentityError extends Error {
   }
 }
 
+/**
+ * One row of the `users` table.
+ *
+ * The row shapes below are type aliases, not interfaces, so each one carries
+ * the implicit index signature the SQLite driver rows have.
+ */
+type UserRow = {
+  id: number
+  short_id: number
+  name: string
+  is_admin: number
+  password: string | null
+  created_at: number
+  updated_at: number
+  deleted_at: number | null
+}
+
+/** One row of the `invites` table. */
+type InviteRow = {
+  code: string
+  created_by: number
+  created_at: number
+  updated_at: number
+  redeemed_by: number | null
+  redeemed_at: number | null
+  deleted_at: number | null
+}
+
+/** One row of the session/user join the credential lookup reads. */
+type SessionUserRow = {
+  digest: string
+  expires_at: number
+  revoked_at: number | null
+  id: number
+  short_id: number
+  name: string
+  is_admin: number
+  password: string | null
+  created_at: number
+  updated_at: number
+  deleted_at: number | null
+}
+
+/** One row of the `groups` table. */
+type GroupRow = {
+  id: number
+  name: string
+  owner_short_id: number
+  created_by: number
+  created_at: number
+  updated_at: number
+  deleted_at: number | null
+}
+
+/** One row of the `group_members` table. */
+type GroupMemberRow = {
+  id: number
+  group_id: number
+  user_short_id: number
+  created_by: number
+  updated_by: number
+  created_at: number
+  updated_at: number
+  deleted_at: number | null
+}
+
+/** One row of the `uploads` table. */
+type UploadRow = {
+  upload_id: string
+  owner_short_id: number
+  session_id: string
+  name: string
+  mime: string
+  size: number
+  sha256: string
+  status: number
+  offset: number
+  original_ref: string | null
+  image_ref: string | null
+  expires_at: number
+  created_by: number
+  updated_by: number
+  created_at: number
+  updated_at: number
+  deleted_at: number | null
+}
+
+/** One row of the `deliveries` table. */
+type DeliveryRow = {
+  delivery_id: string
+  sender_short_id: number
+  sender_session_id: string
+  recipient_short_id: number
+  recipient_session_id: string
+  text: string
+  attachments_json: string
+  status: number
+  message_id: string | null
+  accepted_seq: number | null
+  created_by: number
+  updated_by: number
+  created_at: number
+  updated_at: number
+  deleted_at: number | null
+}
+
 /** One stored user as the product exposes it (never the password record). */
-function publicUser(row) {
+export type PublicUser = {
+  shortId: number
+  name: string
+  isAdmin: boolean
+  createdAt: number
+}
+
+/**
+ * One file a delivery names: the selector it points at and the prepared row,
+ * if any. Both are the delivery package's own JSON; the store carries them
+ * without reading them.
+ */
+export type DeliveryFile = {
+  selector: unknown
+  prepared?: unknown
+}
+
+/** One delivery the product asks the store to coordinate. */
+export type DeliveryInput = {
+  deliveryId: string
+  senderShortId: number
+  senderSessionId: string
+  recipientShortId: number
+  sessionId: string
+  text: string
+  files?: DeliveryFile[]
+}
+
+/** One delivery row as the product's face exposes it. */
+export type Delivery = {
+  deliveryId: string
+  senderShortId: number
+  senderSessionId: string
+  recipientShortId: number
+  sessionId: string
+  text: string
+  status: number
+  messageId: string | null
+  acceptedSeq: number | null
+  files: DeliveryFile[]
+}
+
+/** The receipt one settled delivery answers with. */
+export type DeliveryReceipt = {
+  messageId: string
+  acceptedSeq: number
+}
+
+/** One upload the product asks the store to record. */
+export type UploadInput = {
+  uploadId: string
+  owner: number
+  sessionId: string
+  name: string
+  mime: string
+  size: number
+  sha256: string
+  status: number
+  offset: number
+  expiresAt: number
+  createdAt: number
+  updatedAt: number
+}
+
+/** One upload row as the product's face exposes it. */
+export type Upload = {
+  uploadId: string
+  owner: number
+  sessionId: string
+  name: string
+  mime: string
+  size: number
+  sha256: string
+  status: number
+  offset: number
+  expiresAt: number
+  createdAt: number
+  updatedAt: number
+  original: unknown
+  image: unknown
+}
+
+/** The lifecycle facts one upload update may change. */
+export type UploadChanges = {
+  status?: number
+  offset?: number
+  original?: unknown
+  image?: unknown
+}
+
+/** One group as the product's face exposes it. */
+export type Group = {
+  id: number
+  name: string
+  ownerShortId: number
+  memberShortIds: number[]
+}
+
+/** The group one creation request names. */
+export type GroupRequest = {
+  name?: unknown
+  ownerShortId?: unknown
+}
+
+/** The membership change one request names. */
+export type GroupMemberRequest = {
+  groupId?: unknown
+  userShortId?: unknown
+  action?: unknown
+}
+
+/**
+ * One row read as the row shape its table declares, or undefined when the
+ * query found none.
+ *
+ * The SQLite driver types every column as `SQLOutputValue`; the schema is the
+ * authority on which columns are numbers, which are text and which may be
+ * NULL. The assertion is confined to this one boundary so every read site
+ * keeps a typed row.
+ * @param row - the driver's row, or undefined when the query found none.
+ * @returns the row as the table's row shape.
+ */
+function rowOf<T extends Record<string, SQLOutputValue>>(row: Record<string, SQLOutputValue> | undefined): T | undefined {
+  return row as T | undefined
+}
+
+/**
+ * One row that must exist, read as the row shape its table declares.
+ * @param row - the driver's row.
+ * @returns the row as the table's row shape.
+ * @throws {IdentityError} when the query found no row.
+ */
+function requiredRow<T extends Record<string, SQLOutputValue>>(row: Record<string, SQLOutputValue> | undefined): T {
+  if (row === undefined) {
+    throw new IdentityError(500, 'identity/missing-row', 'the row this step depends on is gone')
+  }
+  return row as T
+}
+
+/** Every row of one query, read as the row shape its table declares. */
+function rowsOf<T extends Record<string, SQLOutputValue>>(rows: Record<string, SQLOutputValue>[]): T[] {
+  return rows as T[]
+}
+
+/** One JSON column read back as the opaque value it holds. */
+function jsonValue(text: string): unknown {
+  const parsed: unknown = JSON.parse(text)
+  return parsed
+}
+
+/** Whether a value is a plain object. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** Whether a parsed attachment list is the delivery file list this store writes. */
+function isDeliveryFiles(value: unknown): value is DeliveryFile[] {
+  return Array.isArray(value) && value.every(file => isRecord(file) && 'selector' in file)
+}
+
+/** Whether a value is a positive safe integer short number. */
+function isShortId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+}
+
+/** Whether a value is the membership action this store accepts. */
+function isMemberAction(value: unknown): value is 1 | 2 {
+  return value === 1 || value === 2
+}
+
+/** One stored user as the product exposes it (never the password record). */
+function publicUser(row: UserRow): PublicUser {
   return {
     shortId: row.short_id,
     name: row.name,
@@ -69,7 +349,7 @@ function publicUser(row) {
 }
 
 /** Validate a login name the same way at registration and sign-in. */
-function assertName(name) {
+function assertName(name: unknown): string {
   const value = String(name ?? '').trim()
   if (!/^[A-Za-z0-9_-]{2,32}$/u.test(value)) {
     throw new IdentityError(400, 'identity/invalid-name',
@@ -79,7 +359,7 @@ function assertName(name) {
 }
 
 /** Validate a password the same way at registration and sign-in. */
-function assertPassword(password) {
+function assertPassword(password: unknown): string {
   const value = String(password ?? '')
   if (value.length < 8) {
     throw new IdentityError(400, 'identity/weak-password', 'password must be at least 8 characters')
@@ -89,11 +369,15 @@ function assertPassword(password) {
 
 /** The identity module's persistent business state. */
 export class IdentityStore {
-  #db
-  #now
-  #sessionTtlMilliseconds
+  #db: DatabaseSync
+  #now: () => number
+  #sessionTtlMilliseconds: number
 
-  constructor({ path, sessionTtlDays = 30, now = () => Date.now() } = {}) {
+  constructor({ path, sessionTtlDays = 30, now = () => Date.now() }: {
+    path?: string
+    sessionTtlDays?: number
+    now?: () => number
+  } = {}) {
     if (typeof path !== 'string' || path === '') {
       throw new IdentityError(500, 'identity/misconfigured', 'the identity store needs a database path')
     }
@@ -118,7 +402,7 @@ export class IdentityStore {
    * The one legacy case is a file that wrote no schema version: it is in this
    * module's current shape, so recording the version is all it needs.
    */
-  #migrate() {
+  #migrate(): void {
     this.#transaction(() => {
       const version = this.#storedVersion()
       if (version === undefined) {
@@ -145,26 +429,42 @@ export class IdentityStore {
   }
 
   /** The recorded schema version, or undefined for a file that records none. */
-  #storedVersion() {
+  #storedVersion(): number | undefined {
     const hasMeta = this.#db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get() !== undefined
     if (!hasMeta) return undefined
-    const row = this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version')
+    const row = rowOf<{ value: string }>(this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version'))
     return row === undefined ? undefined : Number(row.value)
   }
 
-  #setVersion() {
+  #setVersion(): void {
     this.#db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
       .run('schema_version', String(SCHEMA_VERSION))
   }
 
   /** One delivery row; the package's own reads, never a published operation. */
-  #readDelivery(id) {
-    const row = this.#db.prepare('SELECT * FROM deliveries WHERE delivery_id = ? AND deleted_at IS NULL').get(id)
-    return row && { deliveryId: row.delivery_id, senderShortId: row.sender_short_id, senderSessionId: row.sender_session_id,
-      recipientShortId: row.recipient_short_id, sessionId: row.recipient_session_id, text: row.text,
-      status: row.status, messageId: row.message_id, acceptedSeq: row.accepted_seq, files: JSON.parse(row.attachments_json) }
+  #readDelivery(id: string): Delivery | undefined {
+    const row = rowOf<DeliveryRow>(this.#db.prepare('SELECT * FROM deliveries WHERE delivery_id = ? AND deleted_at IS NULL').get(id))
+    if (row === undefined) return undefined
+    const files = jsonValue(row.attachments_json)
+    if (!isDeliveryFiles(files)) {
+      throw new IdentityError(500, 'identity/corrupt-delivery', 'the stored delivery row does not name its files')
+    }
+    return {
+      deliveryId: row.delivery_id,
+      senderShortId: row.sender_short_id,
+      senderSessionId: row.sender_session_id,
+      recipientShortId: row.recipient_short_id,
+      sessionId: row.recipient_session_id,
+      text: row.text,
+      status: row.status,
+      messageId: row.message_id,
+      acceptedSeq: row.accepted_seq,
+      files,
+    }
   }
-  prepareDelivery(row) {
+
+  /** Coordinate one delivery: the same identity, recipient and content, or a conflict. */
+  prepareDelivery(row: DeliveryInput): Delivery | undefined {
     return this.#transaction(() => {
       const existing = this.#readDelivery(row.deliveryId)
       if (existing) {
@@ -183,80 +483,128 @@ export class IdentityStore {
       return this.#readDelivery(row.deliveryId)
     })
   }
+
   /** Persist each immutable file before moving on; null entries alone are retried. */
-  prepareDeliveryFile(id, index, prepared) {
+  prepareDeliveryFile(id: string, index: number, prepared: unknown): Delivery | undefined {
     return this.#transaction(() => {
       const row = this.#readDelivery(id)
-      row.files[index].prepared = prepared
-      const status = row.files.every(file => file.prepared !== null) ? 0 : 2
+      const file = row?.files[index]
+      if (row === undefined || file === undefined) {
+        throw new TypeError(`no delivery file at index ${index} of ${id}`)
+      }
+      file.prepared = prepared
+      const status = row.files.every(entry => entry.prepared !== null) ? 0 : 2
       this.#db.prepare(`UPDATE deliveries SET attachments_json = ?, status = ?,
         updated_by = sender_short_id, updated_at = ? WHERE delivery_id = ? AND deleted_at IS NULL`)
         .run(JSON.stringify(row.files),status,this.#now(),id)
       return this.#readDelivery(id)
     })
   }
-  pendingDeliveries() {
-    return this.#db.prepare('SELECT delivery_id FROM deliveries WHERE status = 0 AND deleted_at IS NULL ORDER BY created_at,delivery_id')
-      .all().map(row => this.#readDelivery(row.delivery_id))
+
+  /** Every delivery still waiting to be settled. */
+  pendingDeliveries(): Delivery[] {
+    const rows = rowsOf<DeliveryRow>(this.#db.prepare('SELECT delivery_id FROM deliveries WHERE status = 0 AND deleted_at IS NULL ORDER BY created_at,delivery_id')
+      .all())
+    return rows.flatMap(row => {
+      const delivery = this.#readDelivery(row.delivery_id)
+      return delivery === undefined ? [] : [delivery]
+    })
   }
-  completeDelivery(id, { messageId, acceptedSeq }) {
+
+  /** Mark one delivery durably delivered. */
+  completeDelivery(id: string, { messageId, acceptedSeq }: DeliveryReceipt): void {
     this.#db.prepare('UPDATE deliveries SET status = 1, message_id = ?, accepted_seq = ?, updated_by = sender_short_id, updated_at = ? WHERE delivery_id = ? AND deleted_at IS NULL')
       .run(messageId,acceptedSeq,this.#now(),id)
   }
 
   /** Insert an opaque upload receipt after the staging file exists. */
-  insertUpload(row) {
+  insertUpload(row: UploadInput): void {
     this.#db.prepare(`INSERT INTO uploads
       (upload_id,owner_short_id,session_id,name,mime,size,sha256,status,offset,expires_at,created_by,updated_by,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(row.uploadId,row.owner,row.sessionId,row.name,row.mime,row.size,row.sha256,
         row.status,row.offset,row.expiresAt,row.owner,row.owner,row.createdAt,row.updatedAt)
   }
+
   /** Read lifecycle facts. Session ownership is checked by the attachment service. */
-  readUpload(id) {
-    const row = this.#db.prepare('SELECT * FROM uploads WHERE upload_id = ? AND deleted_at IS NULL').get(id)
+  readUpload(id: string): Upload | undefined {
+    const row = rowOf<UploadRow>(this.#db.prepare('SELECT * FROM uploads WHERE upload_id = ? AND deleted_at IS NULL').get(id))
     if (!row) return undefined
-    return { uploadId: row.upload_id, owner: row.owner_short_id, sessionId: row.session_id,
-      name: row.name, mime: row.mime, size: row.size, sha256: row.sha256, status: row.status, offset: row.offset,
-      expiresAt: row.expires_at, createdAt: row.created_at, updatedAt: row.updated_at,
-      original: row.original_ref === null ? null : JSON.parse(row.original_ref),
-      image: row.image_ref === null ? null : JSON.parse(row.image_ref) }
+    return {
+      uploadId: row.upload_id,
+      owner: row.owner_short_id,
+      sessionId: row.session_id,
+      name: row.name,
+      mime: row.mime,
+      size: row.size,
+      sha256: row.sha256,
+      status: row.status,
+      offset: row.offset,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      original: row.original_ref === null ? null : jsonValue(row.original_ref),
+      image: row.image_ref === null ? null : jsonValue(row.image_ref),
+    }
   }
+
   /** One atomic lifecycle update; no message-acceptance state is stored here. */
-  updateUpload(id, changes) {
-    const columns = { status: 'status', offset: 'offset', original: 'original_ref', image: 'image_ref' }
-    const entries = Object.entries(changes)
-    if (entries.some(([key]) => !Object.hasOwn(columns, key))) throw new Error('unknown upload lifecycle field')
-    const values = entries.map(([key, value]) => key === 'original' || key === 'image' ? value === null ? null : JSON.stringify(value) : value)
-    this.#db.prepare(`UPDATE uploads SET ${entries.map(([key]) => columns[key] + ' = ?').join(', ')},
-      updated_by = owner_short_id, updated_at = ? WHERE upload_id = ? AND deleted_at IS NULL`).run(...values,this.#now(),id)
+  updateUpload(id: string, changes: UploadChanges): void {
+    const updates = Object.entries(changes).map(([key, value]): { column: string; value: SQLInputValue } => {
+      switch (key) {
+        case 'status':
+        case 'offset': {
+          if (typeof value !== 'number') throw new Error(`upload lifecycle field ${key} must be a number`)
+          return { column: key, value }
+        }
+        case 'original':
+        case 'image': {
+          if (value === null) return { column: key === 'original' ? 'original_ref' : 'image_ref', value: null }
+          const encoded: string | undefined = JSON.stringify(value)
+          if (encoded === undefined) throw new Error(`upload lifecycle field ${key} must be JSON`)
+          return { column: key === 'original' ? 'original_ref' : 'image_ref', value: encoded }
+        }
+        default:
+          throw new Error('unknown upload lifecycle field')
+      }
+    })
+    this.#db.prepare(`UPDATE uploads SET ${updates.map(update => `${update.column} = ?`).join(', ')},
+      updated_by = owner_short_id, updated_at = ? WHERE upload_id = ? AND deleted_at IS NULL`)
+      .run(...updates.map(update => update.value),this.#now(),id)
   }
 
   /** A group's public state; membership is read from the same business store. */
-  #group(row) {
-    return { id: row.id, name: row.name, ownerShortId: row.owner_short_id,
-      memberShortIds: this.#db.prepare('SELECT user_short_id FROM group_members WHERE group_id = ? AND deleted_at IS NULL ORDER BY user_short_id').all(row.id).map(member => member.user_short_id) }
+  #group(row: GroupRow): Group {
+    const members = rowsOf<{ user_short_id: number }>(this.#db.prepare('SELECT user_short_id FROM group_members WHERE group_id = ? AND deleted_at IS NULL ORDER BY user_short_id').all(row.id))
+    return {
+      id: row.id,
+      name: row.name,
+      ownerShortId: row.owner_short_id,
+      memberShortIds: members.map(member => member.user_short_id),
+    }
   }
 
   /** Current member groups only; system management does not grant file access. */
-  groupsForMember(shortId) {
-    return this.#db.prepare(`SELECT groups.* FROM groups JOIN group_members ON group_members.group_id = groups.id
+  groupsForMember(shortId: number): Group[] {
+    const rows = rowsOf<GroupRow>(this.#db.prepare(`SELECT groups.* FROM groups JOIN group_members ON group_members.group_id = groups.id
       WHERE group_members.user_short_id = ? AND group_members.deleted_at IS NULL AND groups.deleted_at IS NULL ORDER BY groups.id`)
-      .all(shortId).map(row => this.#group(row))
+      .all(shortId))
+    return rows.map(row => this.#group(row))
   }
 
-  ownsGroup(shortId) {
+  /** Whether one short number owns a live group. */
+  ownsGroup(shortId: number): boolean {
     return this.#db.prepare('SELECT 1 FROM groups WHERE owner_short_id = ? AND deleted_at IS NULL').get(shortId) !== undefined
   }
 
   /** Phaethon creates and designates an existing owner, who joins atomically. */
-  createGroup(callerShortId, { name, ownerShortId }) {
+  createGroup(callerShortId: number, { name, ownerShortId }: GroupRequest): Group {
     const groupName = typeof name === 'string' ? name.trim() : ''
-    if (!groupName || groupName.length > 100 || !Number.isSafeInteger(ownerShortId) || ownerShortId < 1) {
+    if (!groupName || groupName.length > 100 || !isShortId(ownerShortId)) {
       throw new IdentityError(400, 'groups/invalid-request', 'provide a group name (1-100 characters) and an existing owner short number')
     }
     return this.#transaction(() => {
       const caller = this.userByShortId(callerShortId)
-      if (caller?.shortId !== PHAETHON_SHORT_ID || !caller.isAdmin) {
+      if (caller === undefined || caller.shortId !== PHAETHON_SHORT_ID || !caller.isAdmin) {
         throw new IdentityError(403, 'groups/forbidden', 'only Phaethon may create a group')
       }
       if (!this.userByShortId(ownerShortId)) throw new IdentityError(404, 'groups/unknown-user', 'no active user has that short number')
@@ -266,17 +614,17 @@ export class IdentityStore {
       const groupId = Number(info.lastInsertRowid)
       this.#db.prepare('INSERT INTO group_members (group_id, user_short_id, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
         .run(groupId, ownerShortId, callerShortId, callerShortId, now, now)
-      return this.#group(this.#db.prepare('SELECT * FROM groups WHERE id = ?').get(groupId))
+      return this.#group(requiredRow<GroupRow>(this.#db.prepare('SELECT * FROM groups WHERE id = ?').get(groupId)))
     })
   }
 
   /** Change only the caller's own group, with authorization and write together. */
-  changeGroupMember(callerShortId, { groupId, userShortId, action }) {
-    if (![groupId, userShortId].every(value => Number.isSafeInteger(value) && value > 0) || (action !== 1 && action !== 2)) {
+  changeGroupMember(callerShortId: number, { groupId, userShortId, action }: GroupMemberRequest): Group {
+    if (!isShortId(groupId) || !isShortId(userShortId) || !isMemberAction(action)) {
       throw new IdentityError(400, 'groups/invalid-request', 'provide groupId, userShortId and action 1 (add) or 2 (remove)')
     }
     return this.#transaction(() => {
-      const group = this.#db.prepare('SELECT * FROM groups WHERE id = ? AND deleted_at IS NULL').get(groupId)
+      const group = rowOf<GroupRow>(this.#db.prepare('SELECT * FROM groups WHERE id = ? AND deleted_at IS NULL').get(groupId))
       if (!this.userByShortId(callerShortId) || !group || group.owner_short_id !== callerShortId) {
         throw new IdentityError(403, 'groups/forbidden', 'only the current owner of this group may change its members')
       }
@@ -284,7 +632,7 @@ export class IdentityStore {
       if (action === 2 && userShortId === group.owner_short_id) {
         throw new IdentityError(409, 'groups/owner-required', 'the designated group owner must remain a member')
       }
-      const member = this.#db.prepare('SELECT * FROM group_members WHERE group_id = ? AND user_short_id = ?').get(groupId, userShortId)
+      const member = rowOf<GroupMemberRow>(this.#db.prepare('SELECT * FROM group_members WHERE group_id = ? AND user_short_id = ?').get(groupId, userShortId))
       const now = this.#now()
       if (action === 1 && !member) {
         this.#db.prepare('INSERT INTO group_members (group_id, user_short_id, created_by, updated_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -299,12 +647,12 @@ export class IdentityStore {
   }
 
   /** Close the underlying database. */
-  close() {
+  close(): void {
     this.#db.close()
   }
 
   /** Run `work` inside one immediate transaction, rolling back on any failure. */
-  #transaction(work) {
+  #transaction<T>(work: () => T): T {
     this.#db.exec('BEGIN IMMEDIATE')
     try {
       const result = work()
@@ -321,15 +669,16 @@ export class IdentityStore {
    * only while the account has none; a logically deleted Phaethon row is refused
    * rather than recreated beside itself.
    */
-  seedPhaethon({ name = 'phaethon', password } = {}) {
+  seedPhaethon({ name = 'phaethon', password }: { name?: string; password?: string | undefined } = {}): { user: PublicUser; created: boolean } {
     const login = assertName(name)
     return this.#transaction(() => {
-      const existing = this.#db.prepare('SELECT * FROM users WHERE short_id = ?').get(PHAETHON_SHORT_ID)
+      const existing = rowOf<UserRow>(this.#db.prepare('SELECT * FROM users WHERE short_id = ?').get(PHAETHON_SHORT_ID))
       if (existing !== undefined && existing.deleted_at === null) {
         if (password !== undefined && password !== '' && existing.password === null) {
           this.#db.prepare('UPDATE users SET password = ?, updated_at = ? WHERE id = ?')
             .run(hashPassword(assertPassword(password)), this.#now(), existing.id)
-          return { user: publicUser(this.#db.prepare('SELECT * FROM users WHERE id = ?').get(existing.id)), created: false }
+          const refreshed = requiredRow<UserRow>(this.#db.prepare('SELECT * FROM users WHERE id = ?').get(existing.id))
+          return { user: publicUser(refreshed), created: false }
         }
         return { user: publicUser(existing), created: false }
       }
@@ -344,21 +693,21 @@ export class IdentityStore {
       const info = this.#db.prepare(
         'INSERT INTO users (short_id, name, is_admin, password, created_at, updated_at) VALUES (?, ?, 1, ?, ?, ?)',
       ).run(PHAETHON_SHORT_ID, login, password === undefined || password === '' ? null : hashPassword(assertPassword(password)), now, now)
-      const row = this.#db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid)
+      const row = requiredRow<UserRow>(this.#db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid))
       return { user: publicUser(row), created: true }
     })
   }
 
   /** One user by short number. */
-  userByShortId(shortId) {
-    const row = this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(shortId))
+  userByShortId(shortId: number): PublicUser | undefined {
+    const row = rowOf<UserRow>(this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(shortId)))
     return row === undefined ? undefined : publicUser(row)
   }
 
   /** Mint one invite code for an administrator. */
-  createInvite(adminShortId) {
+  createInvite(adminShortId: number): { code: string; createdAt: number } {
     return this.#transaction(() => {
-      const admin = this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(adminShortId))
+      const admin = rowOf<UserRow>(this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(adminShortId)))
       if (admin === undefined) throw new IdentityError(403, 'identity/forbidden', 'the caller is not a known identity')
       if (admin.is_admin !== 1) {
         throw new IdentityError(403, 'identity/forbidden', 'only Phaethon may create invites')
@@ -375,12 +724,12 @@ export class IdentityStore {
    * Redeem one invite and create the invited identity atomically. A refusal
    * leaves no user, no redemption and no session behind.
    */
-  register({ inviteCode, name, password } = {}) {
+  register({ inviteCode, name, password }: { inviteCode?: unknown; name?: unknown; password?: unknown } = {}): { user: PublicUser; token: string } {
     const code = canonicalInviteCode(inviteCode)
     const login = assertName(name)
     const secret = assertPassword(password)
     return this.#transaction(() => {
-      const invite = this.#db.prepare('SELECT * FROM invites WHERE code = ? AND deleted_at IS NULL').get(code)
+      const invite = rowOf<InviteRow>(this.#db.prepare('SELECT * FROM invites WHERE code = ? AND deleted_at IS NULL').get(code))
       if (invite === undefined) throw new IdentityError(403, 'identity/unknown-invite', 'that invite code was not issued here')
       if (invite.redeemed_by !== null) {
         throw new IdentityError(409, 'identity/invite-used', 'that invite code has already been used')
@@ -391,7 +740,7 @@ export class IdentityStore {
       const now = this.#now()
       // Allocation reads every row, deleted ones included, so a removed identity's
       // short number is never handed out a second time.
-      const next = this.#db.prepare('SELECT COALESCE(MAX(short_id), 0) + 1 AS value FROM users').get()
+      const next = requiredRow<{ value: number }>(this.#db.prepare('SELECT COALESCE(MAX(short_id), 0) + 1 AS value FROM users').get())
       const shortId = Number(next.value)
       if (shortId <= PHAETHON_SHORT_ID) {
         throw new IdentityError(500, 'identity/unseeded', 'the Phaethon identity has not been seeded')
@@ -401,14 +750,14 @@ export class IdentityStore {
       ).run(shortId, login, hashPassword(secret), now, now)
       this.#db.prepare('UPDATE invites SET redeemed_by = ?, redeemed_at = ?, updated_at = ? WHERE code = ?')
         .run(info.lastInsertRowid, now, now, code)
-      const user = publicUser(this.#db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid))
+      const user = publicUser(requiredRow<UserRow>(this.#db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid)))
       return { user, token: this.#mintSession(info.lastInsertRowid, now) }
     })
   }
 
   /** Verify a login name and password, answering the user and a fresh session token. */
-  signIn({ name, password } = {}) {
-    const row = this.#db.prepare('SELECT * FROM users WHERE name = ? AND deleted_at IS NULL').get(String(name ?? '').trim())
+  signIn({ name, password }: { name?: unknown; password?: unknown } = {}): { user: PublicUser; token: string } {
+    const row = rowOf<UserRow>(this.#db.prepare('SELECT * FROM users WHERE name = ? AND deleted_at IS NULL').get(String(name ?? '').trim()))
     if (row === undefined || row.password === null || !verifyPassword(String(password ?? ''), row.password)) {
       throw new IdentityError(401, 'identity/bad-credentials', 'name and password do not match an identity')
     }
@@ -417,13 +766,13 @@ export class IdentityStore {
   }
 
   /** The identity a bearer token speaks for, or undefined when unknown, expired or revoked. */
-  authenticate(token) {
+  authenticate(token: unknown): PublicUser | undefined {
     if (typeof token !== 'string' || token === '') return undefined
-    const row = this.#db.prepare(`
+    const row = rowOf<SessionUserRow>(this.#db.prepare(`
       SELECT sessions.digest AS digest, sessions.expires_at AS expires_at, sessions.revoked_at AS revoked_at, users.*
       FROM sessions JOIN users ON users.id = sessions.user_id
       WHERE sessions.digest = ? AND sessions.deleted_at IS NULL AND users.deleted_at IS NULL
-    `).get(sessionTokenDigest(token))
+    `).get(sessionTokenDigest(token)))
     if (row === undefined) return undefined
     if (row.revoked_at !== null) return undefined
     if (row.expires_at <= this.#now()) return undefined
@@ -431,7 +780,7 @@ export class IdentityStore {
   }
 
   /** Revoke one session token; answers whether a live session was revoked. */
-  signOut(token) {
+  signOut(token: string): boolean {
     const now = this.#now()
     const info = this.#db.prepare(
       'UPDATE sessions SET revoked_at = ?, updated_at = ? WHERE digest = ? AND revoked_at IS NULL AND deleted_at IS NULL',
@@ -440,7 +789,7 @@ export class IdentityStore {
   }
 
   /** Mint and store one session for a user row id. */
-  #mintSession(userId, now) {
+  #mintSession(userId: number | bigint, now: number): string {
     const token = mintSessionToken()
     this.#db.prepare(
       'INSERT INTO sessions (digest, user_id, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?)',

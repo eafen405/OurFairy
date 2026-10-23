@@ -7,8 +7,10 @@
  *
  * @module @ourfairy/dsh-identity/src/routes
  */
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { postHandler } from '@ourfairy/dsh-http/http'
-import { IdentityError } from './store.mjs'
+import { IdentityError, type IdentityStore, type PublicUser } from './store.js'
+import type { IdentityService } from './index.js'
 
 /** Paths this module owns, in the order the carrier registers them. */
 export const IDENTITY_PATHS = Object.freeze([
@@ -19,21 +21,28 @@ export const IDENTITY_PATHS = Object.freeze([
   '/identity/sign-out',
 ])
 
+/** One handler the carrier registers on the web server. */
+export type IdentityHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>
+
 /**
  * Build one handler per path in {@link IDENTITY_PATHS}. The store is passed
  * alongside the service rather than read back from it: the service keeps the
  * store private, and the registration and sign-in routes have no identity rule
  * of their own.
  */
-export function identityHandlers({ service, store, fence }) {
-  const callerOf = (request) => {
+export function identityHandlers({ service, store, fence }: {
+  service: IdentityService
+  store: IdentityStore
+  fence: (request: IncomingMessage) => unknown
+}): Map<string, IdentityHandler> {
+  const callerOf = (request: IncomingMessage): PublicUser => {
     const user = service.authenticateRequest(request)
     if (user === undefined) {
       throw new IdentityError(401, 'identity/unauthorized', 'present a live session credential')
     }
     return user
   }
-  const post = (handle) => postHandler({
+  const post = (handle: (body: Record<string, unknown>, request: IncomingMessage) => Promise<unknown>): IdentityHandler => postHandler({
     fence,
     handle,
     HttpError: IdentityError,
@@ -42,7 +51,7 @@ export function identityHandlers({ service, store, fence }) {
   })
 
   return new Map([
-    ['/identity/invite', post(async (body, request) => {
+    ['/identity/invite', post(async (_body, request) => {
       const caller = callerOf(request)
       return { ok: true, invite: service.createInvite(caller) }
     })],

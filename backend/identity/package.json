@@ -5,15 +5,26 @@
   "description": "OurFairy identity module: users, short numbers, invites, and sessions in the business SQLite store, with its own /identity/* routes and session tokens that admit dsh /api.",
   "type": "module",
   "license": "UNLICENSED",
-  "main": "./src/index.mjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.mjs",
-    "./routes": "./src/routes.mjs",
-    "./owner": "./src/owner.mjs",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./routes": {
+      "types": "./dist/routes.d.ts",
+      "default": "./dist/routes.js"
+    },
+    "./owner": {
+      "types": "./dist/owner.d.ts",
+      "default": "./dist/owner.js"
+    },
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
-    "src",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "README.md",
     "locale/*.json"
   ],
