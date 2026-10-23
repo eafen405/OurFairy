@@ -83,7 +83,9 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3。
   - `backend/spaces/src/fs.ts`：`errorCode` 读 `error.code`（迁移前就是直接读同一个属性，抛出的 `null`
     仍然照样抛）；`metaError as Error` 读 `.message`（同上）。
   - `backend/spaces/test-support/scope-contributors.ts`：夹具站的是「只有 header 的 session」，把
-    `id` / `header.owner` 认作 dsh 的品牌类型（运行期是同一个字符串）。
+    `id` / `header.owner` 认作 dsh 的品牌类型（运行期是同一个字符串）；夹具的 catch 里
+    `(error as { stack?: string }).stack` 读的是被抛值的可选 `stack`——被抛值的形状未知，
+    所以按迁移前那样「防御性地读 `stack`，其余一律 `String(error)`」，运行期与迁移前逐字相同。
   - `backend/attachments/src/service.ts`：`sessionId as string`（owned-session 读刚拒过非本人的 id）、
     `uploadId as string`（锁的键，`_owned` 拒收非 32 位十六进制的 id）、`row.original as FileAttachmentRef | null`
     与 `row.image as ImageAttachmentRef | null`（store 的 JSON 列）、`mime as ImageMediaType`（propose 时
@@ -142,6 +144,86 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3。
 - 会话日志是 JSON：`admittedMessages` 在**这一处边界**把事件流读成产品自己的形状
   （`events as unknown as readonly AdmittedEvent[]`），只取 `agent/inbox/spliced`、`user/message`、
   `delivery/message` 三种带消息的事件——与迁移前的三元表达式逐条对应。
+
+## 补记：合并评审后的一处行为对齐（fix(#208)）
+
+合并评审在 `integration/spec-205` 侧发现迁移里**丢了一个可选链**，与本票「不改行为」的约定冲突，
+已在同一分支上补回：
+
+| | 表达式 |
+| --- | --- |
+| 迁移前（`backend/spaces/src/scope.mjs` @ `80dfc69fcb`） | `const shortId = shortIdOf(session?.header?.owner)` |
+| 迁移后（提交 `420f344299`） | `const shortId = shortIdOf(session?.header.owner)` |
+| 补回后（本次提交） | `const shortId = shortIdOf(session?.header?.owner)` |
+
+差别只落在「一个没有 `header` 的 session 形状」上：带 `?.` 的版本读到 `undefined` →
+`shortIdOf(undefined)` → `undefined` → 抛
+`FsError('file operation requires an owned session', 'FS_PERMISSION_DENIED')`；
+不带 `?.` 的版本在同一个形状上抛 `TypeError`（读 `undefined` 的 `owner`）。两边都失败，但**错误类型
+不同**，对调用方是可观察的——与 T2 评审拦下的三处是同一类。`OwnedSession.header` 在类型上是必填，
+所以这条路径今天不可达；按约定仍以与迁移前逐字相同为准。
+
+### 同一轮做的等价性复查（两包逐表达式比对）
+
+复查方法：把迁移前后的源码都去掉注释与空白后按 token 比对，逐个 hunk 人工判定。除上面那条外，
+两包其余的差异都是类型标注或**语义等价**的改写。下表是判定过、值得复核的那些：
+
+| 位置 | 迁移前 | 迁移后 | 判定 |
+| --- | --- | --- | --- |
+| `scope.ts` `requireCurrent()` | `this.owner(session)` 后 `return session` | 先判 `session === undefined` 抛 `FsError`，再 `this.owner(session)` | 等价：`owner(undefined)` 抛的是同一个 `FsError`（同 message、同 code） |
+| `scope.ts` `session(id)` | `this.ctx.sessions.get(id)` | `id === undefined ? undefined : this.ctx.sessions.get(id)` | 等价：`get` 是 Map 查表，`undefined` 查不到 |
+| `scope.ts` 构造函数 | `this.envRoot = join(...)` 后 `realpathSync(this.envRoot)` | 局部 `envRoot`，再 `this.envRoot = realpathSync(envRoot)` | 等价：同一个值 |
+| `fs.ts` `remember()` | `this.grants.delete(this.grants.keys().next().value)` | 先取 `oldest`，`!== undefined` 才 delete | 等价：删一个不存在的键是空操作 |
+| `fs.ts` `mapOpenError()` 等四处 | `error.code` | `errorCode(error)` | 等价：读同一个属性；被抛的值是 `null` 时仍然照样抛 `TypeError` |
+| `fs.ts` `assertRead(target, op)` | 实参多传一个没用到的 `op` | 去掉实参 | 等价：那个形参在迁移前就没被读过 |
+| `fs.ts` `mintTarget()` | `targetKey: key` | `targetKey: FsTargetKey(key)` | 等价：dsh 的品牌函数实现是 `key as FsTargetKey`，同一个字符串 |
+| `bwrap.ts` `probeBwrap()` | `spawnSync(selfCheck[0], ...)` | `spawnSync(bwrapPath, ...)` | 等价：`selfCheck[0]` 就是 `bwrapPath` |
+| `service.ts` `safeName()` | `name.split(...).at(-1).replace(...)` | 加了 `?.` 与 `?? ''` | 等价：`split` 至少返回一个元素，`.at(-1)` 不会是 `undefined` |
+| `service.ts` `propose()` | `name = safeName(name)`（改写形参） | `const safe = safeName(name)` | 等价 |
+| `service.ts` `propose()` | `imageLimits.mediaTypes.includes(mime)` | `imageLimits.mediaTypes.some(allowed => allowed === mime)` | 等价：同一张表、同一个字符串比较 |
+| `service.ts` `chunk()` / `complete()` | `this._path(uploadId)` | `this._path(row.uploadId)` | 等价：`uploads.upload_id` 是 TEXT PRIMARY KEY（默认 BINARY 排序规则），store 按精确匹配读回同一行，`row.uploadId === uploadId` |
+| `attachments/index.ts` | `postHandler({ ..., respond })` | `...(respond !== undefined ? { respond } : {})` | 等价：`postHandler` 的默认形参对 `undefined` 同样生效 |
+| `spaces/index.ts` | `.map(JSON.stringify)` | `.map(root => JSON.stringify(root))` | 等价：`map` 把 `(value, index, array)` 传给回调，而 `JSON.stringify` 的第 2/3 个形参是 `replacer`/`space`——数字 `replacer` 只在被调用时才生效，`space` 不是数字就不产生缩进，输出与 `JSON.stringify(value)` 相同。TS 选不出适配 `map` 回调的 `JSON.stringify` 重载，才写成显式箭头函数 |
+
+### 复查里剩下的两处（**已按评审决定补回**）
+
+下面两处与被拦下的那条**同类**（旧代码的可选链 / 真值判断在迁移里被换成了另一种写法）。评审决定按
+「不论可达与否都要与迁移前逐字相同」处理，已在同一个提交里补回：
+
+1. **`backend/spaces/test-support/scope-contributors.ts` 的 catch**
+   - 迁移前：`report.error = error.stack ?? String(error)`
+   - 迁移后（`420f344299`）：`error instanceof Error ? error.stack ?? String(error) : String(error)`
+   - 差别：被抛的值是 `null` / `undefined` 时，旧代码在 catch 里读 `.stack` 会抛 `TypeError`，
+     于是**报告文件根本不写**；新代码写成 `"null"` 并继续往下走。另一个差别是带真值 `stack` 的
+     非 Error 对象（旧代码取那个 `stack`，新代码取 `String(error)`）。
+     夹具 catch 到的只会是插件加载失败的 `Error`，今天不可达。
+   - 补回后：`report.error = (error as { stack?: string }).stack ?? String(error)`
+     ——运行期与迁移前**逐字相同**：被抛值是 `null` / `undefined` 时照样抛 `TypeError`，
+     带真值 `stack` 的非 Error 对象照样取那个 `stack`。断言写在「被抛值的形状未知」这个边界上，
+     理由写在代码注释里。
+2. **`backend/attachments/src/pdf.ts` 的 `render`**
+   - 迁移前：`.filter(page => page.image)`（真值判断）
+   - 迁移后（`420f344299`）：`.filter((page): page is WorkerPage & { image: ImageAttachmentRef } => page.image !== undefined)`
+   - 差别：某一页的 `image` 是「非 `undefined` 的假值」（`null` / `0` / `''` / `false`）时，旧代码把它
+     滤掉，新代码会把它留下并产出 `attachment: null`。worker 从不写 `image` 键，产品也只挂真正的
+     `ImageAttachmentRef`，今天不可达。
+   - 补回后：`.filter((page): page is WorkerPage & { image: ImageAttachmentRef } => Boolean(page.image))`
+     ——真值判断与迁移前**逐字相同**（类型谓词保留，只为让后面的 `attachment: page.image` 仍被类型检查）。
+
+### 补回之后的复查：没有第三条
+
+补回上面两处后，又对两包 13 个文件做了一遍**机械复查**，用来兜住「同一类」的其它形态：
+
+- **运算符计数比对**（`?.`、`??`、`||`、`&&`、`===`、`!==`、`==`、`!=`、`!`、`Boolean(` 的逐文件计数）：
+  去掉注释后逐对比较，只有「新增的 `!== undefined` 守卫」与「`safeName` 里新增的 `?.` + `?? ''`」两类差异，
+  都在上面的等价性表里逐条判定过；**没有任何一处旧代码有、迁移后没有的 `?.` / `??` / `||`**。
+- **字面量计数比对**（所有字符串与数字字面量）：差异只有类型标注里的字面量（`'CRLF' | 'LF'`、
+  `'symlink' | 'file' | 'directory' | 'other'`、`'info' | 'render' | 'pages'`、`'agent/inbox/spliced'` 等）、
+  import 说明符、`assertRead` 那 7 个**没被读过的** `op` 实参（`'read'` 少 4 个、`'list'` / `'lstat'` /
+  `'stat'` 各少 1 个）、`requireCurrent()` 里补的那一次同文案 `FsError`，以及 `spawnSync(selfCheck[0], …)`
+  → `spawnSync(bwrapPath, …)` 少掉的那个 `0`。**没有任何一条错误码、错误文案、路径或阈值改过。**
+
+结论：同类差异一共三条，都已补回；其余两包的差异是类型标注或语义等价的改写。
 
 ## test-support 决定
 
@@ -227,6 +309,31 @@ $ node --test tests/identity-interfaces.test.mjs
 | `git check-ignore -v backend/spaces/dist/.tsbuildinfo.test-support` | `.gitignore:11:/backend/*/dist/` |
 | 提交钩子（`node scripts/precommit.mjs`，因包 manifest 属权威路径而判成 `full`） | 第一次 293 tests / 292 pass / **1 fail**（Red 4 那条源码扫描路径）；修好后重跑 **293 / 293 pass / 0 fail**，`combo:verify` 为 `combo: combination verified`。**那是钩子的行为，不构成本票的门禁**。 |
 
+### 补记那一轮（fix(#208)）的验证
+
+在 `420f344299` 之后（评审指出丢了可选链的那一轮）重跑：
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run clean && npm run build` | `removed 5 build output directories`；干净树编译通过，无输出 |
+| `node --test tests/spaces.test.mjs tests/sandbox-network-profile.test.mjs tests/attachments.test.mjs tests/attachment-download-abort.test.mjs tests/pdf-worker-cancel.test.mjs tests/pdf.test.mjs tests/scoped-provider-rows.test.mjs` | **26 tests / 26 pass / 0 fail** |
+| `npm run backend:doctor` | `doctor: all checks passed` |
+| `OURFAIRY_PORT=0 npm run backend:probe` | `ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)` |
+| `npm run combo:verify` | `combo: combination verified` |
+
+### 补回那两处之后的验证（fix(#208)，第二个提交）
+
+在 `e84ded367a` 之后（把夹具的 catch 与 PDF 工具的 `render` 谓词补回迁移前的语义）重跑：
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run clean && npm run build` | `removed 5 build output directories`；干净树编译通过，无输出 |
+| `node --test tests/spaces.test.mjs tests/sandbox-network-profile.test.mjs tests/attachments.test.mjs tests/attachment-download-abort.test.mjs tests/pdf-worker-cancel.test.mjs tests/pdf.test.mjs tests/scoped-provider-rows.test.mjs` | **26 tests / 26 pass / 0 fail** |
+| `npm run backend:doctor` | `doctor: all checks passed` |
+| `OURFAIRY_PORT=0 npm run backend:probe` | `ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)` |
+| `npm run combo:verify` | `combo: combination verified` |
+| 运算符计数 + 字面量计数复查（13 个文件对，去注释后逐对比较） | 没有第三条同类差异（结论见上面「补回之后的复查：没有第三条」） |
+
 `backend:probe` 用了 `OURFAIRY_PORT=0`：本机 3080 端口被一个与本票无关的 `dsh web` 占着（与 T1/T2 记录的情况相同）。
 
 ## 没有跑的
@@ -240,6 +347,10 @@ $ node --test tests/identity-interfaces.test.mjs
 - 没有迁 `chat` / `delivery` / `gateway` / `groups` / `search` / `speech` / `probe`，也没有迁 `scripts/`。
 
 ## 未完成项与留给下一票的提醒
+
+- **本票没有留下同类差异**：合并评审拦下的那处可选链，以及复查里找到的两处（夹具的 catch、
+  PDF 工具的 `render` 谓词），都已按「与迁移前逐字相同」补回；补回后又做了一遍运算符与字面量的
+  机械复查，没有第三条（见上面「补回之后的复查：没有第三条」）。
 
 - **`as unknown as` 只出现在 JSON 边界**：`backend/attachments/src/service.ts` 的会话事件流、
   `backend/attachments/src/pdf.ts` 的 worker 答话与工具规范值。这三处都是「运行期是 JSON、类型系统里

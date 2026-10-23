@@ -192,7 +192,7 @@ export function installPdf(ctx: Context, service: AttachmentService): void {
       output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => {
         const pages = (value.pages ?? []) as unknown as WorkerPage[]
         return [{ type: 'text', text: JSON.stringify(value) },
-          ...pages.filter((page): page is WorkerPage & { image: ImageAttachmentRef } => page.image !== undefined)
+          ...pages.filter((page): page is WorkerPage & { image: ImageAttachmentRef } => Boolean(page.image))
             .map(page => ({ type: 'image' as const, attachment: page.image }))] } },
       // The tool's schema is the authority for the arguments it takes; the
       // pages property is present only for the tools that declare it.

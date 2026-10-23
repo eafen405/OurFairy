@@ -63,7 +63,8 @@ export async function apply(ctx: Context, config: ScopeContributorConfig): Promi
     await second.dispose()
     record('after-second-disposed')
   } catch (error) {
-    report.error = error instanceof Error ? error.stack ?? String(error) : String(error)
+    // The caught value's shape is unknown: read its optional `stack` defensively, stringify the rest.
+    report.error = (error as { stack?: string }).stack ?? String(error)
   }
   writeFileSync(config.reportPath, `${JSON.stringify(report, undefined, 2)}\n`)
 }
