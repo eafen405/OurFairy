@@ -17,8 +17,8 @@ import { test } from 'node:test'
 // module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
 
-const units = await import('../backend/chat/src/units.mjs')
-const { SessionRuntime } = await import('../backend/chat/src/runtime.mjs')
+const units = await import('../backend/chat/dist/units.js')
+const { SessionRuntime } = await import('../backend/chat/dist/runtime.js')
 
 const OWNER = { shortId: 1 }
 const SESSION = 'session-1'

@@ -25,7 +25,7 @@ import { repoRoot } from './helpers/backend.mjs'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
 const dshRoot = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
-const { installJobs, STOP_OUTCOME } = await import('../backend/chat/src/jobs.mjs')
+const { installJobs, STOP_OUTCOME } = await import('../backend/chat/dist/jobs.js')
 
 /** The string-literal members of the pinned dsh `JobRegistry.kill` return type. */
 function nativeStopOutcomes() {

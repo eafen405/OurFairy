@@ -49,7 +49,7 @@ test('a message-only amend has no paths and runs the cheap gate', () => {
 })
 
 test('a product package change runs the tests that mention that package', () => {
-  const paths = ['backend/chat/src/units.mjs']
+  const paths = ['backend/chat/dist/units.js']
   assert.equal(classify(paths), 'related', 'a product package change must run its own tests')
   const decision = plan(paths)
   assert.ok(
@@ -129,7 +129,7 @@ test('every gate keeps the combination check, so drift is caught either way', ()
       'combo:verify is the check that catches a drifted checkout; every gate keeps it',
     )
   }
-  const related = plan(['backend/chat/src/units.mjs']).commands
+  const related = plan(['backend/chat/dist/units.js']).commands
   assert.ok(
     related.some(step => step.args.join(' ') === 'run combo:verify'),
     'the related gate keeps the combination check too',

@@ -10,10 +10,27 @@
  * behind. The Agent's own stream, durable log and settlement stay real.
  */
 import { existsSync, writeFileSync } from 'node:fs'
+import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the dsh agent events this fixture publishes into.
+import type {} from '@deepseek-ai/dsh-agent'
 
 export const name = 'ourfairy-assistant-frame-gap'
 
-export function apply(ctx, config) {
+/** The fault this fixture injects. */
+export interface FrameGapConfig {
+  /** The session whose frames the fault applies to. */
+  readonly sessionId: string
+  /** How many real chunks must have arrived before the gap fires. */
+  readonly afterChunks: number
+  /** The path the test writes to arm the fault. */
+  readonly triggerPath: string
+  /** The path the fixture writes the fired frame's position to. */
+  readonly reportPath: string
+  /** The marker text the gap frame carries. */
+  readonly marker: string
+}
+
+export function apply(ctx: Context, config: FrameGapConfig): void {
   let chunks = 0
   let fired = false
   ctx.on('agent/assistant-stream', ({ agent, frame }) => {
