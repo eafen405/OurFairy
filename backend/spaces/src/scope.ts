@@ -88,7 +88,7 @@ export class SpaceScope extends Service {
 
   /** The short number this session's stored owner names. */
   owner(session: OwnedSession | undefined): number {
-    const shortId = shortIdOf(session?.header.owner)
+    const shortId = shortIdOf(session?.header?.owner)
     if (shortId === undefined) throw new FsError('file operation requires an owned session', 'FS_PERMISSION_DENIED')
     return shortId
   }

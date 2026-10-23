@@ -143,6 +143,67 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3。
   （`events as unknown as readonly AdmittedEvent[]`），只取 `agent/inbox/spliced`、`user/message`、
   `delivery/message` 三种带消息的事件——与迁移前的三元表达式逐条对应。
 
+## 补记：合并评审后的一处行为对齐（fix(#208)）
+
+合并评审在 `integration/spec-205` 侧发现迁移里**丢了一个可选链**，与本票「不改行为」的约定冲突，
+已在同一分支上补回：
+
+| | 表达式 |
+| --- | --- |
+| 迁移前（`backend/spaces/src/scope.mjs` @ `80dfc69fcb`） | `const shortId = shortIdOf(session?.header?.owner)` |
+| 迁移后（提交 `420f344299`） | `const shortId = shortIdOf(session?.header.owner)` |
+| 补回后（本次提交） | `const shortId = shortIdOf(session?.header?.owner)` |
+
+差别只落在「一个没有 `header` 的 session 形状」上：带 `?.` 的版本读到 `undefined` →
+`shortIdOf(undefined)` → `undefined` → 抛
+`FsError('file operation requires an owned session', 'FS_PERMISSION_DENIED')`；
+不带 `?.` 的版本在同一个形状上抛 `TypeError`（读 `undefined` 的 `owner`）。两边都失败，但**错误类型
+不同**，对调用方是可观察的——与 T2 评审拦下的三处是同一类。`OwnedSession.header` 在类型上是必填，
+所以这条路径今天不可达；按约定仍以与迁移前逐字相同为准。
+
+### 同一轮做的等价性复查（两包逐表达式比对）
+
+复查方法：把迁移前后的源码都去掉注释与空白后按 token 比对，逐个 hunk 人工判定。除上面那条外，
+两包其余的差异都是类型标注或**语义等价**的改写。下表是判定过、值得复核的那些：
+
+| 位置 | 迁移前 | 迁移后 | 判定 |
+| --- | --- | --- | --- |
+| `scope.ts` `requireCurrent()` | `this.owner(session)` 后 `return session` | 先判 `session === undefined` 抛 `FsError`，再 `this.owner(session)` | 等价：`owner(undefined)` 抛的是同一个 `FsError`（同 message、同 code） |
+| `scope.ts` `session(id)` | `this.ctx.sessions.get(id)` | `id === undefined ? undefined : this.ctx.sessions.get(id)` | 等价：`get` 是 Map 查表，`undefined` 查不到 |
+| `scope.ts` 构造函数 | `this.envRoot = join(...)` 后 `realpathSync(this.envRoot)` | 局部 `envRoot`，再 `this.envRoot = realpathSync(envRoot)` | 等价：同一个值 |
+| `fs.ts` `remember()` | `this.grants.delete(this.grants.keys().next().value)` | 先取 `oldest`，`!== undefined` 才 delete | 等价：删一个不存在的键是空操作 |
+| `fs.ts` `mapOpenError()` 等四处 | `error.code` | `errorCode(error)` | 等价：读同一个属性；被抛的值是 `null` 时仍然照样抛 `TypeError` |
+| `fs.ts` `assertRead(target, op)` | 实参多传一个没用到的 `op` | 去掉实参 | 等价：那个形参在迁移前就没被读过 |
+| `fs.ts` `mintTarget()` | `targetKey: key` | `targetKey: FsTargetKey(key)` | 等价：dsh 的品牌函数实现是 `key as FsTargetKey`，同一个字符串 |
+| `bwrap.ts` `probeBwrap()` | `spawnSync(selfCheck[0], ...)` | `spawnSync(bwrapPath, ...)` | 等价：`selfCheck[0]` 就是 `bwrapPath` |
+| `service.ts` `safeName()` | `name.split(...).at(-1).replace(...)` | 加了 `?.` 与 `?? ''` | 等价：`split` 至少返回一个元素，`.at(-1)` 不会是 `undefined` |
+| `service.ts` `propose()` | `name = safeName(name)`（改写形参） | `const safe = safeName(name)` | 等价 |
+| `service.ts` `propose()` | `imageLimits.mediaTypes.includes(mime)` | `imageLimits.mediaTypes.some(allowed => allowed === mime)` | 等价：同一张表、同一个字符串比较 |
+| `service.ts` `chunk()` / `complete()` | `this._path(uploadId)` | `this._path(row.uploadId)` | 等价：`uploads.upload_id` 是 TEXT PRIMARY KEY（默认 BINARY 排序规则），store 按精确匹配读回同一行，`row.uploadId === uploadId` |
+| `attachments/index.ts` | `postHandler({ ..., respond })` | `...(respond !== undefined ? { respond } : {})` | 等价：`postHandler` 的默认形参对 `undefined` 同样生效 |
+| `spaces/index.ts` | `.map(JSON.stringify)` | `.map(root => JSON.stringify(root))` | 等价：`map` 把 `(value, index, array)` 传给回调，而 `JSON.stringify` 的第 2/3 个形参是 `replacer`/`space`——数字 `replacer` 只在被调用时才生效，`space` 不是数字就不产生缩进，输出与 `JSON.stringify(value)` 相同。TS 选不出适配 `map` 回调的 `JSON.stringify` 重载，才写成显式箭头函数 |
+
+### 复查里剩下的两处（**未改**，等评审决定）
+
+下面两处与被拦下的那条**同类**（旧代码的可选链 / 真值判断在迁移里被换成了另一种写法）。本轮按
+「只改那一处」的约束**没有动**，记在这里等决定：
+
+1. **`backend/spaces/test-support/scope-contributors.ts` 的 catch**
+   - 迁移前：`report.error = error.stack ?? String(error)`
+   - 迁移后：`error instanceof Error ? error.stack ?? String(error) : String(error)`
+   - 差别：被抛的值是 `null` / `undefined` 时，旧代码在 catch 里读 `.stack` 会抛 `TypeError`，
+     于是**报告文件根本不写**；新代码写成 `"null"` 并继续往下走。另一个差别是带真值 `stack` 的
+     非 Error 对象（旧代码取那个 `stack`，新代码取 `String(error)`）。
+     夹具 catch 到的只会是插件加载失败的 `Error`，今天不可达。
+   - 改法（运行期与迁移前逐字相同）：`report.error = (error as { stack?: string }).stack ?? String(error)`
+2. **`backend/attachments/src/pdf.ts` 的 `render`**
+   - 迁移前：`.filter(page => page.image)`（真值判断）
+   - 迁移后：`.filter((page): page is WorkerPage & { image: ImageAttachmentRef } => page.image !== undefined)`
+   - 差别：某一页的 `image` 是「非 `undefined` 的假值」（`null` / `0` / `''` / `false`）时，旧代码把它
+     滤掉，新代码会把它留下并产出 `attachment: null`。worker 从不写 `image` 键，产品也只挂真正的
+     `ImageAttachmentRef`，今天不可达。
+   - 改法（真值判断与迁移前逐字相同）：把谓词体改成 `Boolean(page.image)`
+
 ## test-support 决定
 
 `backend/spaces/test-support/scope-contributors.ts` 是**测试专用**的 dsh 插件行：它由测试用绝对路径交给
@@ -227,6 +288,18 @@ $ node --test tests/identity-interfaces.test.mjs
 | `git check-ignore -v backend/spaces/dist/.tsbuildinfo.test-support` | `.gitignore:11:/backend/*/dist/` |
 | 提交钩子（`node scripts/precommit.mjs`，因包 manifest 属权威路径而判成 `full`） | 第一次 293 tests / 292 pass / **1 fail**（Red 4 那条源码扫描路径）；修好后重跑 **293 / 293 pass / 0 fail**，`combo:verify` 为 `combo: combination verified`。**那是钩子的行为，不构成本票的门禁**。 |
 
+### 补记那一轮（fix(#208)）的验证
+
+在 `420f344299` 之后（评审指出丢了可选链的那一轮）重跑：
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run clean && npm run build` | `removed 5 build output directories`；干净树编译通过，无输出 |
+| `node --test tests/spaces.test.mjs tests/sandbox-network-profile.test.mjs tests/attachments.test.mjs tests/attachment-download-abort.test.mjs tests/pdf-worker-cancel.test.mjs tests/pdf.test.mjs tests/scoped-provider-rows.test.mjs` | **26 tests / 26 pass / 0 fail** |
+| `npm run backend:doctor` | `doctor: all checks passed` |
+| `OURFAIRY_PORT=0 npm run backend:probe` | `ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)` |
+| `npm run combo:verify` | `combo: combination verified` |
+
 `backend:probe` 用了 `OURFAIRY_PORT=0`：本机 3080 端口被一个与本票无关的 `dsh web` 占着（与 T1/T2 记录的情况相同）。
 
 ## 没有跑的
@@ -240,6 +313,10 @@ $ node --test tests/identity-interfaces.test.mjs
 - 没有迁 `chat` / `delivery` / `gateway` / `groups` / `search` / `speech` / `probe`，也没有迁 `scripts/`。
 
 ## 未完成项与留给下一票的提醒
+
+- **两处待评审决定的行为对齐**（见上节「复查里剩下的两处」）：`scope-contributors.ts` 的 catch 与
+  `pdf.ts` 的 `render` 谓词。两条都是旧代码的可选链 / 真值判断在迁移里被换成了另一种写法，
+  今天不可达，但与「不改行为」的约定同类；改法已写在上节里，等评审点头。
 
 - **`as unknown as` 只出现在 JSON 边界**：`backend/attachments/src/service.ts` 的会话事件流、
   `backend/attachments/src/pdf.ts` 的 worker 答话与工具规范值。这三处都是「运行期是 JSON、类型系统里
