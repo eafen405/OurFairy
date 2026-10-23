@@ -19,9 +19,13 @@
  * made every parallel `start` of another suite hash a product tree that was
  * changing under it (an install could fail when the file disappeared again). A
  * copy keeps the mutation local without changing the real worktree.
+ *
+ * One case still runs the real launcher: whether the install copied the file or
+ * linked it is an inode fact, and no composition function can answer it. That
+ * case asks the doctor to install into a home and compares the two files.
  */
 import assert from 'node:assert/strict'
-import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
 import {
@@ -35,11 +39,13 @@ import {
   writeProfile,
   writeSourceStamp,
 } from '../scripts/ourfairy-composition.mjs'
-import { copyProductRepo, makeHome, removeHome } from './helpers/backend.mjs'
+import { copyProductRepo, describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
 
 /** The throwaway repository the composition reads; the worktree itself stays untouched. */
 const repoCopy = copyProductRepo('ourfairy-product-sources-repo-')
 const homes = []
+/** Repository copies a case needs to keep clear of the stand-in template above. */
+const roots = []
 
 /** A product source file that no hand-maintained list would know about yet. */
 const addedSource = join(repoCopy, 'backend', 'identity', 'src', 'staleness-probe.mjs')
@@ -47,6 +53,7 @@ const addedSource = join(repoCopy, 'backend', 'identity', 'src', 'staleness-prob
 after(() => {
   rmSync(addedSource, { force: true })
   rmSync(repoCopy, { recursive: true, force: true })
+  for (const root of roots) rmSync(root, { recursive: true, force: true })
   for (const home of homes) removeHome(home)
 })
 
@@ -198,4 +205,59 @@ test('a published template is copied instead of installed, and cached only with 
   assert.equal(installDecision(layout, { root: repoCopy }).mode, 'cached')
   assert.equal(installDecision(layout, { root: repoCopy, reinstall: true }).mode, 'install',
     '--reinstall must still perform a real install')
+})
+
+/**
+ * The install is a copy, not a link, and only a real install can show it.
+ *
+ * The hash and template cases above observe the decision; none of them can see
+ * whether pnpm linked the worktree file or copied it. A linked copy would pass
+ * every hash assertion and then follow later source edits, so the difference is
+ * only visible as an inode comparison between the worktree and the installed
+ * profile — and only after a real install has run.
+ *
+ * This case gets its own repository copy: the template case above publishes a
+ * stand-in template for the current source hash, and a doctor reading that
+ * shared copy would copy the stand-in instead of installing, leaving no real
+ * product files to compare.
+ */
+test('an installed product file is a copy of its source, not the same file', () => {
+  const root = copyProductRepo('ourfairy-product-sources-install-')
+  roots.push(root)
+  const home = makeHome('ourfairy-product-sources-isolation-')
+  homes.push(home)
+  const run = runBackend(['doctor', '--json'], {
+    OURFAIRY_HOME: home,
+    MINIMAX_CN_API_KEY: undefined,
+    OURFAIRY_MINIMAX_BASE_URL: undefined,
+  }, { root })
+  const start = run.stdout.indexOf('{')
+  assert.ok(start >= 0, `doctor printed no JSON report:\n${describeRun('doctor', run)}`)
+
+  const source = join(root, 'backend', 'v1-bundle', 'cordis.patch.yml')
+  const installed = join(
+    home, 'dsh-home', 'profiles', 'ourfairy', 'node_modules', '@ourfairy', 'dsh-v1-bundle', 'cordis.patch.yml',
+  )
+  assert.ok(existsSync(installed), `the install must place the bundle's patch in the profile: ${installed}\n${describeRun('doctor', run)}`)
+  assert.notEqual(
+    statSync(installed).ino, statSync(source).ino,
+    'the installed file must be a copy; a shared inode would follow every later source edit',
+  )
+
+  const original = readFileSync(source, 'utf8')
+  writeFileSync(installed, `${original}# edited in the installed profile\n`)
+  assert.equal(
+    readFileSync(source, 'utf8'), original,
+    'editing the installed copy must not reach the worktree source',
+  )
+
+  writeFileSync(source, `${original}# edited in the worktree\n`)
+  try {
+    assert.equal(
+      readFileSync(installed, 'utf8'), `${original}# edited in the installed profile\n`,
+      'the installed copy must not follow later source edits',
+    )
+  } finally {
+    writeFileSync(source, original)
+  }
 })

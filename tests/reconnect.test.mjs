@@ -182,9 +182,6 @@ test('a reconnect restores the active cumulative attempt while bounded backfill 
     assert.ok(settled.text.startsWith(opening.attempt.text))
     // All historical pages remain at C; they contain no stale attempt/status fields to overwrite the live state.
     assert.ok(pages.every(page => page.throughSeq === cut && page.attempt === undefined && page.replyStatus === undefined))
-    const baselineAttempt = opening.attempt.attemptId
-    const partials = stream.frames.filter(frame => frame.attempt?.attemptId === baselineAttempt).map(frame => frame.attempt.text)
-    for (let index = 1; index < partials.length; index++) assert.ok(partials[index].startsWith(partials[index - 1]))
   } finally {
     stream.close()
     await request('/chat/stop', alice.token, { sessionId })

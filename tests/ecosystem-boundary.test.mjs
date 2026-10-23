@@ -132,7 +132,7 @@ const CITED_CHECKS = [
   ['tests/gateway.test.mjs',
     'the gateway accepts every native input modality'],
   ['tests/remote-chat.test.mjs',
-    'the same request id sent twice in a row produces one message'],
+    'a stable send is durably accepted once across concurrent retries and backend restart'],
 ]
 
 test('the boundary doc is reachable from the repository README', () => {

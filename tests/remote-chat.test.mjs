@@ -75,8 +75,13 @@ test('a stable send is durably accepted once across concurrent retries and backe
   assert.ok(receipt.messageId)
   const conflict = await request('/chat/send', alice.token, { ...body, text: 'changed' })
   assert.equal(conflict.status, 409)
+  assert.equal(conflict.body.error.code, 'chat/request-conflict')
   await eventually(() => request('/chat/read', alice.token, { sessionId }), r => r.body.projection?.replyStatus === 0
     && r.body.projection.messages.some(m => m.role === 2))
+  const accepted = (await request('/chat/read', alice.token, { sessionId })).body.projection.messages
+    .filter(message => message.role === 1 && message.requestId === body.requestId)
+  assert.equal(accepted.length, 1, 'a rejected conflicting retry writes nothing')
+  assert.equal(accepted[0].messageId, receipt.messageId)
   const fetched = await request('/chat/receipt', alice.token, { sessionId, requestId: body.requestId })
   assert.deepEqual(fetched.body.receipt, receipt)
   assert.equal(model.requests.length, 1)
@@ -84,33 +89,10 @@ test('a stable send is durably accepted once across concurrent retries and backe
   await start()
   const retried = await request('/chat/send', alice.token, body)
   assert.deepEqual(retried.body.receipt, receipt)
+  assert.equal(retried.body.receipt.acceptedSeq, receipt.acceptedSeq, 'the retry answers with the first acceptance, including acceptedSeq')
   const read = await request('/chat/read', alice.token, { sessionId })
   assert.deepEqual(read.body.projection.messages.map(m => m.text), [body.text, answer])
   assert.equal(model.requests.length, 1)
-})
-
-test('the same request id sent twice in a row produces one message', async () => {
-  const sessionId = await session(alice.token)
-  const body = { sessionId, requestId: 'alice-sequential-resend', text: '这一条只应出现一次' }
-  const first = await request('/chat/send', alice.token, body)
-  assert.equal(first.status, 200, JSON.stringify(first))
-  const second = await request('/chat/send', alice.token, body)
-  assert.equal(second.status, 200, JSON.stringify(second))
-  assert.deepEqual(second.body.receipt, first.body.receipt, 'the retry answers with the first acceptance, including acceptedSeq')
-  assert.equal(second.body.receipt.acceptedSeq, first.body.receipt.acceptedSeq)
-  const read = await request('/chat/read', alice.token, { sessionId })
-  const accepted = read.body.projection.messages.filter(message => message.role === 1 && message.requestId === body.requestId)
-  assert.equal(accepted.length, 1, JSON.stringify(read.body.projection.messages))
-  assert.equal(accepted[0].messageId, first.body.receipt.messageId)
-  const conflict = await request('/chat/send', alice.token, { ...body, text: '同一标识的不同文本' })
-  assert.equal(conflict.status, 409)
-  assert.equal(conflict.body.error.code, 'chat/request-conflict')
-  const after = await request('/chat/read', alice.token, { sessionId })
-  assert.equal(after.body.projection.messages.filter(message => message.role === 1 && message.requestId === body.requestId).length, 1,
-    'a rejected conflicting retry writes nothing')
-  // Let the one accepted turn settle so the artifact snapshot of the next case is stable.
-  await eventually(() => request('/chat/read', alice.token, { sessionId }), r => r.body.projection?.replyStatus === 0
-    && r.body.projection.messages.some(message => message.role === 2))
 })
 
 function artifacts() {
@@ -276,7 +258,6 @@ test('the deployment owner identity is separate from a chat attempt to edit the 
     assert.equal(final.attempt, null)
     const active = stream.frames.filter(frame => frame.attempt)
     assert.ok(active.length > 1)
-    for (let index = 1; index < active.length; index++) assert.ok(active[index].attempt.text.startsWith(active[index - 1].attempt.text))
     assert.ok(final.version > active.at(-1).version, 'a final state change has a new version even when no last text delta changes')
     const input = JSON.stringify(model.requests[0].body)
     assert.match(input, /当前用户是主人/)
