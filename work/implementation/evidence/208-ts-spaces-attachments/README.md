@@ -83,7 +83,9 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3。
   - `backend/spaces/src/fs.ts`：`errorCode` 读 `error.code`（迁移前就是直接读同一个属性，抛出的 `null`
     仍然照样抛）；`metaError as Error` 读 `.message`（同上）。
   - `backend/spaces/test-support/scope-contributors.ts`：夹具站的是「只有 header 的 session」，把
-    `id` / `header.owner` 认作 dsh 的品牌类型（运行期是同一个字符串）。
+    `id` / `header.owner` 认作 dsh 的品牌类型（运行期是同一个字符串）；夹具的 catch 里
+    `(error as { stack?: string }).stack` 读的是被抛值的可选 `stack`——被抛值的形状未知，
+    所以按迁移前那样「防御性地读 `stack`，其余一律 `String(error)`」，运行期与迁移前逐字相同。
   - `backend/attachments/src/service.ts`：`sessionId as string`（owned-session 读刚拒过非本人的 id）、
     `uploadId as string`（锁的键，`_owned` 拒收非 32 位十六进制的 id）、`row.original as FileAttachmentRef | null`
     与 `row.image as ImageAttachmentRef | null`（store 的 JSON 列）、`mime as ImageMediaType`（propose 时
@@ -183,26 +185,45 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3。
 | `attachments/index.ts` | `postHandler({ ..., respond })` | `...(respond !== undefined ? { respond } : {})` | 等价：`postHandler` 的默认形参对 `undefined` 同样生效 |
 | `spaces/index.ts` | `.map(JSON.stringify)` | `.map(root => JSON.stringify(root))` | 等价：`map` 把 `(value, index, array)` 传给回调，而 `JSON.stringify` 的第 2/3 个形参是 `replacer`/`space`——数字 `replacer` 只在被调用时才生效，`space` 不是数字就不产生缩进，输出与 `JSON.stringify(value)` 相同。TS 选不出适配 `map` 回调的 `JSON.stringify` 重载，才写成显式箭头函数 |
 
-### 复查里剩下的两处（**未改**，等评审决定）
+### 复查里剩下的两处（**已按评审决定补回**）
 
-下面两处与被拦下的那条**同类**（旧代码的可选链 / 真值判断在迁移里被换成了另一种写法）。本轮按
-「只改那一处」的约束**没有动**，记在这里等决定：
+下面两处与被拦下的那条**同类**（旧代码的可选链 / 真值判断在迁移里被换成了另一种写法）。评审决定按
+「不论可达与否都要与迁移前逐字相同」处理，已在同一个提交里补回：
 
 1. **`backend/spaces/test-support/scope-contributors.ts` 的 catch**
    - 迁移前：`report.error = error.stack ?? String(error)`
-   - 迁移后：`error instanceof Error ? error.stack ?? String(error) : String(error)`
+   - 迁移后（`420f344299`）：`error instanceof Error ? error.stack ?? String(error) : String(error)`
    - 差别：被抛的值是 `null` / `undefined` 时，旧代码在 catch 里读 `.stack` 会抛 `TypeError`，
      于是**报告文件根本不写**；新代码写成 `"null"` 并继续往下走。另一个差别是带真值 `stack` 的
      非 Error 对象（旧代码取那个 `stack`，新代码取 `String(error)`）。
      夹具 catch 到的只会是插件加载失败的 `Error`，今天不可达。
-   - 改法（运行期与迁移前逐字相同）：`report.error = (error as { stack?: string }).stack ?? String(error)`
+   - 补回后：`report.error = (error as { stack?: string }).stack ?? String(error)`
+     ——运行期与迁移前**逐字相同**：被抛值是 `null` / `undefined` 时照样抛 `TypeError`，
+     带真值 `stack` 的非 Error 对象照样取那个 `stack`。断言写在「被抛值的形状未知」这个边界上，
+     理由写在代码注释里。
 2. **`backend/attachments/src/pdf.ts` 的 `render`**
    - 迁移前：`.filter(page => page.image)`（真值判断）
-   - 迁移后：`.filter((page): page is WorkerPage & { image: ImageAttachmentRef } => page.image !== undefined)`
+   - 迁移后（`420f344299`）：`.filter((page): page is WorkerPage & { image: ImageAttachmentRef } => page.image !== undefined)`
    - 差别：某一页的 `image` 是「非 `undefined` 的假值」（`null` / `0` / `''` / `false`）时，旧代码把它
      滤掉，新代码会把它留下并产出 `attachment: null`。worker 从不写 `image` 键，产品也只挂真正的
      `ImageAttachmentRef`，今天不可达。
-   - 改法（真值判断与迁移前逐字相同）：把谓词体改成 `Boolean(page.image)`
+   - 补回后：`.filter((page): page is WorkerPage & { image: ImageAttachmentRef } => Boolean(page.image))`
+     ——真值判断与迁移前**逐字相同**（类型谓词保留，只为让后面的 `attachment: page.image` 仍被类型检查）。
+
+### 补回之后的复查：没有第三条
+
+补回上面两处后，又对两包 13 个文件做了一遍**机械复查**，用来兜住「同一类」的其它形态：
+
+- **运算符计数比对**（`?.`、`??`、`||`、`&&`、`===`、`!==`、`==`、`!=`、`!`、`Boolean(` 的逐文件计数）：
+  去掉注释后逐对比较，只有「新增的 `!== undefined` 守卫」与「`safeName` 里新增的 `?.` + `?? ''`」两类差异，
+  都在上面的等价性表里逐条判定过；**没有任何一处旧代码有、迁移后没有的 `?.` / `??` / `||`**。
+- **字面量计数比对**（所有字符串与数字字面量）：差异只有类型标注里的字面量（`'CRLF' | 'LF'`、
+  `'symlink' | 'file' | 'directory' | 'other'`、`'info' | 'render' | 'pages'`、`'agent/inbox/spliced'` 等）、
+  import 说明符、`assertRead` 那 7 个**没被读过的** `op` 实参（`'read'` 少 4 个、`'list'` / `'lstat'` /
+  `'stat'` 各少 1 个）、`requireCurrent()` 里补的那一次同文案 `FsError`，以及 `spawnSync(selfCheck[0], …)`
+  → `spawnSync(bwrapPath, …)` 少掉的那个 `0`。**没有任何一条错误码、错误文案、路径或阈值改过。**
+
+结论：同类差异一共三条，都已补回；其余两包的差异是类型标注或语义等价的改写。
 
 ## test-support 决定
 
@@ -300,6 +321,19 @@ $ node --test tests/identity-interfaces.test.mjs
 | `OURFAIRY_PORT=0 npm run backend:probe` | `ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)` |
 | `npm run combo:verify` | `combo: combination verified` |
 
+### 补回那两处之后的验证（fix(#208)，第二个提交）
+
+在 `e84ded367a` 之后（把夹具的 catch 与 PDF 工具的 `render` 谓词补回迁移前的语义）重跑：
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run clean && npm run build` | `removed 5 build output directories`；干净树编译通过，无输出 |
+| `node --test tests/spaces.test.mjs tests/sandbox-network-profile.test.mjs tests/attachments.test.mjs tests/attachment-download-abort.test.mjs tests/pdf-worker-cancel.test.mjs tests/pdf.test.mjs tests/scoped-provider-rows.test.mjs` | **26 tests / 26 pass / 0 fail** |
+| `npm run backend:doctor` | `doctor: all checks passed` |
+| `OURFAIRY_PORT=0 npm run backend:probe` | `ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)` |
+| `npm run combo:verify` | `combo: combination verified` |
+| 运算符计数 + 字面量计数复查（13 个文件对，去注释后逐对比较） | 没有第三条同类差异（结论见上面「补回之后的复查：没有第三条」） |
+
 `backend:probe` 用了 `OURFAIRY_PORT=0`：本机 3080 端口被一个与本票无关的 `dsh web` 占着（与 T1/T2 记录的情况相同）。
 
 ## 没有跑的
@@ -314,9 +348,9 @@ $ node --test tests/identity-interfaces.test.mjs
 
 ## 未完成项与留给下一票的提醒
 
-- **两处待评审决定的行为对齐**（见上节「复查里剩下的两处」）：`scope-contributors.ts` 的 catch 与
-  `pdf.ts` 的 `render` 谓词。两条都是旧代码的可选链 / 真值判断在迁移里被换成了另一种写法，
-  今天不可达，但与「不改行为」的约定同类；改法已写在上节里，等评审点头。
+- **本票没有留下同类差异**：合并评审拦下的那处可选链，以及复查里找到的两处（夹具的 catch、
+  PDF 工具的 `render` 谓词），都已按「与迁移前逐字相同」补回；补回后又做了一遍运算符与字面量的
+  机械复查，没有第三条（见上面「补回之后的复查：没有第三条」）。
 
 - **`as unknown as` 只出现在 JSON 边界**：`backend/attachments/src/service.ts` 的会话事件流、
   `backend/attachments/src/pdf.ts` 的 worker 答话与工具规范值。这三处都是「运行期是 JSON、类型系统里
