@@ -12,6 +12,12 @@
         "207-ts-identity-sessions"
       ],
       "note": "#207 T2：identity 与 sessions 迁 .ts（包内原子）、strict 标注与类型边界、test-support 夹具的 noEmit 工程与类型剥离路线"
+    },
+    {
+      "dirs": [
+        "208-ts-spaces-attachments"
+      ],
+      "note": "#208 T3：spaces 与 attachments 迁 .ts（包内原子）、pdf worker 搬到包根 assets/ 并随包发布、文件权限与沙箱行为不变"
     }
   ]
 }

@@ -40,7 +40,7 @@ part of the pinned dsh installation recorded in `combo.json`.
   and exit facts to numeric status: a worker the service terminates (the 10 s
   deadline, a caller stop, the resource limit) and a `152`/`137` exit map to
   `resource-limit`; any other non-zero exit is `worker-unavailable`. See
-  [`backend/attachments/src/pdf.mjs`](../../backend/attachments/src/pdf.mjs) and
+  [`backend/attachments/src/pdf.ts`](../../backend/attachments/src/pdf.ts) and
   [`backend/attachments/pdf/README.md`](../../backend/attachments/pdf/README.md).
 - **Compatibility tests.** [`tests/pdf-worker-cancel.test.mjs`](../../tests/pdf-worker-cancel.test.mjs)
   (the service registers, cancellation kills the worker, no process survives,
@@ -151,9 +151,9 @@ be changed or deleted with the behavior, rather than silently kept.
 
 The product keeps its own `/attachments/propose`, `/attachments/chunk`,
 `/attachments/complete` and `/attachments/download` protocol
-([`backend/attachments/src/index.mjs`](../../backend/attachments/src/index.mjs))
+([`backend/attachments/src/index.ts`](../../backend/attachments/src/index.ts))
 and the upload lifecycle in
-[`backend/attachments/src/service.mjs`](../../backend/attachments/src/service.mjs).
+[`backend/attachments/src/service.ts`](../../backend/attachments/src/service.ts).
 
 - **Why.** The protocol is resumable at the acknowledged offset (a lost chunk
   ACK can repeat exact bytes; a conflicting offset is refused), uploads expire

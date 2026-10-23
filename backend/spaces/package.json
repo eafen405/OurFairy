@@ -5,9 +5,11 @@
   "description": "OurFairy owned file spaces and the scoped filesystem, sandbox, shell and working-directory providers.",
   "license": "UNLICENSED",
   "type": "module",
-  "main": "./src/index.mjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
-    "src",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "README.md",
     "locale/*.json"
   ],
@@ -24,13 +26,34 @@
     "@deepseek-ai/schemastery": "^3.18.5-alpha.1"
   },
   "exports": {
-    ".": "./src/index.mjs",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./locale/*.json": "./locale/*.json",
-    "./policy": "./src/policy.mjs",
-    "./bwrap": "./src/bwrap.mjs",
-    "./fs": "./src/fs.mjs",
-    "./sandbox": "./src/sandbox.mjs",
-    "./bash": "./src/bash.mjs",
-    "./directory": "./src/directory.mjs"
+    "./policy": {
+      "types": "./dist/policy.d.ts",
+      "default": "./dist/policy.js"
+    },
+    "./bwrap": {
+      "types": "./dist/bwrap.d.ts",
+      "default": "./dist/bwrap.js"
+    },
+    "./fs": {
+      "types": "./dist/fs.d.ts",
+      "default": "./dist/fs.js"
+    },
+    "./sandbox": {
+      "types": "./dist/sandbox.d.ts",
+      "default": "./dist/sandbox.js"
+    },
+    "./bash": {
+      "types": "./dist/bash.d.ts",
+      "default": "./dist/bash.js"
+    },
+    "./directory": {
+      "types": "./dist/directory.d.ts",
+      "default": "./dist/directory.js"
+    }
   }
 }

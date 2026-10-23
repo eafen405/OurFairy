@@ -7,6 +7,9 @@
     { "path": "./backend/http" },
     { "path": "./backend/identity" },
     { "path": "./backend/sessions" },
-    { "path": "./backend/sessions/tsconfig.test-support.json" }
+    { "path": "./backend/sessions/tsconfig.test-support.json" },
+    { "path": "./backend/spaces" },
+    { "path": "./backend/spaces/tsconfig.test-support.json" },
+    { "path": "./backend/attachments" }
   ]
 }
