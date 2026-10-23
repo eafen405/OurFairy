@@ -1,0 +1,13 @@
+{
+  "parent": 182,
+  "title": "同步 dsh fork 到上游 rc.2：17 处冲突与三条 fork 独有接缝",
+  "children": [
+    { "file": "01-seam-decisions.md", "issue": 185, "title": "三条 fork 独有接缝的上游等价物裁决：保留还是改接" },
+    { "file": "02-merge.md", "issue": 186, "title": "真合并上游 rc.2 到 fork 集成分支：17 处冲突逐条取舍" },
+    { "file": "03-builds.md", "issue": 187, "title": "合并后的四条必需构建全绿" },
+    { "file": "04-dsh-tests.md", "issue": 188, "title": "dsh 冲突面测试恢复：连接层、会话层、jobs、boot 与生成器" },
+    { "file": "05-product-side.md", "issue": 189, "title": "产品侧接缝改接与版本组合锁更新" },
+    { "file": "06-upstream-patches.md", "issue": 190, "title": "保留的接缝整理成可上游提交的补丁" },
+    { "file": "07-closeout.md", "issue": 191, "title": "spec 182 收口：证据索引、可执行声称与两轴评审" }
+  ]
+}

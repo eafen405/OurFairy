@@ -159,6 +159,12 @@
 | --- | --- |
 | [137-launcher-split](137-launcher-split/README.md) | spec #137 证据索引：组合层独立成零 spawn 模块、统一错误契约与 bundle manifest 准入规则单份（#155–#158），含合并 tip 门禁与可执行声称复核 |
 
+## dsh 同步到上游 rc.2（规格 #182）
+
+| 目录 | 内容 |
+| --- | --- |
+| [182-dsh-rc2-merge](182-dsh-rc2-merge/README.md) | spec #182 证据索引：三条 fork 独有接缝的上游等价物裁决、真合并 17 处冲突取舍、四条必需构建、冲突面测试、产品侧改接与组合锁（#185–#191） |
+
 ## Triage 修复
 
 | 目录 | 内容 |
