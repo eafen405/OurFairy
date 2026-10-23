@@ -1,0 +1,11 @@
+{
+  "title": "TypeScript 全量迁移（规格 #205）",
+  "entries": [
+    {
+      "dirs": [
+        "206-ts-infra"
+      ],
+      "note": "#206 T1：构建链（tsconfig solution、链接农场、dsh 自带 tsc）、hash 守卫（files 条目零文件硬失败）、测试门禁四模式与 http 试点"
+    }
+  ]
+}

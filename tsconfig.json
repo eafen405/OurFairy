@@ -1,0 +1,9 @@
+{
+  // Solution file for `tsc -b tsconfig.json`. Keep `files` empty; every product
+  // package is a project reference. An empty solution with no references is
+  // TS18002, so the first package lands with this file.
+  "files": [],
+  "references": [
+    { "path": "./backend/http" }
+  ]
+}

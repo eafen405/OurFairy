@@ -7,6 +7,8 @@
 .cleanup-logs/
 .pnpm-store/
 /work/tmp/
+/node_modules/
+/backend/*/dist/
 
 # Client build output and local-only build inputs. The android/ directory keeps its
 # own rules in android/.gitignore and the module .gitignore files; these lines are

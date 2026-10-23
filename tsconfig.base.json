@@ -1,0 +1,22 @@
+{
+  // Shared compiler baseline for every product package. Each package carries its
+  // own project file with rootDir/outDir so `tsc -b` emits one dist per package.
+  // `composite` already implies `declaration` and `incremental`; the package
+  // project files choose where the build info lands.
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "composite": true,
+    "noEmitOnError": true,
+    "verbatimModuleSyntax": true,
+    "types": ["node"]
+  }
+}

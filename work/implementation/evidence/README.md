@@ -165,6 +165,12 @@
 | --- | --- |
 | [182-dsh-rc2-merge](182-dsh-rc2-merge/README.md) | spec #182 证据索引：三条 fork 独有接缝的上游等价物裁决、真合并 17 处冲突取舍、四条必需构建、冲突面测试、产品侧改接与组合锁（#185–#191） |
 
+## TypeScript 全量迁移（规格 #205）
+
+| 目录 | 内容 |
+| --- | --- |
+| [206-ts-infra](206-ts-infra/README.md) | #206 T1：构建链（tsconfig solution、链接农场、dsh 自带 tsc）、hash 守卫（files 条目零文件硬失败）、测试门禁四模式与 http 试点 |
+
 ## Triage 修复
 
 | 目录 | 内容 |
