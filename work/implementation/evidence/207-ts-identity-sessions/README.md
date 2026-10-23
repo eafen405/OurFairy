@@ -65,10 +65,12 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3。
     运行期字符串不变；owner codec 正是唯一写这个字符串的地方。
   - `backend/sessions/src/service.ts`：`primarySessionIdOf` / `sessionIdOf` 返回 dsh 的 `SessionId` 品牌类型；
     `_ownedHeader` 把请求里带来的 session id 认作 `SessionId`（运行期是同一个字符串）。
+  - `backend/identity/src/store.ts`：`updateUpload` 的四列绑定（`status` / `offset` / `original` / `image`）
+    与 `#readDelivery` 的附件列表读取，都是 DB 边界上的断言，理由写在代码注释里；
+    断言只发生在类型层，运行期不再多一道检查（见末节「回退三处行为变化」）。
 - 动态形状一律用真守卫收窄，不用断言：
   - SQLite 行：`rowOf` / `requiredRow` / `rowsOf` 三个小工具把驱动的 `SQLOutputValue` 行收成表自己的行形状
     （schema 是列类型的权威），JSON 列走 `jsonValue`（`JSON.parse` 的结果先落进 `unknown`）。
-  - 投递文件列表：`isDeliveryFiles` 检查每一项是带 `selector` 的对象。
   - `shortId` / 成员操作码：`isShortId` / `isMemberAction` 两个类型守卫。
 - dsh 的上下文接缝用 `import type {} from '@deepseek-ai/dsh-…'` 加载其 `Context` 增强：
   `dsh-client-connection`（`ctx.connection`）、`dsh-host-webserver`（`ctx.webServer`）、
@@ -82,7 +84,7 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3。
 ### 行为面：迁移中收窄的一处边界
 
 迁移中曾有三处「原来会静默继续、现在会明确失败」的地方，都是损坏数据或调用方给错类型的路径。
-其中两处经迁移评审判定违反本票「不改行为」的约定，已在同一分支回退（见末节「回退两处行为变化」），
+三处经迁移评审判定违反本票「不改行为」的约定，已在同一分支回退（见末节「回退三处行为变化」），
 只剩一处：
 
 1. `apply` 里某个路径没有对应 handler 时抛错（原来会把 `undefined` 注册给 carrier）。这一处静态不可达：
@@ -208,9 +210,10 @@ backend/sessions/test-support/persist-fixtures.ts(35,7): error TS2322:
 - **`SessionHeader.createdAt` 是必填**：dsh 的类型里它是必填数字，本票去掉了旧代码里的 `?? 0`；
   下一票若按旧习惯写 `?? 0`，TS 会报 TS2869。
 
-## 回退两处行为变化（fix(#207)）
 
-迁移评审核对 `integration/spec-205` 侧的合并结果时，发现迁移引入了两处**可观察的行为变化**，
+## 回退三处行为变化（fix(#207)）
+
+迁移评审核对 `integration/spec-205` 侧的合并结果时，发现迁移引入了三处**可观察的行为变化**，
 与本票「不改行为」的约定冲突。本节记录差异、证据、改法与回退后的验证。
 
 ### 差异一：`updateUpload` 不该拒收非数字的 `status` / `offset`
@@ -229,6 +232,14 @@ backend/sessions/test-support/persist-fixtures.ts(35,7): error TS2322:
   异常会穿过 `await recovery`（`index.mjs:72`）让**每一次**投递都失败；迁移前只是记一条 warning 继续。
   同时给产品的错误码面新增了一个本票没要求的错误码。
 
+### 差异三：`updateUpload` 不该在 `original` / `image` 上多一道 JSON 检查
+
+- 迁移前：`value === null ? null : JSON.stringify(value)`，编码不出来就交给绑定层，
+  由 node:sqlite 抛 `TypeError: Provided value cannot be bound to SQLite parameter 1.`。
+- 迁移后：编码不出来时先抛 `Error: upload lifecycle field original must be JSON`。
+- 两边都失败，但**错误的类型与文案不同**，对调用方是可观察的；本票是类型层迁移，不是加固，
+  要保留的是迁移前那个错误。
+
 ### 实证证据
 
 迁移评审提供的对照（同一个 SQLite 文件实测）：`{ status: '2' }` 迁移前成功并存成 `status = 2`、
@@ -236,19 +247,24 @@ backend/sessions/test-support/persist-fixtures.ts(35,7): error TS2322:
 `NOT NULL constraint failed: uploads.status`；`{ status: undefined }` 两边都抛 node:sqlite 的 `TypeError`。
 投递读：`attachments_json` 是合法 JSON 但不是文件列表时，迁移前 `pendingDeliveries()` **返回**该行，
 迁移后**抛** `identity/corrupt-delivery`；`attachments_json` 本身不是合法 JSON 时两边都抛 `SyntaxError`。
+`original` / `image`：迁移前 `undefined` 与函数值都走 node:sqlite 的 `TypeError`，
+迁移后走 `upload lifecycle field original must be JSON`。
 
 ### 改了什么
 
 `backend/identity/src/store.ts`（本票两个包中只有这一个文件被动）：
 
-1. `updateUpload`：删掉运行期 `typeof` 守卫；`status` / `offset` 的值改在**编译期边界**上收窄——
+1. `updateUpload` 的 `status` / `offset`：删掉运行期 `typeof` 守卫；值改在**编译期边界**上收窄——
    `src/schema/uploads.ts` 声明两列 INTEGER，调用方自己的类型是权威，`as number` 把 `Object.entries`
    抹掉的声明类型还原回来（#201 允许在 DB 绑定边界用 `as`，理由写在代码注释里）。运行期不再检查，
    SQLite 自己的亲和性、NOT NULL 约束与 node:sqlite 的 `TypeError` 全部按迁移前生效。
-2. `#readDelivery`：删掉 `isDeliveryFiles` 守卫与 `identity/corrupt-delivery` 错误码，
+2. `updateUpload` 的 `original` / `image`：删掉运行期 JSON 检查；`src/schema/uploads.ts` 声明两列 TEXT，
+   `as string` 在绑定边界上写明这个声明类型。JSON 编码不出来的值仍是 `undefined`，
+   由绑定层抛 node:sqlite 自己的 `TypeError`，与迁移前一致。
+3. `#readDelivery`：删掉 `isDeliveryFiles` 守卫与 `identity/corrupt-delivery` 错误码，
    `JSON.parse` 的行为与迁移前逐字一致；随之失去用途的 `isDeliveryFiles` 与 `isRecord` 一并删除，不留死代码。
 
-未动的第三处：`backend/identity/src/index.ts:197` 的「路径没有 handler 就抛错」静态不可达，保留。
+未动的第四处：`backend/identity/src/index.ts:197` 的「路径没有 handler 就抛错」静态不可达，保留。
 
 ### 回退后的验证
 
@@ -256,66 +272,65 @@ backend/sessions/test-support/persist-fixtures.ts(35,7): error TS2322:
 | --- | --- |
 | `npm run clean && npm run build` | 干净树编译通过，无输出 |
 | `node --test tests/{identity-store,identity-interfaces,owner-codec,owned-sessions,conversation-search,native-rows,identity-http,product-sources,bundle-packages,config-contracts,composition-module,launcher-import,bundle-manifest,dsh-checkout,docs}.test.mjs` | `ℹ tests 84  ℹ pass 84  ℹ fail 0` |
+| `node work/implementation/evidence/207-ts-identity-sessions/compare-pre-migration.mjs` | 每个用例 OLD/NEW 一致，末行 `differences: 0`，退出码 0 |
 | `npm run backend:doctor` | `doctor: all checks passed` |
 | `OURFAIRY_PORT=0 npm run backend:probe` | `ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)` |
 | `npm run combo:verify` | `combo: combination verified` |
 
 `backend:probe` 仍用 `OURFAIRY_PORT=0`：本机 3080 端口被一个与本票无关的 `dsh web` 占着。
 
-**旧新对照（回退后实测）**——脚本放在 `/tmp`（不入库），把迁移前的
-`backend/identity/src/store.mjs`（`git archive 0b816e441b backend/identity` 解到 `/tmp/old-identity`）
-与本票构建产物 `backend/identity/dist/store.js` 并排跑同一个 SQLite 文件：
+### 旧新对照的复跑方式
+
+对照脚本随证据入库：[`compare-pre-migration.mjs`](compare-pre-migration.mjs)。它自己用
+`git archive 0b816e441b backend/identity` 把迁移前的包解到临时目录，再与本票构建产物
+`backend/identity/dist/store.js` 并排跑；每个用例各用一个临时 SQLite 文件，跑完全部删除。
+**原始输出不入库**（按[证据索引](../README.md)的约定），复跑命令是：
 
 ```
-=== updateUpload lifecycle binding ===
-OLD updateUpload({ status: "2" }): ok
-OLD   stored: status=2 (sqlite typeof integer)
-OLD updateUpload({ status: "abc" }): ok
-OLD   stored: status="abc" (sqlite typeof text)
-OLD updateUpload({ status: null }): threw Error: NOT NULL constraint failed: uploads.status
-OLD updateUpload({ status: undefined }): threw TypeError: Provided value cannot be bound to SQLite parameter 1.
-OLD updateUpload({ offset: "2" }): ok
-OLD   stored: offset=2 (sqlite typeof integer)
-OLD updateUpload({ offset: "abc" }): ok
-OLD   stored: offset="abc" (sqlite typeof text)
-OLD updateUpload({ offset: null }): threw Error: NOT NULL constraint failed: uploads.offset
-OLD updateUpload({ offset: undefined }): threw TypeError: Provided value cannot be bound to SQLite parameter 1.
-NEW updateUpload({ status: "2" }): ok
-NEW   stored: status=2 (sqlite typeof integer)
-NEW updateUpload({ status: "abc" }): ok
-NEW   stored: status="abc" (sqlite typeof text)
-NEW updateUpload({ status: null }): threw Error: NOT NULL constraint failed: uploads.status
-NEW updateUpload({ status: undefined }): threw TypeError: Provided value cannot be bound to SQLite parameter 1.
-NEW updateUpload({ offset: "2" }): ok
-NEW   stored: offset=2 (sqlite typeof integer)
-NEW updateUpload({ offset: "abc" }): ok
-NEW   stored: offset="abc" (sqlite typeof text)
-NEW updateUpload({ offset: null }): threw Error: NOT NULL constraint failed: uploads.offset
-NEW updateUpload({ offset: undefined }): threw TypeError: Provided value cannot be bound to SQLite parameter 1.
-
-=== pendingDeliveries read of a non-file-list attachments_json ===
-OLD attachments_json=null: pendingDeliveries() returned 1 row(s); files of d1 = null
-OLD attachments_json={"a":1}: pendingDeliveries() returned 2 row(s); files of d2 = {"a":1}
-OLD attachments_json=[: pendingDeliveries() threw SyntaxError: Unexpected end of JSON input
-NEW attachments_json=null: pendingDeliveries() returned 1 row(s); files of d1 = null
-NEW attachments_json={"a":1}: pendingDeliveries() returned 2 row(s); files of d2 = {"a":1}
-NEW attachments_json=[: pendingDeliveries() threw SyntaxError: Unexpected end of JSON input
+npm run clean && npm run build
+node work/implementation/evidence/207-ts-identity-sessions/compare-pre-migration.mjs
 ```
 
-回退前的同一脚本（把本票改动 stash 掉、重建 `dist` 后再跑）得到的 NEW 行是
-`Error: upload lifecycle field status must be a number` 与
-`IdentityError: the stored delivery row does not name its files`——即上表两列差异的机器证据。
-
-### 仍未回退的一处相邻差异（留给 Lead 裁决）
-
-`updateUpload` 的 `original` / `image` 分支还有一道**迁移新增**的运行期检查
-（`JSON.stringify(value) === undefined` 时抛 `upload lifecycle field original must be JSON`）。
-迁移前同一输入走的是 node:sqlite 的 `TypeError: Provided value cannot be bound to SQLite parameter 1.`：
-两边都失败，只是错误类型与文案不同，不是成功→失败的翻转，也不在本次两处回退的范围内，故未改动。实测：
+脚本对每个用例打印 OLD 与 NEW 各自的结果和行里剩下的值，并逐条比对；任何一条不一致就以退出码 1 结束。
+回退后的实测（节选）：
 
 ```
-OLD updateUpload({ original: undefined }): threw TypeError: Provided value cannot be bound to SQLite parameter 1.
-NEW updateUpload({ original: undefined }): threw Error: upload lifecycle field original must be JSON
+=== upload reference binding ===
+
+updateUpload({ original: "abc" })
+  OLD: ok — stored original = "\"abc\"" (sqlite typeof text)
+  NEW: ok — stored original = "\"abc\"" (sqlite typeof text)
+  same: yes
+
+updateUpload({ original: undefined })
+  OLD: threw TypeError: Provided value cannot be bound to SQLite parameter 1. — stored original = null (sqlite typeof null)
+  NEW: threw TypeError: Provided value cannot be bound to SQLite parameter 1. — stored original = null (sqlite typeof null)
+  same: yes
+
+updateUpload({ original: a function })
+  OLD: threw TypeError: Provided value cannot be bound to SQLite parameter 1. — stored original = null (sqlite typeof null)
+  NEW: threw TypeError: Provided value cannot be bound to SQLite parameter 1. — stored original = null (sqlite typeof null)
+  same: yes
+
+=== delivery read of a non-file-list attachments_json ===
+
+attachments_json = null
+  OLD: ok, returned 1 row(s), files = null
+  NEW: ok, returned 1 row(s), files = null
+  same: yes
+
+attachments_json = [
+  OLD: threw SyntaxError: Unexpected end of JSON input
+  NEW: threw SyntaxError: Unexpected end of JSON input
+  same: yes
+
+differences: 0
 ```
 
-要一并对齐的话，删掉那道检查即可——绑定层会自己抛 node:sqlite 的 `TypeError`。
+回退前（把 `backend/identity/src/store.ts` 换回 `e7e7b3abd1`、重建 `dist` 后跑同一脚本）
+13 个用例不一致，NEW 一侧分别是
+`upload lifecycle field status must be a number`、
+`upload lifecycle field offset must be a number`、
+`upload lifecycle field original must be JSON`、
+`upload lifecycle field image must be JSON` 与
+`IdentityError: the stored delivery row does not name its files`——即上面三处差异的机器证据。

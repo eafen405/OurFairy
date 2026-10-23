@@ -553,9 +553,12 @@ export class IdentityStore {
         case 'original':
         case 'image': {
           if (value === null) return { column: key === 'original' ? 'original_ref' : 'image_ref', value: null }
+          // `schema/uploads.ts` declares both columns TEXT, so the encoded
+          // value is the row's own JSON text: the assertion names that declared
+          // type at the binding boundary. A value JSON cannot encode leaves the
+          // encoding undefined, and the driver refuses to bind it.
           const encoded: string | undefined = JSON.stringify(value)
-          if (encoded === undefined) throw new Error(`upload lifecycle field ${key} must be JSON`)
-          return { column: key === 'original' ? 'original_ref' : 'image_ref', value: encoded }
+          return { column: key === 'original' ? 'original_ref' : 'image_ref', value: encoded as string }
         }
         default:
           throw new Error('unknown upload lifecycle field')
