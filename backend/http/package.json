@@ -5,14 +5,22 @@
   "description": "OurFairy product HTTP transport envelope: the bounded JSON request reader, the bearer credential parser, the JSON response writer, and the POST wrapper every product route shares.",
   "type": "module",
   "license": "UNLICENSED",
-  "main": "./src/index.mjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.mjs",
-    "./http": "./src/http.mjs",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "default": "./dist/http.js"
+    },
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
-    "src",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "README.md",
     "locale/*.json"
   ]

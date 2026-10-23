@@ -229,6 +229,11 @@ export function productPackages(root = repoRoot) {
  * a new file under `src/` is published, so it reaches the hash by itself. The
  * packages walked are the ones the profile installs, themselves read from the
  * bundle manifest.
+ *
+ * A `files` entry that publishes no file is refused here rather than skipped.
+ * npm skips it silently, so a package whose build output is missing installs
+ * without that output, the hash of the "sources" stays the same, and the boot
+ * dies with `ERR_MODULE_NOT_FOUND` long after the install reported success.
  * @param {string} [root] - repository root.
  * @returns {string[]}
  */
@@ -237,8 +242,15 @@ export function productSources(root = repoRoot) {
   for (const { dir } of productPackages(root)) {
     // npm always ships package.json, whether `files` names it or not.
     sources.add(join(dir, 'package.json'))
-    for (const entry of readPackageManifest(dir, root).files) {
-      for (const published of publishedEntries(dir, entry, root)) sources.add(published)
+    const manifest = readPackageManifest(dir, root)
+    for (const entry of manifest.files) {
+      const published = publishedEntries(dir, entry, root)
+      if (published.length === 0) {
+        throw new Error(`${dir} (${manifest.name ?? 'unnamed package'}) declares the files entry ${JSON.stringify(entry)},`
+          + ' which publishes no file; the profile install would copy a package without its build output.'
+          + " Run 'npm run build' to produce it.")
+      }
+      for (const file of published) sources.add(file)
     }
   }
   return [...sources].sort()
@@ -250,8 +262,8 @@ export function productSources(root = repoRoot) {
  * The entry is a path or an npm-style glob (`locale/*.json`); a directory
  * publishes every file beneath it. Node's own resolver reads the glob, so this
  * module carries no wildcard logic of its own. An entry matching nothing
- * publishes nothing, so it contributes nothing — npm silently skips it the
- * same way.
+ * publishes nothing here — npm silently skips it the same way, which is why
+ * `productSources` refuses such an entry instead of hashing an empty set.
  * @param {string} dir - repo-relative package directory.
  * @param {string} entry - one `files` entry.
  * @param {string} [root] - repository root.

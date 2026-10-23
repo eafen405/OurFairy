@@ -10,6 +10,6 @@
  */
 
 export const name = 'ourfairy-http'
-export const inject = []
+export const inject: string[] = []
 
-export function apply() {}
+export function apply(): void {}

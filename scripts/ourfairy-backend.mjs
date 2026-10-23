@@ -46,6 +46,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
 import { repoPath, verifyBundlePackages, verifyCombination, verifyInstalledNativeCapabilities, verifyPluginCompatibility } from './combo.mjs'
+import { buildProducts as runProductBuild } from './tsc.mjs'
 import {
   assertIsolatedHome,
   bootPatches,
@@ -149,6 +150,39 @@ function resolveDsh(options, combination) {
   return { dir, bin, head, locked, drifted: head !== locked, combo }
 }
 
+/** The build this launcher process already did; undefined until the first call. */
+let productBuild
+
+/**
+ * Build the product packages before the profile install hashes them.
+ *
+ * The install copies what the packages publish, so a package whose build output
+ * is missing or stale would be installed without it and the boot would die with
+ * `ERR_MODULE_NOT_FOUND` long after the install reported success. Building
+ * first makes the build output the install's input, and a build failure stops
+ * here instead of after a hash.
+ *
+ * `OURFAIRY_SKIP_BUILD=1` skips the build. The test fixtures set it because
+ * dozens of launcher invocations run concurrently and would otherwise be
+ * concurrent writers of the same build output; production and CI do not set
+ * it. Skipping the build does not skip the guard: the source hash still walks
+ * the published files, so a missing or empty build output fails loudly there.
+ * @returns {'built'|'skipped'} what this launcher process did.
+ */
+function buildProducts() {
+  if (productBuild !== undefined) return productBuild
+  if (process.env.OURFAIRY_SKIP_BUILD === '1') {
+    productBuild = 'skipped'
+    return productBuild
+  }
+  const result = runProductBuild(repoRoot, { fresh: true })
+  if (result.status !== 0) {
+    fail(`the product build failed (exit ${result.status}); the profile install would copy packages without their build output:\n${result.output.trim()}`)
+  }
+  productBuild = 'built'
+  return productBuild
+}
+
 /**
  * Link the product packages into the profile, reinstalling when their content
  * moved.
@@ -157,6 +191,9 @@ function resolveDsh(options, combination) {
  * the hash the install was built from are the process layer's half.
  */
 function installProfile(layout, options, combination) {
+  // The build output must exist and be current before the source hash is
+  // computed: the hash walks the files the install copies.
+  buildProducts()
   writeProfile(layout, repoRoot)
   // OURFAIRY_NO_TEMPLATE forces a real install: the install-failure test needs
   // pnpm to run, and an operator debugging a template wants the same.
@@ -669,6 +706,15 @@ function commandDoctor(layout, options, combination) {
   check('dsh CLI build', () => {
     const dsh = resolveDsh(options, combination)
     return `${dsh.bin} (${dsh.head.slice(0, 12)})`
+  })
+  check('product build', () => {
+    // The install copies the build output, so the output has to exist before the
+    // packages are judged. The check is placed here so a broken build is named
+    // before the package list that would fail for the same reason.
+    const mode = buildProducts()
+    return mode === 'skipped'
+      ? 'skipped (OURFAIRY_SKIP_BUILD=1); the published-file check below still refuses a missing or empty build output'
+      : 'built the product packages'
   })
   check('product packages', () => {
     // Nothing is verified by hand here: the set comes from the same `files`
