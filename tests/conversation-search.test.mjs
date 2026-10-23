@@ -212,7 +212,7 @@ test('the identity owner codec speaks the encoding sessions persist and refuses 
   // The expected encoding's only authority is what sessions actually stores; the
   // codec must reproduce it in both directions, or owner checks read a different
   // string than the one SessionHeader.owner carries.
-  const { ownerOf, shortIdOf } = await import('../backend/identity/src/owner.mjs')
+  const { ownerOf, shortIdOf } = await import('../backend/identity/dist/owner.js')
   const session = (await request('/sessions/create', alice.token)).session
   assert.equal(session.owner, ownerOf(alice.user.shortId))
   assert.equal(shortIdOf(session.owner), alice.user.shortId)

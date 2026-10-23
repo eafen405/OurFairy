@@ -6,8 +6,9 @@
  *
  * @module @ourfairy/dsh-sessions/src/http
  */
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { postHandler } from '@ourfairy/dsh-http/http'
-import { SessionScopeError } from './service.mjs'
+import { SessionScopeError, type OwnedSessionService, type SessionOwner } from './service.js'
 
 /** Paths this module owns, in the order the carrier registers them. */
 export const SESSION_PATHS = Object.freeze([
@@ -18,16 +19,22 @@ export const SESSION_PATHS = Object.freeze([
   '/sessions/read',
 ])
 
+/** One handler the carrier registers on the web server. */
+export type SessionHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>
+
 /** Build one handler per path in {@link SESSION_PATHS}. */
-export function sessionHandlers({ service, fence }) {
-  const callerOf = (request) => {
+export function sessionHandlers({ service, fence }: {
+  service: OwnedSessionService
+  fence: (request: IncomingMessage) => unknown
+}): Map<string, SessionHandler> {
+  const callerOf = (request: IncomingMessage): SessionOwner => {
     const user = service.authenticate(request)
     if (user === undefined) {
       throw new SessionScopeError(401, 'sessions/unauthorized', 'present a live session credential')
     }
     return user
   }
-  const post = (handle) => postHandler({
+  const post = (handle: (body: Record<string, unknown>, request: IncomingMessage) => Promise<unknown>): SessionHandler => postHandler({
     fence,
     handle,
     HttpError: SessionScopeError,
@@ -35,7 +42,7 @@ export function sessionHandlers({ service, fence }) {
     internalMessage: 'the owned-session module failed to handle this request',
   })
   /** One owned session, answered as `{ ok, session }`. Both read routes share it. */
-  const oneSession = (resolve) => post(async (body, request) => {
+  const oneSession = (resolve: (caller: SessionOwner, sessionId: unknown) => Promise<Parameters<OwnedSessionService['expose']>[0]>) => post(async (body, request) => {
     const caller = callerOf(request)
     return { ok: true, session: service.expose(await resolve(caller, body.sessionId), caller.shortId) }
   })

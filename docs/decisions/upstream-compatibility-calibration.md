@@ -25,7 +25,7 @@
 
 调查采用 [combo.json](../../combo.json) 当时锁定的 dsh 产品提交 `fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee`，对照研究上游 `d743267388641bc76f17c45ce8b4c231aed1d32c`；OurFairy 为 `902bc11a0f12fe936bde430b1b11ba06719b0d06`。本节为静态源码调查，实际运行证据见下文。
 
-- 身份、邀请、授权、空间规则及投递协调已经主要在 OurFairy 中实现。源码入口：[身份](../../backend/identity/src/index.mjs)、[会话](../../backend/sessions/src/service.mjs)、[空间](../../backend/spaces/src/index.mjs)、[投递](../../backend/delivery/src/index.mjs)。
+- 身份、邀请、授权、空间规则及投递协调已经主要在 OurFairy 中实现。源码入口：[身份](../../backend/identity/src/index.ts)、[会话](../../backend/sessions/src/service.ts)、[空间](../../backend/spaces/src/index.mjs)、[投递](../../backend/delivery/src/index.mjs)。
 - dsh fork 的改动涉及会话归属 header、正式投递消息、第二凭据接入、任务持久事实和中文子串搜索。正式投递扩大了 assistant 消息来源类型，涉及模型回放、查询及导出等消费者。依据：[消息来源类型](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/llm/llm/src/message.ts)、[会话表面](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/core/session/src/surface.ts)、[凭据接入](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/client/connection/src/rpc-host.ts)、[任务完成接线](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/jobs/tool-jobs/src/index.ts)。
 - 上游会话表面使用有限事件集合，自定义事件能否被保存与能否进入模型历史是不同能力。依据：[原上游表面投影](https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/packages/core/session/src/surface.ts)、[事件兼容规则](https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/packages/core/session/src/known-event-types.ts)。外置方案需要分别验证持久化、授权、模型历史和恢复。
 - 产品使用显式 [bundle](../../backend/v1-bundle/cordis.patch.yml)。维护成本也包含随上游核对装配和配置联动，不能仅以 Git 补丁数量衡量。
@@ -56,7 +56,7 @@
 
 `providers` 在 [配置定义](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/llm/llm-pi-ai/src/config.ts) 中声明为 volatile。正常 settings 修改可热更新，同一 adapter 原子替换路由集合，单独修改未使用的路由不会先卸载其他路由。整插件重载、上下文或装配变化则覆盖全部路由；覆盖整个字典时被省略的路由也须计入影响范围。
 
-本轮没有业务数据库结构改动方案；配置沿用原生持久化。父规格中主会话定位也已按 [现有实现](../../backend/sessions/src/service.mjs) 校正为用户编号确定标识、原生日志核对归属。
+本轮没有业务数据库结构改动方案；配置沿用原生持久化。父规格中主会话定位也已按 [现有实现](../../backend/sessions/src/service.ts) 校正为用户编号确定标识、原生日志核对归属。
 
 ## 投递验证与上游合并演练
 
@@ -88,7 +88,7 @@ git merge-tree --write-tree --messages \
 
 不过 [`admit`](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/client/connection/src/rpc-host.ts#L129) 仍只接受原生浏览器/API cookie；创建 Peer 不等于产品 Bearer 凭据通过网络准入。新版 exact `/api` Fetch 路径还要求 owner 身份，产品普通用户不能映射成 owner。
 
-当前 [chat](../../backend/chat/src/index.mjs) 与 [sessions](../../backend/sessions/src/http.mjs) 直接注册产品 HTTP 路径，独立认证并复用 `connection.fence`。下一步应结合网关实际管理范围，明确哪些操作需要原生 `/api`，再确定最小准入补丁；新版已经提供的 Peer 生命周期应优先复用。以上是静态核对结论，尚未实现或验证补丁收缩。
+当前 [chat](../../backend/chat/src/index.mjs) 与 [sessions](../../backend/sessions/src/http.ts) 直接注册产品 HTTP 路径，独立认证并复用 `connection.fence`。下一步应结合网关实际管理范围，明确哪些操作需要原生 `/api`，再确定最小准入补丁；新版已经提供的 Peer 生命周期应优先复用。以上是静态核对结论，尚未实现或验证补丁收缩。
 
 ### 任务事件复用
 

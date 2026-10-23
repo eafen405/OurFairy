@@ -47,8 +47,14 @@ const homes = []
 /** Repository copies a case needs to keep clear of the stand-in template above. */
 const roots = []
 
-/** A product source file that no hand-maintained list would know about yet. */
-const addedSource = join(repoCopy, 'backend', 'identity', 'src', 'staleness-probe.mjs')
+/**
+ * A product file that no hand-maintained list would know about yet.
+ *
+ * The identity package publishes its build output, so a file it publishes
+ * lives in its `dist`: the probe writes there, where the package's own
+ * `files` entry picks it up.
+ */
+const addedSource = join(repoCopy, 'backend', 'identity', 'dist', 'staleness-probe.js')
 
 after(() => {
   rmSync(addedSource, { force: true })
@@ -238,6 +244,7 @@ test('a new product source file changes the hash and decides install', () => {
   const layout = installedProfile()
   const before = productSourceHash(repoCopy)
   const added = relative(repoCopy, addedSource)
+  mkdirSync(dirname(addedSource), { recursive: true })
   writeFileSync(addedSource, '// Ticket #48 staleness probe: a product source added after the last install.\n')
   try {
     const after = productSourceHash(repoCopy)

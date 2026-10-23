@@ -9,12 +9,19 @@
  * @module @ourfairy/dsh-sessions/src/service
  */
 import { randomUUID } from 'node:crypto'
-import { Service } from '@deepseek-ai/cordis'
+import { Service, type Context } from '@deepseek-ai/cordis'
 import { ownerOf } from '@ourfairy/dsh-identity/owner'
+import type { IdentityService } from '@ourfairy/dsh-identity'
+import type { SessionHeader, SessionId, SessionStore } from '@deepseek-ai/dsh-session'
+import type { SessionPersistence, SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
+import type { IncomingMessage } from 'node:http'
 
 /** Error carrying the HTTP status one request path answers with. */
 export class SessionScopeError extends Error {
-  constructor(status, code, message) {
+  readonly status: number
+  readonly code: string
+
+  constructor(status: number, code: string, message: string) {
     super(message)
     this.name = 'SessionScopeError'
     this.status = status
@@ -23,27 +30,51 @@ export class SessionScopeError extends Error {
 }
 
 /**
+ * The owner facts the owned-session service reads.
+ *
+ * The ownership decision is the short number alone: the service compares the
+ * owner string of a session with the owner string of the caller, and never
+ * reads anything else about the caller.
+ */
+export interface SessionOwner {
+  readonly shortId: number
+}
+
+/**
  * The deterministic primary session id of one identity. The `ourfairy-user-`
  * namespace is this product's own, so a primary id cannot collide with a native
  * `session-<n>` id.
  */
-export function primarySessionIdOf(shortId) {
-  return `ourfairy-user-${Number(shortId)}-primary`
+export function primarySessionIdOf(shortId: number): SessionId {
+  // dsh brands a session id so it cannot be confused with any other string; the
+  // id this function writes is the id the store persists under.
+  return `ourfairy-user-${Number(shortId)}-primary` as SessionId
 }
 
 /**
  * A fresh ordinary (non-primary) session id for one identity. A UUID, because
  * the native `session-<n>` counter restarts at 1 after a process restart.
  */
-export function sessionIdOf(shortId) {
-  return `ourfairy-user-${Number(shortId)}-${randomUUID()}`
+export function sessionIdOf(shortId: number): SessionId {
+  return `ourfairy-user-${Number(shortId)}-${randomUUID()}` as SessionId
 }
 
 /** The product-owned service the composition reads as `ctx.ourfairySessions`. */
 export class OwnedSessionService extends Service {
-  _inFlight = new Map()
+  /** One in-flight operation per owner, so a primary and a create cannot race. */
+  readonly _inFlight = new Map<number, Promise<void>>()
+  /** The dsh session store this module prepares owned headers with. */
+  readonly sessions: SessionStore
+  /** The durable store this module reads and writes session headers through. */
+  readonly persistence: SessionPersistence
+  /** The identity service that names the caller. */
+  readonly identity: IdentityService
 
-  constructor(ctx, { sessions, persistence, identity }) {
+  constructor(ctx: Context, { sessions, persistence, identity }: {
+    sessions: SessionStore
+    persistence: SessionPersistence
+    identity: IdentityService
+  }) {
     super(ctx, 'ourfairySessions')
     this.sessions = sessions
     this.persistence = persistence
@@ -51,12 +82,17 @@ export class OwnedSessionService extends Service {
   }
 
   /** The user the presented credential speaks for, or undefined. */
-  authenticate(request) {
+  authenticate(request: IncomingMessage): SessionOwner | undefined {
     return this.identity.authenticateRequest(request)
   }
 
   /** One session as the product exposes it. */
-  expose(header, shortId) {
+  expose(header: SessionHeader, shortId: number): {
+    id: string
+    owner: string | null
+    primary: boolean
+    createdAt: number
+  } {
     return {
       id: header.id,
       owner: header.owner ?? null,
@@ -66,7 +102,7 @@ export class OwnedSessionService extends Service {
   }
 
   /** `persistence.stat` answers a snapshot `{header, revision, ...}`, never a bare header. */
-  async _headerOf(id) {
+  async _headerOf(id: SessionId): Promise<SessionPersistenceSnapshot | undefined> {
     return await this.persistence.stat(id)
   }
 
@@ -74,11 +110,14 @@ export class OwnedSessionService extends Service {
    * Resolve one session for a caller. An unknown id, an ownerless header and a
    * foreign owner's header are refused identically, before any handle is opened.
    */
-  async _ownedHeader(owner, sessionId) {
+  async _ownedHeader(owner: SessionOwner, sessionId: unknown): Promise<SessionHeader> {
     if (typeof sessionId !== 'string' || sessionId === '') {
       throw new SessionScopeError(400, 'sessions/invalid-request', 'name the session this request acts on')
     }
-    const snapshot = await this._headerOf(sessionId)
+    // The request names the session by its own id; dsh brands that id so it
+    // cannot be confused with any other string, and the store reads the very
+    // same string.
+    const snapshot = await this._headerOf(sessionId as SessionId)
     if (snapshot === undefined) {
       throw new SessionScopeError(404, 'sessions/unknown-session', 'no session with that identifier is visible to you')
     }
@@ -92,12 +131,12 @@ export class OwnedSessionService extends Service {
   }
 
   /** Every stored session this identity owns, plus its primary id (or null). Reads headers only. */
-  async list(owner) {
+  async list(owner: SessionOwner): Promise<{ sessions: SessionHeader[]; primarySessionId: string | null }> {
     const snapshots = await this.persistence.list()
     const owned = snapshots
       .map(snapshot => snapshot.header)
       .filter(header => header.owner === ownerOf(owner.shortId))
-      .sort((left, right) => (left.createdAt ?? 0) - (right.createdAt ?? 0) || left.id.localeCompare(right.id))
+      .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
     const primaryId = primarySessionIdOf(owner.shortId)
     return {
       sessions: owned,
@@ -106,7 +145,7 @@ export class OwnedSessionService extends Service {
   }
 
   /** Persist one owned header; a later request resumes the empty session through the agent factory. */
-  async _materialize(owner, id) {
+  async _materialize(owner: SessionOwner, id: SessionId): Promise<SessionHeader> {
     const session = this.sessions.prepare(id, { meta: { owner: ownerOf(owner.shortId) } })
     const handle = await this.persistence.create(session.header)
     try {
@@ -121,7 +160,7 @@ export class OwnedSessionService extends Service {
    * Run `work` as the only operation in flight for one owner, so a `/primary`
    * racing a `/create` cannot both observe "no primary" across their awaits.
    */
-  async _exclusively(owner, work) {
+  async _exclusively<T>(owner: SessionOwner, work: () => Promise<T>): Promise<T> {
     const key = owner.shortId
     const running = this._inFlight.get(key) ?? Promise.resolve()
     const started = running.then(work, work)
@@ -135,7 +174,7 @@ export class OwnedSessionService extends Service {
   }
 
   /** An identity that owns nothing gets its deterministic primary; anyone else gets an ordinary session. */
-  async create(owner) {
+  async create(owner: SessionOwner): Promise<SessionHeader> {
     return await this._exclusively(owner, async () => {
       const primaryId = primarySessionIdOf(owner.shortId)
       const existing = await this._headerOf(primaryId)
@@ -151,7 +190,7 @@ export class OwnedSessionService extends Service {
   }
 
   /** Return the fixed primary session, creating it when it does not exist yet. */
-  async primary(owner) {
+  async primary(owner: SessionOwner): Promise<SessionHeader> {
     return await this._exclusively(owner, async () => {
       const primaryId = primarySessionIdOf(owner.shortId)
       const existing = await this._headerOf(primaryId)
@@ -167,7 +206,7 @@ export class OwnedSessionService extends Service {
   }
 
   /** Read one owned session. */
-  async read(owner, sessionId) {
+  async read(owner: SessionOwner, sessionId: unknown): Promise<SessionHeader> {
     return await this._ownedHeader(owner, sessionId)
   }
 }

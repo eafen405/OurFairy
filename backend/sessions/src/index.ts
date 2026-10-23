@@ -1,0 +1,52 @@
+/**
+ * The OurFairy owned-session module: session ownership and the fixed primary
+ * session, mounted as one dsh plugin. `SessionHeader.owner` is the ownership
+ * authority; this module stores nothing of its own.
+ *
+ * @module @ourfairy/dsh-sessions
+ */
+import type { Context } from '@deepseek-ai/cordis'
+import { OwnedSessionService } from './service.js'
+import { SESSION_PATHS, sessionHandlers } from './http.js'
+// The dsh context's own seams: the session store, the durable store and the
+// carrier. The imports are type-only, so they add no runtime dependency.
+import type {} from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-session-persistence'
+import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@ourfairy/dsh-identity'
+
+export const name = 'ourfairy-sessions'
+
+/** `identity` is required because the presented credential is what names the owner. */
+export const inject = ['webServer', 'connection', 'identity', 'sessions', 'sessionPersistence']
+
+export function apply(ctx: Context): void {
+  const service = new OwnedSessionService(ctx, {
+    sessions: ctx.sessions,
+    persistence: ctx.sessionPersistence,
+    identity: ctx.identity,
+  })
+  const handlers = sessionHandlers({ service, fence: request => ctx.connection.fence(request) })
+
+  for (const path of SESSION_PATHS) {
+    const handler = handlers.get(path)
+    if (handler === undefined) {
+      throw new Error(`no handler is registered for ${path}`)
+    }
+    ctx.effect(
+      () => ctx.webServer.register({ kind: 'exact', path, handler }),
+      `ourfairy-sessions: ${path}`,
+    )
+  }
+}
+
+export { OwnedSessionService, primarySessionIdOf, sessionIdOf, SessionScopeError } from './service.js'
+export { SESSION_PATHS, sessionHandlers } from './http.js'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The product's owned-session service, as this package provides it. */
+    ourfairySessions: OwnedSessionService
+  }
+}

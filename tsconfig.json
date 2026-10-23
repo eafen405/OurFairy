@@ -4,6 +4,9 @@
   // TS18002, so the first package lands with this file.
   "files": [],
   "references": [
-    { "path": "./backend/http" }
+    { "path": "./backend/http" },
+    { "path": "./backend/identity" },
+    { "path": "./backend/sessions" },
+    { "path": "./backend/sessions/tsconfig.test-support.json" }
   ]
 }

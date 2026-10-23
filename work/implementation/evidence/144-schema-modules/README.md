@@ -7,11 +7,11 @@
 
 | 模块 | 导出 | 内容 |
 | --- | --- | --- |
-| [`users.mjs`](../../../../backend/identity/src/schema/users.mjs) | `USERS_SCHEMA` | `users`、`invites`、`sessions` 三张表 |
-| [`indexes.mjs`](../../../../backend/identity/src/schema/indexes.mjs) | `INDEXES_SCHEMA` | `sessions_by_user`、`users_by_short_id`、`users_by_name` |
-| [`groups.mjs`](../../../../backend/identity/src/schema/groups.mjs) | `GROUPS_SCHEMA` | `groups`、`group_members` 与它们的三个索引 |
-| [`uploads.mjs`](../../../../backend/identity/src/schema/uploads.mjs) | `UPLOADS_SCHEMA` | `uploads` |
-| [`deliveries.mjs`](../../../../backend/identity/src/schema/deliveries.mjs) | `DELIVERIES_SCHEMA` | `deliveries` |
+| [`users.ts`](../../../../backend/identity/src/schema/users.ts) | `USERS_SCHEMA` | `users`、`invites`、`sessions` 三张表 |
+| [`indexes.ts`](../../../../backend/identity/src/schema/indexes.ts) | `INDEXES_SCHEMA` | `sessions_by_user`、`users_by_short_id`、`users_by_name` |
+| [`groups.ts`](../../../../backend/identity/src/schema/groups.ts) | `GROUPS_SCHEMA` | `groups`、`group_members` 与它们的三个索引 |
+| [`uploads.ts`](../../../../backend/identity/src/schema/uploads.ts) | `UPLOADS_SCHEMA` | `uploads` |
+| [`deliveries.ts`](../../../../backend/identity/src/schema/deliveries.ts) | `DELIVERIES_SCHEMA` | `deliveries` |
 
 store 侧只改了文件头部：
 
