@@ -532,7 +532,7 @@ export function verifyPluginCompatibility({ binName, bundlePackage, installAncho
     }
     const issue = boot.evaluatePluginCompatibility(installed, {}, dshVersion)
     if (issue !== undefined) {
-      const peers = Object.entries(issue.peers).map(([peer, range]) => `${peer} ${range}`).join(', ')
+      const peers = Object.entries(issue.requirements).map(([peer, range]) => `${peer} ${range}`).join(', ')
       failures.push(`${name}@${issue.version} is incompatible with dsh ${dshVersion}: peerDependencies ${peers}`)
       continue
     }

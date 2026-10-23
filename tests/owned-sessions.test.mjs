@@ -375,7 +375,19 @@ describe('OurFairy owned sessions over real HTTP', () => {
       // must stay unregistered even with an admitted token and a known other id.
       for (const path of ['/api/sessions/read', '/api/sessions/select', '/api/sessions/subscribe',
         '/api/sessions/control', '/sessions/subscribe', '/sessions/control']) {
-        const absent = await request(path, { token, body: { sessionId: foreignId } })
+        // dsh answers 400 for a body that is not an RPC envelope, so an admitted
+        // request to an unmounted method only reads as "not found" when it carries
+        // a well-formed envelope; without one the assertion would pass or fail on
+        // envelope validation instead of on the route being unregistered.
+        const absent = await request(path, {
+          token,
+          body: {
+            type: 'client-request',
+            rpcId: 'probe-1',
+            method: path.replace(/^\/api\//u, ''),
+            payload: { sessionId: foreignId },
+          },
+        })
         assert.equal(absent.status, 404, `${path}: ${absent.text}`)
       }
     }

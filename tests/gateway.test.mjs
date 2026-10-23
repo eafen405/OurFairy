@@ -652,10 +652,10 @@ test('the shared ASR connection is edited through the gateway and the next recor
     } })
     assert.equal(saved.asr.endpoint, `http://127.0.0.1:${provider.address().port}/transcribe`)
     assert.equal(saved.asr.available, true)
-    // The launching environment wins over the writable store, so this reference
-    // is configured and read-only: an edit would appear to save and then resolve
-    // the inherited value anyway.
-    assert.deepEqual(saved.asr.credential, { ref: 'VOICE_API_KEY', configured: true, writable: false, source: 'env' })
+    // Every reference is writable: a stored value outranks every fallback, and an
+    // unset exposes the inherited one again. So an environment-sourced credential
+    // is both configured and writable, and an edit really does change what resolves.
+    assert.deepEqual(saved.asr.credential, { ref: 'VOICE_API_KEY', configured: true, writable: true, source: 'env' })
 
     const available = await httpJson(port, '/speech', { method: 'GET', token: admin, expect: false })
     assert.equal(available.status, 200, available.text)

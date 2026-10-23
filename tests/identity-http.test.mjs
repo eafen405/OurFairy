@@ -233,7 +233,13 @@ describe('OurFairy identity over real HTTP', () => {
     assert.equal(anonymous.status, 401, `an anonymous /api request must be refused: ${anonymous.text}`)
     assert.match(anonymous.text, /unauthorized/u)
 
-    const admitted = await request('/api/session.list', { method: 'GET', token: agent.json.token })
+    // The pinned dsh validates the RPC envelope before it looks for an endpoint,
+    // so a bare body answers 400. A well-formed envelope for a method the shared
+    // channel does not mount keeps the observation on "admitted, then not found".
+    const admitted = await request('/api/session.list', {
+      token: agent.json.token,
+      body: { type: 'client-request', rpcId: 'probe-1', method: 'session.list', payload: {} },
+    })
     assert.equal(admitted.status, 404,
       `the session credential must pass admission and then miss the endpoint: ${admitted.text}`)
   })

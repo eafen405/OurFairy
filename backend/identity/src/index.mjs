@@ -68,7 +68,11 @@ export class IdentityService extends Service {
   /** Connection's second-credential seam: the principal one request speaks for. */
   identify(request) {
     const user = this.authenticateRequest(request)
-    return user === undefined ? undefined : { id: principalIdOf(user.shortId) }
+    if (user === undefined) return undefined
+    // Connection caches one Peer per subject and revokes it by that same key, so
+    // the subject and the principal id stay the short number's owner string.
+    const id = principalIdOf(user.shortId)
+    return { subject: id, principal: { kind: 'user', id } }
   }
 
   /** Mint an invite for the authenticated administrator. */
