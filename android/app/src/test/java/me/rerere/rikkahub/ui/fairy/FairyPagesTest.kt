@@ -10,6 +10,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -33,8 +35,10 @@ import me.rerere.rikkahub.data.remote.*
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import kotlin.math.abs
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -215,5 +219,48 @@ class FairyPagesTest {
         }
         compose.mainClock.advanceTimeBy(600)
         compose.onNodeWithText("正在思考…").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "zh-rCN-w360dp-h800dp")
+    fun `chat body keeps an even horizontal margin from the screen edge`() {
+        val fairyBody = "Fairy正文：" + "正文与屏幕边缘之间保持明显留白，".repeat(5)
+        val userBody = "用户正文：" + "气泡与屏幕右边缘之间保持明显留白，".repeat(5)
+        updates["main"] = MutableStateFlow(RemoteChatProjection(
+            sessionId = "main", cursor = 0, durableThroughSeq = 0,
+            events = eventCoverage(0, 0),
+            messages = listOf(
+                RemoteChatMessage("fairy", 0, role = 2, status = 2, text = fairyBody),
+                RemoteChatMessage("user", 1, role = 1, status = 2, text = userBody),
+            ),
+            activity = RemoteActivity(1),
+        ))
+        conversation()
+        val fairy = compose.onAllNodesWithText("Fairy正文：", substring = true, useUnmergedTree = true)
+            .onFirst().fetchSemanticsNode()
+        val user = compose.onAllNodesWithText("用户正文：", substring = true, useUnmergedTree = true)
+            .onFirst().fetchSemanticsNode()
+        val density = fairy.layoutInfo.density.density
+        val rootWidth = compose.onRoot().fetchSemanticsNode().boundsInRoot.width
+        val fairyLeft = fairy.boundsInRoot.left / density
+        val fairyRight = (rootWidth - fairy.boundsInRoot.right) / density
+        val userRight = (rootWidth - user.boundsInRoot.right) / density
+        screenshot("conversation-padding-360dp")
+        assertTrue(
+            "Fairy 正文左侧留白 $fairyLeft dp，应不小于 30 dp",
+            fairyLeft >= 30f,
+        )
+        assertTrue(
+            "Fairy 正文右侧留白 $fairyRight dp，应不小于 30 dp",
+            fairyRight >= 30f,
+        )
+        assertTrue(
+            "用户正文右侧留白 $userRight dp，应不小于 30 dp",
+            userRight >= 30f,
+        )
+        assertTrue(
+            "Fairy 正文左右留白 $fairyLeft / $fairyRight dp 应对称",
+            abs(fairyLeft - fairyRight) <= 1f,
+        )
     }
 }
