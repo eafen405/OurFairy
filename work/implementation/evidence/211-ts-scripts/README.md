@@ -217,11 +217,11 @@ Node v24.18.0，pnpm 由 `corepack pnpm@11.28.5` 提供，dsh 检出 `d1b6099ae7
 ## 6. 合并 `integration/spec-205` 之后
 
 本票收口时 `integration/spec-205` 已前进到 `4fb3250984`（#214 的两个提交：发送背压修复与
-它的独立验证）。本票分支先提交，再把该 tip 合进来。
+它的独立验证）。本票分支先提交（`ebca5da7d3`），再把该 tip 合进来（合并提交 `16f569d17f`，
+无冲突：`work/implementation/evidence/README.md` 两边各加一行，git 自己分开了）。
 
 `#214` 新增了 `tests/chat-stream-backpressure.test.mjs`，所以合并后的全量数字是
 **294 / 294**（不是收口前的 293）——增的是 #214 的那条测试，不是本票的改动。
-合并后的重跑结果见 §8。
 
 ---
 
@@ -238,9 +238,31 @@ Node v24.18.0，pnpm 由 `corepack pnpm@11.28.5` 提供，dsh 检出 `d1b6099ae7
 
 ---
 
-## 8. 收口后的最终数字
+## 8. 收口后的最终门禁（合并 `4fb3250984` 之后）
 
-见 §9 的「最终门禁」小节（在本票提交与合并之后跑的那一遍）。
+| 命令 | 结果 |
+| --- | --- |
+| `npm run build` | 退出码 0（`node scripts/tsc.ts --fresh`，干净树重编） |
+| `npm test` | **294 tests / 294 pass / 0 fail**，`duration_ms 91345` |
+| `npm run combo:verify` | `combo: combination verified`（ourfairy@`16f569d17f36`、dsh@`d1b6099ae716`、android source@`460109d1b89b`） |
+| `npm run backend:doctor` | `doctor: all checks passed`（11 项全 ok） |
+| `OURFAIRY_PORT=0 npm run backend:probe` | `ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)` |
+| `node --no-warnings work/implementation/evidence/211-ts-scripts/parity-scan.mjs` | 退出码 0，**0 residue** |
+
+### 8.1 一次负载下的抖动（已复跑排除）
+
+合并后的第一次全量跑出现了 3 条失败，全在 `tests/file-delivery.test.mjs`
+（`file delivery recovers durable log success before business completion without recopying changed sources`、
+`a file delivery flush failure leaves a ready retry and never confirms incomplete durability`、
+`authorized shared files appear together in live and persisted recipient attachment projection`）。
+那一跑机器上还叠着本票的并行工作（parity 扫描、doctor、probe），负载明显更高。
+
+- 单跑 `node --test tests/file-delivery.test.mjs`：**8 / 8 pass**（7.995 s）。
+- 负载下来后重跑整个 `npm test`：**294 / 294 / 0 fail**（91.3 s）。
+
+结论：这三条是**负载下的抖动**，不是本票引入的回归——本票没有碰投递、chat 或 Android 的任何代码，
+parity 扫描也证明 `scripts/` 除声明类别外逐 token 相同。**但收口人应知道：全量门禁在重负载下
+可能抖。**
 
 ---
 
@@ -260,5 +282,15 @@ Node v24.18.0，pnpm 由 `corepack pnpm@11.28.5` 提供，dsh 检出 `d1b6099ae7
 | `.worktrees/209-ts-chat` | `ticket/209-ts-chat` | `478fc708a4` 是祖先 |
 | `.worktrees/210-ts-remaining` | `ticket/210-ts-remaining` | `3ef3144566` 是祖先 |
 
+删除前逐条验过合并状态（`git merge-base --is-ancestor <branch> integration/spec-205`），
+九个分支与九个工作树都已删除。删除后 `git worktree list` 只剩三行：
+
+```
+/home/eafen405/projects/OurFairy                4fb3250984 [integration/spec-205]
+/home/eafen405/projects/OurFairy/.worktrees/211-ts-scripts  16f569d17f [ticket/211-ts-scripts]
+/home/eafen405/projects/OurFairy/.worktrees/213-tool-calls  4fb3250984 [ticket/213-tool-calls]
+```
+
 **未删**：`.worktrees/` 本身、`.worktrees/211-ts-scripts` 与 `ticket/211-ts-scripts`（本票自己的）、
+`.worktrees/213-tool-calls` 与 `ticket/213-tool-calls`（**另一个会话正在用**）、
 根检出 `/home/eafen405/projects/OurFairy` 的工作树。
