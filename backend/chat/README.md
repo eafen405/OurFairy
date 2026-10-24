@@ -69,6 +69,12 @@
 
 ### 分页与重连
 
+`/chat/observe` 按会话合并运行中的片段（32 ms 发布窗口），各观察者仍保留自己的窗口；闲置/终态发布
+不等这个定时窗口。传输背压期间保留最新待发累计快照，流恢复后发送它。接受 `gzip` 的客户端收到
+逐帧 flush 的 HTTP gzip 流；`gzip;q=0` 与未请求压缩的客户端沿用明文 SSE。JSON 字段、累计原文与
+分页规则不变。对应公开接口检查见 `tests/chat-multi-observer.test.mjs` 与
+`tests/chat-stream-backpressure.test.mjs`。
+
 `maxEvents` 是原生事件数（1..256，默认 64），不是消息数：system/context/tool/inbox 事件
 可能不产生气泡。
 

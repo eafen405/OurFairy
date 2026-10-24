@@ -212,6 +212,10 @@ test('two observers of one session agree through one streamed reply, including a
     assert.deepEqual(read.projection.attempt, null)
     assert.equal(read.projection.replyStatus, 0)
     assert.equal(read.projection.messages.filter(message => message.role === 2 && message.status === 2).length, 1)
+    const revisions = new Set(second.frames.filter(frame => frame.attempt?.text.length)
+      .map(frame => frame.attempt.revision))
+    assert.ok(revisions.size < FRAGMENT_COUNT / 2,
+      `cumulative snapshots should coalesce high-rate fragments instead of sending ${revisions.size} revisions`)
   } finally {
     await first.close().catch(() => {})
     await second?.close().catch(() => {})

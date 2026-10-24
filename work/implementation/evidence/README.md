@@ -181,6 +181,7 @@
 | --- | --- |
 | [146-147-triage](146-147-triage/README.md) | #146 假模型分块解码致 8000 码点断言偶发 8001；#147 store 文件头错引 AGENTS.md |
 | [177-179-triage](177-179-triage/README.md) | #177 合并 chat 幂等重复用例；#178 恢复安装隔离断言；#179 证据索引改为生成 |
+| [214-stream-rate](214-stream-rate/README.md) | #214 分环节测量、SSE 压缩与共享合并、背压和接收积压回归；vivo S50 限速真机验证 |
 
 ## 阶段整合与评审
 

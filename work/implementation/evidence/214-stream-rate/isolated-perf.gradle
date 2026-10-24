@@ -1,0 +1,9 @@
+// Keep the measurement APK alongside the user's installed application.
+gradle.beforeProject { project ->
+    project.pluginManager.withPlugin('com.android.application') {
+        project.afterEvaluate {
+            project.android.buildTypes.getByName('perf').applicationIdSuffix = '.streambench'
+            project.android.buildTypes.getByName('perf').signingConfig = project.android.signingConfigs.getByName('debug')
+        }
+    }
+}
