@@ -20,7 +20,7 @@ import { test } from 'node:test'
 // module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
 import {
-  SESSION, attachment, event, job, toolCallMessage, transcriptLog, userMessage, workCases, workLog,
+  SESSION, attachment, event, job, toolCallMessage, toolStream, transcriptLog, userMessage, workCases, workLog,
 } from './fixtures/projection-logs.mjs'
 
 const units = await import('../backend/chat/dist/units.js')
@@ -113,10 +113,19 @@ test('a unit applies an unrelated event as the same state reference', () => {
 test('the stateVersion constants bind the README contract', () => {
   // Bump these together with backend/chat/README.md and the evidence when the
   // fold semantics or state shape change; the registry discards older rows.
+  // The README is read, not restated: the numbers below are this suite's
+  // expectation, and the documented sentence must name the same ones, so a
+  // version bump that forgets the prose fails here instead of shipping drift.
   const versions = { ourfairyTranscript: 4, ourfairyWork: 2 }
+  const documented = { ourfairyTranscript: /transcript `(\d+)`/u, ourfairyWork: /\bwork `(\d+)`/u }
+  const readme = readFileSync(new URL('../backend/chat/README.md', import.meta.url), 'utf8')
   for (const definition of [units.transcriptDefinition, units.workDefinition]) {
     assert.equal(typeof definition.key, 'string')
     assert.equal(definition.stateVersion, versions[definition.key], `${definition.key} stateVersion`)
+    const match = documented[definition.key].exec(readme)
+    assert.ok(match, `backend/chat/README.md must state the ${definition.key} stateVersion`)
+    assert.equal(Number(match[1]), definition.stateVersion,
+      `backend/chat/README.md documents ${definition.key} at ${match[1]}, but the unit is at ${definition.stateVersion}`)
     assert.equal(definition.wire, undefined, `${definition.key} is host-only and must not publish a wire view`)
   }
 })
@@ -221,6 +230,59 @@ test('a tool-only step still carries its tool names', () => {
   const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
   assert.equal(messages[0].text, '')
   assert.deepEqual(messages[0].tools, ['bash'])
+})
+
+test('an aborted step keeps the tool it had already requested', () => {
+  // A step can emit a tool call and then die before producing a message. The
+  // attempt row is all the reader gets, so it must carry the name too.
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'assistant/attempt', { turn: 1, step: 1, stream: [...toolStream('c1', 'bash'), ...toolStream('c2', 'read')] }),
+    event(2, 'turn/end', { turn: 1, reason: { kind: 'aborted' } }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  assert.equal(messages.length, 1, 'the attempt is the only row')
+  assert.equal(messages[0].status, 3, 'the attempt is settled as interrupted')
+  assert.deepEqual(messages[0].tools, ['bash', 'read'])
+  assert.equal(messages[0].text, '')
+})
+
+test('a repeated tool-call id keeps its first name and an unnamed record adds nothing', () => {
+  const stream = [
+    { type: 'tool-call-chunks', time0: 1, index: 0, dt: [0], id: 'c1', name: 'bash', args: ['{}'] },
+    { type: 'tool-call-chunks', time0: 2, index: 0, dt: [0], id: 'c1', name: 'bash', args: ['{}'] },
+    { type: 'tool-call-chunks', time0: 3, index: 1, dt: [0], id: 'c2', args: ['{}'] },
+  ]
+  assert.deepEqual(units.attemptTools(stream), ['bash'])
+})
+
+test('a delivered message is not an assistant step and names no tools', () => {
+  // A delivery is another session's report; the ticket keeps its presentation
+  // unchanged even if its content ever carried a tool call.
+  const log = [
+    event(0, 'delivery/message', { deliveryId: 'd1', origin: { sessionId: 'sender-1' },
+      message: toolCallMessage('dmsg', 'delivered', [{ id: 'c1', name: 'bash', arguments: '{}' }]) }, { surfaceOp: 'append' }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+  assert.equal(messages[0].text, 'delivered')
+  assert.equal(messages[0].tools, undefined, 'a delivered message must not grow a tools field')
+})
+
+test('tool steps keep their place between ordinary messages', () => {
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'assistant/message', { turn: 1, step: 1, message: toolCallMessage('a1', '', [
+      { id: 'c1', name: 'bash', arguments: '{}' }]), stream: [] }, { surfaceOp: 'append' }),
+    event(2, 'assistant/message', { turn: 1, step: 2, message: { id: 'a2', role: 'assistant',
+      content: [{ type: 'text', text: '中间' }], source: { kind: 'model' } }, stream: [] }, { surfaceOp: 'append' }),
+    event(3, 'assistant/message', { turn: 1, step: 3, message: toolCallMessage('a3', '', [
+      { id: 'c2', name: 'read', arguments: '{}' }]), stream: [] }, { surfaceOp: 'append' }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  assert.deepEqual(messages.map(message => message.messageId), ['a1', 'a2', 'a3'])
+  assert.deepEqual(messages.map(message => message.tools), [['bash'], undefined, ['read']])
 })
 
 test('the transcript unit answers receipts without reading the log', () => {

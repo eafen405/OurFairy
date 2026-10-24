@@ -122,6 +122,24 @@ const toolNamesOf = (message: ProductMessage) => (message.content ?? []).filter(
 const attachmentsOf = (message: ProductMessage) => (message.source?.attachments ?? []).map((item, index) => ({ index, type: item.image ? 2 : 1, name: item.name, mime: item.mime, bytes: item.original.bytes }))
 /** The interrupted text blocks of one native Assistant stream, shared with the live attempt read. */
 export const attemptText = (stream: readonly AssistantStreamRecord[]) => assembleAssistantStream(stream).interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('')
+/**
+ * The tool names one Assistant stream has requested so far, in first-request order.
+ *
+ * A call's name can arrive after its record starts, so an unnamed record is
+ * skipped rather than projected as an empty name; a repeated id keeps its first
+ * name because the stream can re-open the same call. This is the same fact the
+ * committed message carries, read from the stream of a step that has not
+ * produced a message yet — the aborted or still-running step would otherwise
+ * settle as an empty row again.
+ */
+export const attemptTools = (stream: readonly AssistantStreamRecord[]) => {
+  const names = new Map<string, string>()
+  for (const record of stream) {
+    if (record.type !== 'tool-call-chunks' || record.name === undefined) continue
+    if (!names.has(record.id)) names.set(record.id, record.name)
+  }
+  return [...names.values()]
+}
 
 /* ------------------------------------------------------------- transcript */
 
@@ -279,8 +297,11 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
     if ((event.type === 'assistant/message' || event.type === 'delivery/message') && isAppendSurfaceEvent(event)) {
       const message = event.data.message
       const view = productMessage(message)
+      // Only an assistant step names tools: a delivered message is another
+      // session's report, and the delivery's presentation does not change.
       const fields = { requestId: null, role: 2,
-        text: messageText(view), attachments: attachmentsOf(view), tools: toolNamesOf(view) }
+        text: messageText(view), attachments: attachmentsOf(view),
+        tools: event.type === 'assistant/message' ? toolNamesOf(view) : [] }
       // `interrupted` is the assistant event's own field; a delivered message
       // carries none, so it reads as not interrupted.
       const status = (event.data as { interrupted?: true }).interrupted ? 3 : 2
@@ -298,7 +319,8 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
       const attempts = state.attemptsByTurn[turn] ?? []
       return { ...state,
         rows: [...state.rows, {
-          messageId, requestId: null, role: 2, text: attemptText(event.data.stream), attachments: null, tools: [],
+          messageId, requestId: null, role: 2, text: attemptText(event.data.stream), attachments: null,
+          tools: attemptTools(event.data.stream),
           // A turn end that already exists in the prefix settles the attempt at
           // its own seq (the old fold looked up the whole log's turn ends).
           first: { seq: event.seq, status: ended !== undefined && ended.interrupted ? 3 : 4 }, transitions: [],

@@ -531,7 +531,6 @@ class RemoteChatApiTest {
                 """{"messageId":"m-2","seq":2,"requestId":"r-1","role":2,"status":3,"text":"\n  second  \n"}],""" +
                 """"attempt":null,"replyStatus":0,"error":null}"""
 
-        /** A committed Fairy delivery beside an independent running attempt. */
         /** One tool-only assistant step followed by an ordinary user message. */
         const val TOOL_SNAPSHOT =
             """{"sessionId":"s-1","generation":"gen-1","version":2,"cursor":2,"durableThroughSeq":2,""" +
@@ -539,6 +538,7 @@ class RemoteChatApiTest {
                 """{"messageId":"u-1","seq":3,"role":1,"status":2,"text":"next"}],""" +
                 """"attempt":null,"replyStatus":0,"error":null}"""
 
+        /** A committed Fairy delivery beside an independent running attempt. */
         const val DELIVERED_SNAPSHOT =
             """{"sessionId":"s-1","generation":"gen-1","version":4,"cursor":2,"durableThroughSeq":2,""" +
                 """"messages":[{"messageId":"d-1","seq":2,"role":2,"status":2,"text":"# Saved\n\n**bold** body  ","attachments":[]}],""" +

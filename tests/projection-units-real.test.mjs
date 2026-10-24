@@ -13,7 +13,10 @@
  * activity are frozen in `fixtures/projection-real-expected.json`, captured
  * from those folds at `integration/spec-72` commit `9092e52` over this same
  * scenario. Native message and session ids are generated per run, so the
- * frozen rows omit `messageId`; every other field is the captured value.
+ * frozen rows omit `messageId`; every other field is the captured value except
+ * `tools`, which #213 added afterwards: the row it was added to (the
+ * `todo_write` step at seq 11) is the one place this fixture is not a pure
+ * capture.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'

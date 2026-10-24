@@ -34,13 +34,14 @@ class RemoteTranscriptToolCallTest {
     private val toolStep = RemoteChatMessage("a1", 4, role = 2, status = 2, text = "",
         tools = listOf("bash", "read"))
 
-    private fun show(messages: List<RemoteChatMessage>, attempt: String? = null) {
+    private fun show(messages: List<RemoteChatMessage>, attempt: String? = null,
+        attemptTools: List<String> = emptyList()) {
         compose.setContent {
             CompositionLocalProvider(LocalDisplayPreferences provides DisplayPreferences()) {
                 FairyAppTheme {
                     CompositionLocalProvider(LocalAgoraMotionPolicy provides AgoraMotionPolicy(true)) {
                         RemoteTranscript(messages, attempt, attempt?.let { "g" to "a" }, false, { _, _ -> },
-                            modifier = Modifier.fillMaxSize())
+                            attemptTools = attemptTools, modifier = Modifier.fillMaxSize())
                     }
                 }
             }
@@ -65,6 +66,14 @@ class RemoteTranscriptToolCallTest {
         show(listOf(question, toolStep))
 
         assertTrue("bash is requested first, so it must render above read", top("调用工具 · bash") < top("调用工具 · read"))
+    }
+
+    @Test fun `a step still streaming shows the tool it has already requested`() {
+        // The live row has no committed message yet; the name comes from the attempt.
+        show(listOf(question), attempt = "正在读取。", attemptTools = listOf("bash"))
+
+        compose.onNodeWithText("调用工具 · bash", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("正在读取。").assertExists()
     }
 
     @Test fun `the tool entry stays while the next step streams`() {

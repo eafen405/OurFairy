@@ -54,8 +54,10 @@
   参数与工具输出。只有工具调用、没有可见文本的步骤因此不再是一行空文本。没有原生消息的
   assistant 结算使用确定性身份 `attempt:<sessionId>:<seq>`。`messages` 按首次出现顺序排列，
   不是 seq 顺序。
-- `attempt`：`{attemptId,revision,text}`。`attemptId` 只在同一 generation 内唯一，`text` 是
-  累计原始可见文本。最终持久消息取代它，终止消息使用完整富文本渲染。
+- `attempt`：`{attemptId,revision,text,tools?}`。`attemptId` 只在同一 generation 内唯一，`text` 是
+  累计原始可见文本；`tools` 是这一步到目前为止请求过的工具名，按首次请求顺序，未请求时不出现。
+  最终持久消息取代它，终止消息使用完整富文本渲染；被中止的步骤不会有消息，工具名因此也从
+  `assistant/attempt` 行带出。
 - `settledAttempt`：`{attemptId,seq}|null`，本 generation 最近一次已提交的 assistant 流结束。
 - `replyStatus`：0 空闲、1 运行中、2 停止中。`error` 是最近一次执行失败；连接中断不是模型错误。
 - `tasks`：任务列表，每项含 `taskId`、`kind`、`label`、`status`、`availability`、`startedAt`、
@@ -122,8 +124,9 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 每个单元声明 `key`、`stateVersion`、zod `stateSchema`、`init(header)` 与 `apply(state,event)`：
 `apply` 必须同步且纯，未解释的事件返回同一引用；state 必须能被 registry 做 JSON checkpoint。
 每个单元的 `stateVersion` 在折叠语义或 state 形状变化时递增，旧版本的持久化行会被丢弃并从
-`init` 重折。当前 transcript 为 `3`（不可变首次出现 + 有序 transitions + move 索引），work 为
-`2`（窄的 pending id/来源索引）。
+`init` 重折。当前版本：transcript `4`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
+工具名），work `2`（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读这几行，
+与本文件一起漂移即失败。
 
 - 任务与活动是同一次 fold：activity 依赖每个事件后的任务/report 快照，拆开会形成第二套
   report 状态机。

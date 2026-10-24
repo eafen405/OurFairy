@@ -69,6 +69,7 @@ internal fun RemoteTranscript(
     onDownload: (RemoteChatMessage, RemoteChatAttachment) -> Unit,
     onFinalPresented: () -> Unit = {},
     settledAttempt: Pair<String, Long>? = null,
+    attemptTools: List<String> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     if (messages.isEmpty() && attemptText == null) {
@@ -178,11 +179,13 @@ internal fun RemoteTranscript(
                             presentationRow = row,
                         )
                     }
+                    // The live row has no message yet; its tools come from the attempt.
+                    val tools = message?.tools ?: attemptTools
+                    if (tools.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        ToolCallLines(tools)
+                    }
                     if (message != null) {
-                        if (message.tools.isNotEmpty()) {
-                            Spacer(Modifier.height(6.dp))
-                            ToolCallLines(message.tools)
-                        }
                         if (message.attachments.isNotEmpty()) {
                             Spacer(Modifier.height(6.dp))
                             AttachmentChips(message.attachments, downloadEnabled) { attachment ->
@@ -208,7 +211,7 @@ internal fun RemoteTranscript(
  *
  * Only the name reaches the screen: the request arguments and the tool's output stay in the
  * native session. The line reuses the message's small-label style rather than introducing a chip
- * or an icon, so an ordinary reply and a tool step keep the same visual grammar.
+ * or an icon, which keeps a tool step reading as part of its message.
  */
 @Composable
 private fun ToolCallLines(tools: List<String>) {
