@@ -18,6 +18,7 @@
     { "path": "./backend/speech" },
     { "path": "./backend/delivery" },
     { "path": "./backend/gateway" },
-    { "path": "./backend/probe" }
+    { "path": "./backend/probe" },
+    { "path": "./scripts" }
   ]
 }

@@ -29,7 +29,7 @@ import {
   TYPECHECK_COMMANDS,
   classify,
   plan,
-} from '../scripts/precommit.mjs'
+} from '../scripts/precommit.ts'
 import { repoRoot } from './helpers/backend.mjs'
 
 test('a Markdown-only change gets the docs gate, not the backend suite', () => {
@@ -96,15 +96,15 @@ test('the authorities that decide what every package installs run the full suite
     ['backend/chat/tsconfig.json'],
     ['tests/helpers/backend.mjs'],
     ['tests/helpers/dsh-peers.mjs'],
-    ['scripts/precommit.mjs'],
-    ['scripts/tsc.mjs'],
-    ['scripts/link-types.mjs'],
-    ['scripts/ourfairy-composition.mjs'],
-    ['scripts/ourfairy-backend.mjs'],
+    ['scripts/precommit.ts'],
+    ['scripts/tsc.ts'],
+    ['scripts/link-types.ts'],
+    ['scripts/ourfairy-composition.ts'],
+    ['scripts/ourfairy-backend.ts'],
     ['.github/workflows/check.yml'],
     ['.githooks/pre-commit'],
     ['android/ourfairy-source.json'],
-    ['work/implementation/evidence/137-launcher-split/README.md', 'scripts/ourfairy-backend.mjs'],
+    ['work/implementation/evidence/137-launcher-split/README.md', 'scripts/ourfairy-backend.ts'],
   ]
   for (const paths of cases) {
     assert.equal(classify(paths), 'full', `${paths.join(', ')} must run the full suite`)
@@ -138,7 +138,7 @@ test('every gate keeps the combination check, so drift is caught either way', ()
 
 test('the hook runs the shared script instead of its own command list', () => {
   const hook = readFileSync(join(repoRoot, '.githooks', 'pre-commit'), 'utf8')
-  assert.match(hook, /exec node scripts\/precommit\.mjs/u, 'the hook must delegate, or the split is unreachable')
+  assert.match(hook, /exec node scripts\/precommit\.ts/u, 'the hook must delegate, or the split is unreachable')
   assert.doesNotMatch(hook, /^npm test$/mu, 'the hook must not keep its own copy of the command list')
 })
 

@@ -9,6 +9,10 @@
 /work/tmp/
 /node_modules/
 /backend/*/dist/
+# The scripts project is a noEmit leaf of the solution, but it still keeps the
+# incremental state `tsc -b` reads. The product packages keep theirs inside
+# their own `dist/`, which the line above already ignores.
+*.tsbuildinfo
 
 # Client build output and local-only build inputs. The android/ directory keeps its
 # own rules in android/.gitignore and the module .gitignore files; these lines are

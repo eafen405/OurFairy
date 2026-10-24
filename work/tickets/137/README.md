@@ -10,7 +10,7 @@ dsh 检出 HEAD = `5b8ec0f1…` 与 [`combo.json`](../../../combo.json) 锁定�
 
 ## 现状审计
 
-[`scripts/ourfairy-backend.mjs`](../../../scripts/ourfairy-backend.mjs) 902 行，混着五件事：
+[`scripts/ourfairy-backend.ts`](../../../scripts/ourfairy-backend.ts) 902 行，混着五件事：
 
 | 职责 | 现在的位置 |
 | --- | --- |
@@ -26,7 +26,7 @@ dsh 检出 HEAD = `5b8ec0f1…` 与 [`combo.json`](../../../combo.json) 锁定�
    安装失败或 dsh 检出缺失时 `doctor --json` 没有任何 JSON 输出。既有断言里，缺 dsh 只对 `probe` 的文本有断言，
    `doctor` 的同一情形没有断言。
 2. **同一份 bundle manifest 有两份读法。** 启动器读 worktree 副本并做三条准入判定（非 `file:`、指向仓库外、
-   与 bundle/probe 重名）；[`scripts/combo.mjs`](../../../scripts/combo.mjs) 的 `verifyBundlePackages` 读已安装副本、
+   与 bundle/probe 重名）；[`scripts/combo.ts`](../../../scripts/combo.ts) 的 `verifyBundlePackages` 读已安装副本、
    只取 `Object.keys`，不做判定。
 3. **组合规则不可直接断言。** 想断言哈希、陈旧判定、准入规则，只能起子进程跑 doctor，从返回模式反推。
 

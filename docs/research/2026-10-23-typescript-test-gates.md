@@ -17,11 +17,11 @@ dsh 检出 HEAD = `d1b6099ae716870a2afba705a2c90415408a69f5`，与 [`combo.json`
 ## 方法
 
 1. 读产品侧测试与门禁：60 个 `tests/*.test.mjs`、[`tests/helpers/dsh-peers.mjs`](../../tests/helpers/dsh-peers.mjs)、
-   [`tests/helpers/backend.mjs`](../../tests/helpers/backend.mjs)、[`scripts/precommit.mjs`](../../scripts/precommit.mjs)、
+   [`tests/helpers/backend.mjs`](../../tests/helpers/backend.mjs)、[`scripts/precommit.ts`](../../scripts/precommit.ts)、
    [`tests/precommit.test.mjs`](../../tests/precommit.test.mjs)、[`tests/docs.test.mjs`](../../tests/docs.test.mjs)、
    [`.github/workflows/check.yml`](../../.github/workflows/check.yml)、[`package.json`](../../package.json)。
-2. 读安装链的接缝：[`scripts/ourfairy-backend.mjs`](../../scripts/ourfairy-backend.mjs) 的
-   `installProfile`（`:159`）与 `commandDoctor`（`:617`）、[`scripts/ourfairy-composition.mjs`](../../scripts/ourfairy-composition.mjs)
+2. 读安装链的接缝：[`scripts/ourfairy-backend.ts`](../../scripts/ourfairy-backend.ts) 的
+   `installProfile`（`:159`）与 `commandDoctor`（`:617`）、[`scripts/ourfairy-composition.ts`](../../scripts/ourfairy-composition.ts)
    的 `productSources`（`:235`）/`publishedEntries`（`:260`）。
 3. 实验在 worktree 的 `.lab/` 临时目录做（已删除），只动副本与合成 fixture；没有改本仓产品代码/tests/
    manifest，没有跑全量 `npm test`，没有触发 CI。

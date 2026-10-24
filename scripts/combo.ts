@@ -20,53 +20,105 @@
  * docs/research/README.md.
  *
  * Usage:
- *   node scripts/combo.mjs verify [--json] [--allow-drift]
- *   node scripts/combo.mjs show [--json]
+ *   node scripts/combo.ts verify [--json] [--allow-drift]
+ *   node scripts/combo.ts show [--json]
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { admitBundleDependencies, readCombo } from './ourfairy-composition.mjs'
+import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
+import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
+import type { PluginCompatibility, Profile, ProfileLayer, SkippedBundle } from '@deepseek-ai/dsh-app-boot'
+import { admitBundleDependencies, readCombo } from './ourfairy-composition.ts'
+import type { AdmissionRefusal, Combo, ComboAndroidSource, ComboRepo } from './ourfairy-composition.ts'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(scriptDir, '..')
 
 /**
  * Read combo.json. Owned by the composition module so the dependency direction
- * stays one-way (`combo.mjs` -> composition); re-exported here because existing
+ * stays one-way (`combo.ts` -> composition); re-exported here because existing
  * callers import it from this module.
  */
 export { readCombo }
 
 /** Environment override per repository key; the default is combo.json's localPath. */
-const PATH_OVERRIDES = {
+const PATH_OVERRIDES: Record<string, string> = {
   ourfairy: 'OURFAIRY_REPO_DIR',
   dsh: 'OURFAIRY_DSH_DIR',
 }
 
+/**
+ * One row of the combination table.
+ *
+ * The rows are what the launcher and the doctor print, so the columns differ
+ * per row: the android row has no branch, and the actual column carries
+ * whatever the check compared against.
+ */
+export interface ComboRow {
+  readonly key: string
+  readonly role: string | null
+  readonly path: string | null
+  readonly lock: string
+  readonly branch?: string | null
+  readonly expected: string | null | undefined
+  readonly actual: unknown
+  readonly ok: boolean
+  failure?: string
+  readonly integrationTip?: string
+  readonly headIsTip?: boolean
+}
+
+/**
+ * The app-boot module's public surface, as the checks read it.
+ *
+ * The module is loaded through `createRequire` from the INSTALLED profile, not
+ * from this repository's link farm, so the runtime copy is the one a boot
+ * would read. The types are the pinned dsh checkout's, which is the package
+ * the installed copy is.
+ */
+interface DshAppBoot {
+  loadProfileDirectory(binName: string, dir: string, installAnchor: string): Profile
+  readProfileManifest(binName: string, dir: string): { dependencies?: Record<string, unknown>; version?: string }
+  composeEntries(layers: readonly PatchOptions[][]): EntryOptions[]
+  resolveBundleDir(binName: string, packageName: string, installAnchor: string, profileDir: string): string
+  getDshRuntimeVersion(): string
+  evaluatePluginCompatibility(manifest: object, exemptions: object, runtimeVersion: string): PluginCompatibility | undefined
+}
+
+/** The installed profile's bundle layer, as the checks read it. */
+interface InstalledBundle {
+  readonly boot: DshAppBoot
+  readonly profile: Profile
+  readonly layer: ProfileLayer | undefined
+  readonly skipped: SkippedBundle | undefined
+}
+
 /** The repo holding combo.json resolves to this checkout, not to combo.json's canonical path. */
-function isSelfEntry(entry) {
+function isSelfEntry(entry: ComboRepo): boolean {
   return entry.lock === 'integration-branch'
 }
 
 /** Resolve one repo's checkout path, honoring the environment override. */
-export function repoPath(combo, key, root = repoRoot) {
+export function repoPath(combo: Combo, key: string, root = repoRoot): string {
   const override = PATH_OVERRIDES[key]
   const fromEnv = override === undefined ? undefined : process.env[override]
   if (fromEnv !== undefined && fromEnv !== '') return resolve(fromEnv)
-  const entry = combo.repos[key]
+  // A key the recorded file does not carry has no entry; the assertion records
+  // that the caller asks for a repository the combination declares.
+  const entry = combo.repos[key]!
   if (isSelfEntry(entry)) return root
   return resolve(entry.localPath)
 }
 
-function git(args, cwd) {
+function git(args: string[], cwd: string): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 }
 
 /** Resolve a local branch tip; undefined when the ref is absent. */
-function revParse(path, ref) {
+function revParse(path: string, ref: string): string | undefined {
   try {
     return git(['rev-parse', '--verify', `${ref}^{commit}`], path)
   } catch {
@@ -74,7 +126,7 @@ function revParse(path, ref) {
   }
 }
 
-function isAncestor(path, ancestor, descendant) {
+function isAncestor(path: string, ancestor: string, descendant: string): boolean {
   const result = spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd: path, encoding: 'utf8' })
   return result.status === 0
 }
@@ -86,11 +138,11 @@ function isAncestor(path, ancestor, descendant) {
  * the branch tip, which may predate the integration tip. The merge result
  * descends from both parents, so an incoming `MERGE_HEAD` that is based on the
  * tip gives the same guarantee.
- * @param {string} path - repository to read refs from.
- * @param {string} tip - integration tip commit.
- * @returns {boolean}
+ * @param path - repository to read refs from.
+ * @param tip - integration tip commit.
+ * @returns
  */
-export function basedOnIntegration(path, tip) {
+export function basedOnIntegration(path: string, tip: string): boolean {
   const head = revParse(path, 'HEAD')
   if (head === undefined) return false
   if (head === tip || isAncestor(path, tip, head)) return true
@@ -100,12 +152,11 @@ export function basedOnIntegration(path, tip) {
 
 /**
  * Verify the locked combination.
- * @returns {{ok: boolean, rows: object[], failures: string[]}}
  */
-export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) {
+export function verifyCombination({ root = repoRoot, allowDrift = false }: { root?: string; allowDrift?: boolean } = {}): { ok: boolean; rows: ComboRow[]; failures: string[] } {
   const { combo } = readCombo(root)
-  const rows = []
-  const failures = []
+  const rows: ComboRow[] = []
+  const failures: string[] = []
   for (const [key, entry] of Object.entries(combo.repos)) {
     const path = repoPath(combo, key, root)
     const envName = PATH_OVERRIDES[key]
@@ -140,7 +191,7 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
       // which is the normal state of a ticket branch before it is merged back).
       const head = revParse(path, 'HEAD')
       const ok = basedOnIntegration(path, tip)
-      const row = {
+      const row: ComboRow = {
         ...base,
         expected: `based on ${entry.integrationBranch}`,
         actual: head,
@@ -160,7 +211,7 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
 
     const locked = entry.productCommit
     const ok = tip === locked
-    const row = {
+    const row: ComboRow = {
       ...base,
       expected: locked,
       actual: tip,
@@ -188,7 +239,7 @@ export function verifyCombination({ root = repoRoot, allowDrift = false } = {}) 
  * The copy case is why a missing declaration is a row rather than a throw:
  * doctor runs against copies that carry combo.json but not android/.
  */
-function androidSourceRow(root, source) {
+function androidSourceRow(root: string, source: ComboAndroidSource | undefined): ComboRow {
   const path = typeof source?.declaration === 'string' && source.declaration !== ''
     ? resolve(root, source.declaration)
     : null
@@ -200,7 +251,7 @@ function androidSourceRow(root, source) {
     lock: 'declaration',
     expected,
   }
-  const fail = (failure, actual = null) => ({ ...base, actual, ok: false, failure })
+  const fail = (failure: string, actual: unknown = null): ComboRow => ({ ...base, actual, ok: false, failure })
   const remedy = expected === null ? '' : `; set "commit" in ${path ?? 'the declaration'} to ${expected},`
     + ' or update combo.json androidSource.commit when the snapshot intentionally moves'
 
@@ -214,7 +265,9 @@ function androidSourceRow(root, source) {
   try {
     declared = JSON.parse(readFileSync(path, 'utf8')).commit
   } catch (error) {
-    return fail(`android source: ${path} must be JSON with a "commit" field: ${error.message}`)
+    // The caught value is whatever the read or the parse threw; the report only
+    // reads its `message`, exactly as the pre-migration code did.
+    return fail(`android source: ${path} must be JSON with a "commit" field: ${(error as Error).message}`)
   }
   if (declared === expected) return { ...base, actual: declared, ok: true }
   const actual = typeof declared === 'string' ? declared : null
@@ -223,7 +276,7 @@ function androidSourceRow(root, source) {
 }
 
 /** What the table's result column says for one row. */
-function resultLabel(row) {
+function resultLabel(row: ComboRow): string {
   if (!row.ok) return 'MISMATCH'
   if (row.lock === 'declaration') return 'ok (declaration matches)'
   if (row.lock === 'integration-branch') {
@@ -235,10 +288,10 @@ function resultLabel(row) {
 /**
  * The package a module specifier belongs to: `@scope/name` for both
  * `@scope/name` and `@scope/name/subpath`.
- * @param {string} specifier
- * @returns {string}
+ * @param specifier
+ * @returns
  */
-export function packageOf(specifier) {
+export function packageOf(specifier: string): string {
   return specifier.split('/').slice(0, 2).join('/')
 }
 
@@ -246,10 +299,10 @@ export function packageOf(specifier) {
  * The npm scope a package name belongs to (`@scope/`), or undefined for an
  * unscoped name. Product rows are recognized by scope rather than by an
  * enumerated package list.
- * @param {string} name
- * @returns {string|undefined}
+ * @param name
+ * @returns
  */
-function scopeOf(name) {
+function scopeOf(name: string): string | undefined {
   return name.startsWith('@') ? `${name.split('/')[0]}/` : undefined
 }
 
@@ -265,12 +318,12 @@ function scopeOf(name) {
  *
  * Idempotent: the result contains no group rows, so flattening it again returns
  * the same rows.
- * @param {object[]} entries
- * @returns {object[]}
+ * @param entries
+ * @returns
  */
-export function flattenEntries(entries) {
-  const leaves = []
-  const visit = (list, inheritedDisabled) => {
+export function flattenEntries(entries: EntryOptions[]): EntryOptions[] {
+  const leaves: EntryOptions[] = []
+  const visit = (list: EntryOptions[], inheritedDisabled: boolean) => {
     for (const entry of list) {
       const disabled = inheritedDisabled || entry.disabled === true
       if (entry.group) {
@@ -296,11 +349,11 @@ export function flattenEntries(entries) {
  * under `<profileDir>/node_modules/<scope>`. This is the installed set, not the
  * declared set: a directory that no manifest declares still counts as installed
  * and must be reported.
- * @param {string} profileDir
- * @param {string} bundlePackage
- * @returns {string[]} package names, sorted.
+ * @param profileDir
+ * @param bundlePackage
+ * @returns package names, sorted.
  */
-function installedProductPackages(profileDir, bundlePackage) {
+function installedProductPackages(profileDir: string, bundlePackage: string): string[] {
   const scope = scopeOf(bundlePackage)
   if (scope === undefined) return []
   const dir = join(profileDir, 'node_modules', scope)
@@ -319,16 +372,18 @@ function installedProductPackages(profileDir, bundlePackage) {
  * whose public exports read manifests and judge compatibility. Loading it in
  * one place keeps the package set and the compatibility judgement from reading
  * two different installations.
- * @param {{
- *   binName: string,
- *   bundlePackage: string,
- *   installAnchor: string,
- *   profileDir: string,
- * }} options
- * @returns {{boot: any, layer: object|undefined, skipped: object|undefined}}
+ * @param options
+ * @returns
  */
-function installedBundle({ binName, bundlePackage, installAnchor, profileDir }) {
-  const boot = createRequire(installAnchor)('@deepseek-ai/dsh-app-boot')
+function installedBundle({ binName, bundlePackage, installAnchor, profileDir }: {
+  binName: string
+  bundlePackage: string
+  installAnchor: string
+  profileDir: string
+}): InstalledBundle {
+  // The module is loaded from the INSTALLED profile, so the runtime copy is the
+  // one a boot would read; the cast names the surface this script calls.
+  const boot = createRequire(installAnchor)('@deepseek-ai/dsh-app-boot') as DshAppBoot
   const profile = boot.loadProfileDirectory(binName, profileDir, installAnchor)
   return {
     boot,
@@ -345,12 +400,12 @@ function installedBundle({ binName, bundlePackage, installAnchor, profileDir }) 
  * reported instead, because doctor's job is to collect failures rather than
  * abort on the first one. The message names the installed manifest, the
  * package, and the rule it broke.
- * @param {string} manifestPath - the installed bundle's manifest.
- * @param {string} containmentRoot - the profile's node_modules.
- * @param {{name: string, specifier: unknown, target?: string, rule: 'file'|'containment'|'duplicate'}} refusal
- * @returns {string}
+ * @param manifestPath - the installed bundle's manifest.
+ * @param containmentRoot - the profile's node_modules.
+ * @param refusal
+ * @returns
  */
-function installedAdmissionFailure(manifestPath, containmentRoot, { name, specifier, target, rule }) {
+function installedAdmissionFailure(manifestPath: string, containmentRoot: string, { name, specifier, target, rule }: AdmissionRefusal): string {
   if (rule === 'file') {
     return `${manifestPath} declares ${name} as ${JSON.stringify(specifier)};`
       + ' an installed product package is linked, not fetched, so the bundle must declare each one as file:<path>'
@@ -389,20 +444,20 @@ function installedAdmissionFailure(manifestPath, containmentRoot, { name, specif
  * the declaration: a package present there but absent from the expected set
  * (the bundle, the probe, or a declared dependency) is a package the profile
  * boots with that no manifest owns, and it fails here by name.
- * @param {{
- *   binName: string,
- *   bundlePackage: string,
- *   probePackage: string,
- *   installAnchor: string,
- *   profileDir: string,
- * }} options
- * @returns {{ok: boolean, declared: string[], mounted: {id: string, name: string, package: string}[], failures: string[]}}
+ * @param options
+ * @returns
  */
-export function verifyBundlePackages({ binName, bundlePackage, probePackage, installAnchor, profileDir }) {
+export function verifyBundlePackages({ binName, bundlePackage, probePackage, installAnchor, profileDir }: {
+  binName: string
+  bundlePackage: string
+  probePackage: string
+  installAnchor: string
+  profileDir: string
+}): { ok: boolean; declared: string[]; mounted: { id: string; name: string; package: string }[]; failures: string[] } {
   // Loaded the same way the launcher boots: the profile's bundle layer, the
   // patches it declares, and the rows composed from them.
   const { boot, layer, skipped } = installedBundle({ binName, bundlePackage, installAnchor, profileDir })
-  const failures = []
+  const failures: string[] = []
   if (skipped !== undefined) {
     failures.push(`${bundlePackage} was not loaded from ${profileDir}: ${skipped.reason}`)
   }
@@ -444,8 +499,8 @@ export function verifyBundlePackages({ binName, bundlePackage, probePackage, ins
     .map(row => ({ id: String(row.id), name: row.name, package: packageOf(row.name) }))
 
   const declaredSet = new Set(declared)
-  const mountedPackages = new Set()
-  const seen = new Map()
+  const mountedPackages = new Set<string>()
+  const seen = new Map<string, string[]>()
   for (const row of mounted) {
     if (!declaredSet.has(row.package)) {
       failures.push(`bundle row "${row.id}" mounts ${row.name}, but ${bundlePackage} does not declare ${row.package}`)
@@ -467,8 +522,10 @@ export function verifyBundlePackages({ binName, bundlePackage, probePackage, ins
     try {
       boot.resolveBundleDir(binName, name, installAnchor, profileDir)
     } catch (error) {
+      // The caught value is whatever the loader threw; the report only reads
+      // its `message`, exactly as the pre-migration code did.
       failures.push(`${bundlePackage} declares ${name}, but it is not installed in ${profileDir};`
-        + ` run 'ourfairy-backend start --reinstall': ${error.message}`)
+        + ` run 'ourfairy-backend start --reinstall': ${(error as Error).message}`)
     }
   }
   // The expected set is what the launcher installs: the bundle itself, the
@@ -501,18 +558,18 @@ export function verifyBundlePackages({ binName, bundlePackage, probePackage, ins
  * probe are included: the bundle declares no peers, and the probe declares one
  * `@ourfairy/*` peer, which this judgement ignores because it judges only dsh
  * peers; a reader still sees every installed product package accounted for.
- * @param {{
- *   binName: string,
- *   bundlePackage: string,
- *   installAnchor: string,
- *   profileDir: string,
- * }} options
- * @returns {{ok: boolean, dshVersion: string, checked: string[], failures: string[]}}
+ * @param options
+ * @returns
  */
-export function verifyPluginCompatibility({ binName, bundlePackage, installAnchor, profileDir }) {
+export function verifyPluginCompatibility({ binName, bundlePackage, installAnchor, profileDir }: {
+  binName: string
+  bundlePackage: string
+  installAnchor: string
+  profileDir: string
+}): { ok: boolean; dshVersion: string; checked: string[]; failures: string[] } {
   const { boot, layer, skipped } = installedBundle({ binName, bundlePackage, installAnchor, profileDir })
   const dshVersion = boot.getDshRuntimeVersion()
-  const failures = []
+  const failures: string[] = []
   if (skipped !== undefined) {
     failures.push(`${bundlePackage} was not loaded from ${profileDir}: ${skipped.reason}`)
   }
@@ -521,13 +578,15 @@ export function verifyPluginCompatibility({ binName, bundlePackage, installAncho
     return { ok: false, dshVersion, checked: [], failures }
   }
 
-  const checked = []
+  const checked: string[] = []
   for (const name of installedProductPackages(profileDir, bundlePackage)) {
     let installed
     try {
       installed = boot.readProfileManifest(binName, boot.resolveBundleDir(binName, name, installAnchor, profileDir))
     } catch (error) {
-      failures.push(`${name} is installed in ${profileDir} but its manifest is not readable: ${error.message}`)
+      // The caught value is whatever the loader threw; the report only reads
+      // its `message`, exactly as the pre-migration code did.
+      failures.push(`${name} is installed in ${profileDir} but its manifest is not readable: ${(error as Error).message}`)
       continue
     }
     const issue = boot.evaluatePluginCompatibility(installed, {}, dshVersion)
@@ -560,14 +619,14 @@ const SESSION_HISTORY_EXPORT = '@deepseek-ai/dsh-agent/session-history'
  * Every required native capability that is not mounted, plus the public
  * history export when it does not resolve.
  *
- * @param {object[]} rows - the composed profile rows, as dsh's loader returns them;
+ * @param rows - the composed profile rows, as dsh's loader returns them;
  *   rows nested in a group's `config` are mounted too, so the lookup flattens,
  *   including the disabled state inherited from an ancestor group.
- * @param {(specifier: string) => string} resolveExport - resolves from the dsh installation.
- * @returns {string[]} one message per missing, disabled, or drifted capability.
+ * @param resolveExport - resolves from the dsh installation.
+ * @returns one message per missing, disabled, or drifted capability.
  */
-export function nativeCapabilityFailures(rows, resolveExport) {
-  const failures = []
+export function nativeCapabilityFailures(rows: EntryOptions[], resolveExport: (specifier: string) => string): string[] {
+  const failures: string[] = []
   const mounted = new Map(flattenEntries(rows).map(row => [row.id, row]))
   for (const { row: id, name } of REQUIRED_NATIVE_ROWS) {
     const entry = mounted.get(id)
@@ -590,8 +649,10 @@ export function nativeCapabilityFailures(rows, resolveExport) {
   try {
     resolveExport(SESSION_HISTORY_EXPORT)
   } catch (error) {
+    // The caught value is whatever the resolver threw; the report only reads
+    // its `message`, exactly as the pre-migration code did.
     failures.push(`required native capability missing: ${SESSION_HISTORY_EXPORT} does not resolve from the dsh installation`
-      + ` (${error.message}); check out the dsh commit combo.json locks and run 'build:lib:host' in that checkout`)
+      + ` (${(error as Error).message}); check out the dsh commit combo.json locks and run 'build:lib:host' in that checkout`)
   }
   return failures
 }
@@ -601,18 +662,25 @@ export function nativeCapabilityFailures(rows, resolveExport) {
  *
  * The profile is read through dsh's own loader (`dsh-app-boot`), so the rows
  * checked are the rows a boot would mount, including the profile's user layer.
- * @param {{binName: string, bundlePackage: string, installAnchor: string, profileDir: string}} options
- * @returns {{ok: boolean, failures: string[], checked: string[]}}
+ * @param options
+ * @returns
  */
-export function verifyInstalledNativeCapabilities({ binName, bundlePackage, installAnchor, profileDir }) {
+export function verifyInstalledNativeCapabilities({ binName, bundlePackage, installAnchor, profileDir }: {
+  binName: string
+  bundlePackage: string
+  installAnchor: string
+  profileDir: string
+}): { ok: boolean; failures: string[]; checked: string[] } {
   // The same loader read the bundle-package check performs: what a boot would
   // mount, including the profile's own layer.
-  let installed
+  let installed: InstalledBundle
   try {
     installed = installedBundle({ binName, bundlePackage, installAnchor, profileDir })
   } catch (error) {
+    // The caught value is whatever the loader threw; the report only reads
+    // its `message`, exactly as the pre-migration code did.
     return { ok: false, checked: [], failures: [`the installed profile ${profileDir} could not be read through`
-      + ` @deepseek-ai/dsh-app-boot (${error.message}); check out and build the dsh commit combo.json locks,`
+      + ` @deepseek-ai/dsh-app-boot (${(error as Error).message}); check out and build the dsh commit combo.json locks,`
       + ` then run 'npm run backend:start -- --reinstall'`] }
   }
   const { boot, profile, layer, skipped } = installed
@@ -632,7 +700,7 @@ export function verifyInstalledNativeCapabilities({ binName, bundlePackage, inst
   }
 }
 
-function printTable(rows) {
+function printTable(rows: ComboRow[]): string {
   const header = ['row', 'branch', 'expected', 'actual', 'result']
   const cells = rows.map((row) => [
     row.key,
@@ -641,12 +709,13 @@ function printTable(rows) {
     row.actual === null || row.actual === undefined ? 'MISSING' : String(row.actual).slice(0, 16),
     resultLabel(row),
   ])
-  const widths = header.map((cell, index) => Math.max(cell.length, ...cells.map(row => row[index].length)))
-  const line = row => row.map((cell, index) => cell.padEnd(widths[index])).join('  ')
+  // Every row has one cell per column, so the widths and the cells line up.
+  const widths = header.map((cell, index) => Math.max(cell.length, ...cells.map(row => row[index]!.length)))
+  const line = (row: string[]) => row.map((cell, index) => cell.padEnd(widths[index]!)).join('  ')
   return [line(header), line(widths.map(width => '-'.repeat(width))), ...cells.map(line)].join('\n')
 }
 
-function printShow(combo) {
+function printShow(combo: Combo): string {
   const lines = [`combination: ${combo.product} (schemaVersion ${combo.schemaVersion})`]
   for (const [key, entry] of Object.entries(combo.repos)) {
     lines.push(`${key} (${entry.role}, lock: ${entry.lock ?? 'commit'})`)
@@ -663,15 +732,17 @@ function printShow(combo) {
     const source = combo.androidSource
     lines.push(`android source (${source.role}, lock: declaration)`)
     lines.push(`  commit                ${source.commit}`)
-    lines.push(`  declaration           ${resolve(repoRoot, source.declaration)}`)
+    lines.push(`  declaration           ${resolve(repoRoot, source.declaration!)}`)
   }
-  lines.push(`backend                 profile ${combo.backend.profileName}; bundle ${combo.backend.bundlePackage} (${combo.backend.bundlePathInRepo})`)
-  lines.push(`launcher                ${combo.backend.launcher}; ${combo.backend.pnpmInvocation}`)
+  // The recorded file is the authority for the backend pins; `readCombination`
+  // is what validates them, and `show` prints what the file holds.
+  lines.push(`backend                 profile ${combo.backend!.profileName}; bundle ${combo.backend!.bundlePackage} (${combo.backend!.bundlePathInRepo})`)
+  lines.push(`launcher                ${combo.backend!.launcher}; ${combo.backend!.pnpmInvocation}`)
   lines.push('research baseline       docs/research/README.md (upstream SHAs, not product commits)')
   return lines.join('\n')
 }
 
-function main(argv) {
+function main(argv: string[]): number {
   const args = argv.slice(2)
   const command = args.find(arg => !arg.startsWith('-')) ?? 'verify'
   const json = args.includes('--json')

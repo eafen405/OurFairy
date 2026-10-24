@@ -14,12 +14,12 @@
  * path was put there by something else and is left alone.
  *
  * Usage:
- *   node scripts/link-types.mjs            # link this repository's root
+ *   node scripts/link-types.ts             # link this repository's root
  */
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { readCombo, repoPath } from './combo.mjs'
-import { productPackages } from './ourfairy-composition.mjs'
+import { readCombo, repoPath } from './combo.ts'
+import { productPackages } from './ourfairy-composition.ts'
 
 /** The repository this module lives in; the default root of every function. */
 export const repoRoot = resolve(import.meta.dirname, '..')
@@ -27,11 +27,11 @@ export const repoRoot = resolve(import.meta.dirname, '..')
 /**
  * The dsh packages the checkout publishes: `packages/<group>/<name>` and
  * `vendor/<name>`.
- * @param {string} root - the dsh checkout.
- * @returns {string[]} absolute package directories.
+ * @param root - the dsh checkout.
+ * @returns absolute package directories.
  */
-export function dshPackageDirs(root) {
-  const dirs = []
+export function dshPackageDirs(root: string): string[] {
+  const dirs: string[] = []
   const packages = join(root, 'packages')
   for (const group of readdirSync(packages, { withFileTypes: true })) {
     if (!group.isDirectory()) continue
@@ -52,11 +52,12 @@ export function dshPackageDirs(root) {
 
 /**
  * One package's published name, read from its manifest.
- * @param {string} dir - absolute package directory.
- * @returns {string|undefined}
+ * @param dir - absolute package directory.
+ * @returns
  */
-function packageNameOf(dir) {
-  const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+function packageNameOf(dir: string): string | undefined {
+  // The manifest is the package's own file; npm declares `name` as a string.
+  const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { name?: unknown }
   return typeof manifest.name === 'string' && manifest.name !== '' ? manifest.name : undefined
 }
 
@@ -66,12 +67,12 @@ function packageNameOf(dir) {
  * A link this script created is replaced; a real directory at that path was
  * put there by something else and is kept, so the build never deletes a
  * developer's own install.
- * @param {string} nodeModules - the farm's directory.
- * @param {string} name - the package name to publish.
- * @param {string} target - the absolute directory to link to.
- * @returns {boolean} whether the link was made.
+ * @param nodeModules - the farm's directory.
+ * @param name - the package name to publish.
+ * @param target - the absolute directory to link to.
+ * @returns whether the link was made.
  */
-function linkInto(nodeModules, name, target) {
+function linkInto(nodeModules: string, name: string, target: string): boolean {
   const link = join(nodeModules, name)
   mkdirSync(dirname(link), { recursive: true })
   const existing = lstatSync(link, { throwIfNoEntry: false })
@@ -89,10 +90,10 @@ function linkInto(nodeModules, name, target) {
  *
  * The farm is a generated artifact: it is rebuilt rather than copied, because a
  * copied farm carries the machine paths of the checkout it was made in.
- * @param {string} [root] - repository root.
- * @returns {{linked: number, kept: number, nodeModules: string}} what was made.
+ * @param [root] - repository root.
+ * @returns what was made.
  */
-export function linkTypes(root = repoRoot) {
+export function linkTypes(root = repoRoot): { linked: number; kept: number; nodeModules: string } {
   const { combo } = readCombo(root)
   const dshDir = repoPath(combo, 'dsh', root)
   const nodeModules = join(root, 'node_modules')
@@ -100,7 +101,7 @@ export function linkTypes(root = repoRoot) {
 
   let linked = 0
   let kept = 0
-  const link = (name, target) => {
+  const link = (name: string, target: string) => {
     if (linkInto(nodeModules, name, target)) linked += 1
     else kept += 1
   }
@@ -119,7 +120,7 @@ export function linkTypes(root = repoRoot) {
   return { linked, kept, nodeModules }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.main) {
   const { linked, kept, nodeModules } = linkTypes(repoRoot)
   console.log(`linked ${linked} package(s) into ${nodeModules}${kept > 0 ? `; kept ${kept} real directory/directories` : ''}`)
 }
