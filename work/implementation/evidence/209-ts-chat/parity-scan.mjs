@@ -178,10 +178,112 @@ function lineDelta(before, after) {
   return difference
 }
 
+/**
+ * The token stream of a text: the code with every formatting difference removed.
+ *
+ * The line report is layout-sensitive, so the printer wrapping one statement
+ * over two lines reads as a difference. The token stream is not: it keeps the
+ * order and the token boundaries and drops only whitespace and comments, so it
+ * is the structure-insensitive comparison the scan trusts.
+ *
+ * Template literals need their own handling. A plain `scan()` loop swallows the
+ * template tail AND every token after it into one `FirstTemplateToken`, so a
+ * file with a template literal would only ever be compared up to its first
+ * backtick. Each template is therefore walked part by part: the head, then the
+ * substitution (braces counted, so a nested object literal does not end it),
+ * then `reScanTemplateToken` advances to the middle or the tail.
+ * @param {string} text - the executable text.
+ * @returns {string[]} the token texts, in order.
+ */
+function tokenStream(text) {
+  const scanner = ts.createScanner(ts.ScriptTarget.ES2024, true, ts.LanguageVariant.Standard, text)
+  const tokens = []
+  let kind = scanner.scan()
+  while (kind !== ts.SyntaxKind.EndOfFileToken) {
+    tokens.push(scanner.getTokenText())
+    if (kind === ts.SyntaxKind.TemplateHead || kind === ts.SyntaxKind.TemplateMiddle) {
+      let depth = 0
+      for (;;) {
+        kind = scanner.scan()
+        if (kind === ts.SyntaxKind.OpenBraceToken) depth += 1
+        else if (kind === ts.SyntaxKind.CloseBraceToken) {
+          if (depth === 0) break
+          depth -= 1
+        }
+        tokens.push(scanner.getTokenText())
+      }
+      kind = scanner.reScanTemplateToken()
+      tokens.push(scanner.getTokenText())
+      kind = scanner.scan()
+      continue
+    }
+    kind = scanner.scan()
+  }
+  return tokens
+}
+
+/**
+ * The difference between two token streams.
+ *
+ * The comparison is ORDER-SENSITIVE: the two streams must agree token for
+ * token, so a renamed local, a reordered statement, a swapped argument or a
+ * renamed property all show up. The multiset summary is only a reading aid on
+ * top of that.
+ * @param {string} before - the pre-migration text.
+ * @param {string} after - the migrated text.
+ * @returns {{identical: boolean, first: number, onlyOld: string[], onlyNew: string[], oldTokens: string[], newTokens: string[]}} the difference.
+ */
+function tokenDelta(before, after) {
+  const oldTokens = tokenStream(before)
+  const newTokens = tokenStream(after)
+  const onlyOld = []
+  const remaining = [...newTokens]
+  for (const token of oldTokens) {
+    const index = remaining.indexOf(token)
+    if (index === -1) onlyOld.push(token)
+    else remaining.splice(index, 1)
+  }
+  let first = 0
+  while (first < oldTokens.length && first < newTokens.length && oldTokens[first] === newTokens[first]) first++
+  const identical = oldTokens.length === newTokens.length && first === oldTokens.length
+  return { identical, first, onlyOld, onlyNew: remaining, oldTokens, newTokens }
+}
+
+/**
+ * The difference between two token streams, as one readable line.
+ * @param {string} before - the pre-migration text.
+ * @param {string} after - the migrated text.
+ * @returns {string} the report.
+ */
+function tokenReport(before, after) {
+  const { identical, first, onlyOld, onlyNew, oldTokens, newTokens } = tokenDelta(before, after)
+  if (identical) return 'identical'
+  const show = tokens => tokens.length === 0 ? 'none' : tokens.map(token => `'${token}'`).join(' ')
+  return `differ — first at token #${first} (${oldTokens.length} old / ${newTokens.length} new); only old: ${show(onlyOld)}; only new: ${show(onlyNew)}`
+}
+
+/**
+ * The tokens around the first difference, so a reader can see what changed.
+ * @param {string} before - the pre-migration text.
+ * @param {string} after - the migrated text.
+ * @returns {string[]} the report lines.
+ */
+function tokenContext(before, after) {
+  const { identical, first, oldTokens, newTokens } = tokenDelta(before, after)
+  if (identical) return []
+  const window = 6
+  const from = Math.max(0, first - 2)
+  return [
+    `  old: ${oldTokens.slice(from, first + window).join(' ')}`,
+    `  new: ${newTokens.slice(from, first + window).join(' ')}`,
+  ]
+}
+
 const before = path => execFileSync('git', ['show', `${base}:${path}`], { cwd: repoRoot, encoding: 'utf8' })
 
 let operatorDeltas = 0
 let literalDeltas = 0
+let tokenDeltas = 0
 for (const [oldPath, newPath, distPath] of files) {
   const oldText = executable(before(oldPath), oldPath)
   const newText = executable(readFileSync(join(repoRoot, newPath), 'utf8'), newPath)
@@ -190,29 +292,37 @@ for (const [oldPath, newPath, distPath] of files) {
   console.log(`# ${newPath}`)
   console.log(`source operators: ${sourceOperators.length === 0 ? 'identical' : sourceOperators.join(', ')}`)
   console.log(`source literals: ${sourceLiterals.length === 0 ? 'identical' : sourceLiterals.join(', ')}`)
+  console.log(`source tokens: ${tokenReport(oldText, newText)}`)
+  for (const line of tokenContext(oldText, newText)) console.log(line)
   if (sourceOperators.length > 0) operatorDeltas += 1
   if (sourceLiterals.length > 0) literalDeltas += 1
+  if (!tokenDelta(oldText, newText).identical) tokenDeltas += 1
+  // The line report is layout-sensitive and is printed for EVERY file, so a
+  // change that keeps the operator counts and the literal multiset exactly is
+  // still line-compared. The token report above is the structure-insensitive
+  // answer to the same question.
+  const sourceLines = lineDelta(oldText, newText)
+  if (sourceLines.length > 0) {
+    console.log('source lines (layout-sensitive):')
+    for (const line of sourceLines) console.log(`  ${line}`)
+  }
   if (distPath !== null) {
     const runtimeText = executable(readFileSync(join(repoRoot, distPath), 'utf8'), distPath)
     const runtimeOperators = operatorDelta(operatorCounts(oldText), operatorCounts(runtimeText))
     const runtimeLiterals = literalDelta(literalCounts(oldText), literalCounts(runtimeText))
     console.log(`runtime operators: ${runtimeOperators.length === 0 ? 'identical' : runtimeOperators.join(', ')}`)
     console.log(`runtime literals: ${runtimeLiterals.length === 0 ? 'identical' : runtimeLiterals.join(', ')}`)
+    console.log(`runtime tokens: ${tokenReport(oldText, runtimeText)}`)
+    for (const line of tokenContext(oldText, runtimeText)) console.log(line)
     if (runtimeOperators.length > 0) operatorDeltas += 1
     if (runtimeLiterals.length > 0) literalDeltas += 1
-  }
-  if (sourceOperators.length > 0 || sourceLiterals.length > 0) {
-    console.log('lines:')
-    for (const line of lineDelta(oldText, newText)) console.log(`  ${line}`)
-  }
-  if (distPath !== null) {
-    const runtimeText = executable(readFileSync(join(repoRoot, distPath), 'utf8'), distPath)
+    if (!tokenDelta(oldText, runtimeText).identical) tokenDeltas += 1
     const runtimeLines = lineDelta(oldText, runtimeText)
     if (runtimeLines.length > 0) {
-      console.log('runtime lines:')
+      console.log('runtime lines (layout-sensitive):')
       for (const line of runtimeLines) console.log(`  ${line}`)
     }
   }
   console.log('')
 }
-console.log(`${operatorDeltas} operator delta(s), ${literalDeltas} literal delta(s) across ${files.length} files`)
+console.log(`${operatorDeltas} operator delta(s), ${literalDeltas} literal delta(s), ${tokenDeltas} token delta(s) across ${files.length} files`)

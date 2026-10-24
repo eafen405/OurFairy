@@ -126,6 +126,8 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3，`zod` 4.4.3（链接�
   - `(taskId as string)`（两处）：任务是按 id 找到的，所以请求里的 `taskId` 就是那个字符串。
 - `backend/chat/src/units.ts`
   - `status as keyof typeof TASK_STATUS`：`Object.hasOwn` 是「这张表认得这个状态」的权威。
+  - `keyOf(items[middle] as T)`（`firstAtLeast`）：二分查找的不变式是 `low < high <= items.length`，
+    于是 `middle < high <= items.length`，下标必在界内。断言**命名这个界**，不是迁移前没有的一道检查。
   - `view.source.rpcId as string`：上面的过滤器只留 `rpcId` 为真的消息，所以它是非空字符串。
   - `rows[existing] as TranscriptRow` / `rows[index] as TranscriptRow` / `state.rows[move.index] as TranscriptRow`
     / `state.rows[index] as TranscriptRow`：下标来自 `state.index` / `attemptsByTurn` / `moves`，
@@ -154,7 +156,7 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3，`zod` 4.4.3（链接�
 | `index.ts` `postHandler({...})` | `respond`（可能是 `undefined`）直接传 | `...respond !== undefined ? { respond } : {}` | 等价：`postHandler` 的默认形参对 `undefined` 与「属性缺席」同样生效 |
 | `index.ts` 观察路由的 responder | `(response, subscribe) => {...}` | `(response, result) => { const subscribe = result; ... }` | 等价：`result` 就是 `handle` 返回的观察者 |
 | `service.ts` / `jobs.ts` 整数守卫 | `!Number.isSafeInteger(x)` | `!isSafeInteger(x)` | 等价：守卫就是 `Number.isSafeInteger(value)`，同一个调用、同一个判定 |
-| `runtime.ts` `open()` | `this.#live.get(sessionId)` | `const key = sessionId` 后 `this.#live.get(key)` | 等价：同一个值 |
+| `runtime.ts` `open()` | `this.#live.get(sessionId)` | `const key = sessionId as SessionId` 后 `this.#live.get(key)` | 等价：同一个值取成局部量；断言被擦除，`key` 与 `sessionId` 是同一个字符串 |
 | `runtime.ts` `agent/error` | `error?.message ?? String(error)` | `(error as { message?: string } \| null \| undefined)?.message ?? String(error)` | 等价：断言被擦除；被抛值是 `null`/`undefined` 仍走 `String(error)`，被抛值是字符串仍没有 `.message` |
 | `runtime.ts` `agent/status` 的 reject | `error.message` | `(error as { message?: string }).message` | 等价：断言被擦除；非 Error 的 reject 仍得 `undefined` |
 | `runtime.ts` `publish()` 的 catch | `observer.listener(undefined, error)` | `observer.listener(undefined, error as Error)` | 等价：断言被擦除；观察者拿到的就是被捕获的值 |
@@ -181,7 +183,7 @@ Node v24.18.0，编译用 dsh 自带的 TypeScript 6.0.3，`zod` 4.4.3（链接�
 | `units.ts` `TASK_STATUS[status]` | 同左 | `TASK_STATUS[status as keyof typeof TASK_STATUS]` | 等价：`Object.hasOwn` 是权威 |
 | `spill-read.ts` spill 根 | `ctx.get('spillStore')?.root` | `const store = ctx.get('spillStore')` 后 `store?.root` | 等价：store 只取一次，可选链不变 |
 
-### 机械复查：运算符与字面量逐文件比对
+### 机械复查：运算符、字面量与 token 流逐文件比对
 
 可复跑脚本：[`parity-scan.mjs`](parity-scan.mjs)。
 
@@ -195,41 +197,60 @@ $ node work/implementation/evidence/209-ts-chat/parity-scan.mjs
 1. 逐文件统计每个运算符（`?.`、`??`、`??=`、`||`、`&&`、`===`、`!==`、`==`、`!=`、`!`、
    `=>`、算术与位运算…）——字符串内容先遮住，所以字面量里的运算符不计入；
 2. 逐文件统计每一个字符串与数字字面量（从 AST 读，不把长串里的短串数两次）；
-3. 打印只有一侧有的行（`lines:` 是源码对源码，`runtime lines:` 是迁移前对 `dist/*.js`），
-   好逐条判定。
+3. 逐文件比对 **token 流**（顺序敏感，见下）并打印只有一侧有的行，好逐条判定。
 
-逐行差异全部落在上面那张「行为面」的表里：除 import 说明符、`respond` 的条件展开、
-`isSafeInteger` 守卫、几个 `const` 局部量、`productMessage` 视图、`const data` 别名的去留、
-`begin()` 的返回值之外，**没有别的行差异**。
+**token 流这一层是补上的，不是原来的。** 原脚本只有「按计数差值门控的逐行比对」：只要运算符计数
+与字面量多重集都相同，文件就**根本不做行级比对**。于是「改个局部量名、把两条语句换个顺序、
+把两个实参对调、改个属性名」这类改动会静默通过——而它们恰恰是迁移里最容易手滑的地方。
+
+token 流用 TypeScript 的 scanner 取，**顺序敏感**：两个流必须逐 token 对上。扫描器对模板字面量
+要特别处理——普通 `scan()` 循环会把模板尾巴**以及它之后的全部代码**吞成一个 `FirstTemplateToken`，
+于是含模板的文件只会被比到第一个反引号为止。脚本因此逐段走模板：head → 替换式（数括号，
+嵌套对象字面量不会提前收尾）→ `reScanTemplateToken` 推进到 middle 或 tail。
+
+补上这一层之后，脚本**自己找到了三处此前没被记录的东西**（见下表「token 差异」列）。
+
+> 更正：先前这节写的是「逐行差异全部落在上面那张『行为面』的表里」。**这句话不成立**——
+> `queues.ts` 的运行期行差异是 tsc 打印器换行造成的假阳性，并不在那张表里；而且在 token 流
+> 这一层补上之前，行级比对对「计数相同」的文件根本没跑过，说「全部落在表里」是没有依据的。
+> 现在这两点都被脚本本身覆盖：行比对对每个文件无条件执行，token 比对把结构差异也照出来。
 
 结果（`source` = 迁前 `.mjs` 对迁后 `.ts`；`runtime` = 迁前 `.mjs` 对 `dist/*.js`）：
 
-| 文件 | 运算符差异 | 字面量差异 | 判定 |
-| --- | --- | --- | --- |
-| `src/index.ts` | `!== 0→1`、`? 0→1`、`: 24→25`、`= 8→9` | 只有 import 说明符 | `respond` 的条件展开（`exactOptionalPropertyTypes` 不接受把 `undefined` 传给可选属性），见上面那张表 |
-| `src/jobs.ts` | `=> 5→6`、`= 12→13` | 只有 import 说明符 | `isSafeInteger` 类型守卫（一个箭头、一个绑定） |
-| `src/persona.ts` | 无 | 无 | 一字未改 |
-| `src/queues.ts` | 无 | 无 | 一字未改 |
-| `src/runtime-facade.ts` | 无 | 无 | 一字未改 |
-| `src/runtime.ts` | `= 92→93` | 只有 import 说明符 | `open()` 里 `const key = sessionId`（同一个值取成局部量） |
-| `src/service.ts` | `=> 5→6`、`= 21→28` | 只有 import 说明符 | `isSafeInteger` 守卫（+1/+1）加 6 个 `const` 局部量，每个都装着迁移前那个内联表达式的同一个值 |
-| `src/spill-read.ts` | `= 2→3` | 无 | `const store = ctx.get('spillStore')`（store 仍只取一次） |
-| `src/units.ts` | `= 144→148` | 无 | 4 个 `const view = productMessage(message)`（+4）、1 个 `const candidate`（+1）、1 个 `const episode`（+1）、减去 2 个删掉的 `const data = event.data` 别名（−2） |
-| `test-support/fail-outlets.ts` | 无 | 无 | 一字未改 |
-| `test-support/frame-gap.ts` | 无 | 无 | 一字未改 |
-| `test-support/lost-event.ts` | 无 | 无 | 一字未改 |
+| 文件 | 运算符差异 | 字面量差异 | token 差异 | 判定 |
+| --- | --- | --- | --- | --- |
+| `src/index.ts` | `!== 0→1`、`? 0→1`、`: 24→25`、`= 8→9` | 只有 import 说明符 | import 说明符；`respond` 的条件展开 | `respond` 的条件展开（`exactOptionalPropertyTypes` 不接受把 `undefined` 传给可选属性），见上面那张表 |
+| `src/jobs.ts` | `=> 5→6`、`= 12→13` | 只有 import 说明符 | import 说明符；`import { requestedSessionId }`；`isSafeInteger` 守卫 | `isSafeInteger` 类型守卫（一个箭头、一个绑定）+ 新导出 |
+| `src/persona.ts` | 无 | 无 | **无** | 一字未改 |
+| `src/queues.ts` | 无 | 无 | **无** | 一字未改（模板字面量逐 token 相同） |
+| `src/runtime-facade.ts` | 无 | 无 | **无** | 一字未改 |
+| `src/runtime.ts` | `= 92→93` | 只有 import 说明符 | import 说明符；`sessionId` → `key` 的局部改名（4 处 + 模板里 1 处）；新导出 `requestedSessionId` | `open()` 里 `const key = sessionId as SessionId`（同一个值取成局部量并断言品牌） |
+| `src/service.ts` | `=> 5→6`、`= 21→28` | 只有 import 说明符 | import 说明符；`import { requestedSessionId }`；6 个 `const` 局部量；`isSafeInteger` 守卫 | 局部量每个都装着迁移前那个内联表达式的同一个值，校验时机与顺序不变 |
+| `src/spill-read.ts` | `= 2→3` | 无 | 拆成两条语句：`const store = ctx.get('spillStore')` + `const root = store?.root` | 等价：`ctx.get` 仍只调一次，`?.` 仍在同一处生效（`store` 为 `null`/`undefined` 时两边都得 `undefined`） |
+| `src/units.ts` | `= 144→148` | 无 | 新增 `function productMessage(message)` | 视图助手，返回的就是同一个消息对象 |
+| `test-support/fail-outlets.ts` | 无 | 无 | **无** | 一字未改（去掉了一个多余的类型标注，消掉打印器的行差异假阳性） |
+| `test-support/frame-gap.ts` | 无 | 无 | **无** | 一字未改 |
+| `test-support/lost-event.ts` | 无 | 无 | **无** | 一字未改 |
 
 **字面量差异只有 import 说明符**（`./units.mjs` → `./units.js` 等）：没有任何一条错误码、错误文案、
-路径或阈值改过。
+路径或阈值改过。模板字面量的**内容**由第 2 项（AST 字面量）比对，模板**结构**由第 3 项比对。
 
 **运算符差异里没有任何一处「迁移前有、迁移后没有」的 `?.` / `??` / `||` / `&&`**：
 逐条数下来，迁后每一类都不少于迁前（`index.ts` 的 `!==`/`?` 是新增，`units.ts` 与 `service.ts`
 的 `=` 是新增局部量，其余都是持平）。
 
+**token 流也证明了没有任何一条「迁移前有、迁后没有」的旧标识符**：`persona.ts`、`queues.ts`、
+`runtime-facade.ts` 与三个 test-support 文件的 token 流**逐 token 完全相同**。
+
 ### 表面变化（非行为）
 
 - `LiveSession` 类从「模块私有」变成 `export`（`runtime.ts`）：它的类型要出现在 `SessionRuntime`
   的公开方法签名里，而 `declaration: true` 不允许公开签名引用未导出的名字。类本身的行为一字未改。
+- `runtime.ts` 新增运行期导出 `requestedSessionId(sessionId: unknown): SessionId`：它把「请求体里的
+  session id 是未受信的 `unknown`，但 owned-session 服务已经确认过它是字符串」这件事收成一处断言，
+  `runtime.ts` 与 `service.ts` / `jobs.ts` 都用它。**它是 `dist/runtime.js` 的新运行期导出**，
+  但包的**入口**导出没有变——`dist/index.js` 仍然只导出 `name`、`inject`、`apply`，
+  与迁移前的 `src/index.mjs` 一致，所以已发布的入口面没有增长。
 - `index.ts` 新增两条 `export type { RemoteChat }` / `export type { ChatRuntimeFacade }`：
   **纯类型**再导出，编译产物里没有新的运行期导出；它们的用处是让别的行
   `import type {} from '@ourfairy/dsh-chat'` 就能拿到 `ctx.ourfairyChat` 与 `ctx.ourfairyChatRuntime`
@@ -374,3 +395,39 @@ backend/chat/test-support/lost-event.ts(44,11): error TS6133: 'wrong' is declare
 
 - **探针若给 chat 加，落在 `dist/`**：`tests/product-sources.test.mjs` 的「新增一个已发布文件必须进哈希」
   那条断言按发布集算哈希，chat 的发布集现在是 `dist/`。
+
+## 合并评审后的补记
+
+合并评审（merger）在本票合入前后各审了一遍，提出四点，都已处理：
+
+1. **`units.ts` 的 `ctx.jobs.list(sessionId as SessionId)`** —— 原来是一处品牌断言。改成把
+   `tasksAt` / `tasksAndActivityAt` 的 `sessionId` 形参类型收成 `SessionId`，断言随之消失。
+   这两个函数不在包的 `exports` 里（入口只有 `"."`），所以没有对外的类型面变化。
+2. **`units.ts` 的 `keyOf(items[middle] as T)`** —— 二分查找的不变式保证下标在界内，断言是
+   「命名这个界」，已补上界的不变式说明，并登记进上面的保留断言清单。
+3. **`requestedSessionId` 是 `dist/runtime.js` 的新运行期导出** —— 已补进「表面变化」一节。
+   包的**入口**导出没有变（仍是 `name` / `inject` / `apply`），已发布的入口面没有增长。
+4. **parity 脚本有两处盲区** —— 已修：
+   - 行级比对原先按「运算符计数或字面量多重集有差异」门控，计数相同的文件根本不做行比对。
+     现在**每个文件都无条件行比对**。
+   - 扫描器对模板字面量会把尾巴**及其之后的全部代码**吞成一个 token，于是含模板的文件只会被
+     比到第一个反引号为止。现在逐段走模板（head → 替换式，括号计数 → `reScanTemplateToken`）。
+   - 三个 test-support fixture 没有 `dist` 产物，原先拿不到任何行级比对；现在它们的**源码**
+     层逐行 + 逐 token 比对照做（它们是 noEmit 工程，本来就没有运行期产物）。
+
+补上这两层之后脚本自己找到了三处此前没被记录的东西，都已登记进上面的表：
+`runtime.ts` 的 `sessionId` → `key` 局部改名、`spill-read.ts` 把 `ctx.get('spillStore')?.root`
+拆成两条语句、`units.ts` 新增 `productMessage` 视图助手。三处都逐条核过，等价。
+另外 `fail-outlets.ts` 去掉了那个多余的 `Session` 类型标注（消掉 tsc 打印器的行差异假阳性），
+`queues.ts` 在修好模板分词后确认**逐 token 完全相同**。
+
+### 补记后的实测
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run clean && npm run build` | 通过，无输出 |
+| `node work/implementation/evidence/209-ts-chat/parity-scan.mjs` | 通过；**12 operator delta、8 literal delta、12 token delta**（12 个文件）。token 差异全部落在上表已登记的条目里 |
+| 16 个相关测试文件 | **94 tests / 94 pass / 0 fail** |
+| `npm run backend:doctor` | `doctor: all checks passed` |
+| `OURFAIRY_PORT=0 npm run backend:probe` | `ok (24 services live, 51 rows composed, mode boot)` |
+| `npm run combo:verify` | `combo: combination verified` |
