@@ -1,7 +1,7 @@
 /**
  * Shared helpers for the OurFairy baseline tests.
  *
- * Every test drives the real product entry (`scripts/ourfairy-backend.mjs`),
+ * Every test drives the real product entry (`scripts/ourfairy-backend.ts`),
  * which in turn boots the shipped dsh CLI profile machinery — no plugin is
  * assembled by hand here.
  */
@@ -12,8 +12,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { readCombo, repoPath } from '../../scripts/combo.mjs'
-import { linkTypes } from '../../scripts/link-types.mjs'
+import { readCombo, repoPath } from '../../scripts/combo.ts'
+import { linkTypes } from '../../scripts/link-types.ts'
 
 /** Absolute path of this ticket worktree (the repository under test). */
 export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
@@ -22,7 +22,7 @@ export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 export const dshDir = repoPath(readCombo(repoRoot).combo, 'dsh', repoRoot)
 
 /** Path of the product launcher every test drives. */
-export const backendScript = join(repoRoot, 'scripts', 'ourfairy-backend.mjs')
+export const backendScript = join(repoRoot, 'scripts', 'ourfairy-backend.ts')
 
 /**
  * Directories of the packages under `backend/` that carry a manifest, as paths
@@ -141,7 +141,7 @@ export function copyProductRepo(prefix = 'ourfairy-repo-') {
  */
 export function runBackend(args, env = {}, options = {}) {
   const root = options.root ?? repoRoot
-  const result = spawnSync(process.execPath, [join(root, 'scripts', 'ourfairy-backend.mjs'), ...args], {
+  const result = spawnSync(process.execPath, [join(root, 'scripts', 'ourfairy-backend.ts'), ...args], {
     cwd: options.cwd ?? root,
     env: launchEnv(env),
     encoding: 'utf8',

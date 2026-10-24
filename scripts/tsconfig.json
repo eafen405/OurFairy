@@ -1,0 +1,23 @@
+{
+  // The scripts are run by Node, not emitted. Node 24 strips the types at load
+  // time, so this project only has to PROVE the sources type check; it never
+  // writes an artefact a product package could import.
+  //
+  // Three flags carry the migration's contract:
+  // - `allowImportingTsExtensions` lets a relative import carry the `.ts`
+  //   specifier Node's type stripping does NOT rewrite. The backend packages
+  //   carry `.js` because they are emitted; the scripts are loaded from source,
+  //   so they carry `.ts`.
+  // - `erasableSyntaxOnly` refuses anything Node's stripper cannot erase: no
+  //   enums, no namespaces, no parameter properties.
+  // - `noEmit` keeps the project a leaf of the root solution that produces no
+  //   output of its own.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+  "include": ["**/*.ts"]
+}

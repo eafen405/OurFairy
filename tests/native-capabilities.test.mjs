@@ -7,7 +7,7 @@
  * history export are asserted here through dsh's own profile loader — not a
  * YAML reader kept beside it.
  *
- * The row expectations live in one place (`scripts/combo.mjs`), and the
+ * The row expectations live in one place (`scripts/combo.ts`), and the
  * `doctor` check runs the same function against the *installed* profile. The
  * tests below mutate the composed bundle to prove each failure names what is
  * missing instead of failing generically.
@@ -17,7 +17,7 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { nativeCapabilityFailures, flattenEntries } from '../scripts/combo.mjs'
+import { nativeCapabilityFailures, flattenEntries } from '../scripts/combo.ts'
 import { dshDir, describeRun, makeHome, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))

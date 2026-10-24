@@ -22,9 +22,9 @@
  * `npm run combo:verify` on the final integration state, and CI runs the same.
  *
  * Usage:
- *   node scripts/precommit.mjs           # classify the staged change and run the gate
- *   node scripts/precommit.mjs --print   # print the decision as JSON, run nothing
- *   node scripts/precommit.mjs --full    # run the full suite whatever changed
+ *   node scripts/precommit.ts           # classify the staged change and run the gate
+ *   node scripts/precommit.ts --print   # print the decision as JSON, run nothing
+ *   node scripts/precommit.ts --full    # run the full suite whatever changed
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -34,6 +34,21 @@ import { fileURLToPath } from 'node:url'
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(scriptDir, '..')
 
+/** One command the gate runs. */
+export type GateCommand = { command: string; args: readonly string[] }
+
+/** Which gate a staged change earns. */
+export type GateMode = 'docs' | 'related' | 'typecheck' | 'full'
+
+/** What the caller asks the gate to decide. */
+export type GateOptions = { merge?: boolean; forceFull?: boolean; root?: string }
+
+/** The decision, with the tests it selected. */
+export type GateDecision = { mode: GateMode; tests: string[] }
+
+/** The decision and the commands it runs. */
+export type GatePlan = { mode: GateMode; tests: string[]; commands: readonly GateCommand[] }
+
 /** Checks a Markdown-only commit runs: the link check, then the combination. */
 export const DOCS_COMMANDS = Object.freeze([
   Object.freeze({ command: 'node', args: Object.freeze(['--test', 'tests/docs.test.mjs']) }),
@@ -41,7 +56,7 @@ export const DOCS_COMMANDS = Object.freeze([
 ])
 
 /** Checks a change with related tests runs: the build, those tests, the combination. */
-export function relatedCommands(tests) {
+export function relatedCommands(tests: string[]): GateCommand[] {
   return [
     { command: 'npm', args: ['run', 'build'] },
     { command: 'node', args: ['--test', ...tests] },
@@ -90,12 +105,12 @@ const FULL_AUTHORITY = Object.freeze([
 
 /**
  * The test files the repository runs, mirroring `npm test`'s glob.
- * @param {string} root
- * @returns {string[]} repo-relative paths.
+ * @param root
+ * @returns repo-relative paths.
  */
-function testFiles(root) {
-  const found = []
-  const walk = (dir, prefix) => {
+function testFiles(root: string): string[] {
+  const found: string[] = []
+  const walk = (dir: string, prefix: string) => {
     if (!existsSync(dir)) return
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (entry.isDirectory()) walk(join(dir, entry.name), `${prefix}${entry.name}/`)
@@ -108,14 +123,15 @@ function testFiles(root) {
 
 /**
  * One product package's published name, read from its manifest.
- * @param {string} root
- * @param {string} name - the directory name under `backend/`.
- * @returns {string}
+ * @param root
+ * @param name - the directory name under `backend/`.
+ * @returns
  */
-function productPackageName(root, name) {
+function productPackageName(root: string, name: string): string {
   const manifest = join(root, 'backend', name, 'package.json')
   if (existsSync(manifest)) {
-    const parsed = JSON.parse(readFileSync(manifest, 'utf8'))
+    // The manifest is the package's own file; npm declares `name` as a string.
+    const parsed = JSON.parse(readFileSync(manifest, 'utf8')) as { name?: unknown }
     if (typeof parsed.name === 'string' && parsed.name !== '') return parsed.name
   }
   return `@ourfairy/dsh-${name}`
@@ -127,13 +143,13 @@ function productPackageName(root, name) {
  * Staged test files are always selected. A changed product package selects the
  * tests whose body names that package, and a changed script selects the tests
  * whose body names that script. A Markdown change selects the link check.
- * @param {string[]} paths staged paths, repository-relative
- * @param {{root?: string}} [options]
- * @returns {string[]} repo-relative test paths.
+ * @param paths staged paths, repository-relative
+ * @param [options]
+ * @returns repo-relative test paths.
  */
-export function relatedTests(paths, { root = repoRoot } = {}) {
-  const selected = new Set()
-  const needles = []
+export function relatedTests(paths: string[], { root = repoRoot }: { root?: string } = {}): string[] {
+  const selected = new Set<string>()
+  const needles: string[] = []
   for (const path of paths) {
     if (/^tests\/.+\.test\.mjs$/u.test(path)) {
       selected.add(path)
@@ -145,11 +161,11 @@ export function relatedTests(paths, { root = repoRoot } = {}) {
     }
     const productPackage = /^backend\/([^/]+)\//u.exec(path)
     if (productPackage !== null) {
-      needles.push(`backend/${productPackage[1]}/`, productPackageName(root, productPackage[1]))
+      needles.push(`backend/${productPackage[1]}/`, productPackageName(root, productPackage[1]!))
       continue
     }
     const script = /^scripts\/([^/]+)\.(?:mjs|ts)$/u.exec(path)
-    if (script !== null) needles.push(`scripts/${script[1]}.`)
+    if (script !== null) needles.push(`scripts/${script[1]!}.`)
   }
   if (needles.length > 0) {
     for (const file of testFiles(root)) {
@@ -166,21 +182,21 @@ export function relatedTests(paths, { root = repoRoot } = {}) {
  * A commit that changes no path at all is a message-only amend: its tree is the
  * one already committed, so only the docs check has anything to add. A merge
  * and an explicit `--full` earn the whole suite whatever they carry.
- * @param {string[]} paths staged paths, repository-relative
- * @param {{merge?: boolean, forceFull?: boolean, root?: string}} [options]
- * @returns {'docs'|'related'|'typecheck'|'full'}
+ * @param paths staged paths, repository-relative
+ * @param [options]
+ * @returns
  */
-export function classify(paths, options = {}) {
+export function classify(paths: string[], options: GateOptions = {}): GateMode {
   return decide(paths, options).mode
 }
 
 /**
  * The decision, with the tests it selected.
- * @param {string[]} paths
- * @param {{merge?: boolean, forceFull?: boolean, root?: string}} [options]
- * @returns {{mode: 'docs'|'related'|'typecheck'|'full', tests: string[]}}
+ * @param paths
+ * @param [options]
+ * @returns
  */
-function decide(paths, options = {}) {
+function decide(paths: string[], options: GateOptions = {}): GateDecision {
   if (options.merge === true || options.forceFull === true) return { mode: 'full', tests: [] }
   if (paths.length === 0) return { mode: 'docs', tests: [] }
   if (paths.every(path => /\.mdx?$/iu.test(path))) return { mode: 'docs', tests: [] }
@@ -193,11 +209,11 @@ function decide(paths, options = {}) {
 
 /**
  * The commands a staged change must pass.
- * @param {string[]} paths
- * @param {{merge?: boolean, forceFull?: boolean, root?: string}} [options]
- * @returns {{mode: string, tests: string[], commands: {command: string, args: string[]}[]}}
+ * @param paths
+ * @param [options]
+ * @returns
  */
-export function plan(paths, options = {}) {
+export function plan(paths: string[], options: GateOptions = {}): GatePlan {
   const { mode, tests } = decide(paths, options)
   if (mode === 'docs') return { mode, tests, commands: DOCS_COMMANDS }
   if (mode === 'full') return { mode, tests, commands: FULL_COMMANDS }
@@ -211,16 +227,16 @@ export function plan(paths, options = {}) {
  * During a merge or an amend this is the delta against the first parent / the
  * commit being replaced, which is exactly what the gate has to cover. A
  * repository without HEAD (the first commit) compares against the empty tree.
- * @param {string} root
- * @returns {string[]}
+ * @param root
+ * @returns
  */
-export function stagedPaths(root) {
-  const read = args => execFileSync('git', args, {
+export function stagedPaths(root: string): string[] {
+  const read = (args: string[]) => execFileSync('git', args, {
     cwd: root,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
   }).trim()
-  let out
+  let out: string
   try {
     out = read(['diff', '--cached', '--name-only', 'HEAD'])
   } catch {
@@ -231,14 +247,14 @@ export function stagedPaths(root) {
 
 /**
  * Whether this checkout is in the middle of a merge.
- * @param {string} root
- * @returns {boolean}
+ * @param root
+ * @returns
  */
-export function isMerging(root) {
+export function isMerging(root: string): boolean {
   return spawnSync('git', ['rev-parse', '-q', '--verify', 'MERGE_HEAD'], { cwd: root }).status === 0
 }
 
-function main(argv) {
+function main(argv: string[]): void {
   const print = argv.includes('--print')
   const paths = stagedPaths(repoRoot)
   const decision = plan(paths, { merge: isMerging(repoRoot), forceFull: argv.includes('--full') })
@@ -258,4 +274,4 @@ function main(argv) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main(process.argv.slice(2))
+if (import.meta.main) main(process.argv.slice(2))

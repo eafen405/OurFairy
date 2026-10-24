@@ -39,7 +39,7 @@ import net from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { after, test } from 'node:test'
-import { isolatedEnv, layoutOf } from '../scripts/ourfairy-composition.mjs'
+import { isolatedEnv, layoutOf } from '../scripts/ourfairy-composition.ts'
 import {
   dshDir, describeRun, httpJson, makeHome, messageBlocks, readReport, registerUser, removeHome, repoRoot,
   runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay,

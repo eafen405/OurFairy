@@ -16,7 +16,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { admitBundleDependencies, productPackages, readCombination } from '../scripts/ourfairy-composition.mjs'
+import { admitBundleDependencies, productPackages, readCombination } from '../scripts/ourfairy-composition.ts'
 import { copyProductRepo, repoRoot } from './helpers/backend.mjs'
 
 const roots = []

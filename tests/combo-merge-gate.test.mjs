@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { basedOnIntegration } from '../scripts/combo.mjs'
+import { basedOnIntegration } from '../scripts/combo.ts'
 
 /** Run git in `root`; a non-zero exit is a test failure unless asked for. */
 function git(root, args, { allowFail = false } = {}) {

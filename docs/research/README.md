@@ -23,6 +23,9 @@
 | 文件 | 日期 | 主题 |
 | --- | --- | --- |
 | [2026-10-20-luo-relay-diagnosis.md](2026-10-20-luo-relay-diagnosis.md) | 2026-10-20 | luo 中转站故障诊断：伪造 `finish_reason: length`、空响应与特殊 token 混入正文的根因定位。 |
+| [2026-10-23-typescript-build-route.md](2026-10-23-typescript-build-route.md) | 2026-10-23 | backend/ 的 TypeScript 构建与类型检查路线：tsc 项目引用、dist 布局与模块说明符的实测结论。（#199） |
+| [2026-10-23-typescript-install-chain.md](2026-10-23-typescript-install-chain.md) | 2026-10-23 | 安装链与构建产物：`files`、`productSourceHash`、模板与 doctor 的事实层与失效路径。（#200） |
+| [2026-10-23-typescript-test-gates.md](2026-10-23-typescript-test-gates.md) | 2026-10-23 | TypeScript 迁移期的测试、构建前置与门禁分流：import 路径、build-before-test 与 CI/precommit 的分流判断。（#202） |
 | [android-notification-audit.md](android-notification-audit.md) | 2026-10-14 | Android / vivo 通知结论审计：纠正 Force Stop、Doze 维护窗口、FGS 超时与 vpush 资格的误述。 |
 | [android-notifications.md](android-notifications.md) | 2026-10-13 | rikkahub 现有通知能力核查：系统通知构建、点击定位与会话入口的源码位置。 |
 | [backend-references.md](backend-references.md) | 2026-10-13 | Koishi、Open WebUI、LibreChat 的后端骨架参考，以及没有可直接照搬的结论。 |

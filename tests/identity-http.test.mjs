@@ -2,7 +2,7 @@
  * Ticket #26 acceptance: invite registration, sign-in, and session credentials
  * over the real backend.
  *
- * These drive the shipped launcher (`scripts/ourfairy-backend.mjs start`), which
+ * These drive the shipped launcher (`scripts/ourfairy-backend.ts start`), which
  * boots the real dsh CLI with the OurFairy profile, and then speak HTTP to the
  * listener it bound — no plugin is assembled by hand and no request is faked.
  * Requests go through the shared helper's `node:http` client, not `fetch`, so

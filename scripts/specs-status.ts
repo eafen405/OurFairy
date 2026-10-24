@@ -15,7 +15,7 @@
  * agents wrote (`sleep 240; git log ...`) with one call.
  *
  * Usage:
- *   node scripts/specs-status.mjs [--json] [--offline] [--spec <n>...]
+ *   node scripts/specs-status.ts [--json] [--offline] [--spec <n>...]
  *
  * Exit code 1 when a spec has work that only exists locally (`unpushed`), a
  * landed spec still holds a worktree (`stale-worktree`), or the landing branch
@@ -33,6 +33,50 @@ export const repoRoot = resolve(scriptDir, '..')
 /** The landing branch every spec is measured against. */
 export const LANDING_BRANCH = 'main'
 
+/** The state a spec can be in. */
+export type SpecState = 'planned' | 'unpushed' | 'in-flight' | 'landed' | 'orphan' | 'stale-worktree'
+
+/** The tracker half of the report: spec number to issue facts. */
+export type TrackerFacts = Map<number, { state: string; title: string }>
+
+/** What one spec's facts are read from. */
+export type SpecContext = {
+  root: string
+  tracker: TrackerFacts | undefined
+  worktrees: string[]
+}
+
+/** One spec's facts, as the report prints them. */
+export type SpecRow = {
+  spec: number
+  state: SpecState
+  defect: boolean
+  title: string | undefined
+  issue: string | undefined
+  branch: string | null
+  tip: string | null | undefined
+  pushed: boolean
+  landed: boolean
+  ahead: number
+  copies: boolean
+  worktrees: string[]
+}
+
+/** How one branch stands against its origin counterpart. */
+export type BranchDrift = { branch: string; ahead: number | null; behind: number | null }
+
+/** The whole report. */
+export type SpecReport = {
+  tracker: 'skipped' | 'unavailable' | 'ok'
+  landing: BranchDrift[]
+  rows: SpecRow[]
+  orphanWorktrees: string[]
+  defects: SpecRow[]
+}
+
+/** The command's options, as argv carries them. */
+export type SpecsStatusOptions = { offline: boolean; specs: number[]; json?: boolean }
+
 /** States that need a human. Everything else is either in progress or finished. */
 export const DEFECTS = Object.freeze(['unpushed', 'orphan', 'stale-worktree'])
 
@@ -41,12 +85,12 @@ export const DEFECTS = Object.freeze(['unpushed', 'orphan', 'stale-worktree'])
  *
  * Failures are data here: a missing remote branch and an unreachable tracker
  * are findings, not exceptions, so nothing below throws on them.
- * @param {string} file
- * @param {string[]} args
- * @param {{cwd?: string, timeout?: number}} [options]
- * @returns {string|undefined}
+ * @param file
+ * @param args
+ * @param [options]
+ * @returns
  */
-function run(file, args, options = {}) {
+function run(file: string, args: string[], options: { cwd?: string; timeout?: number } = {}): string | undefined {
   try {
     return execFileSync(file, args, {
       cwd: options.cwd,
@@ -59,7 +103,7 @@ function run(file, args, options = {}) {
   }
 }
 
-function git(root, args) {
+function git(root: string, args: string[]): string | undefined {
   return run('git', args, { cwd: root })
 }
 
@@ -69,25 +113,26 @@ function git(root, args) {
  * One request per run rather than one per spec: the wave burned minutes on
  * `gh issue view` loops. Returns undefined when the tracker is unreachable so
  * the report degrades to git-only facts instead of failing.
- * @param {string} root
- * @returns {Map<number, {state: string, title: string}>|undefined}
+ * @param root
+ * @returns
  */
-export function readTracker(root) {
+export function readTracker(root: string): TrackerFacts | undefined {
   const raw = run('gh', ['issue', 'list', '--state', 'all', '--limit', '500', '--json', 'number,title,state'], {
     cwd: root,
     timeout: 60_000,
   })
   if (raw === undefined) return undefined
   try {
-    return new Map(JSON.parse(raw).map(issue => [issue.number, { state: issue.state, title: issue.title }]))
+    // The tracker answers with the three fields the query asked for.
+    return new Map(JSON.parse(raw).map((issue: { number: number; state: string; title: string }) => [issue.number, { state: issue.state, title: issue.title }]))
   } catch {
     return undefined
   }
 }
 
 /** The spec numbers the checkout knows: ticket-copy directories and spec branches. */
-export function specsInCheckout(root) {
-  const specs = new Set()
+export function specsInCheckout(root: string): Set<number> {
+  const specs = new Set<number>()
   const tickets = resolve(root, 'work', 'tickets')
   if (existsSync(tickets)) {
     for (const entry of readdirSync(tickets, { withFileTypes: true })) {
@@ -107,7 +152,7 @@ export function specsInCheckout(root) {
 }
 
 /** Worktree paths, excluding the main checkout itself. */
-export function worktrees(root) {
+export function worktrees(root: string): string[] {
   const out = git(root, ['worktree', 'list', '--porcelain']) ?? ''
   const main = git(root, ['rev-parse', '--show-toplevel'])
   return out.split('\n')
@@ -117,13 +162,13 @@ export function worktrees(root) {
 }
 
 /** Whether a worktree path names this spec, directly or as one of its tickets. */
-export function worktreeNamesSpec(path, spec) {
+export function worktreeNamesSpec(path: string, spec: number): boolean {
   const name = path.split('/').pop() ?? ''
   return name === `spec-${spec}` || name.startsWith(`spec-${spec}-`) || name.startsWith(`${spec}-`)
 }
 
 /** Whether the branch tip carries the spec's ticket copies. */
-function carriesCopies(root, ref, spec) {
+function carriesCopies(root: string, ref: string, spec: number): boolean {
   return git(root, ['cat-file', '-e', `${ref}:work/tickets/${spec}`]) !== undefined
 }
 
@@ -134,10 +179,10 @@ function carriesCopies(root, ref, spec) {
  * `stale-worktree` (landed but the worktree remains), `in-flight` (pushed, not
  * yet landed), `landed` (merged into the landing branch), or `planned` (no
  * branch yet — the spec has ticket copies only).
- * @param {number} spec
- * @param {{root: string, tracker?: Map<number, object>|undefined, worktrees: string[]}} context
+ * @param spec
+ * @param context
  */
-export function specStatus(spec, context) {
+export function specStatus(spec: number, context: SpecContext): SpecRow {
   const { root, tracker } = context
   const branch = `integration/spec-${spec}`
   const local = git(root, ['rev-parse', '--verify', `refs/heads/${branch}`])
@@ -153,7 +198,7 @@ export function specStatus(spec, context) {
   const leftover = context.worktrees.filter(path => worktreeNamesSpec(path, spec))
   const tracked = tracker?.get(spec)
 
-  let state = 'planned'
+  let state: SpecState = 'planned'
   if (hasBranch) state = pushed ? (landed ? 'landed' : 'in-flight') : 'unpushed'
   else if (orphan) state = landed ? 'landed' : 'orphan'
   if (landed && leftover.length > 0) state = 'stale-worktree'
@@ -175,7 +220,7 @@ export function specStatus(spec, context) {
 }
 
 /** Whether a branch carries commits origin does not have, or the reverse. */
-export function branchDrift(root, branches = ['main', LANDING_BRANCH]) {
+export function branchDrift(root: string, branches: string[] = ['main', LANDING_BRANCH]): BranchDrift[] {
   return branches.map(branch => {
     const ahead = git(root, ['rev-list', '--count', `origin/${branch}..${branch}`])
     const behind = git(root, ['rev-list', '--count', `${branch}..origin/${branch}`])
@@ -192,9 +237,9 @@ export function branchDrift(root, branches = ['main', LANDING_BRANCH]) {
  *
  * `tracker` is injectable so tests can pin the tracker half without network;
  * when omitted the real tracker is queried unless `offline` is set.
- * @param {{root?: string, offline?: boolean, specs?: number[], tracker?: Map<number, object>}} [options]
+ * @param [options]
  */
-export function collect({ root = repoRoot, offline = false, specs = [], tracker } = {}) {
+export function collect({ root = repoRoot, offline = false, specs = [], tracker }: { root?: string; offline?: boolean; specs?: number[]; tracker?: TrackerFacts } = {}): SpecReport {
   const resolved = tracker ?? (offline ? undefined : readTracker(root))
   const known = specsInCheckout(root)
   const wanted = specs.length === 0 ? [...known] : specs
@@ -212,7 +257,7 @@ export function collect({ root = repoRoot, offline = false, specs = [], tracker 
 }
 
 /** Human-readable table; columns are the facts `state` is derived from. */
-export function render(report) {
+export function render(report: SpecReport): string {
   const head = ['spec', 'state', 'branch', 'tip', 'push', 'land', 'ahead', 'copies', 'worktree', 'issue']
   const cells = report.rows.map(row => [
     String(row.spec),
@@ -226,8 +271,9 @@ export function render(report) {
     String(row.worktrees.length),
     row.issue ?? '?',
   ])
-  const widths = head.map((title, index) => Math.max(title.length, ...cells.map(row => row[index].length)))
-  const line = row => row.map((cell, index) => cell.padEnd(widths[index])).join('  ').trimEnd()
+  // Every row has one cell per column, so the widths and the cells line up.
+  const widths = head.map((title, index) => Math.max(title.length, ...cells.map(row => row[index]!.length)))
+  const line = (row: string[]) => row.map((cell, index) => cell.padEnd(widths[index]!)).join('  ').trimEnd()
   const lines = [`tracker: ${report.tracker}`, '', line(head), ...cells.map(line)]
 
   for (const { branch, ahead, behind } of report.landing) {
@@ -250,10 +296,10 @@ export function render(report) {
   return lines.join('\n')
 }
 
-function parseArgs(argv) {
-  const options = { offline: false, specs: [] }
+function parseArgs(argv: string[]): SpecsStatusOptions | undefined {
+  const options: SpecsStatusOptions = { offline: false, specs: [] }
   for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index]
+    const arg = argv[index]!
     if (arg === '--json') options.json = true
     else if (arg === '--offline') options.offline = true
     else if (arg === '--spec') {
@@ -267,17 +313,19 @@ function parseArgs(argv) {
   return options
 }
 
-function main(argv) {
-  let options
+function main(argv: string[]): void {
+  let options: SpecsStatusOptions | undefined
   try {
     options = parseArgs(argv)
   } catch (error) {
-    process.stderr.write(`specs-status: ${error.message}\n`)
+    // The caught value is whatever the flag parser threw; the report only
+    // reads its `message`, exactly as the pre-migration code did.
+    process.stderr.write(`specs-status: ${(error as Error).message}\n`)
     process.exitCode = 2
     return
   }
   if (options === undefined) {
-    process.stdout.write('usage: node scripts/specs-status.mjs [--json] [--offline] [--spec <n>...]\n')
+    process.stdout.write('usage: node scripts/specs-status.ts [--json] [--offline] [--spec <n>...]\n')
     return
   }
   const report = collect(options)
@@ -286,4 +334,4 @@ function main(argv) {
   if (report.defects.length > 0 || drift) process.exitCode = 1
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main(process.argv.slice(2))
+if (import.meta.main) main(process.argv.slice(2))
