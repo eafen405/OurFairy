@@ -36,7 +36,7 @@
     "bundlePathInRepo": "backend/v1-bundle",
     "probePackage": "@ourfairy/dsh-baseline-probe",
     "probePathInRepo": "backend/probe",
-    "launcher": "scripts/ourfairy-backend.mjs",
+    "launcher": "scripts/ourfairy-backend.ts",
     "nodeRange": "^22.19.0 || >=24",
     "pnpmPin": "11.28.5",
     "pnpmInvocation": "corepack pnpm@11.28.5"

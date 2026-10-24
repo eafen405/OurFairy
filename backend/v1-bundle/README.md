@@ -47,7 +47,7 @@ beside that list give the reason for each group; read them there.
 
 ## Consuming it
 
-The launcher (`scripts/ourfairy-backend.mjs`) generates a profile under the
+The launcher (`scripts/ourfairy-backend.ts`) generates a profile under the
 isolated `OURFAIRY_HOME` that declares this package through a `file:` dependency
 and lists it in `dsh.profile.bundles`, then boots the real dsh CLI. pnpm installs
 this package's own `file:` dependencies from this checkout, so the profile

@@ -14,7 +14,7 @@
 | --- | --- |
 | `backend/` | 产品模块与显式后端装配（dsh profile 的 bundle 与各产品包） |
 | `android/` | Android 客户端。正常的 Gradle 工程，内部结构与上游 RikkaHub 保持原相对位置 |
-| `scripts/` | 后端入口 `ourfairy-backend.mjs`、版本组合 `combo.mjs`、验收与基准脚本 |
+| `scripts/` | 后端入口 `ourfairy-backend.ts`、版本组合 `combo.ts`、验收与基准脚本 |
 | `tests/` | 产品测试与仓库结构检查：行为测试经启动器驱动真实后端，模型与网络使用替身 |
 | `docs/` | 规格、架构边界、决策与调查 |
 | `work/` | 实施期的工作区：票面副本与交付证据 |
@@ -67,7 +67,7 @@ node --test tests/chat-read-window.test.mjs
 npm run hooks:install   # git config core.hooksPath .githooks
 ```
 
-之后每次提交都会过一道门禁，按改动内容分四种（`scripts/precommit.mjs`）：只改 Markdown 跑
+之后每次提交都会过一道门禁，按改动内容分四种（`scripts/precommit.ts`）：只改 Markdown 跑
 `tests/docs.test.mjs`；改动面能选出相关测试时跑 `npm run build` 与选中的测试文件；源码改动但选不出
 相关测试时跑 `npm run typecheck`；根构建权威、包 manifest、共享 fixture、合并提交或 `--full` 跑全量
 `npm test`。四种门禁都保留 `npm run combo:verify`。任一失败即阻止提交；检查针对当前工作树，未暂存的
