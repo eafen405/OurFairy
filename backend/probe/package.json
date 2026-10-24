@@ -5,12 +5,17 @@
   "description": "Test-only liveness probe for the OurFairy v1 backend composition. Mounted through a --patch overlay and never part of the product bundle.",
   "type": "module",
   "license": "UNLICENSED",
-  "main": "./src/index.mjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.mjs"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "files": [
-    "src/index.mjs",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "overlay.patch.yml",
     "README.md"
   ],

@@ -24,6 +24,12 @@
         "209-ts-chat"
       ],
       "note": "#209 T4：chat 迁 .ts（包内原子，1400 行最大包）、投影单元的 SessionProjectionStateMap 声明、test-support 夹具的 noEmit 工程与类型剥离路线、运算符与字面量的机械复查"
+    },
+    {
+      "dirs": [
+        "210-ts-remaining"
+      ],
+      "note": "#210 T5：delivery、gateway、groups、search、speech、probe 迁 .ts（包内原子）、投递消息源扩展的单一权威与 Events 声明、运算符与字面量的机械复查"
     }
   ]
 }
