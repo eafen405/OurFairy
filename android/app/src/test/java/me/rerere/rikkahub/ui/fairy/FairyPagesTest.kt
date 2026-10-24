@@ -133,6 +133,28 @@ class FairyPagesTest {
         }
     }
 
+    @Test fun `console prototype variants can be compared at the reference size`() {
+        show { FairyConsolePage({}, account, receive) }
+        compose.onNodeWithText("A · QUIET").assertIsDisplayed()
+        screenshot("home-prototype-a")
+        compose.onNodeWithContentDescription("下一方案").performClick()
+        // With autoAdvance off, one frame delivers the click and the next draws its state.
+        compose.mainClock.advanceTimeBy(100)
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(100)
+        compose.waitForIdle()
+        compose.onNodeWithText("B · SIGNAL DOCK").assertIsDisplayed()
+        screenshot("home-prototype-b")
+        compose.onNodeWithContentDescription("下一方案").performClick()
+        compose.mainClock.advanceTimeBy(100)
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(100)
+        compose.waitForIdle()
+        compose.onNodeWithText("C · SESSION FIRST").assertIsDisplayed()
+        screenshot("home-prototype-c")
+        compose.onNodeWithText("进入会话").assertIsDisplayed()
+    }
+
     @Test fun `home opens the current conversation with a visible composer`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
