@@ -176,6 +176,12 @@
 | [210-ts-remaining](210-ts-remaining/README.md) | #210 T5：delivery、gateway、groups、search、speech、probe 迁 .ts（包内原子）、投递消息源扩展的单一权威与 Events 声明、运算符与字面量的机械复查 |
 | [211-ts-scripts](211-ts-scripts/README.md) | #211 T6：scripts 十二个脚本迁 .ts（源码直跑、noEmit 叶子工程、相对 import 带 .ts 说明符）、研究文档索引补三行、全量门禁（293/293、combo:verify、doctor、probe）与工作树清理；**收口评审的九项发现见同一 README 的 §10**（Node 下限与 CLI 守卫、包名权威、bench:projection 补跑） |
 
+## 工具调用呈现（#213）
+
+| 目录 | 内容 |
+| --- | --- |
+| [213-tool-calls](213-tool-calls/README.md) | #213：投影的 messages 增加工具名（只名字，不含参数与输出），客户端按序渲染为可见条目；stateVersion 4 重折历史 |
+
 ## Triage 修复
 
 | 目录 | 内容 |
