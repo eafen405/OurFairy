@@ -65,6 +65,7 @@ import me.rerere.rikkahub.ui.components.message.ChatMessageFileChip
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.fairy.FairyDialogPaddingH
 import me.rerere.rikkahub.ui.fairy.FairyDialogPaddingV
+import me.rerere.rikkahub.ui.fairy.FairyMessagePaddingH
 import me.rerere.rikkahub.ui.fairy.LocalFairyTokens
 import me.rerere.rikkahub.ui.fairy.fairyDialogPanel
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
@@ -165,16 +166,16 @@ internal fun RemoteTranscript(
                     modifier = Modifier.align(if (fairy) Alignment.CenterStart else Alignment.CenterEnd)
                         .then(if (fairy) Modifier.fillMaxWidth()
                             .fairyDialogPanel(active = message == null)
-                            .padding(horizontal = FairyDialogPaddingH, vertical = FairyDialogPaddingV)
+                            .padding(horizontal = FairyMessagePaddingH, vertical = FairyDialogPaddingV)
                         else Modifier.widthIn(max = 340.dp)
                             .background(tokens.userBubble, tokens.userBubbleShape)
                             .border(1.dp, tokens.userBubbleBorder, tokens.userBubbleShape)
                             .padding(12.dp))
-                        .then(Modifier.combinedClickable(
+                        .then(if (row.text.isNotBlank() || message != null) Modifier.combinedClickable(
                             onClick = {},
-                            onLongClickLabel = "消息操作",
+                            onLongClickLabel = if (message != null) "查看全文或复制" else "复制",
                             onLongClick = { menuRowKey = row.key },
-                        )),
+                        ) else Modifier),
                 ) {
                     // Same heading/body geometry before and after a streaming row settles.
                     Text(
@@ -214,17 +215,19 @@ internal fun RemoteTranscript(
                         onDismissRequest = { menuRowKey = null },
                         containerColor = tokens.panelOpaque,
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("复制") },
-                            onClick = {
-                                menuRowKey = null
-                                val body = currentRows.firstOrNull { it.key == row.key }?.text ?: row.text
-                                scope.launch {
-                                    clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("message", body)))
-                                }
-                                Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
-                            },
-                        )
+                        if (row.text.isNotBlank()) {
+                            DropdownMenuItem(
+                                text = { Text("复制") },
+                                onClick = {
+                                    menuRowKey = null
+                                    val body = currentRows.firstOrNull { it.key == row.key }?.text ?: row.text
+                                    scope.launch {
+                                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("message", body)))
+                                        Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                            )
+                        }
                         if (message != null) {
                             DropdownMenuItem(
                                 text = { Text("查看全文") },

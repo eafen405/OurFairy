@@ -91,7 +91,12 @@ def _arc(radius: float, end: tuple[float, float], sweep: float) -> str:
 
 
 def disc_path() -> str:
-    """Disc with four compass bumps (same outline as FairyEmblem.discPath)."""
+    """Disc with four compass bumps, following FairyEmblem.discPath's description.
+
+    The app's literal path closes its rim with `270 - 2*beta`, which overshoots the
+    start; the icon uses the symmetric `90 - 2*beta` completion quoted above so the
+    four right-angled tips stay symmetric. The in-app drawing is unchanged.
+    """
     beta = math.degrees(math.atan2(TIP_HALF_BASE, DISC_R))
     parts = [f"M {_xy(_point(DISC_R, DIRECTIONS[0] - beta))}"]
     for index, direction in enumerate(DIRECTIONS):

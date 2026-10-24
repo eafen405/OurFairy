@@ -36,8 +36,12 @@ with headless Chromium), `verify_icons.py` (stdlib PNG checks), and the four 108
 python3 work/implementation/evidence/ui-217/generate_icons.py \
   --res /home/eafen405/.cache/ourfairy-icons/stage
 python3 work/implementation/evidence/ui-217/verify_icons.py \
-  --res /home/eafen405/.cache/ourfairy-icons/stage
+  --res /home/eafen405/.cache/ourfairy-icons/stage   # before copying into res
+python3 work/implementation/evidence/ui-217/verify_icons.py          # the committed res, the guard
 ```
+
+The last form (no `--res`) is the check that fails if the committed mipmaps drift from these claims;
+run it after copying the staged PNGs into `android/app/src/main/res`.
 
 Chromium needs `--headless --no-sandbox --disable-gpu --hide-scrollbars --force-device-scale-factor=1
 --virtual-time-budget=10000 --window-size=W,H`, plus `--default-background-color=00000000` for the

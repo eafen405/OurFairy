@@ -36,8 +36,11 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
 /** Inner padding of Fairy's dialog panel around the assistant content. */
-internal val FairyDialogPaddingH = 14.dp
+internal val FairyDialogPaddingH = 6.dp
 internal val FairyDialogPaddingV = 12.dp
+
+/** Inner padding of the chat transcript's Fairy panel (issue #215); the dialog keeps its own. */
+internal val FairyMessagePaddingH = 14.dp
 internal val FairyDialogShape = RoundedCornerShape(14.dp)
 
 private const val DIALOG_BREATH_MS = 1600

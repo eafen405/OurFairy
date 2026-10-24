@@ -9,9 +9,10 @@ Commits: test `c7e3b0fef5`, spacing `d3421dd61f`, evidence (this commit). No dat
 Only spacing, in two files:
 
 - `RemoteChatPanel.kt`: root `Column` horizontal padding `12.dp` → `20.dp`.
-- `FairyDialogPanel.kt`: `FairyDialogPaddingH` `6.dp` → `14.dp` (the Fairy assistant body's inner
-  horizontal padding). `FairyDialogPaddingV`, `FairyDialogShape`, `fairyDialogPanel` drawing,
-  colors, typography and the user bubble's shape/background/border are untouched.
+- `FairyDialogPanel.kt`: a new `FairyMessagePaddingH = 14.dp` for the chat transcript's Fairy panel.
+  `FairyDialogPaddingH` stays at `6.dp`, so the `查看全文` dialog keeps its existing inset.
+  `FairyDialogPaddingV`, `FairyDialogShape`, `fairyDialogPanel` drawing, colors, typography and the
+  user bubble's shape/background/border are untouched.
 
 Composed insets at 360dp width:
 
@@ -21,10 +22,13 @@ Composed insets at 360dp width:
 | user body (text → right edge) | 12 + 12 = 24dp | 20 + 12 = **32dp** |
 
 The user text inset differs from the Fairy body because the user bubble keeps its existing 12dp
-inner padding; 32dp still clears the 30dp requirement. `20 + 14` was chosen because the issue asks
-for roughly 32–36dp, symmetric for the Fairy body, and both values land inside that band without
-changing the panel or bubble geometry. The root padding also insets the header/composer, which is
-part of the same chat body; nothing outside `RemoteChatPanel` moved.
+inner padding; 32dp still clears the 30dp requirement. I targeted roughly 32–36dp (the issue itself
+gives no number), symmetric for the Fairy body; both values land inside that band without changing
+the panel or bubble geometry. The root padding also insets the header/composer, which is part of the
+same chat body; nothing outside `RemoteChatPanel` moved.
+
+Review follow-up: the first cut raised `FairyDialogPaddingH` itself, which also widened the
+`查看全文` dialog; the final code splits the constant so only the transcript body changes.
 
 ## 测试
 
@@ -38,7 +42,9 @@ transcript-only composition could not measure the inset from the screen edge.
 It renders one long Fairy message (role 2) and one long user message (role 1) that wrap, then
 measures the unmerged text nodes with `getBoundsInRoot()`/`boundsInRoot` and asserts, at 360dp:
 Fairy left ≥ 30dp, Fairy right ≥ 30dp, user right ≥ 30dp, and `|Fairy left − Fairy right| ≤ 1dp`.
-These are requirement assertions, not the padding constants.
+These are requirement assertions, not the chosen constants: 30dp is the floor that makes the margin
+obvious; the measured 34/32dp are the current design values. The 34/32 numbers are recorded by the
+red/green runs below, not asserted exactly.
 
 Red run before the change, on commit `c7e3b0fef5`:
 
@@ -91,4 +97,4 @@ run were noise and were removed.
 - 真机验收（issue 验收项第 1 条）未执行：没有连接设备或模拟器，无法给出真实观感结论。
 - 横屏与其他屏宽未测：新用例只覆盖 360dp 竖屏；同文件原有页面用例在 `zh-rCN-w411dp-h891dp`
   下随本次 green run 一起通过，但没有新增横屏断言。
-- 未 push，未改证据索引，未触碰主检出或其他 worktree。
+- 未 push；本票分支未改证据索引，集成分支由 Lead 登记（见 `ui-215` 条目），未触碰主检出或其他 worktree。

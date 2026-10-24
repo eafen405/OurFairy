@@ -113,6 +113,16 @@ class RemoteTranscriptCopyTest {
         assertEquals("第一段。\n第二段。", clipboardText())
     }
 
+    @Test fun `a streaming row with no text yet does not offer copy`() {
+        live = ""
+        show(emptyList())
+
+        compose.onNodeWithText("Fairy").performTouchInput { longClick() }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("复制").assertDoesNotExist()
+    }
+
     @Test fun `viewing the full settled message keeps the existing dialog`() {
         val body = "需要展开的完整回复。"
         show(listOf(RemoteChatMessage("fairy", 1, role = 2, status = 2, text = body)))
