@@ -474,7 +474,7 @@ export class GatewayService extends Service {
 
   /** Save the shared selection. It applies from each conversation's next reply, never to a running one. */
   async saveSelection(body: Record<string, unknown>) {
-    const { provider, model, reasoningEffort } = (body ?? {}) as Record<string, unknown>
+    const { provider, model, reasoningEffort } = body ?? ({} as Record<string, unknown>)
     if (typeof provider !== 'string' || provider === '' || typeof model !== 'string' || model === '') {
       throw new GatewayError(400, 'gateway/invalid-selection', 'provider and model must both be non-empty strings')
     }
@@ -572,7 +572,7 @@ export class GatewayService extends Service {
 
   /** Save the ASR connection. A transcription already running keeps its request. */
   async saveAsr(body: Record<string, unknown>) {
-    const input = (body ?? {}) as Record<string, unknown>
+    const input = body ?? ({} as Record<string, unknown>)
     const model = input.model
     const endpoint = input.endpoint
     if (typeof model !== 'string' || model.trim() === '') throw new GatewayError(400, 'gateway/invalid-asr', 'model must be a non-empty string')
