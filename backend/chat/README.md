@@ -48,10 +48,12 @@
   快照序号，客户端用它丢弃过时快照。
 - `cursor`：最近观察到的原生事件 seq，空会话为 -1。`durableThroughSeq`：writer 屏障已确认
   的前缀，未知为 -1；它不表示客户端已应用该前缀。
-- `messages`：`{messageId,seq,requestId,role,status,text,attachments}`。`role` 1 用户、
+- `messages`：`{messageId,seq,requestId,role,status,text,attachments,tools?}`。`role` 1 用户、
   2 Fairy；`status` 1 待定、2 完成、3 中断、4 失败。文本是原始文本，含空白与 Markdown。
-  没有原生消息的 assistant 结算使用确定性身份 `attempt:<sessionId>:<seq>`。`messages` 按
-  首次出现顺序排列，不是 seq 顺序。
+  `tools` 是该条消息请求的工具名，按 content block 顺序；只在该消息请求过工具时出现，不含
+  参数与工具输出。只有工具调用、没有可见文本的步骤因此不再是一行空文本。没有原生消息的
+  assistant 结算使用确定性身份 `attempt:<sessionId>:<seq>`。`messages` 按首次出现顺序排列，
+  不是 seq 顺序。
 - `attempt`：`{attemptId,revision,text}`。`attemptId` 只在同一 generation 内唯一，`text` 是
   累计原始可见文本。最终持久消息取代它，终止消息使用完整富文本渲染。
 - `settledAttempt`：`{attemptId,seq}|null`，本 generation 最近一次已提交的 assistant 流结束。

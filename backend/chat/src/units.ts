@@ -25,9 +25,9 @@
  *
  * `stateVersion` increments whenever this module's fold semantics or state
  * shape change; the registry then discards persisted rows of an older version
- * and refolds the log from `init`. The transcript is at version 3 (immutable
- * first appearance plus ordered transitions and a move index); the work unit is
- * at version 2 (the narrow pending id/kind index).
+ * and refolds the log from `init`. The transcript is at version 4 (immutable
+ * first appearance plus ordered transitions, a move index, and each row's tool
+ * names); the work unit is at version 2 (the narrow pending id/kind index).
  *
  * This module is the only fold of a chat session: the read path
  * (`runtime.ts`, `service.ts`) takes durable values from these units and
@@ -111,6 +111,14 @@ const interruptedKind = (kind: string) => ['aborted', 'interrupted', 'forked'].i
 const taskKey = (generation: string, id: string) => `${generation}/${id}`
 
 const messageText = (message: ProductMessage) => (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
+/**
+ * The tool names one message requested, in content-block order.
+ *
+ * Only the name is projected: the arguments and the matching tool results stay
+ * in the native session, because the chat tells the reader *that* Fairy used a
+ * tool, not what it was asked or what it returned.
+ */
+const toolNamesOf = (message: ProductMessage) => (message.content ?? []).filter(block => block.type === 'tool-call').map(block => block.name)
 const attachmentsOf = (message: ProductMessage) => (message.source?.attachments ?? []).map((item, index) => ({ index, type: item.image ? 2 : 1, name: item.name, mime: item.mime, bytes: item.original.bytes }))
 /** The interrupted text blocks of one native Assistant stream, shared with the live attempt read. */
 export const attemptText = (stream: readonly AssistantStreamRecord[]) => assembleAssistantStream(stream).interruptedBlocks().filter(block => block.type === 'text').map(block => block.text).join('')
@@ -127,6 +135,11 @@ const transcriptRowSchema = z.object({
   text: z.string(),
   /** `null` is the attempt shape, which carries no `attachments` field at all. */
   attachments: z.array(attachmentSchema).nullable(),
+  /**
+   * Tool names this row's message requested, in block order; empty for a row
+   * that requested none. Arguments and results are never part of the row.
+   */
+  tools: z.array(z.string()),
   /**
    * Where the row first appeared. Immutable: it is the row's position in the
    * first-appearance order and the anchor for a cut before any transition.
@@ -198,6 +211,7 @@ function rowAtCut(row: TranscriptRow, cut: number) {
     status: transition === null ? row.first.status : transition.status,
     text: row.text,
     ...(row.attachments === null ? {} : { attachments: row.attachments }),
+    ...(row.tools.length === 0 ? {} : { tools: row.tools }),
   }
 }
 
@@ -208,7 +222,7 @@ function rowAtCut(row: TranscriptRow, cut: number) {
  */
 export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', TranscriptState> = {
   key: 'ourfairyTranscript',
-  stateVersion: 3,
+  stateVersion: 4,
   stateSchema: transcriptStateSchema,
   init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], moves: [] }),
   apply(state, event) {
@@ -232,7 +246,7 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
         const existing = index[message.id]
         if (existing === undefined) {
           index[message.id] = rows.length
-          rows.push({ messageId: message.id, requestId, role: 1, text, attachments,
+          rows.push({ messageId: message.id, requestId, role: 1, text, attachments, tools: [],
             first: { seq: event.seq, status: 1 }, transitions: [] })
         } else {
           // `index` only holds positions of rows that exist.
@@ -254,7 +268,7 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
       const message = event.data
       const view = productMessage(message)
       const fields = { requestId: view.source.rpcId ?? null, role: 1,
-        text: messageText(view), attachments: attachmentsOf(view) }
+        text: messageText(view), attachments: attachmentsOf(view), tools: [] }
       const existing = state.index[message.id]
       if (existing === undefined) {
         return appendRow(state, { messageId: message.id, ...fields,
@@ -266,7 +280,7 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
       const message = event.data.message
       const view = productMessage(message)
       const fields = { requestId: null, role: 2,
-        text: messageText(view), attachments: attachmentsOf(view) }
+        text: messageText(view), attachments: attachmentsOf(view), tools: toolNamesOf(view) }
       // `interrupted` is the assistant event's own field; a delivered message
       // carries none, so it reads as not interrupted.
       const status = (event.data as { interrupted?: true }).interrupted ? 3 : 2
@@ -284,7 +298,7 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
       const attempts = state.attemptsByTurn[turn] ?? []
       return { ...state,
         rows: [...state.rows, {
-          messageId, requestId: null, role: 2, text: attemptText(event.data.stream), attachments: null,
+          messageId, requestId: null, role: 2, text: attemptText(event.data.stream), attachments: null, tools: [],
           // A turn end that already exists in the prefix settles the attempt at
           // its own seq (the old fold looked up the whole log's turn ends).
           first: { seq: event.seq, status: ended !== undefined && ended.interrupted ? 3 : 4 }, transitions: [],

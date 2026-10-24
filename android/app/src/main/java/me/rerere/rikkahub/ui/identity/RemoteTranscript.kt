@@ -179,6 +179,10 @@ internal fun RemoteTranscript(
                         )
                     }
                     if (message != null) {
+                        if (message.tools.isNotEmpty()) {
+                            Spacer(Modifier.height(6.dp))
+                            ToolCallLines(message.tools)
+                        }
                         if (message.attachments.isNotEmpty()) {
                             Spacer(Modifier.height(6.dp))
                             AttachmentChips(message.attachments, downloadEnabled) { attachment ->
@@ -195,6 +199,26 @@ internal fun RemoteTranscript(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The tools one step requested, one visible line per name.
+ *
+ * Only the name reaches the screen: the request arguments and the tool's output stay in the
+ * native session. The line reuses the message's small-label style rather than introducing a chip
+ * or an icon, so an ordinary reply and a tool step keep the same visual grammar.
+ */
+@Composable
+private fun ToolCallLines(tools: List<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        tools.forEach { name ->
+            Text(
+                text = "调用工具 · $name",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

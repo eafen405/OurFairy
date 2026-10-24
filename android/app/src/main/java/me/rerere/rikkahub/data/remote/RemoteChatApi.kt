@@ -31,7 +31,13 @@ data class RemoteChatAttachment(
     val bytes: Long,
 )
 
-/** Wire role: 1 user, 2 Fairy. Status: 1 pending, 2 complete, 3 interrupted, 4 failed. */
+/**
+ * Wire role: 1 user, 2 Fairy. Status: 1 pending, 2 complete, 3 interrupted, 4 failed.
+ *
+ * `tools` names the tools one message requested, in the order it requested them. The backend
+ * sends it only when the message requested something, so an older snapshot or an ordinary
+ * message decodes as "no tools". Arguments and tool output are not part of the wire shape.
+ */
 @Serializable
 data class RemoteChatMessage(
     val messageId: String,
@@ -41,6 +47,7 @@ data class RemoteChatMessage(
     val status: Int,
     val text: String,
     val attachments: List<RemoteChatAttachment> = emptyList(),
+    val tools: List<String> = emptyList(),
 )
 
 /** Cumulative raw text; attempt identity is scoped to the projection generation. */
