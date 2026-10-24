@@ -14,6 +14,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { isCliEntry } from './cli-guard.ts'
 
 /** The agreed relative limits. Every value is an after/before ratio. */
 export const LIMITS = Object.freeze({
@@ -203,4 +204,4 @@ function main(argv: string[]): void {
   if (!result.pass) process.exitCode = 1
 }
 
-if (import.meta.main) main(process.argv.slice(2))
+if (isCliEntry(import.meta.main)) main(process.argv.slice(2))

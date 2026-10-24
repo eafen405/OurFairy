@@ -80,6 +80,10 @@ jobs:
       # The product packages are built before the suite runs: the profile the
       # tests install publishes the build output, so a build failure and a test
       # failure stay separate lines in this log.
+      #
+      # The explicit step stays even though the suite's own `pretest` hook also
+      # builds: it makes the build a distinct, named step, and a failing build
+      # stops the job before the suite starts.
       - name: Build the product packages
         run: npm run build
 

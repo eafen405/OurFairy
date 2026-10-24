@@ -10,15 +10,18 @@
  * compiler — so the compiler version stays in the same authority as
  * `combo.json`.
  *
- * Only symlinks this script created are replaced: a real directory at the same
- * path was put there by something else and is left alone.
+ * A symlink at the farm's path is replaced — the farm is a generated artefact,
+ * and a link left there would be stale. A real directory at the same path was
+ * put there by something else and is left alone.
  *
  * Usage:
  *   node scripts/link-types.ts             # link this repository's root
  */
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { isCliEntry } from './cli-guard.ts'
 import { readCombo, repoPath } from './combo.ts'
+import { packageNameOf } from './package-manifest.ts'
 import { productPackages } from './ourfairy-composition.ts'
 
 /** The repository this module lives in; the default root of every function. */
@@ -51,22 +54,12 @@ export function dshPackageDirs(root: string): string[] {
 }
 
 /**
- * One package's published name, read from its manifest.
- * @param dir - absolute package directory.
- * @returns
- */
-function packageNameOf(dir: string): string | undefined {
-  // The manifest is the package's own file; npm declares `name` as a string.
-  const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { name?: unknown }
-  return typeof manifest.name === 'string' && manifest.name !== '' ? manifest.name : undefined
-}
-
-/**
  * Put one symlink at `node_modules/<name>`.
  *
- * A link this script created is replaced; a real directory at that path was
- * put there by something else and is kept, so the build never deletes a
- * developer's own install.
+ * Any symlink at that path is replaced: the farm is a generated artefact, and a
+ * link left there would point at whatever the previous build linked. A real
+ * directory at that path was put there by something else and is kept, so the
+ * build never deletes a developer's own install.
  * @param nodeModules - the farm's directory.
  * @param name - the package name to publish.
  * @param target - the absolute directory to link to.
@@ -120,7 +113,7 @@ export function linkTypes(root = repoRoot): { linked: number; kept: number; node
   return { linked, kept, nodeModules }
 }
 
-if (import.meta.main) {
+if (isCliEntry(import.meta.main)) {
   const { linked, kept, nodeModules } = linkTypes(repoRoot)
   console.log(`linked ${linked} package(s) into ${nodeModules}${kept > 0 ? `; kept ${kept} real directory/directories` : ''}`)
 }

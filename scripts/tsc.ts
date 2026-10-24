@@ -20,6 +20,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { isCliEntry } from './cli-guard.ts'
 import { readCombo, repoPath } from './combo.ts'
 import { linkTypes } from './link-types.ts'
 
@@ -84,7 +85,7 @@ export function buildProducts(root = repoRoot, { fresh = false }: { fresh?: bool
   return { status: result.status ?? 1, output: `${result.stdout ?? ''}${result.stderr ?? ''}` }
 }
 
-if (import.meta.main) {
+if (isCliEntry(import.meta.main)) {
   const args = process.argv.slice(2)
   if (args.includes('--clean')) {
     const removed = cleanProducts(repoRoot)

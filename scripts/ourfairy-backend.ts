@@ -45,6 +45,7 @@ import { openSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSyn
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
+import { isCliEntry } from './cli-guard.ts'
 import { repoPath, verifyBundlePackages, verifyCombination, verifyInstalledNativeCapabilities, verifyPluginCompatibility } from './combo.ts'
 import { buildProducts as runProductBuild } from './tsc.ts'
 import {
@@ -689,24 +690,40 @@ function commandStatus(layout: Layout, options: LauncherOptions): number {
 }
 
 /**
+ * Compare two version triples, most significant part first.
+ * @param left - the first triple.
+ * @param right - the second triple.
+ * @returns a negative number, zero or a positive number, as `Array#sort` does.
+ */
+function compareVersion(left: readonly number[], right: readonly number[]): number {
+  for (let index = 0; index < left.length; index += 1) {
+    const difference = (left[index] ?? 0) - (right[index] ?? 0)
+    if (difference !== 0) return difference
+  }
+  return 0
+}
+
+/**
  * Whether a Node version satisfies the combination's declared range. Supports
- * the forms combo.json uses (`^N.M.P` and `>=N`); an unrecognized form throws
+ * the forms combo.json uses (`^N.M.P` and `>=N.M.P`); an unrecognized form throws
  * rather than passing silently, so a changed range cannot quietly disable the
  * check.
  */
-function nodeSatisfies(range: string, version: string): boolean {
+export function nodeSatisfies(range: string, version: string): boolean {
   // A node version always carries at least `major.minor`; the cast records
   // that the split is the one the comparison reads.
   const [major, minor] = version.split('.').map(Number) as [number, number]
+  const patch = Number(version.split('.')[2] ?? 0)
   for (const alternative of range.split('||').map(part => part.trim())) {
     const caret = /^\^(\d+)\.(\d+)\.\d+$/.exec(alternative)
     if (caret !== null) {
       if (major === Number(caret[1]) && minor >= Number(caret[2])) return true
       continue
     }
-    const atLeast = /^>=(\d+)$/.exec(alternative)
+    const atLeast = /^>=(\d+)(?:\.(\d+))?(?:\.(\d+))?$/.exec(alternative)
     if (atLeast !== null) {
-      if (major >= Number(atLeast[1])) return true
+      const wanted = [Number(atLeast[1]), Number(atLeast[2] ?? 0), Number(atLeast[3] ?? 0)]
+      if (compareVersion([major, minor, patch], wanted) >= 0) return true
       continue
     }
     throw new Error(`unsupported alternative ${JSON.stringify(alternative)} in combo.json backend.nodeRange`)
@@ -889,4 +906,4 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
-if (import.meta.main) process.exit(await main(process.argv))
+if (isCliEntry(import.meta.main)) process.exit(await main(process.argv))

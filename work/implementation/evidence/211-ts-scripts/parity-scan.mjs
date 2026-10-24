@@ -44,7 +44,6 @@
  *   node work/implementation/evidence/211-ts-scripts/parity-scan.mjs [base-ref]
  */
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createRequire, stripTypeScriptTypes } from 'node:module'
 
@@ -54,6 +53,20 @@ const ts = require('typescript')
 
 /** The commit the migration branched from. */
 const base = process.argv[2] ?? '303280fdcf'
+
+/**
+ * The commit the migration landed in; the right-hand side is read from there.
+ *
+ * The scan certifies the MIGRATION: the pre-migration scripts against the
+ * migrated ones. The review of spec #205 then changed two of those scripts on
+ * purpose — a shared CLI guard that refuses a Node without `import.meta.main`,
+ * and a Node range that accepts `>=N.M.P` — and those are declared where they
+ * were made (the evidence README's §10), not here: a declared category is a
+ * difference the migration did NOT make. Reading the right-hand side from the
+ * working tree would make the scan certify the review fixes as well, which is
+ * not what it measures.
+ */
+const migrated = process.argv[3] ?? '29f6d71ad2'
 
 /**
  * The migrated script, its pre-migration twin, and the script's own name.
@@ -684,7 +697,7 @@ function residueReport(before, after) {
   return { identical: listed.length === 0, fired, residue: listed, context, oldTokens, newTokens }
 }
 
-const before = path => execFileSync('git', ['show', `${base}:${path}`], { cwd: repoRoot, encoding: 'utf8' })
+const before = (path, ref = base) => execFileSync('git', ['show', `${ref}:${path}`], { cwd: repoRoot, encoding: 'utf8' })
 
 let operatorDeltas = 0
 let literalDeltas = 0
@@ -692,7 +705,7 @@ let tokenDeltas = 0
 let residues = 0
 for (const [oldPath, newPath] of files) {
   const oldSource = before(oldPath)
-  const newSource = readFileSync(join(repoRoot, newPath), 'utf8')
+  const newSource = before(newPath, migrated)
   // The source comparison: both sides go through the pinned compiler, so the
   // comments and the type annotations are gone and only executable code is
   // compared.

@@ -99,6 +99,8 @@ test('the authorities that decide what every package installs run the full suite
     ['scripts/precommit.ts'],
     ['scripts/tsc.ts'],
     ['scripts/link-types.ts'],
+    ['scripts/cli-guard.ts'],
+    ['scripts/package-manifest.ts'],
     ['scripts/ourfairy-composition.ts'],
     ['scripts/ourfairy-backend.ts'],
     ['.github/workflows/check.yml'],

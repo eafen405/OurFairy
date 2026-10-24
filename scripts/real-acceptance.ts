@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import http from 'node:http'
+import { isCliEntry } from './cli-guard.ts'
 import { repoRoot } from './combo.ts'
 
 const PHAETHON_PASSWORD = 'real-acceptance-password'
@@ -331,4 +332,4 @@ async function main(): Promise<void> {
   }
 }
 
-if (import.meta.main) await main()
+if (isCliEntry(import.meta.main)) await main()

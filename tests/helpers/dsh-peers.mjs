@@ -14,10 +14,10 @@
  * `import()`: a static import graph is resolved before any module body runs,
  * so a hook registered at evaluation time cannot answer for it.
  */
-import { readFileSync } from 'node:fs'
 import { createRequire, registerHooks } from 'node:module'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { manifestName } from '../../scripts/package-manifest.ts'
 import { dshDir, productPackageDirs, repoRoot } from './backend.mjs'
 
 /**
@@ -42,9 +42,10 @@ const anchors = {
   '@deepseek-ai/dsh-jobs': join(dshDir, 'packages', 'jobs', 'jobs', 'package.json'),
   '@deepseek-ai/schemastery': join(dshDir, 'vendor', 'schemastery', 'package.json'),
   zod: join(dshDir, 'package.json'),
-  ...Object.fromEntries(productPackageDirs().map(dir => {
-    const manifest = JSON.parse(readFileSync(join(repoRoot, dir, 'package.json'), 'utf8'))
-    return [manifest.name, join(repoRoot, dir, 'package.json')]
+  ...Object.fromEntries(productPackageDirs().flatMap(dir => {
+    const manifest = join(repoRoot, dir, 'package.json')
+    const name = manifestName(manifest)
+    return name === undefined ? [] : [[name, manifest]]
   })),
 }
 

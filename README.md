@@ -23,7 +23,7 @@
 
 | 需要 | 版本 / 位置 |
 | --- | --- |
-| Node | `^22.19.0 \|\| >=24` |
+| Node | `^22.19.0 \|\| >=24.2.0`（`import.meta.main` 自 22.18.0 与 24.2.0 起提供） |
 | pnpm | 用 corepack 固定：`corepack pnpm@11.28.5` |
 | deepseek-harness 检出 | 路径与锁定提交见 [combo.json](combo.json) 的 `repos.dsh` |
 | Linux 沙箱 | bubblewrap（`bwrap`），并允许创建非特权用户命名空间 |

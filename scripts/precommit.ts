@@ -30,6 +30,8 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isCliEntry } from './cli-guard.ts'
+import { packageNameOf } from './package-manifest.ts'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(scriptDir, '..')
@@ -95,7 +97,7 @@ const FULL_AUTHORITY = Object.freeze([
   /^combo\.json$/u,
   /^(?:backend\/[^/]+\/)?tsconfig[^/]*\.json$/u,
   /^backend\/[^/]+\/package\.json$/u,
-  /^scripts\/(?:precommit|tsc|link-types|combo|ourfairy-composition|ourfairy-backend)\.(?:mjs|ts)$/u,
+  /^scripts\/(?:precommit|tsc|link-types|combo|cli-guard|package-manifest|ourfairy-composition|ourfairy-backend)\.(?:mjs|ts)$/u,
   /^tests\/helpers\//u,
   /^tests\/fixtures\//u,
   /^\.github\//u,
@@ -123,18 +125,18 @@ function testFiles(root: string): string[] {
 
 /**
  * One product package's published name, read from its manifest.
+ *
+ * The manifest is the authority: the repository's package names do not follow a
+ * derivable pattern — `backend/probe` publishes `@ourfairy/dsh-baseline-probe`
+ * — so a name that is not read from the manifest would be an invention, and an
+ * invented name names a package that does not exist. A package without a
+ * manifest has no name; the caller then selects it by its directory alone.
  * @param root
  * @param name - the directory name under `backend/`.
  * @returns
  */
-function productPackageName(root: string, name: string): string {
-  const manifest = join(root, 'backend', name, 'package.json')
-  if (existsSync(manifest)) {
-    // The manifest is the package's own file; npm declares `name` as a string.
-    const parsed = JSON.parse(readFileSync(manifest, 'utf8')) as { name?: unknown }
-    if (typeof parsed.name === 'string' && parsed.name !== '') return parsed.name
-  }
-  return `@ourfairy/dsh-${name}`
+function productPackageName(root: string, name: string): string | undefined {
+  return packageNameOf(join(root, 'backend', name))
 }
 
 /**
@@ -161,7 +163,9 @@ export function relatedTests(paths: string[], { root = repoRoot }: { root?: stri
     }
     const productPackage = /^backend\/([^/]+)\//u.exec(path)
     if (productPackage !== null) {
-      needles.push(`backend/${productPackage[1]}/`, productPackageName(root, productPackage[1]!))
+      needles.push(`backend/${productPackage[1]}/`)
+      const published = productPackageName(root, productPackage[1]!)
+      if (published !== undefined) needles.push(published)
       continue
     }
     const script = /^scripts\/([^/]+)\.(?:mjs|ts)$/u.exec(path)
@@ -274,4 +278,4 @@ function main(argv: string[]): void {
   }
 }
 
-if (import.meta.main) main(process.argv.slice(2))
+if (isCliEntry(import.meta.main)) main(process.argv.slice(2))

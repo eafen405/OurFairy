@@ -65,5 +65,10 @@ dsh 检出 `product/ourfairy-v1` @ `d1b6099ae7`（与 [`combo.json`](../../../co
 
 ## 证据
 
-`work/implementation/evidence/205-ts-migration/`，每票一份记录加一份收口 README
-（目录索引见[证据索引](../../implementation/evidence/README.md)）。
+`work/implementation/evidence/` 下每票一份记录加一份收口 README：
+[`206-ts-infra/`](../../implementation/evidence/206-ts-infra/)、
+[`207-ts-identity-sessions/`](../../implementation/evidence/207-ts-identity-sessions/)、
+[`208-ts-spaces-attachments/`](../../implementation/evidence/208-ts-spaces-attachments/)、
+[`209-ts-chat/`](../../implementation/evidence/209-ts-chat/)、
+[`210-ts-remaining/`](../../implementation/evidence/210-ts-remaining/)、
+[`211-ts-scripts/`](../../implementation/evidence/211-ts-scripts/)（目录索引见[证据索引](../../implementation/evidence/README.md)）。

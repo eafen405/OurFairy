@@ -31,6 +31,7 @@ import { fileURLToPath } from 'node:url'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import type { PluginCompatibility, Profile, ProfileLayer, SkippedBundle } from '@deepseek-ai/dsh-app-boot'
+import { isCliEntry } from './cli-guard.ts'
 import { admitBundleDependencies, readCombo } from './ourfairy-composition.ts'
 import type { AdmissionRefusal, Combo, ComboAndroidSource, ComboRepo } from './ourfairy-composition.ts'
 
@@ -770,4 +771,4 @@ function main(argv: string[]): number {
   return result.failures.length === 0 || allowDrift ? 0 : 1
 }
 
-if (import.meta.main) process.exit(main(process.argv))
+if (isCliEntry(import.meta.main)) process.exit(main(process.argv))

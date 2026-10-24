@@ -26,6 +26,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isCliEntry } from './cli-guard.ts'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(scriptDir, '..')
@@ -334,4 +335,4 @@ function main(argv: string[]): void {
   if (report.defects.length > 0 || drift) process.exitCode = 1
 }
 
-if (import.meta.main) main(process.argv.slice(2))
+if (isCliEntry(import.meta.main)) main(process.argv.slice(2))

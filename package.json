@@ -6,7 +6,7 @@
   "type": "module",
   "license": "AGPL-3.0",
   "engines": {
-    "node": "^22.19.0 || >=24"
+    "node": "^22.19.0 || >=24.2.0"
   },
   "scripts": {
     "build": "node scripts/tsc.ts --fresh",
