@@ -335,6 +335,9 @@ function firstAtLeast<T>(items: readonly T[], keyOf: (item: T) => number, target
   let high = items.length
   while (low < high) {
     const middle = (low + high) >> 1
+    // The loop invariant is `low < high <= items.length`, so
+    // `middle < high <= items.length` and `items[middle]` is in range. The
+    // assertion names that bound; it is not a check the old code made.
     if (keyOf(items[middle] as T) < target) low = middle + 1
     else high = middle
   }
@@ -601,8 +604,8 @@ export const workDefinition: ProjectionDefinition<'ourfairyWork', WorkState> = {
 }
 
 /** Wire tasks: the folded roster enriched with the live registry's availability. */
-function tasksAt(state: WorkState, ctx: Context, sessionId: string) {
-  const live = new Map<string, JobView>(ctx.jobs.list(sessionId as SessionId).filter(job => job.owner === sessionId).map(job => [job.id, job]))
+function tasksAt(state: WorkState, ctx: Context, sessionId: SessionId) {
+  const live = new Map<string, JobView>(ctx.jobs.list(sessionId).filter(job => job.owner === sessionId).map(job => [job.id, job]))
   return rosterOf(state).map(row => {
     const job = row.generation === ctx.jobs.generation ? live.get(row.id) : undefined
     const available = job !== undefined
@@ -656,7 +659,7 @@ function activityAt(state: WorkState, tasks: ReturnType<typeof tasksAt>, running
  * @param cut - inclusive `throughSeq`, `-1` for an empty log. Required: an
  *   omitted cut would fabricate a `session/Infinity` episode.
  */
-export function tasksAndActivityAt(state: WorkState, ctx: Context, sessionId: string, running: boolean, cut: number) {
+export function tasksAndActivityAt(state: WorkState, ctx: Context, sessionId: SessionId, running: boolean, cut: number) {
   const tasks = tasksAt(state, ctx, sessionId)
   return { tasks, activity: activityAt(state, tasks, running, cut) }
 }
