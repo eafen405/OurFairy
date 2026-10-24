@@ -225,6 +225,40 @@ Node v24.18.0，pnpm 由 `corepack pnpm@11.28.5` 提供，dsh 检出 `d1b6099ae7
 
 ---
 
+## 6.1 类型漂移实例（票据验收项）
+
+票据验收写的是：「给 pinned dsh 的 `JobStatus` 加成员或改 `kill()` 返回形状，`tsc` 失败并点名符号。」
+本票把它跑成了可复跑的脚本 `work/implementation/evidence/211-ts-scripts/type-drift.mjs`：
+把钉住的 dsh 的 jobs 包类型树**复制**到 `work/tmp/drift-211/`（钉住的检出是只读的，脚本不动它），
+在副本上改形状，用一个 scratch 工程的 `paths` 指过去，然后跑 `tsc`。
+
+```
+node work/implementation/evidence/211-ts-scripts/type-drift.mjs
+```
+
+结果（逐条漂移后重跑 `tsc`）：
+
+| 漂移 | `tsc` | 说明 |
+| --- | --- | --- |
+| 0. 未改动的钉住 dsh | 无错误 | 基线 |
+| 1. `JobStatus` 加一个成员 | **无错误** | 产品用 `taskStatusOf(status: string)` 读状态，编译期看不到那个更窄的并集 |
+| 2. `kill()` 返回形状加一个成员 | **无错误** | 产品用 `stopOutcomeOf(result: string)` 读结果，未知取值在**运行期**被拒绝 |
+| 3. `JobOutputRead.next` 改类型 | **无错误** | 该值被原样放进推断出来的 wire 对象，编译期仍然接受 |
+| 4. `JobId` 的参数改类型 | **失败**：`backend/chat/src/jobs.ts(49,22)`、`(61,40)` 两处 TS2345 | 用了点的位置报错 |
+| 5. `JobId` 从包根消失 | **失败并点名符号**：`backend/chat/src/jobs.ts(2,10): error TS2724: '"@deepseek-ai/dsh-jobs"' has no exported member named 'JobId'. Did you mean 'JobKind'?` | 直接 import 的符号，编译器点名 |
+
+**要如实记的一件事**：验收句里点名的两个符号（`JobStatus`、`kill()`）**不会**让 `tsc` 失败——
+T2–T5 刻意把产品对它们的用法放宽成 `string` 加运行期的表（`backend/chat/src/units.ts` 的
+`TASK_STATUS` 与 `backend/chat/src/jobs.ts` 的 `STOP_OUTCOME`），所以未知取值被**运行期**拒绝，
+而不是让编译失败。`JobStatus` 的增删另有专门的测试期守卫：
+`tests/native-job-status.test.mjs` 用 TypeScript 编译器 API 读钉住 dsh 的
+`packages/jobs/jobs/lib/types/view.d.ts`，把 `JobStatus` 的成员与 `TASK_STATUS` 逐项对账。
+
+类型层的耦合由漂移 4 与 5 证明：产品直接消费钉住 dsh 的类型，所以 dsh 的类型一变，
+产品的 `tsc` 就失败，并在直接 import 的符号上**点名**。
+
+---
+
 ## 7. 没跑的 / 未完成的
 
 | 项 | 状态 | 原因 |
