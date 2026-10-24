@@ -36,6 +36,11 @@ export const attachment = (uploadId, bytes) => ({ uploadId, name: `${uploadId}.p
 /** A compact assistant stream carrying only visible text, as the log stores it. */
 export const textStream = text => [{ type: 'text-chunks', time0: 1, index: 0, dt: [0], texts: [text] }]
 
+/** The same stream shape for one tool call: the name arrives with the first delta. */
+export const toolStream = (id, name, args = '{}') => [
+  { type: 'tool-call-chunks', time0: 1, index: 1, dt: [0], id, name, args: [args] },
+]
+
 export const job = (overrides = {}) => ({ id: 'job-1', kind: 'task', label: 'work', status: 'running', startedAt: 10,
   output: { earliest: 0, total: 0 }, ...overrides })
 

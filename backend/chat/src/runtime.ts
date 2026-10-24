@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { SessionHistoryGapError, createSessionHistorySeam } from '@deepseek-ai/dsh-agent/session-history'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
-import { attemptText, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.js'
+import { attemptText, attemptTools, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.js'
 import { FAIRY_PERSONA } from './persona.js'
 import { SessionQueues } from './queues.js'
 import type { Context } from '@deepseek-ai/cordis'
@@ -96,7 +96,11 @@ export interface ChatProjection {
   readonly tasks: WireTask[]
   readonly activity: WireActivity
   readonly messages: WireMessage[]
-  readonly attempt: { readonly attemptId: string; readonly revision: number; readonly text: string } | null
+  /**
+   * The live attempt: cumulative text plus the tool names it has requested so
+   * far. `tools` is omitted when the step requested none, like a message row.
+   */
+  readonly attempt: { readonly attemptId: string; readonly revision: number; readonly text: string; readonly tools?: readonly string[] } | null
   readonly settledAttempt: { readonly attemptId: string; readonly seq: number } | null
   readonly replyStatus: number
   readonly error: string | null | undefined
@@ -312,7 +316,9 @@ export class SessionRuntime {
     const { baseline, needsResync } = this.#history.assistantStream(state.sessionId)
     const attempt = needsResync ? undefined : baseline.activeAttempt
     if (attempt === undefined) return null
-    return { attemptId: attempt.attemptId, revision: baseline.revision, text: attemptText(attempt.stream) }
+    const tools = attemptTools(attempt.stream)
+    return { attemptId: attempt.attemptId, revision: baseline.revision, text: attemptText(attempt.stream),
+      ...(tools.length === 0 ? {} : { tools }) }
   }
 
   /**

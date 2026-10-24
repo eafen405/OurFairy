@@ -31,6 +31,9 @@
 - `toolNamesOf` 只取 `block.name`；`arguments` 与 `tool/result` 不参与。
 - `rowAtCut` 在 `tools` 为空时**不输出该字段**，与 `attachments` 在 attempt 行缺席的既有做法一致，
   普通消息的线上形状不变。
+- `assistant/attempt` 行与实时 `attempt` 叠加层也从 stream 的 `tool-call-chunks` 取工具名
+  （`attemptTools`，按 call id 去重、跳过尚无名字的记录）。被中止的步骤没有消息，名字因此不会丢。
+- 只有 `assistant/message` 带工具名：`delivery/message`（任务报告）一律为空，呈现不变。
 - `stateVersion` 3 → 4：行形状变了，registry 丢弃旧版本持久化行并从 `init` 重折历史，旧会话也能
   显示工具名。
 - `backend/chat/README.md` 的 `messages` 契约同步为 `{…,attachments,tools?}`。
@@ -38,8 +41,10 @@
 **客户端**
 
 - `RemoteChatMessage.tools: List<String> = emptyList()`：旧快照与普通消息解码为「没有工具」。
+- `RemoteChatAttempt.tools` 同理；`RemoteChatPanel` 把 `attempt.tools` 传进 `RemoteTranscript`。
 - `RemoteTranscript` 在消息正文之后按序渲染 `调用工具 · <name>` 小号标签行（`labelSmall` +
-  `onSurfaceVariant`，与「已停止」「回复失败」同一套文字样式），不新增 chip、图标或动画。
+  `onSurfaceVariant`，与「已停止」「回复失败」同一套文字样式），不新增 chip、图标或动画。实时行
+  （还没有消息）用 `attemptTools` 渲染同一套行。
 
 ## 验证
 
@@ -52,7 +57,8 @@ node --test tests/projection-units-real.test.mjs
 node --test tests/chat-multi-observer.test.mjs tests/chat-stream-backpressure.test.mjs
 ```
 
-- `projection-units`＋`projection-fold`＋`chat-read-window`：25/25 通过。
+- `projection-units`＋`projection-fold`＋`chat-read-window`：25/25 通过（评审修补后含新增的被中止
+  步骤、重复 call id、投递不带工具名、跨消息顺序四条用例）。
 - `projection-units-real`：1/1 通过。这是**真实产品后端 + mock 模型**的日志：会话里那条
   `seq: 11`、`text: ""` 的 assistant 行现在带 `tools: ["todo_write"]`；冻结期望里的这一行与
   10 个包含它的 cut 一并更新，其余字段逐字未变。
@@ -65,8 +71,16 @@ Android（`android/`，`ANDROID_HOME=/home/eafen405/Android/Sdk`，`--offline`�
   --tests 'me.rerere.rikkahub.data.remote.*' --console=plain
 ```
 
-- 193 项通过，0 失败。包含新增 `RemoteTranscriptToolCallTest`（3 项）与
+- 194 项通过，0 失败。包含新增 `RemoteTranscriptToolCallTest`（4 项）与
   `RemoteChatApiTest` 的 `tools` 解码用例。
+- 客户端的构建与静态检查按 `android/AGENTS.md` 的验证入口另跑一次：
+
+```sh
+ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew lintDebug assembleDebug \
+  -Pourfairy.identityEndpoint=https://measurement.invalid --offline --console=plain
+```
+
+  `BUILD SUCCESSFUL`（约 1 分 32 秒）：单测、lint 与 debug APK 构建都实际执行。
 
 全量：
 
@@ -75,7 +89,7 @@ npm test
 npm run combo:verify
 ```
 
-- 全量 `npm test`：**296/296 通过**，0 失败、0 跳过（`pretest` 先 `npm run build`）。
+- 全量 `npm test`：**300/300 通过**，0 失败、0 跳过（`pretest` 先 `npm run build`）。
 - `npm run combo:verify`：`combo: combination verified`（ourfairy 基于集成分支 tip、dsh 锁定提交、
   Android 来源声明三条 ok）。
 
@@ -87,9 +101,24 @@ npm run combo:verify
   （`调用工具 · bash` / `调用工具 · read`）、`bash` 在上、流式期间（`attempt` 非空）仍在。
   断言读的是 Compose 语义树，不是内部状态。
 
+## 两轴评审
+
+Standards 与 Spec 各一轮，范围 `git diff 29f6d71ad2...HEAD`。
+
+- Standards 抓到的硬问题都已修：`backend/chat/README.md` 仍写 transcript 版本 3（现为 4）；
+  「stateVersion 绑定 README」的测试其实只断言手写常量（现在真的读 README 的句子）；客户端只跑了
+  定向单测、缺 `lintDebug`/`assembleDebug` 证据（已补跑并记录）；`RemoteChatApiTest` 里
+  `DELIVERED_SNAPSHOT` 的 KDoc 被新 fixture 挤成了孤儿注释（已归位）。
+- Spec 抓到的问题也已修：被中止/仍在流的步骤原本没有工具名（现在从 stream 取，attempt 行与实时
+  叠加层都带）；`delivery/message` 不该长 `tools`（现在只给 `assistant/message`）；`tools` 混进
+  冻结的「纯捕获」期望却说成捕获值（`projection-units-real.test.mjs` 的头注已说明这是唯一例外）。
+- 未改的两条评审意见：`messageText` 与 `toolNamesOf` 的过滤器形状相近（两者都是一行的
+  filter/map，抽公共函数要引入按块类型收窄的泛型守卫，收益低于复杂度）；行字段用 zod
+  `z.infer` 已经让漏字段变成类型错误，没有再引入行工厂。
+
 ## 未执行项
 
 - 未在真机上目视验收（本票是呈现改动，测试跑在 Robolectric 上）。
 - 未改 `tasks`/后台任务面板，也未让工具名进入通知或投屏类摘要。
-- 流式过程中的**当前未提交**步骤（模型正在吐 tool-call、消息还没 append 的那一小段）不显示工具名：
-  条目随 `assistant/message` 提交出现。工具执行与后续步骤期间条目都在场。
+- 一步之内 text 与 tool-call 交错时，界面固定先显示正文再列出工具名（投影只保留 `text` 合并
+  文本与工具名数组，不保留块间交错）。模型常见的「先正文后调用」不受影响。

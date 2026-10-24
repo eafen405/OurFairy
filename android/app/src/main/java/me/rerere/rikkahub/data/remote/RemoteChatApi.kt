@@ -49,12 +49,16 @@ data class RemoteChatMessage(
     val tools: List<String> = emptyList(),
 )
 
-/** Cumulative raw text; attempt identity is scoped to the projection generation. */
+/**
+ * Cumulative raw text; attempt identity is scoped to the projection generation. `tools` names the
+ * tools this in-flight step has requested so far, and is absent while it requested none.
+ */
 @Serializable
 data class RemoteChatAttempt(
     val attemptId: String,
     val revision: Long,
     val text: String,
+    val tools: List<String> = emptyList(),
 )
 
 /** Native end outcome copied by the backend; attempt identity is generation-local. */
