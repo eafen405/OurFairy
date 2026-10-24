@@ -220,15 +220,39 @@ function installProfile(layout, options, combination) {
   // pnpm's hoisted linker can keep old file: contents on install, even with --force.
   // Rebuild invalidated snapshots while retaining the lockfile and download store.
   rmSync(join(layout.profileDir, 'node_modules'), { recursive: true, force: true })
-  const result = spawnSync(command, [...args, 'install', '--ignore-scripts',
+  const install = () => spawnSync(command, [...args, 'install', '--ignore-scripts',
     '--package-import-method', PROFILE_IMPORT_METHOD, '--store-dir', layout.pnpmStore], {
     cwd: layout.profileDir,
     env: isolatedEnv(layout, { root: repoRoot }),
     encoding: 'utf8',
     timeout: 300_000,
   })
+  let result = install()
+  let firstFailure = ''
+  let droppedLockfile = false
   if (result.status !== 0) {
-    fail(`profile install failed in ${layout.profileDir} (exit ${result.status}):\n${result.stdout ?? ''}\n${result.stderr ?? ''}`)
+    firstFailure = `\n${result.stdout ?? ''}\n${result.stderr ?? ''}`
+    // The lockfile records the content hash of every `file:` package it
+    // installed. A product package publishes its build output, so its content
+    // changes as soon as its source does — and then those hashes are stale.
+    // pnpm re-packs the package, and the peer path it recorded for the
+    // package's own dependencies no longer resolves, so the install dies with
+    // an ENOENT naming a directory nobody wrote. The lockfile is a cache of
+    // the previous install, not an input to it: drop it and let pnpm
+    // re-resolve.
+    const lock = join(layout.profileDir, 'pnpm-lock.yaml')
+    if (existsSync(lock)) {
+      rmSync(lock, { force: true })
+      droppedLockfile = true
+      result = install()
+    }
+  }
+  if (result.status !== 0) {
+    const note = droppedLockfile
+      ? `\nthe profile lockfile was stale and has been dropped; the retry failed too.`
+        + `\nthe first failure was:${firstFailure}`
+      : ''
+    fail(`profile install failed in ${layout.profileDir} (exit ${result.status}):\n${result.stdout ?? ''}\n${result.stderr ?? ''}${note}`)
   }
   if (!existsSync(linked)) {
     fail(`profile install reported success but ${linked} is missing;`
