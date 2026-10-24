@@ -168,7 +168,7 @@ fun RemoteChatPanel(
             }
         }
     }
-    Column(modifier = modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+    Column(modifier = modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         if (!snapshot.connected || snapshot.failure != null || projection?.error != null) {
             ConnectionHeader(
                 connected = snapshot.connected,
