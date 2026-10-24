@@ -65,9 +65,8 @@ fun FairyConversationPage(
         if (sessionId == null && retry > 0) receive.owned.refresh()
         val ready = receive.owned.snapshot.first { !it.loading }
         if (sessionId == null) {
-            val target = ready.selectedId ?: ready.primarySessionId
             opening = false
-            if (target != null) onOpenConversation(target) else drawer.open()
+            drawer.open()
         } else {
             val alreadySelected = ready.failure == null && ready.selectedId == sessionId &&
                 ready.sessions.any { it.id == sessionId }
