@@ -20,7 +20,7 @@ import { test } from 'node:test'
 // module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
 import {
-  SESSION, attachment, event, job, transcriptLog, userMessage, workCases, workLog,
+  SESSION, attachment, event, job, toolCallMessage, transcriptLog, userMessage, workCases, workLog,
 } from './fixtures/projection-logs.mjs'
 
 const units = await import('../backend/chat/dist/units.js')
@@ -113,7 +113,7 @@ test('a unit applies an unrelated event as the same state reference', () => {
 test('the stateVersion constants bind the README contract', () => {
   // Bump these together with backend/chat/README.md and the evidence when the
   // fold semantics or state shape change; the registry discards older rows.
-  const versions = { ourfairyTranscript: 3, ourfairyWork: 2 }
+  const versions = { ourfairyTranscript: 4, ourfairyWork: 2 }
   for (const definition of [units.transcriptDefinition, units.workDefinition]) {
     assert.equal(typeof definition.key, 'string')
     assert.equal(definition.stateVersion, versions[definition.key], `${definition.key} stateVersion`)
@@ -186,6 +186,41 @@ test('the work read reports the observed log end, not a fold position it never s
 
   const empty = fold(units.workDefinition, [])
   assert.equal(units.tasksAndActivityAt(empty, ctx, SESSION, false, -1).activity.throughSeq, -1)
+})
+
+test('a tool-call step carries its tool names in block order and nothing else', () => {
+  // #213: a step that only requested tools used to reach the wire as an empty
+  // text row, so the client had nothing to show. The names ride on the message;
+  // arguments and tool output stay out of the projection.
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'assistant/message', { turn: 1, step: 1, message: toolCallMessage('a1', 'checking', [
+      { id: 'c1', name: 'bash', arguments: '{"command":"secret-argument"}' },
+      { id: 'c2', name: 'read', arguments: '{"path":"secret-path"}' },
+    ]), stream: [] }, { surfaceOp: 'append' }),
+    event(2, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+      content: [{ type: 'text', text: 'secret tool output' }], source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  assert.equal(messages.length, 1, 'the tool result is not a transcript row')
+  assert.deepEqual(messages[0].tools, ['bash', 'read'])
+  assert.equal(messages[0].text, 'checking', 'the step text is unchanged')
+  const wire = JSON.stringify(messages)
+  for (const secret of ['secret-argument', 'secret-path', 'secret tool output']) {
+    assert.ok(!wire.includes(secret), `the projection must not carry ${secret}`)
+  }
+})
+
+test('a tool-only step still carries its tool names', () => {
+  const log = [
+    event(0, 'assistant/message', { turn: 1, step: 1, message: toolCallMessage('a1', '', [
+      { id: 'c1', name: 'bash', arguments: '{}' },
+    ]), stream: [] }, { surfaceOp: 'append' }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+  assert.equal(messages[0].text, '')
+  assert.deepEqual(messages[0].tools, ['bash'])
 })
 
 test('the transcript unit answers receipts without reading the log', () => {
@@ -291,7 +326,7 @@ test('the transcript read at a cut keeps the frozen first-appearance order, not 
 
 test('a windowed read touches only its window rows, not the whole transcript', () => {
   const rows = Array.from({ length: 5000 }, (_, seq) => ({ messageId: `m${seq}`, requestId: null, role: 2,
-    text: 'x', attachments: null, first: { seq, status: 2 }, transitions: [] }))
+    text: 'x', attachments: null, tools: [], first: { seq, status: 2 }, transitions: [] }))
   let rowReads = 0
   const proxied = new Proxy(rows, {
     get(target, property, receiver) {
