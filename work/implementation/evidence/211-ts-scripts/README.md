@@ -670,3 +670,20 @@ corepack pnpm `11.28.5`，dsh 检出 `/home/eafen405/projects/deepseek-harness` 
 （`tests/chat-stream-backpressure.test.mjs`，1 个测试；#214 只**新增**这一个测试文件，
 `tests/chat-multi-observer.test.mjs` 是改已有用例的断言、没加新用例）。
 **去掉那一个测试文件，本规格自己的内容是 298 个测试**，全部通过。
+
+**合并集成尖端之后（提交 `10e35572d5`，本分支的最终状态）。** 按收口要求把
+`integration/spec-205`（`6f1864ff82`）并进本分支，合并无冲突，并行会话 #213 的文件**一个都没有改**。
+合并后重跑同一组门禁，数字变了（#213 带进来 6 个测试）：
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run clean && npm run build` | 通过（`removed 12 build output directories`，构建退出码 0） |
+| `npm test` | **305 tests / 305 pass / 0 fail**（142 911 ms） |
+| `npm run combo:verify` | 通过（ourfairy@`10e35572d575`、dsh@`d1b6099ae716`、android source@`460109d1b89b`） |
+| `npm run backend:doctor` | 通过（`node version: 24.18.0 satisfies ^22.19.0 \|\| >=24.2.0`，`doctor: all checks passed`） |
+| `OURFAIRY_PORT=0 npm run backend:probe` | 通过（`ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)`） |
+| `node --no-warnings work/implementation/evidence/211-ts-scripts/parity-scan.mjs` | 通过（`0 residue(s) after them, across 12 files`） |
+| `node work/implementation/evidence/211-ts-scripts/type-drift.mjs` | 通过（漂移 1/2/3 无错误、漂移 4 两处 `TS2345`、漂移 5 一处 `TS2724`，与合并前逐字相同） |
+
+**305 = 299（合并前）+ 6（#213 的合并带进来的测试）**。其中属于本规格的内容仍是
+**299 − 1（#214 的那个测试文件）= 298**，加上合并进来的 #213 的 6 个。
