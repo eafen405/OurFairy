@@ -6,6 +6,7 @@ import { ChatRuntimeFacade } from './runtime-facade.js'
 import { installJobs } from './jobs.js'
 import { registerProjectionUnits } from './units.js'
 import { installSpillRead } from './spill-read.js'
+import { respondToChatObserver } from './observe.js'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ServerResponse } from 'node:http'
@@ -63,14 +64,6 @@ export function apply(ctx: Context): void {
   register('/chat/observe', (owner, body) => chat.observe(owner, body), (response, result) => {
     // The route's handler returns the observer; the transport envelope types
     // every route result as unknown.
-    const subscribe = result as ChatObserver
-    response.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-accel-buffering': 'no' })
-    response.flushHeaders()
-    const unsubscribe = subscribe((projection, error) => {
-      if (error) { response.destroy(error); return }
-      response.write(`event: projection\ndata: ${JSON.stringify(projection)}\n\n`)
-    })
-    const heartbeat = setInterval(() => response.write(': keepalive\n\n'), 15000)
-    response.once('close', () => { clearInterval(heartbeat); unsubscribe() })
+    respondToChatObserver(response, result as ChatObserver)
   })
 }

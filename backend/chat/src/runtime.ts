@@ -119,6 +119,7 @@ export class LiveSession {
   error: string | null | undefined = null
   listeners = new Set<Observer>()
   scheduled = false
+  publishTimer: ReturnType<typeof setTimeout> | null = null
   agent: Agent | null = null
   /**
    * The observed event window: `events` is null until the first read seeds it
@@ -377,23 +378,35 @@ export class SessionRuntime {
 
   /** Schedule one projection pass for the current listeners; does not change the version. */
   publish(state: LiveSession) {
-    if (state.scheduled || state.listeners.size === 0) return
-    state.scheduled = true
-    queueMicrotask(async () => {
-      try {
-        for (const observer of state.listeners) {
-          const projection = await this.projection(state, observer)
-          if (state.listeners.has(observer)) observer.listener(projection)
-          if (state.version !== projection.version) queueMicrotask(() => this.publish(state))
-        }
-      } catch (error) {
-        // The observer decides what to do with the failure; it is the caught
-        // value as it is.
-        for (const observer of state.listeners) observer.listener(undefined, error as Error)
-      } finally {
-        state.scheduled = false
+    if (state.listeners.size === 0) return
+    if (state.scheduled) {
+      if (state.publishTimer !== null && state.status === 'idle') {
+        clearTimeout(state.publishTimer)
+        state.publishTimer = null
+        queueMicrotask(() => this.#publishNow(state))
       }
-    })
+      return
+    }
+    state.scheduled = true
+    if (state.status === 'idle') queueMicrotask(() => this.#publishNow(state))
+    else state.publishTimer = setTimeout(() => this.#publishNow(state), 32)
+  }
+
+  /** One shared publication for every observer; running fragments coalesce before projection. */
+  async #publishNow(state: LiveSession) {
+    state.publishTimer = null
+    const version = state.version
+    try {
+      for (const observer of state.listeners) {
+        const projection = await this.projection(state, observer)
+        if (state.listeners.has(observer)) observer.listener(projection)
+      }
+    } catch (error) {
+      for (const observer of state.listeners) observer.listener(undefined, error as Error)
+    } finally {
+      state.scheduled = false
+      if (state.version !== version) this.publish(state)
+    }
   }
 
   /**

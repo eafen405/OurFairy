@@ -1,5 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application>
+    <application android:usesCleartextTraffic="true">
+        <activity
+            android:name=".ui.identity.StreamingRateActivity"
+            android:exported="true"
+            android:label="OurFairy streaming rate measurement" />
         <activity
             android:name=".ui.identity.PresentationBenchmarkActivity"
             android:exported="true"
