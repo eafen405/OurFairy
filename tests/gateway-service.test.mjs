@@ -19,7 +19,7 @@ import { test } from 'node:test'
 import './helpers/dsh-peers.mjs'
 
 const { Context } = await import('@deepseek-ai/cordis')
-const { GatewayError, GatewayService, loadNativeModalities } = await import('../backend/gateway/src/service.mjs')
+const { GatewayError, GatewayService, loadNativeModalities } = await import('../backend/gateway/dist/service.js')
 
 const PROVIDER = 'minimax-cn'
 const MODEL = 'MiniMax-M3.1-Flash'

@@ -11,6 +11,24 @@
  * @module @ourfairy/dsh-gateway/src/service
  */
 import { Service } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
+import type { ModelSelection } from '@deepseek-ai/dsh-agent'
+import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
+import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import type { SettingsForms } from '@deepseek-ai/dsh-settings'
+import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { IdentityService } from '@ourfairy/dsh-identity'
+// The dsh context's own seams and the product's own context rows: the model
+// registry, the shared model selection, the credential seam, the settings
+// service and the chat row's reply view. The imports are type-only, so they add
+// no runtime dependency.
+import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-agent-default-model'
+import type {} from '@deepseek-ai/dsh-credentials'
+import type {} from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@ourfairy/dsh-chat'
+import type {} from '@ourfairy/dsh-identity'
 
 /**
  * The native catalog owns the modality vocabulary. Importing the runtime value
@@ -25,20 +43,20 @@ const NATIVE_CATALOG_MODULE = '@deepseek-ai/dsh-llm-pi-ai/src/catalog.ts'
 
 /**
  * Load the native modality list from the catalog module.
- * @param {string} specifier - the catalog module specifier to import.
- * @returns {Promise<string[]>} the native modality list.
+ * @param specifier - the catalog module specifier to import.
+ * @returns the native modality list.
  */
-export async function loadNativeModalities(specifier = NATIVE_CATALOG_MODULE) {
+export async function loadNativeModalities(specifier: string = NATIVE_CATALOG_MODULE): Promise<string[]> {
   try {
-    const { MODALITIES } = await import(specifier)
+    const { MODALITIES } = await import(specifier) as { MODALITIES?: unknown }
     if (!Array.isArray(MODALITIES) || MODALITIES.length === 0) {
       throw new Error(`"${specifier}" exports no MODALITIES list`)
     }
-    return MODALITIES
+    return MODALITIES as string[]
   } catch (error) {
     const peer = specifier.split('/').slice(0, 2).join('/')
     throw new Error(`cannot load the native input modality list from "${specifier}";`
-      + ` install the ${peer} peer at the pinned dsh version (${error?.message ?? String(error)})`,
+      + ` install the ${peer} peer at the pinned dsh version (${(error as Error | undefined)?.message ?? String(error)})`,
     { cause: error })
   }
 }
@@ -47,8 +65,8 @@ export async function loadNativeModalities(specifier = NATIVE_CATALOG_MODULE) {
 // constructor: a module-scope throw is reported by the loader only as "failed
 // to import", while a construction failure carries this message into the boot
 // diagnostic.
-let MODALITIES
-let catalogFailure
+let MODALITIES: string[] | undefined
+let catalogFailure: unknown
 try {
   MODALITIES = await loadNativeModalities()
 } catch (error) {
@@ -58,7 +76,10 @@ try {
 
 /** One refusal with the HTTP status and product error code the route answers with. */
 export class GatewayError extends Error {
-  constructor(status, code, message) {
+  declare readonly status: number
+  declare readonly code: string
+
+  constructor(status: number, code: string, message: string) {
     super(message)
     this.name = 'GatewayError'
     this.status = status
@@ -77,57 +98,147 @@ const PROVIDER_ID = /^[a-z][a-z0-9-]*$/
 export const PHONE_EDITABLE_MODEL_FIELDS = new Set(['id', 'name', 'contextWindow', 'maxTokens', 'input'])
 
 /** Draft fields outside `models` reshape every model on the route. */
-const ROUTE_WIDE_FIELDS = ['api', 'baseURL', 'apiKeyEnv']
+const ROUTE_WIDE_FIELDS = ['api', 'baseURL', 'apiKeyEnv'] as const
 
-function isPlainObject(value) {
+/**
+ * One model entry of a provider route, as the settings row and the phone draft
+ * carry it.
+ *
+ * The stored row carries adapter defaults the draft never sets, so the entry
+ * keeps an open shape: the gateway reads and writes the phone-editable fields
+ * and leaves every other field the deployment declared alone.
+ */
+interface RouteModel {
+  id: string
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
+  input?: readonly string[]
+  [field: string]: unknown
+}
+
+/** One provider route profile, as the `llm-pi-ai` settings row carries it. */
+interface RouteProfile {
+  displayName?: string
+  api?: string
+  baseURL?: string
+  apiKeyEnv?: string
+  models?: RouteModel[]
+}
+
+/**
+ * The value of one settings row, as the gateway reads it.
+ *
+ * The native row's value column is opaque JSON; the gateway reads the
+ * deployment-owned fields out of it, so this view type is the gateway's own
+ * reading of that column. Every field is optional: a row carries only the
+ * fields its own namespace declares.
+ */
+interface GatewayRowValue {
+  providers?: Record<string, RouteProfile>
+  apiKeyEnv?: string
+  model?: string
+  endpoint?: string
+  reasoningEffort?: string
+  maxDurationMs?: number
+  maxAudioBytes?: number
+  timeoutMs?: number
+  maxGlobalInFlight?: number
+  maxUserInFlight?: number
+  [field: string]: unknown
+}
+
+/** One settings row, as the gateway reads it. */
+interface GatewayRow {
+  readonly ns: string
+  readonly value?: GatewayRowValue
+  readonly base?: GatewayRowValue
+  readonly user?: GatewayRowValue
+}
+
+/** Presence facts for one credential reference; the value never leaves the backend. */
+interface CredentialFacts {
+  readonly ref: unknown
+  readonly configured: boolean
+  readonly writable: boolean
+  readonly source?: string
+  readonly error?: string
+}
+
+/** One running reply, as the chat row reports it. */
+interface ActiveReply {
+  readonly sessionId: SessionId
+  readonly provider: string
+  readonly model: string
+}
+
+/**
+ * Whether one value is a plain object.
+ *
+ * The check is the prototype test itself; it is written as a type guard so the
+ * value that passes it can be read field by field.
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const proto = Object.getPrototypeOf(value)
   return proto === Object.prototype || proto === null
 }
 
-function invalid(message) {
+function invalid(message: string): GatewayError {
   return new GatewayError(400, 'gateway/invalid-route', message)
 }
 
 /** Reject keys the gateway does not own before any profile reaches the settings layer. */
-function onlyFields(object, allowed, label) {
+function onlyFields(object: Record<string, unknown>, allowed: Set<string>, label: string): void {
   for (const key of Object.keys(object)) {
     if (!allowed.has(key)) throw invalid(`${label} does not accept field "${key}"`)
   }
 }
 
+/**
+ * Whether one value is a safe integer.
+ *
+ * `Number.isSafeInteger` is the check itself; it is written as a type guard so
+ * the value that passes it can be used as a number.
+ */
+function isSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value)
+}
+
 /** Validate one model entry; unknown fields are refused rather than silently dropped. */
-function modelEntry(entry, index) {
+function modelEntry(entry: unknown, index: number): RouteModel {
   if (!isPlainObject(entry)) throw invalid(`models[${index}] must be an object`)
   onlyFields(entry, PHONE_EDITABLE_MODEL_FIELDS, `models[${index}]`)
   if (typeof entry.id !== 'string' || entry.id.trim() === '') throw invalid(`models[${index}].id must be a non-empty string`)
   if (entry.name !== undefined && (typeof entry.name !== 'string' || entry.name.trim() === '')) throw invalid(`models[${index}].name must be a non-empty string`)
-  for (const field of ['contextWindow', 'maxTokens']) {
-    if (entry[field] !== undefined && (!Number.isSafeInteger(entry[field]) || entry[field] < 1)) {
+  for (const field of ['contextWindow', 'maxTokens'] as const) {
+    if (entry[field] !== undefined && (!isSafeInteger(entry[field]) || entry[field] < 1)) {
       throw invalid(`models[${index}].${field} must be a positive integer`)
     }
   }
   if (entry.input !== undefined) {
     if (!Array.isArray(entry.input) || entry.input.length === 0) throw invalid(`models[${index}].input must be a non-empty array`)
     for (const modality of entry.input) {
-      if (!MODALITIES.includes(modality)) throw invalid(`models[${index}].input does not know modality "${String(modality)}"`)
+      // The service constructor refuses a deployment whose native catalog did
+      // not load, so the modality list is there.
+      if (!MODALITIES!.includes(modality)) throw invalid(`models[${index}].input does not know modality "${String(modality)}"`)
     }
   }
-  return { ...entry }
+  return { ...entry } as RouteModel
 }
 
 /** The fields one route draft may set; the same list read returns. */
 const DRAFT_FIELDS = new Set(['provider', 'displayName', 'api', 'baseURL', 'apiKeyEnv', 'models'])
 
 /** Validate one flat route draft and return the provider profile the settings row stores. */
-function routeDraft(input) {
+function routeDraft(input: unknown): RouteProfile {
   if (!isPlainObject(input)) throw invalid('the route must be an object')
   onlyFields(input, DRAFT_FIELDS, 'the route')
-  const profile = {}
-  for (const field of ['displayName', 'api', 'baseURL', 'apiKeyEnv']) {
+  const profile: RouteProfile = {}
+  for (const field of ['displayName', 'api', 'baseURL', 'apiKeyEnv'] as const) {
     if (input[field] === undefined) continue
     if (typeof input[field] !== 'string' || input[field].trim() === '') throw invalid(`${field} must be a non-empty string`)
-    profile[field] = input[field]
+    profile[field] = input[field] as string
   }
   if (profile.baseURL !== undefined && !/^https?:\/\/[^\s]+$/u.test(profile.baseURL)) {
     throw invalid('baseURL must be an http(s) URL')
@@ -145,17 +256,17 @@ function routeDraft(input) {
  * names exactly the models whose definition differs, so an unrelated running
  * reply does not block it.
  */
-export function affectedModels(previous, next) {
+export function affectedModels(previous: RouteProfile | undefined, next: RouteProfile | undefined): Set<string> | null {
   if (previous === undefined || next === undefined) return null
   // The stored row carries adapter defaults the draft never sets, so compare
   // only the fields a draft owns; otherwise every edit would look route-wide.
   for (const field of ROUTE_WIDE_FIELDS) {
     if (previous[field] !== next[field]) return null
   }
-  const project = model => JSON.stringify(Object.fromEntries(Object.entries(model).filter(([key]) => PHONE_EDITABLE_MODEL_FIELDS.has(key))))
-  const changed = new Set()
-  const before = new Map((previous.models ?? []).map(model => [model.id, model]))
-  const after = new Map((next.models ?? []).map(model => [model.id, model]))
+  const project = (model: Record<string, unknown>): string => JSON.stringify(Object.fromEntries(Object.entries(model).filter(([key]) => PHONE_EDITABLE_MODEL_FIELDS.has(key))))
+  const changed = new Set<string>()
+  const before = new Map((previous.models ?? []).map(model => [model.id, model] as const))
+  const after = new Map((next.models ?? []).map(model => [model.id, model] as const))
   for (const id of new Set([...before.keys(), ...after.keys()])) {
     if (project(before.get(id) ?? {}) !== project(after.get(id) ?? {})) changed.add(id)
   }
@@ -171,15 +282,15 @@ export function affectedModels(previous, next) {
  * phone's "blank means unset" drafts; a model id with no previous entry is
  * stored exactly as the draft declares it.
  */
-function overlayPhoneEditableModelFields(previous, draft) {
+function overlayPhoneEditableModelFields(previous: RouteProfile | undefined, draft: RouteProfile): RouteProfile {
   if (previous === undefined || !Array.isArray(draft.models)) return draft
-  const before = new Map((previous.models ?? []).map(model => [model.id, model]))
+  const before = new Map((previous.models ?? []).map(model => [model.id, model] as const))
   return {
     ...draft,
     models: draft.models.map(model => {
       const prior = before.get(model.id)
       if (prior === undefined) return model
-      const merged = { ...prior }
+      const merged: RouteModel = { ...prior }
       for (const field of PHONE_EDITABLE_MODEL_FIELDS) {
         if (model[field] === undefined) delete merged[field]
         else merged[field] = model[field]
@@ -191,13 +302,13 @@ function overlayPhoneEditableModelFields(previous, draft) {
 
 /** The shared-configuration gateway service the composition reads as `ourfairyGateway`. */
 export class GatewayService extends Service {
-  constructor(ctx) {
+  constructor(ctx: Context) {
     super(ctx, 'ourfairyGateway')
     if (catalogFailure !== undefined) throw catalogFailure
   }
 
   /** The native settings service; refuses when this deployment mounts no configuration editor. */
-  requireConfigurationEditor() {
+  requireConfigurationEditor(): SettingsForms {
     const settings = this.ctx.get('settings')
     if (settings === undefined) {
       throw new GatewayError(503, 'gateway/configuration-unavailable',
@@ -206,60 +317,62 @@ export class GatewayService extends Service {
     return settings
   }
 
-  rows() {
+  rows(): SettingsForms['describe'] extends () => infer R ? R : never {
     return this.requireConfigurationEditor().describe()
   }
 
-  row(namespace) {
-    return this.rows().find(row => row.ns === namespace)
+  row(namespace: string): GatewayRow | undefined {
+    // The native row's columns are opaque JSON; the gateway reads the
+    // deployment-owned fields out of them, so the row is read at this boundary.
+    return this.rows().find(row => row.ns === namespace) as unknown as GatewayRow | undefined
   }
 
   /** The caller must be the administrator; the identity store is the authority for that flag. */
-  requireAdmin(caller) {
+  requireAdmin(caller: ReturnType<IdentityService['authenticateRequest']>): void {
     if (caller === undefined) throw new GatewayError(401, 'gateway/unauthorized', 'present a live session credential')
     if (caller.isAdmin !== true) throw new GatewayError(403, 'gateway/forbidden', 'only Phaethon manages the shared configuration')
   }
 
   /** Map a settings/validation failure to a client-actionable refusal without hiding its message. */
-  async edit(work) {
+  async edit(work: () => Promise<unknown>): Promise<unknown> {
     try {
       return await work()
     } catch (error) {
       if (error instanceof GatewayError) throw error
-      throw new GatewayError(400, 'gateway/invalid-config', error?.message ?? String(error))
+      throw new GatewayError(400, 'gateway/invalid-config', (error as Error | undefined)?.message ?? String(error))
     }
   }
 
   /** Presence facts for one credential reference; the value never leaves the backend. */
-  async credential(ref) {
+  async credential(ref: unknown): Promise<CredentialFacts | null> {
     if (typeof ref !== 'string' || ref === '') return null
     const credentials = this.ctx.get('credentials')
     if (credentials === undefined) return { ref, configured: false, writable: false }
     try {
-      const info = await credentials.describe(ref)
+      const info = await credentials.describe(ref as CredentialRef)
       return { ref, configured: info.configured === true, writable: info.writable === true,
         ...(info.source === undefined ? {} : { source: info.source }) }
     } catch (error) {
-      return { ref, configured: false, writable: false, error: error?.message ?? String(error) }
+      return { ref, configured: false, writable: false, error: (error as Error | undefined)?.message ?? String(error) }
     }
   }
 
   /** The resolved provider dictionary; never the raw expression nodes. */
-  providers() {
-    return structuredClone(this.row('llm-pi-ai')?.value?.providers ?? {})
+  providers(): Record<string, RouteProfile> {
+    return structuredClone(this.row('llm-pi-ai')?.value?.providers ?? {}) as Record<string, RouteProfile>
   }
 
-  providerProfile(provider) {
+  providerProfile(provider: string): RouteProfile | undefined {
     return this.providers()[provider]
   }
 
-  routeProfile(provider) {
+  routeProfile(provider: string): { editable: boolean; declared: boolean } {
     const directory = this.ctx.llm.listConfigurableProviders().find(entry => entry.provider === provider)
     const editable = directory?.settingsNs === 'llm-pi-ai'
     return { editable, declared: directory?.declared === true }
   }
 
-  async modelList(provider, profile, selection) {
+  async modelList(provider: string, profile: RouteProfile | undefined, selection: ModelSelection) {
     // A configured route answers with its own declaration, so the page edits
     // exactly what it will store. An adapter-owned route answers from the
     // adapter's live catalog.
@@ -269,14 +382,14 @@ export class GatewayService extends Service {
         ...(model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens }),
         ...(model.input === undefined ? {} : { input: [...model.input] }) }))
     }
-    let models = []
+    let models: { id: string; name: string; inputModalities?: readonly string[] }[] = []
     try { models = await this.ctx.llm.listModels(provider) } catch { models = [] }
     if (models.length === 0 && selection.provider === provider) models = [{ id: selection.model, name: selection.model }]
     return models.map(model => ({ id: model.id, name: model.name ?? model.id,
       ...(model.inputModalities === undefined ? {} : { input: [...model.inputModalities] }) }))
   }
 
-  async routeView(provider, displayName, profile, editable, selection, inUse) {
+  async routeView(provider: string, displayName: string | undefined, profile: RouteProfile | undefined, editable: boolean, selection: ModelSelection, inUse: ActiveReply[]) {
     const { declared } = this.routeProfile(provider)
     const officialRef = provider === 'deepseek-official' ? this.row('llm-deepseek-api-key')?.value?.apiKeyEnv : undefined
     const configured = editable ? profile : undefined
@@ -303,7 +416,7 @@ export class GatewayService extends Service {
     // gateway must ask the same seam the same way rather than describing a
     // second fact.
     const credentials = this.ctx.get('credentials')
-    const resolved = credentials === undefined ? undefined : await credentials.resolve(ref).catch(() => undefined)
+    const resolved = credentials === undefined ? undefined : await credentials.resolve(ref as CredentialRef).catch(() => undefined)
     return {
       editable: row !== undefined,
       model: value.model ?? null,
@@ -328,7 +441,7 @@ export class GatewayService extends Service {
     const selection = this.ctx.agentDefaultModel.currentSelection()
     const inUse = this.ctx.ourfairyChat.activeReplies()
     const profiles = this.row('llm-pi-ai')?.value?.providers ?? {}
-    const registered = new Map(this.ctx.llm.listProviders().map(provider => [provider.id, provider]))
+    const registered = new Map(this.ctx.llm.listProviders().map(provider => [provider.id, provider] as const))
     const routes = []
     for (const [provider, entry] of registered) {
       const profile = this.providerProfile(provider)
@@ -360,8 +473,8 @@ export class GatewayService extends Service {
   }
 
   /** Save the shared selection. It applies from each conversation's next reply, never to a running one. */
-  async saveSelection(body) {
-    const { provider, model, reasoningEffort } = body ?? {}
+  async saveSelection(body: Record<string, unknown>) {
+    const { provider, model, reasoningEffort } = (body ?? {}) as Record<string, unknown>
     if (typeof provider !== 'string' || provider === '' || typeof model !== 'string' || model === '') {
       throw new GatewayError(400, 'gateway/invalid-selection', 'provider and model must both be non-empty strings')
     }
@@ -369,7 +482,7 @@ export class GatewayService extends Service {
       throw new GatewayError(400, 'gateway/invalid-selection', `provider "${provider}" is not registered`)
     }
     try { await this.ctx.llm.resolveModelInfo(provider, model) } catch (error) {
-      throw new GatewayError(400, 'gateway/invalid-selection', error?.message ?? String(error))
+      throw new GatewayError(400, 'gateway/invalid-selection', (error as Error | undefined)?.message ?? String(error))
     }
     // A route that advertises a catalog answers membership itself; the adapter
     // would otherwise accept any id and silently invent capacities for it.
@@ -395,14 +508,16 @@ export class GatewayService extends Service {
     await this.edit(() => this.ctx.agentDefaultModel.saveSelection({
       provider,
       model,
-      ...(effort === undefined ? {} : { reasoningEffort: effort }),
+      // The shared selection's effort is the adapter-owned id; the settings
+      // row holds that id, and the value is passed on unchanged.
+      ...(effort === undefined ? {} : { reasoningEffort: effort as ReasoningEffortId }),
     }))
     return { selection: this.ctx.agentDefaultModel.currentSelection(), applies: 'next-turn' }
   }
 
   /** Refuse a change the replies below are still running against. */
-  async guard(provider, affected, work) {
-    const refusal = replies => {
+  async guard(provider: string, affected: Set<string> | null, work: () => Promise<unknown>): Promise<unknown> {
+    const refusal = (replies: ActiveReply[]) => {
       const hits = replies.filter(reply => reply.provider === provider && (affected === null || affected.has(reply.model)))
       if (hits.length === 0) return undefined
       return new GatewayError(409, 'chat/route-in-use',
@@ -413,7 +528,7 @@ export class GatewayService extends Service {
   }
 
   /** Add or replace one provider route and return its new view. */
-  async saveRoute(body) {
+  async saveRoute(body: Record<string, unknown>) {
     const provider = body?.provider
     if (typeof provider !== 'string' || !PROVIDER_ID.test(provider)) {
       throw new GatewayError(400, 'gateway/invalid-route', 'provider must be a lowercase hyphenated identifier')
@@ -437,7 +552,7 @@ export class GatewayService extends Service {
   }
 
   /** Remove one provider route; the route the shared selection names cannot be removed. */
-  async deleteRoute(body) {
+  async deleteRoute(body: Record<string, unknown>) {
     const provider = body?.provider
     if (typeof provider !== 'string' || provider === '') throw new GatewayError(400, 'gateway/invalid-route', 'name the provider route to remove')
     if (this.providerProfile(provider) === undefined) {
@@ -456,18 +571,18 @@ export class GatewayService extends Service {
   }
 
   /** Save the ASR connection. A transcription already running keeps its request. */
-  async saveAsr(body) {
-    const input = body ?? {}
+  async saveAsr(body: Record<string, unknown>) {
+    const input = (body ?? {}) as Record<string, unknown>
     const model = input.model
     const endpoint = input.endpoint
     if (typeof model !== 'string' || model.trim() === '') throw new GatewayError(400, 'gateway/invalid-asr', 'model must be a non-empty string')
     if (typeof endpoint !== 'string' || !/^https?:\/\/[^\s]+$/u.test(endpoint)) {
       throw new GatewayError(400, 'gateway/invalid-asr', 'endpoint must be an http(s) URL')
     }
-    const fields = { model, endpoint }
-    for (const field of ['maxDurationMs', 'maxAudioBytes', 'timeoutMs', 'maxGlobalInFlight', 'maxUserInFlight']) {
+    const fields: Record<string, unknown> = { model, endpoint }
+    for (const field of ['maxDurationMs', 'maxAudioBytes', 'timeoutMs', 'maxGlobalInFlight', 'maxUserInFlight'] as const) {
       if (input[field] === undefined) continue
-      if (!Number.isSafeInteger(input[field]) || input[field] < 1) {
+      if (!isSafeInteger(input[field]) || input[field] < 1) {
         throw new GatewayError(400, 'gateway/invalid-asr', `${field} must be a positive integer`)
       }
       fields[field] = input[field]

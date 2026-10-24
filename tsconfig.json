@@ -12,6 +12,12 @@
     { "path": "./backend/spaces/tsconfig.test-support.json" },
     { "path": "./backend/attachments" },
     { "path": "./backend/chat" },
-    { "path": "./backend/chat/tsconfig.test-support.json" }
+    { "path": "./backend/chat/tsconfig.test-support.json" },
+    { "path": "./backend/groups" },
+    { "path": "./backend/search" },
+    { "path": "./backend/speech" },
+    { "path": "./backend/delivery" },
+    { "path": "./backend/gateway" },
+    { "path": "./backend/probe" }
   ]
 }

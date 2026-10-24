@@ -20,6 +20,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { ownerOf } from '@ourfairy/dsh-identity/owner'
+import type { Context } from '@deepseek-ai/cordis'
+import type { Session } from '@deepseek-ai/dsh-session'
 
 export const name = 'ourfairy-baseline-probe'
 
@@ -49,7 +51,7 @@ const SERVICE_ROWS = [
   ['sandbox', 'scoped-sandbox', '@ourfairy/dsh-spaces'],
   ['workingDirectory', 'scoped-directory', '@ourfairy/dsh-spaces'],
   ['sandboxPolicy', 'sandbox-policy', '@ourfairy/dsh-spaces/policy'],
-]
+] as const
 
 const FIBER_STATES = ['pending', 'loading', 'active', 'failed', 'disposed', 'unloading']
 
@@ -59,22 +61,173 @@ const FIBER_STATES = ['pending', 'loading', 'active', 'failed', 'disposed', 'unl
  * tells a supervisor which one it is (3 = configuration, 1 = composition).
  */
 class ProbeConfigError extends Error {
-  constructor(message) {
+  constructor(message: string) {
     super(message)
     this.name = 'ProbeConfigError'
   }
 }
 
-function fiberStateName(entry) {
+/**
+ * One composed row, as the loader reports it.
+ *
+ * The probe reads the composed tree through the loader's own reflection, so
+ * these are the loader's row facts and nothing more.
+ */
+interface ProbeLoaderEntry {
+  readonly options?: { readonly id?: string; readonly name?: string }
+  readonly disabled?: boolean
+  readonly fiber?: { readonly state?: number }
+}
+
+/** The loader service, as the probe reads the composed tree through it. */
+interface ProbeLoader {
+  entries(): Iterable<ProbeLoaderEntry>
+  await(): Promise<void>
+}
+
+/** One row of the composed tree, as the probe reports it. */
+interface ProbeRow {
+  readonly id: string | null
+  readonly name: string | null
+  readonly disabled: boolean
+  readonly fiberState: string
+}
+
+/** One service's liveness facts, as the probe reports them. */
+interface ProbeServiceFacts {
+  readonly live: boolean
+  readonly expectedRow: string
+  readonly expectedPackage: string
+  readonly rowPresent: boolean
+  readonly fiberState: string | null
+  readonly disabled?: boolean
+}
+
+/** The shared model selection, as the probe reads it. */
+interface ProbeSelection {
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
+}
+
+/** The composed agent-default-model row, as the probe reads it. */
+interface ProbeAgentDefaultModel {
+  currentSelection(): ProbeSelection
+}
+
+/** The live agent the probe drives one turn with. */
+interface ProbeAgent {
+  readonly session: Session
+  whenIdle(): Promise<void>
+  followup(message: unknown): void
+}
+
+/** The agent registry, as the probe creates its own agent through it. */
+interface ProbeAgentRegistry {
+  create(request: {
+    readonly sessionId: string
+    readonly meta: { readonly owner: string }
+    readonly agentOptions: { readonly provider: string; readonly model: string; readonly reasoningEffort?: string }
+  }): Promise<{ readonly agent: ProbeAgent }>
+}
+
+/** The session store, as the probe flushes the durable log through it. */
+interface ProbeSessions {
+  flush(session: Session): Promise<boolean>
+}
+
+/** One settings row's value, as the probe reads a route's credential reference out of it. */
+interface ProbeSettingsValue {
+  readonly providers?: Record<string, { readonly apiKeyEnv?: string }>
+  readonly apiKeyEnv?: string
+}
+
+/** One settings row, as the probe reads it. */
+interface ProbeSettingsRow {
+  readonly ns: string
+  readonly value?: ProbeSettingsValue
+}
+
+/** The settings service, as the probe reads the live route rows through it. */
+interface ProbeSettings {
+  describe(): ProbeSettingsRow[]
+}
+
+/** The credential seam, as the probe resolves a route's reference through it. */
+interface ProbeCredentials {
+  resolve(ref: string): Promise<{ readonly value?: string } | undefined>
+}
+
+/** The scoped filesystem, as the probe checks that an agentless call is refused. */
+interface ProbeFs {
+  resolve(path: string): unknown
+}
+
+/** The scoped shell, as the probe checks that an agentless call is refused. */
+interface ProbeShell {
+  resolve(request: { readonly command: string }): unknown
+  execute(handle: unknown): unknown
+}
+
+/** The application's bounded exit, as the probe asks for one. */
+type ProbeExit = (code: number) => void
+
+/** The readiness signal, as the probe waits for it. */
+interface ProbeReady {
+  onReady(start: () => void): void
+}
+
+/** The failure one scoped call reports, as the probe records it. */
+interface ProbeCallFailure {
+  readonly code?: string
+  readonly message?: string
+}
+
+/** One session event's assistant text, as the probe reads it out of the log. */
+interface ProbeEvent {
+  readonly data?: { readonly message?: { readonly content?: readonly { readonly type?: string; readonly text?: string }[] } }
+}
+
+/** The model section of the probe's report. */
+interface ProbeModelReport {
+  provider: string
+  model: string
+  reasoningEffort?: string
+  selection: string
+  sessionId?: string
+  events?: number
+  output?: string | null
+  flushReturned?: boolean
+}
+
+/** The machine-readable report the probe writes. */
+interface ProbeReport {
+  ok: boolean
+  probeVersion: number
+  startedAt: string
+  dshHome: string | null
+  mode: string
+  rows: ProbeRow[]
+  services: Record<string, ProbeServiceFacts>
+  model: ProbeModelReport | null
+  sessions: { root: string | null; files: string[] }
+  configurationFailure: boolean
+  failures: string[]
+  finishedAt?: string
+  agentless?: Record<string, string | undefined>
+  error?: string
+}
+
+function fiberStateName(entry: ProbeLoaderEntry | undefined): string {
   const state = entry?.fiber?.state
   return typeof state === 'number' ? (FIBER_STATES[state] ?? `unknown(${state})`) : 'absent'
 }
 
 /** Every composed row, with the state that decides whether its service can be used. */
-function collectRows(ctx) {
-  const loader = ctx.get('loader')
+function collectRows(ctx: Context): ProbeRow[] {
+  const loader = ctx.get('loader') as ProbeLoader | undefined
   if (loader === undefined) return []
-  const rows = []
+  const rows: ProbeRow[] = []
   for (const entry of loader.entries()) {
     rows.push({
       id: entry.options?.id ?? null,
@@ -90,7 +243,7 @@ function collectRows(ctx) {
  * The probe's own package, read from its manifest: a hardcoded copy could drift
  * from the name the overlay mounts and make this test machinery a "product row".
  */
-const PROBE_PACKAGE = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).name
+const PROBE_PACKAGE: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).name
 
 /**
  * Every non-disabled `@ourfairy/*` row in the composed tree must be active.
@@ -104,10 +257,10 @@ const PROBE_PACKAGE = JSON.parse(readFileSync(new URL('../package.json', import.
  * an operator disabled through an overlay is a deliberate absence, not an
  * activation failure, so it is skipped.
  */
-function collectInactiveProductRows(ctx) {
-  const loader = ctx.get('loader')
+function collectInactiveProductRows(ctx: Context): string[] {
+  const loader = ctx.get('loader') as ProbeLoader | undefined
   if (loader === undefined) return []
-  const failures = []
+  const failures: string[] = []
   for (const entry of loader.entries()) {
     const name = entry.options?.name
     if (typeof name !== 'string' || !name.startsWith('@ourfairy/')) continue
@@ -134,12 +287,12 @@ function collectInactiveProductRows(ctx) {
  * absent, a live service whose expected row is missing from the tree, and a
  * live service whose enabled expected row did not activate.
  */
-function collectServices(ctx, rows) {
-  const byId = new Map(rows.map(row => [row.id, row]))
-  const services = {}
-  const failures = []
+function collectServices(ctx: Context, rows: ProbeRow[]): { services: Record<string, ProbeServiceFacts>; failures: string[] } {
+  const byId = new Map(rows.map(row => [row.id, row] as const))
+  const services: Record<string, ProbeServiceFacts> = {}
+  const failures: string[] = []
   for (const [service, rowId, packageName] of SERVICE_ROWS) {
-    const value = ctx.get(service)
+    const value = ctx.get(service) as unknown
     const live = value !== undefined && value !== null
     const row = byId.get(rowId)
     services[service] = {
@@ -174,10 +327,10 @@ function collectServices(ctx, rows) {
  * matching only `.jsonl` would report "no durable log" for a session that was
  * in fact saved.
  */
-function listJsonlFiles(root) {
+function listJsonlFiles(root: string | undefined): string[] {
   if (root === undefined || !existsSync(root)) return []
-  const found = []
-  const walk = (dir) => {
+  const found: string[] = []
+  const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name)
       if (entry.isDirectory()) walk(path)
@@ -188,7 +341,7 @@ function listJsonlFiles(root) {
   return found.sort()
 }
 
-function assistantTextOf(event) {
+function assistantTextOf(event: ProbeEvent | undefined): string | undefined {
   const content = event?.data?.message?.content
   if (!Array.isArray(content)) return undefined
   const text = content.filter(block => block?.type === 'text').map(block => block.text).join('')
@@ -207,8 +360,8 @@ const MODEL_SELECTION_SOURCE = 'agentDefaultModel.currentSelection()'
  * through the gateway is what this returns once the running composition has
  * adopted it.
  */
-function readAgentDefaultModel(ctx) {
-  const service = ctx.get('agentDefaultModel')
+function readAgentDefaultModel(ctx: Context): ProbeSelection {
+  const service = ctx.get('agentDefaultModel') as ProbeAgentDefaultModel | undefined
   if (service === undefined || typeof service.currentSelection !== 'function') {
     throw new ProbeConfigError(
       'the "agentDefaultModel" service is not live: the probe reads the model selection from the'
@@ -226,7 +379,7 @@ function readAgentDefaultModel(ctx) {
 }
 
 /** The selection fields every report carries, before any turn outcome is added. */
-function selectionReport(selection) {
+function selectionReport(selection: ProbeSelection): ProbeModelReport {
   return {
     provider: selection.provider,
     model: selection.model,
@@ -239,10 +392,10 @@ function selectionReport(selection) {
  * Drive one real model turn: create a session through the agent factory, send
  * one user message, wait for idle, and flush the durable log.
  */
-async function runTurn(ctx, report) {
-  const agents = ctx.get('agents')
+async function runTurn(ctx: Context, report: ProbeReport): Promise<void> {
+  const agents = ctx.get('agents') as ProbeAgentRegistry | undefined
   if (agents === undefined) throw new Error('cannot run a turn: the "agents" service is not live')
-  const sessions = ctx.get('sessions')
+  const sessions = ctx.get('sessions') as ProbeSessions | undefined
   if (sessions === undefined) throw new Error('cannot run a turn: the "sessions" service is not live')
   // The composed selection is the authority, read at the start of this turn the
   // same way the product chat runtime reads it. Passing it explicitly is what
@@ -252,8 +405,8 @@ async function runTurn(ctx, report) {
   const { provider, model } = selection
   // The route's credential reference is the authority, not a hardcoded name:
   // resolve the live settings row and let the seam answer presence.
-  const settings = ctx.get('settings')
-  const credentials = ctx.get('credentials')
+  const settings = ctx.get('settings') as ProbeSettings | undefined
+  const credentials = ctx.get('credentials') as ProbeCredentials | undefined
   if (settings !== undefined && credentials !== undefined) {
     const rows = settings.describe()
     const ref = rows.find(row => row.ns === 'llm-pi-ai')?.value?.providers?.[provider]?.apiKeyEnv
@@ -276,12 +429,12 @@ async function runTurn(ctx, report) {
       ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }) },
   })
   const agent = handle.agent
-  let output
+  let output: string | undefined
   let events = 0
   const dispose = ctx.on('session/event', (session, event) => {
     if (session !== agent.session) return
     events += 1
-    const text = assistantTextOf(event)
+    const text = assistantTextOf(event as unknown as ProbeEvent | undefined)
     if (text !== undefined) output = text
   })
   try {
@@ -320,10 +473,10 @@ async function runTurn(ctx, report) {
  * interval for its whole duration — that handle, not the signal listeners, is
  * what keeps the booted composition running until `stop`.
  */
-function holdUntilSignal(ms) {
-  return new Promise((resolve) => {
+function holdUntilSignal(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
     const keepAlive = setInterval(() => {}, 1_000)
-    let bounded
+    let bounded: ReturnType<typeof setTimeout> | undefined
     const finish = () => {
       clearInterval(keepAlive)
       if (bounded !== undefined) clearTimeout(bounded)
@@ -337,8 +490,8 @@ function holdUntilSignal(ms) {
   })
 }
 
-async function runProbe(ctx) {
-  const report = {
+async function runProbe(ctx: Context): Promise<void> {
+  const report: ProbeReport = {
     ok: false,
     probeVersion: 1,
     startedAt: new Date().toISOString(),
@@ -354,7 +507,7 @@ async function runProbe(ctx) {
   let configurationFailure = false
 
   try {
-    const loader = ctx.get('loader')
+    const loader = ctx.get('loader') as ProbeLoader | undefined
     if (loader === undefined) throw new Error('the Loader service is not live; nothing was composed')
     await loader.await()
 
@@ -369,11 +522,11 @@ async function runProbe(ctx) {
     // Direct provider calls have no authenticated session; cwd must never supply one.
     report.agentless = {}
     for (const [name, operation] of [
-      ['file', () => ctx.get('fs').resolve(join(process.env.DSH_HOME, 'spaces', 'public'))],
-      ['process', () => ctx.get('shell').execute(ctx.get('shell').resolve({ command: 'true' }))],
-    ]) {
+      ['file', () => (ctx.get('fs') as ProbeFs).resolve(join(process.env.DSH_HOME as string, 'spaces', 'public'))],
+      ['process', () => (ctx.get('shell') as ProbeShell).execute((ctx.get('shell') as ProbeShell).resolve({ command: 'true' }))],
+    ] as const) {
       try { await operation(); report.agentless[name] = 'ALLOWED'; report.failures.push(`agentless ${name} unexpectedly allowed`) }
-      catch (error) { report.agentless[name] = error.code ?? error.message }
+      catch (error) { report.agentless[name] = (error as ProbeCallFailure).code ?? (error as ProbeCallFailure).message }
     }
 
     const sessionsRoot = process.env.DSH_HOME === undefined ? undefined : join(process.env.DSH_HOME, 'sessions')
@@ -426,7 +579,7 @@ async function runProbe(ctx) {
       + ` ${report.rows.length} rows composed, mode ${report.mode})\n`,
     )
   }
-  const exit = ctx.get('appExit')
+  const exit = ctx.get('appExit') as ProbeExit | undefined
   const exitCode = report.ok ? 0 : (configurationFailure ? 3 : 1)
   if (exit === undefined) {
     process.exitCode = exitCode
@@ -436,16 +589,16 @@ async function runProbe(ctx) {
 }
 
 /** Mount the probe and run it once readiness commits. */
-export function apply(ctx) {
+export function apply(ctx: Context): void {
   const start = () => {
     void runProbe(ctx).catch((error) => {
       process.stderr.write(`ourfairy-baseline-probe: ${error instanceof Error ? error.stack : String(error)}\n`)
-      const exit = ctx.get('appExit')
+      const exit = ctx.get('appExit') as ProbeExit | undefined
       if (exit === undefined) process.exitCode = 1
       else exit(1)
     })
   }
-  const ready = ctx.get('appReady')
+  const ready = ctx.get('appReady') as ProbeReady | undefined
   if (ready !== undefined && typeof ready.onReady === 'function') ready.onReady(start)
   else setTimeout(start, 0)
 }

@@ -26,7 +26,7 @@ const { flattenEntries } = await import('../scripts/combo.mjs')
 const { Config: PiAiConfig } = await import('@deepseek-ai/dsh-llm-pi-ai')
 // The phone-editable allowlist has one authority: the gateway service exports
 // the same set its route validator and save overlay use.
-const { PHONE_EDITABLE_MODEL_FIELDS } = await import('../backend/gateway/src/service.mjs')
+const { PHONE_EDITABLE_MODEL_FIELDS } = await import('../backend/gateway/dist/service.js')
 
 /**
  * The native input modality list, read from the pinned dsh catalog module the

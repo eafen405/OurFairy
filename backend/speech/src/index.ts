@@ -11,7 +11,15 @@
  */
 import z from '@deepseek-ai/schemastery'
 import { sendJson } from '@ourfairy/dsh-http/http'
-import { createSpeechHandler, resolveSpeechSettings, SpeechError } from './service.mjs'
+import { createSpeechHandler, resolveSpeechSettings, SpeechError } from './service.js'
+import type { Context } from '@deepseek-ai/cordis'
+import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
+// The dsh context's own seams and the product's own context row: the web
+// server's route registry, Connection's trust fence and identity's service.
+// The imports are type-only, so they add no runtime dependency.
+import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@ourfairy/dsh-identity'
 
 export const name = 'ourfairy-speech'
 export const inject = ['webServer', 'connection', 'identity']
@@ -28,20 +36,36 @@ export const Config = z.object({
   maxUserInFlight: z.natural().required().volatile(),
 })
 
-const FIELDS = ['model', 'endpoint', 'apiKeyEnv', 'maxDurationMs', 'maxAudioBytes', 'timeoutMs', 'maxGlobalInFlight', 'maxUserInFlight']
+/**
+ * One live configuration field: the loader's volatile ref, or the plain value
+ * a non-volatile field carries.
+ */
+export type SpeechField = { readonly get: () => unknown } | string | number | null | undefined
 
-export function apply(ctx, config) {
+/**
+ * The row's configuration, as the loader hands it over.
+ *
+ * Every field of this row is volatile, so the loader hands over a live ref
+ * per field and the ref's `get()` is the row's current value.
+ */
+export type SpeechConfig = Record<string, SpeechField>
+
+const FIELDS = ['model', 'endpoint', 'apiKeyEnv', 'maxDurationMs', 'maxAudioBytes', 'timeoutMs', 'maxGlobalInFlight', 'maxUserInFlight'] as const
+
+export function apply(ctx: Context, config: SpeechConfig) {
   /** Read the live row: volatile fields are refs, plain fields are values. */
-  const values = () => Object.fromEntries(FIELDS.map(field => {
+  const values = (): Record<string, unknown> => Object.fromEntries(FIELDS.map(field => {
     const value = config[field]
-    return [field, value !== null && typeof value === 'object' && typeof value.get === 'function' ? value.get() : value]
+    return [field, value !== null && typeof value === 'object' && typeof value.get === 'function' ? value.get() : value] as const
   }))
   resolveSpeechSettings(values())
   /** Resolve the configured reference through the native seam; an unset one is unavailable. */
-  const voiceKey = async () => {
+  const voiceKey = async (): Promise<string | undefined> => {
     const credentials = ctx.get('credentials')
     if (credentials === undefined) return undefined
-    const hit = await credentials.resolve(values().apiKeyEnv).catch(() => undefined)
+    // The credential seam names its references with a branded string; the
+    // speech row's `apiKeyEnv` is the environment-variable name it resolves.
+    const hit = await credentials.resolve(values().apiKeyEnv as CredentialRef).catch(() => undefined)
     const value = hit?.value?.trim()
     return value === undefined || value === '' ? undefined : value
   }
@@ -51,7 +75,7 @@ export function apply(ctx, config) {
     return caller
   }, sendJson, voiceKey)
   ctx.effect(() => () => service.close())
-  for (const [path, transcribe] of [['/speech', false], ['/speech/transcriptions', true]]) {
+  for (const [path, transcribe] of [['/speech', false], ['/speech/transcriptions', true]] as const) {
     ctx.effect(() => ctx.webServer.register({ kind: 'exact', path, handler: async (req, res) => {
       try {
         if (ctx.connection.fence(req) !== undefined) throw new SpeechError(403, 'forbidden-authority', 'untrusted Host or Origin')
