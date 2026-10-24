@@ -145,22 +145,7 @@ fun FairyConsolePage(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 20.dp),
         ) {
-            Text(
-                text = "HOLLOW DEEP DIVE",
-                fontFamily = tokens.titleFontFamily,
-                fontWeight = FontWeight.Black,
-                fontSize = 30.sp,
-                lineHeight = 36.sp,
-                color = tokens.textPrimary,
-            )
-            Text(
-                text = "DEEP DIVE CONSOLE",
-                fontFamily = tokens.labelFontFamily,
-                fontSize = 10.sp,
-                letterSpacing = 2.sp,
-                color = tokens.fairyLink.copy(alpha = 0.7f),
-                modifier = Modifier.fairySlant(),
-            )
+            FairyHddWordmark()
             Spacer(Modifier.height(18.dp))
             Box(Modifier.fillMaxWidth().zIndex(1f)) {
                 FairyScreen(
@@ -191,8 +176,7 @@ fun FairyConsolePage(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .fairyPanel(tokens.panelShape)
-                    .fairyHudCorners()
+                    .fairyPanel(tokens.consoleShape, deep = true)
                     .padding(horizontal = 18.dp, vertical = 6.dp),
             ) {
                 identity?.let { who ->
@@ -276,11 +260,10 @@ fun SlantKey(
     val tokens = LocalFairyTokens.current
     val shape = FairySlantShape(slant = 12.dp, corner = 8.dp)
     val interaction = remember { MutableInteractionSource() }
-    val fill = if (primary) tokens.primary else tokens.pill
     val label = if (primary) tokens.onPrimary else tokens.textPrimary
     Box(
         modifier
-            .background(fill, shape)
+            .fairyKey(shape, primary)
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(horizontal = 20.dp),
         contentAlignment = Alignment.Center,

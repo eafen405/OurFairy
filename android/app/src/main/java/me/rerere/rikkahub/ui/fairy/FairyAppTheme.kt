@@ -20,7 +20,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.core.view.WindowCompat
 
 private val FairyBgTop = Color(0xFF0B1733)
-private val FairyBgBottom = Color(0xFF050A18)
+private val FairyBgBottom = Color(0xFF04070F)
 private val FairyPanel = Color(0xFF0E1A36)
 private val FairyPill = Color(0xFF16244A)
 private val FairyIce = Color(0xFFEAF0FF)
