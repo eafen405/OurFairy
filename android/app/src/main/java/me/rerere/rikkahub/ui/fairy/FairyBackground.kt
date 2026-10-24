@@ -54,8 +54,10 @@ fun BoxScope.FairyBackground(modifier: Modifier = Modifier, watermark: Boolean =
                     0f to tokens.bgTop,
                     1f to tokens.bgBottom,
                 )
-                val glowCenter = Offset(size.width / 2f, 0f)
-                val glowRadius = size.width * 0.9f
+                // One light source, above and left of the page centre; panel
+                // bevels and key lips are weighted to the same direction.
+                val glowCenter = Offset(size.width * 0.3f, 0f)
+                val glowRadius = size.width * 1.05f
                 val glow = Brush.radialGradient(
                     0f to tokens.ambientGlow,
                     1f to tokens.ambientGlow.copy(alpha = 0f),
@@ -92,8 +94,8 @@ fun BoxScope.FairyBackground(modifier: Modifier = Modifier, watermark: Boolean =
                 onDrawBehind {
                     drawRect(gradient)
                     if (mark != null && caption != null) {
-                        // Anchored low on the page, right-aligned with a small margin.
-                        val top = size.height * 0.62f
+                        // Anchored below the console keys, right-aligned with a small margin.
+                        val top = size.height * 0.52f
                         val left = size.width - mark.size.width - size.width * 0.03f
                         withTransform({
                             transform(Matrix().apply {

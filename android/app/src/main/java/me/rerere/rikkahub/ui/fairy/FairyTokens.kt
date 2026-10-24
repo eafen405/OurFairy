@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 data class FairyTokens(
     /** Page vertical gradient: top and bottom stops. */
     val bgTop: Color = Color(0xFF0B1733),
-    val bgBottom: Color = Color(0xFF050A18),
+    val bgBottom: Color = Color(0xFF04070F),
     /** Page scanlines: 1 px lines on a 3 dp period. */
     val scanline: Color = Color.White.copy(alpha = 0.025f),
     /** Fairy window screen: radial center and edge. */
@@ -28,6 +28,9 @@ data class FairyTokens(
     val screenEdge: Color = Color(0xFF050B1F),
     /** Window bar, composer, dialogs, sheets, menus. */
     val panel: Color = Color(0xFF0E1A36).copy(alpha = 0.92f),
+    /** Console plate fill: lit at the top, falling into [panelBottom]. */
+    val panelTop: Color = Color(0xFF1B2F5E),
+    val panelBottom: Color = Color(0xFF0C1730),
     /** File cards, quick prompts, list items, secondary capsules. */
     val pill: Color = Color(0xFF16244A),
     /** 1 dp panel outline, window bar bottom edge, dividers. */
@@ -55,6 +58,8 @@ data class FairyTokens(
     val textMuted: Color = Color(0xFF8C9AB8),
     val panelShape: Shape = RoundedCornerShape(20.dp),
     val screenShape: Shape = RoundedCornerShape(14.dp),
+    /** Console readout plate: chamfered, so it needs no corner brackets. */
+    val consoleShape: Shape = FairyChamferShape(cut = 16.dp),
     val userBubbleShape: Shape = RoundedCornerShape(
         topStart = 18.dp,
         topEnd = 6.dp,

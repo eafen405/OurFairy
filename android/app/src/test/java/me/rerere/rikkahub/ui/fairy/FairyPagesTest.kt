@@ -117,6 +117,7 @@ class FairyPagesTest {
                 else -> FairySettingsPage({}, {}, account, onBack = { destination = Screen.Home })
             }
         }
+        screenshot("home")
         compose.onNodeWithText("设置").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithText("账号").assertIsDisplayed()
