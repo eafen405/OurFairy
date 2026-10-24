@@ -282,7 +282,7 @@ spill 文件，贡献返回空；声明它会让所有 chat 路由等待一个�
 | `node --test tests/native-job-status.test.mjs tests/native-job-stop-outcome.test.mjs` | 运行时语义 | 原生任务状态与停止返回值的逐项对账。 |
 | `node --test tests/spill-read.test.mjs` | 运行时语义 | 本会话 spill 目录授权。 |
 | `node --test tests/gateway.test.mjs`（图片能力用例） | 运行时语义 | `llm` 声明的图片能力检查。 |
-| `node scripts/bench-projection.mjs --label after-upgrade --out /tmp/projection-upgrade.json` | 运行时语义 | 投影成本。 |
+| `node scripts/bench-projection.ts --label after-upgrade --out /tmp/projection-upgrade.json` | 运行时语义 | 投影成本。 |
 
 若 registry 接口、事件形状或 `stateOf` 消失，插件会在 `inject`/`stateOf` 处失败、相关测试
 报错，不能靠保留第二套 fold 绕过。两条对账用例 `native job status vocabulary matches the

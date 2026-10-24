@@ -16,10 +16,10 @@
 
 ## 三项改动
 
-1. **状态视图**：`npm run specs:status`（`scripts/specs-status.mjs`）从 git 与 tracker 派生每张 spec 的
+1. **状态视图**：`npm run specs:status`（`scripts/specs-status.ts`）从 git 与 tracker 派生每张 spec 的
    分支 tip、是否已推送、是否已落地、遗留 worktree、落地分支漂移与孤儿 worktree；`--offline` 跳过 tracker。
    检查：`tests/specs-status.test.mjs` 在临时仓库里固定每条派生规则。
-2. **提交门禁分流**：`scripts/precommit.mjs` 让只改 Markdown 的提交跑 `tests/docs.test.mjs` 与
+2. **提交门禁分流**：`scripts/precommit.ts` 让只改 Markdown 的提交跑 `tests/docs.test.mjs` 与
    `combo:verify`，其余改动仍跑全量 `npm test`；`CODING_STANDARDS.md` 的交付前全量要求不变。
    检查：`tests/precommit.test.mjs` 固定分类与命令表。
 3. **CI**：`.github/workflows/check.yml` 在 push 到 `main` / `integration/**` 与 PR 上按 `combo.json`
