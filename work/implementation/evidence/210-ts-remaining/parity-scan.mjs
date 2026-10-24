@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Operator and literal parity between the pre-migration product sources and the
- * migrated ones.
+ * Operator, literal, structure and token parity between the pre-migration
+ * product sources and the migrated ones.
  *
  * The migration must not change behaviour, so the code that runs has to keep
  * the same operators and the same literals. This script proves that mechanically
@@ -13,9 +13,32 @@
  * - `runtime` compares the pre-migration `.mjs` with the emitted `dist/*.js`,
  *   the artefact Node actually loads.
  *
- * Comments are stripped before counting, string contents are masked so an
- * operator inside a literal never counts, and literals are read from the
- * TypeScript AST so a literal inside a longer string is not counted twice.
+ * Four checks run per file, and each of them is order-sensitive or
+ * count-sensitive, so a renamed local, a reordered statement, a swapped
+ * argument or a renamed property shows up:
+ *
+ * - `operators` counts every operator AND the brackets and the statement
+ *   separator. A change that only moves a brace or a semicolon changes the
+ *   shape of the code, so an operator list that cannot see it would call two
+ *   different files equal.
+ * - `literals` reads the literal multiset from the TypeScript AST, so a
+ *   literal inside a longer string is not counted twice.
+ * - `structure` is an AST-derived signature: every node's kind, and the text
+ *   of the nodes that carry one. It never goes through the scanner, so it
+ *   cannot be fooled by a scanner quirk.
+ * - `tokens` is the scanner's token stream. The scanner walks a template
+ *   literal part by part — head, each substitution with its braces counted,
+ *   then the middle or the tail — and a template nested inside a substitution
+ *   is walked the same way. Stopping at the first part, or not descending into
+ *   a nested template, leaves the scanner in code mode and lets one token
+ *   swallow a whole function.
+ *
+ * Every difference the migration declares is a transformation of the token
+ * stream, listed in {@link declaredCategories}. Each transformation is applied
+ * to BOTH streams, so a difference that survives all of them is a difference
+ * the migration did not declare: the scan prints the residue and exits
+ * non-zero. The transformations are this migration's own; another ticket
+ * declares its own.
  *
  * Usage:
  *   node work/implementation/evidence/210-ts-remaining/parity-scan.mjs [base-ref]
@@ -45,10 +68,18 @@ const files = [
   ['backend/speech/src/service.mjs', 'backend/speech/src/service.ts', 'backend/speech/dist/service.js'],
 ]
 
-/** The operators the scan counts; longest first, so `??=` never counts as `??`. */
+/**
+ * The operators and punctuation the scan counts; longest first, so `??=` never
+ * counts as `??`.
+ *
+ * The brackets and the statement separator are counted too: a change that only
+ * moves a brace or a semicolon changes the shape of the code, and an operator
+ * list that cannot see it would call two different files equal.
+ */
 const operators = [
   '??=', '===', '!==', '?.', '??', '||', '&&', '==', '!=', '<=', '>=', '+=', '-=', '*=', '/=', '=>',
   '++', '--', '+', '-', '*', '/', '%', '<', '>', '!', '?', ':', '=', '~', '&', '|', '^',
+  '(', ')', '{', '}', ';',
 ]
 
 /**
@@ -71,34 +102,25 @@ function executable(source, fileName) {
 }
 
 /**
- * The text with every string and template literal's contents blanked, so an
- * operator that only appears inside a literal never counts.
+ * The operator counts of one executable text.
+ *
+ * The literal contents are masked first, so an operator inside a string is
+ * never counted.
  * @param {string} text - the executable text.
- * @returns {string} the masked text.
+ * @returns {Record<string, number>} the count per operator.
  */
-function maskLiterals(text) {
+function operatorCounts(text) {
   const source = ts.createSourceFile('scan.js', text, ts.ScriptTarget.ES2024, true)
   const masked = [...text]
-  const blank = (from, to) => { for (let index = from; index < to; index++) masked[index] = ' ' }
+  const blank = (from, to) => { for (let i = from; i < to; i++) masked[i] = ' ' }
   const visit = node => {
-    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
-      || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
-      blank(node.getStart(source), node.getEnd())
-    }
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node)
+      || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) blank(node.getStart(source), node.getEnd())
     ts.forEachChild(node, visit)
   }
   visit(source)
-  return masked.join('')
-}
-
-/**
- * Every operator in the text, counted.
- * @param {string} text - the executable text.
- * @returns {Record<string, number>} the counts.
- */
-function operatorCounts(text) {
   const counts = {}
-  let rest = maskLiterals(text)
+  let rest = masked.join('')
   for (const operator of operators) {
     const parts = rest.split(operator)
     counts[operator] = parts.length - 1
@@ -108,49 +130,24 @@ function operatorCounts(text) {
 }
 
 /**
- * Every string and numeric literal in the text, read from the AST so a
- * literal inside a longer string is not counted twice.
+ * The literal multiset of one executable text, read from the AST.
  * @param {string} text - the executable text.
- * @returns {string[]} the literal texts, sorted.
+ * @returns {Map<string, number>} the count per literal.
  */
 function literalCounts(text) {
   const source = ts.createSourceFile('scan.js', text, ts.ScriptTarget.ES2024, true)
-  const literals = []
+  const counts = new Map()
   const visit = node => {
-    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) literals.push(`s:${node.text}`)
-    else if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) literals.push(`t:${node.text}`)
-    else if (ts.isNumericLiteral(node)) literals.push(`n:${node.text}`)
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isNumericLiteral(node)
+      || ts.isBigIntLiteral(node) || node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword
+      || node.kind === ts.SyntaxKind.NullKeyword) {
+      const key = `${ts.SyntaxKind[node.kind]}:${node.getText(source)}`
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
     ts.forEachChild(node, visit)
   }
   visit(source)
-  return literals.sort()
-}
-
-/**
- * The difference between two count maps, keeping only the entries that differ.
- * @param {Record<string, number>} before - the pre-migration counts.
- * @param {Record<string, number>} after - the migrated counts.
- * @returns {string[]} the differing entries, as `operator before -> after`.
- */
-function operatorDelta(before, after) {
-  const delta = []
-  for (const operator of operators) {
-    if (before[operator] !== after[operator]) delta.push(`${operator} ${before[operator]} -> ${after[operator]}`)
-  }
-  return delta
-}
-
-/**
- * The literals that only one side has, as a multiset difference.
- * @param {string[]} before - the pre-migration literals.
- * @param {string[]} after - the migrated literals.
- * @returns {string[]} the difference.
- */
-function literalDelta(before, after) {
-  const counts = new Map()
-  for (const literal of before) counts.set(literal, (counts.get(literal) ?? 0) + 1)
-  for (const literal of after) counts.set(literal, (counts.get(literal) ?? 0) - 1)
-  return [...counts.entries()].filter(([, count]) => count !== 0).map(([literal, count]) => `${literal} ${count > 0 ? '+' : ''}${count}`)
+  return counts
 }
 
 /**
@@ -176,45 +173,79 @@ function lineDelta(before, after) {
 }
 
 /**
- * The token stream of a text: the code with every formatting difference removed.
+ * The AST-derived structure signature of one executable text.
  *
- * The line report is layout-sensitive, so the printer wrapping one statement
- * over two lines reads as a difference. The token stream is not: it keeps the
- * order and the token boundaries and drops only whitespace and comments, so it
- * is the structure-insensitive comparison the scan trusts.
+ * Every node contributes its kind, and the nodes that carry a name or a value
+ * contribute their text as well. The signature never goes through the scanner,
+ * so it cannot be fooled by a scanner quirk: a template literal contributes its
+ * head, its substitutions and its tail as separate nodes, and the code between
+ * two template literals is code, not one token.
+ * @param {string} text - the executable text.
+ * @returns {string[]} the signature, in order.
+ */
+function structureSignature(text) {
+  const source = ts.createSourceFile('scan.js', text, ts.ScriptTarget.ES2024, true)
+  const signature = []
+  const visit = node => {
+    for (const child of node.getChildren(source)) {
+      const kind = ts.SyntaxKind[child.kind]
+      const carriesText = ts.isIdentifier(child) || ts.isStringLiteral(child) || ts.isNoSubstitutionTemplateLiteral(child)
+        || ts.isNumericLiteral(child) || ts.isBigIntLiteral(child) || ts.isPrivateIdentifier(child)
+      signature.push(carriesText ? `${kind}:${child.getText(source)}` : kind)
+      visit(child)
+    }
+  }
+  visit(source)
+  return signature
+}
+
+/**
+ * Walk one template literal's parts, from the head or middle the scanner is
+ * positioned at to the tail.
  *
- * Template literals need their own handling. A plain `scan()` loop swallows the
- * template tail AND every token after it into one `FirstTemplateToken`, so a
- * file with a template literal would only ever be compared up to its first
- * backtick. Each template is therefore walked part by part: the head, then the
- * substitution (braces counted, so a nested object literal does not end it),
- * then `reScanTemplateToken` advances to the middle or the tail.
+ * Each substitution's braces are counted, so a `}` inside the substitution
+ * does not end it, and a template nested inside a substitution is walked the
+ * same way. A template with more than one substitution runs head -> middle ->
+ * middle -> tail, and only the tail ends the template.
+ * @param {ts.Scanner} scanner - the scanner, positioned at a template part.
+ * @param {string[]} tokens - the token texts collected so far.
+ */
+function scanTemplateParts(scanner, tokens) {
+  for (;;) {
+    let depth = 0
+    for (;;) {
+      const kind = scanner.scan()
+      if (kind === ts.SyntaxKind.TemplateHead || kind === ts.SyntaxKind.TemplateMiddle) {
+        tokens.push(scanner.getTokenText())
+        scanTemplateParts(scanner, tokens)
+        continue
+      }
+      if (kind === ts.SyntaxKind.OpenBraceToken) depth += 1
+      else if (kind === ts.SyntaxKind.CloseBraceToken) {
+        if (depth === 0) break
+        depth -= 1
+      }
+      tokens.push(scanner.getTokenText())
+    }
+    const kind = scanner.reScanTemplateToken()
+    tokens.push(scanner.getTokenText())
+    if (kind !== ts.SyntaxKind.TemplateMiddle) break
+  }
+}
+
+/**
+ * The scanner's token stream, in order.
  * @param {string} text - the executable text.
  * @returns {string[]} the token texts, in order.
  */
-function tokenStream(text, { normalizeTemplates = false } = {}) {
+function tokenStream(text) {
   const scanner = ts.createScanner(ts.ScriptTarget.ES2024, true, ts.LanguageVariant.Standard, text)
   const tokens = []
   let kind = scanner.scan()
   while (kind !== ts.SyntaxKind.EndOfFileToken) {
     tokens.push(scanner.getTokenText())
     if (kind === ts.SyntaxKind.TemplateHead || kind === ts.SyntaxKind.TemplateMiddle) {
-      let depth = 0
-      for (;;) {
-        kind = scanner.scan()
-        if (kind === ts.SyntaxKind.OpenBraceToken) depth += 1
-        else if (kind === ts.SyntaxKind.CloseBraceToken) {
-          if (depth === 0) break
-          depth -= 1
-        }
-        tokens.push(scanner.getTokenText())
-      }
-      kind = scanner.reScanTemplateToken()
-      // The scanner's template tail carries the text from the substitution's
-      // closing brace to the next backtick, so one token can hold a whole
-      // function. The normalized stream reports the tail by its kind instead;
-      // the literal multiset above still carries the template's own text.
-      tokens.push(normalizeTemplates ? '<template>' : scanner.getTokenText())
+      scanTemplateParts(scanner, tokens)
       kind = scanner.scan()
       continue
     }
@@ -224,35 +255,188 @@ function tokenStream(text, { normalizeTemplates = false } = {}) {
 }
 
 /**
- * The order-sensitive token difference with the template parts normalized.
- *
- * @param {string} before - the pre-migration source.
- * @param {string} after - the migrated source.
- * @returns {string} the report line.
+ * Drop the parentheses a type annotation forces around a single arrow
+ * parameter: `(x) =>` becomes `x =>`.
+ * @param {string[]} tokens - the token stream.
+ * @returns {string[]} the rewritten stream.
  */
-function normalizedReport(before, after) {
-  const { identical, first, oldTokens, newTokens } = tokenDelta(before, after, { normalizeTemplates: true })
-  if (identical) return 'identical'
-  const window = 6
-  const from = Math.max(0, first - 2)
-  return `differ — first at token #${first} (${oldTokens.length} old / ${newTokens.length} new); `
-    + `old: ${oldTokens.slice(from, first + window).join(' ')} | new: ${newTokens.slice(from, first + window).join(' ')}`
+function dropArrowParameterParens(tokens) {
+  const out = []
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === '(' && tokens[i + 2] === ')' && tokens[i + 3] === '=>' && /^[A-Za-z_$][\w$]*$/u.test(tokens[i + 1] ?? '')) {
+      out.push(tokens[i + 1])
+      i += 2
+      continue
+    }
+    out.push(tokens[i])
+  }
+  return out
 }
+
+/**
+ * Drop the `async` the native tool contract puts on a tool's `execute`.
+ * @param {string[]} tokens - the token stream.
+ * @returns {string[]} the rewritten stream.
+ */
+function dropAsyncArrow(tokens) {
+  const out = []
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === 'async' && tokens[i + 1] === '(') {
+      let depth = 0
+      let close = -1
+      for (let j = i + 1; j < tokens.length; j++) {
+        if (tokens[j] === '(') depth += 1
+        else if (tokens[j] === ')') {
+          depth -= 1
+          if (depth === 0) { close = j; break }
+        }
+      }
+      if (close !== -1 && tokens[close + 1] === '=>') continue
+    }
+    out.push(tokens[i])
+  }
+  return out
+}
+
+/**
+ * Unwrap the `isSafeInteger` predicate helper: drop its declaration and write
+ * the call it replaced back as `Number.isSafeInteger`.
+ * @param {string[]} tokens - the token stream.
+ * @returns {string[]} the rewritten stream.
+ */
+function unwrapSafeIntegerHelper(tokens) {
+  const declaration = ['function', 'isSafeInteger', '(', 'value', ')', '{', 'return', 'Number', '.', 'isSafeInteger', '(', 'value', ')', ';', '}']
+  const out = []
+  for (let i = 0; i < tokens.length; i++) {
+    if (declaration.every((token, k) => tokens[i + k] === token)) {
+      i += declaration.length - 1
+      continue
+    }
+    if (tokens[i] === 'isSafeInteger' && !(tokens[i - 1] === '.' && tokens[i - 2] === 'Number')) {
+      out.push('Number', '.', 'isSafeInteger')
+      continue
+    }
+    out.push(tokens[i])
+  }
+  return out
+}
+
+/**
+ * Drop every occurrence of one token sequence.
+ * @param {string[]} tokens - the token stream.
+ * @param {string[]} sequence - the sequence to drop.
+ * @returns {string[]} the rewritten stream.
+ */
+function dropTokenSequence(tokens, sequence) {
+  const out = []
+  for (let i = 0; i < tokens.length; i++) {
+    if (sequence.every((token, k) => tokens[i + k] === token)) {
+      i += sequence.length - 1
+      continue
+    }
+    out.push(tokens[i])
+  }
+  return out
+}
+
+/**
+ * Fold the `return undefined` the `agent/created` handler's type asks for.
+ *
+ * The tail `; return undefined ;` is dropped, and an arrow body that is
+ * nothing but one expression then loses the block's braces as well: the
+ * concise body it replaces is the same expression. A block that holds more
+ * than one statement keeps its braces, because the pre-migration body was a
+ * block too.
+ * @param {string[]} tokens - the token stream.
+ * @returns {string[]} the rewritten stream.
+ */
+function foldExplicitReturnUndefined(tokens) {
+  const withoutTail = dropTokenSequence(tokens, ['return', 'undefined', ';'])
+  const out = []
+  for (let i = 0; i < withoutTail.length; i++) {
+    if (withoutTail[i] === '=>' && withoutTail[i + 1] === '{') {
+      let depth = 0
+      let close = -1
+      for (let j = i + 1; j < withoutTail.length; j++) {
+        if (withoutTail[j] === '{') depth += 1
+        else if (withoutTail[j] === '}') {
+          depth -= 1
+          if (depth === 0) { close = j; break }
+        }
+      }
+      if (close !== -1) {
+        const body = withoutTail.slice(i + 2, close)
+        // A body that is one expression and its separator is the concise body
+        // the block replaced; a body with more than one statement keeps its
+        // braces, because the pre-migration body was a block too.
+        const statements = body.length > 0 && body[body.length - 1] === ';' ? body.slice(0, -1) : body
+        if (!statements.includes(';')) {
+          out.push('=>')
+          out.push(...statements)
+          i = close
+          continue
+        }
+      }
+    }
+    out.push(withoutTail[i])
+  }
+  return out
+}
+
+/**
+ * The differences the migration declares, as token-stream transformations.
+ *
+ * Each transformation is applied to BOTH streams, so a difference that
+ * survives all of them is a difference the migration did not declare. The
+ * list is this migration's own: another ticket declares its own.
+ */
+const declaredCategories = [
+  {
+    // A relative import must carry the `.js` specifier the emitted artefact has.
+    name: 'relative-specifier',
+    apply: tokens => tokens.map(token => token.replace(/\.mjs'$/u, ".js'")),
+  },
+  {
+    // A typed arrow parameter needs its parentheses.
+    name: 'arrow-param-parens',
+    apply: dropArrowParameterParens,
+  },
+  {
+    // The native tool contract makes a tool's `execute` asynchronous.
+    name: 'async-on-execute',
+    apply: dropAsyncArrow,
+  },
+  {
+    // `Number.isSafeInteger` is not a type guard, so the check is wrapped.
+    name: 'safe-integer-helper',
+    apply: unwrapSafeIntegerHelper,
+  },
+  {
+    // The `agent/created` handler's type is `undefined | Promise<undefined>`.
+    //
+    // This is the one category that carries a VALUE difference, not only a
+    // shape difference: the pre-migration `delivery` helper was a concise
+    // arrow whose value was dsh's tool disposer, and the migrated one returns
+    // `undefined`. A token comparison cannot see a returned value, so the
+    // deviation is recorded in the ticket's evidence, not here.
+    name: 'explicit-return-undefined',
+    apply: foldExplicitReturnUndefined,
+  },
+]
 
 /**
  * The difference between two token streams.
  *
  * The comparison is ORDER-SENSITIVE: the two streams must agree token for
- * token, so a renamed local, a reordered statement, a swapped argument or a
- * renamed property all show up. The multiset summary is only a reading aid on
- * top of that.
+ * token, so a renamed local, a reordered statement or a swapped argument
+ * shows up.
  * @param {string} before - the pre-migration text.
  * @param {string} after - the migrated text.
  * @returns {{identical: boolean, first: number, onlyOld: string[], onlyNew: string[], oldTokens: string[], newTokens: string[]}} the difference.
  */
-function tokenDelta(before, after, options = {}) {
-  const oldTokens = tokenStream(before, options)
-  const newTokens = tokenStream(after, options)
+function tokenDelta(before, after) {
+  const oldTokens = tokenStream(before)
+  const newTokens = tokenStream(after)
   const onlyOld = []
   const remaining = [...newTokens]
   for (const token of oldTokens) {
@@ -276,11 +460,12 @@ function tokenReport(before, after) {
   const { identical, first, onlyOld, onlyNew, oldTokens, newTokens } = tokenDelta(before, after)
   if (identical) return 'identical'
   const show = tokens => tokens.length === 0 ? 'none' : tokens.map(token => `'${token}'`).join(' ')
-  return `differ — first at token #${first} (${oldTokens.length} old / ${newTokens.length} new); only old: ${show(onlyOld)}; only new: ${show(onlyNew)}`
+  return `differ — first at token #${first} (${oldTokens.length} old / ${newTokens.length} new); `
+    + `only old: ${show(onlyOld)}; only new: ${show(onlyNew)}`
 }
 
 /**
- * The tokens around the first difference, so a reader can see what changed.
+ * The context around the first token difference.
  * @param {string} before - the pre-migration text.
  * @param {string} after - the migrated text.
  * @returns {string[]} the report lines.
@@ -296,11 +481,133 @@ function tokenContext(before, after) {
   ]
 }
 
+/**
+ * The difference between two operator count maps.
+ * @param {Record<string, number>} before - the pre-migration counts.
+ * @param {Record<string, number>} after - the migrated counts.
+ * @returns {string[]} the lines that differ.
+ */
+function operatorDelta(before, after) {
+  const lines = []
+  for (const operator of operators) {
+    const oldCount = before[operator] ?? 0
+    const newCount = after[operator] ?? 0
+    if (oldCount !== newCount) lines.push(`${operator}: ${oldCount} -> ${newCount}`)
+  }
+  return lines
+}
+
+/**
+ * The difference between two literal multisets.
+ * @param {Map<string, number>} before - the pre-migration multiset.
+ * @param {Map<string, number>} after - the migrated multiset.
+ * @returns {string[]} the lines that differ.
+ */
+function literalDelta(before, after) {
+  const lines = []
+  for (const key of new Set([...before.keys(), ...after.keys()])) {
+    const oldCount = before.get(key) ?? 0
+    const newCount = after.get(key) ?? 0
+    if (oldCount !== newCount) lines.push(`${key}: ${oldCount} -> ${newCount}`)
+  }
+  return lines
+}
+
+/**
+ * The difference between two structure signatures.
+ * @param {string} before - the pre-migration text.
+ * @param {string} after - the migrated text.
+ * @returns {string} the report.
+ */
+function structureReport(before, after) {
+  const oldSignature = structureSignature(before)
+  const newSignature = structureSignature(after)
+  let first = 0
+  while (first < oldSignature.length && first < newSignature.length && oldSignature[first] === newSignature[first]) first++
+  if (first === oldSignature.length && first === newSignature.length) return 'identical'
+  const window = 6
+  const from = Math.max(0, first - 2)
+  return `differ — first at node #${first} (${oldSignature.length} old / ${newSignature.length} new); `
+    + `old: ${oldSignature.slice(from, first + window).join(' ')} | new: ${newSignature.slice(from, first + window).join(' ')}`
+}
+
+/**
+ * Apply the declared categories to one token stream.
+ * @param {string[]} tokens - the token stream.
+ * @returns {{tokens: string[], fired: string[]}} the rewritten stream and the categories that changed it.
+ */
+function applyDeclaredCategories(tokens) {
+  const fired = []
+  let current = tokens
+  for (const category of declaredCategories) {
+    const next = category.apply(current)
+    if (next.length !== current.length || next.some((token, index) => token !== current[index])) fired.push(category.name)
+    current = next
+  }
+  return { tokens: current, fired }
+}
+
+/**
+ * How many tokens the two streams still disagree on.
+ * @param {string[]} before - the pre-migration token stream.
+ * @param {string[]} after - the migrated token stream.
+ * @returns {number} the number of tokens that do not pair up.
+ */
+function residueSize(before, after) {
+  const remaining = [...after]
+  let size = 0
+  for (const token of before) {
+    const index = remaining.indexOf(token)
+    if (index === -1) size += 1
+    else remaining.splice(index, 1)
+  }
+  return size + remaining.length
+}
+
+/**
+ * The difference between two token streams after the declared categories are
+ * applied to both.
+ * @param {string} before - the pre-migration text.
+ * @param {string} after - the migrated text.
+ * @returns {{identical: boolean, fired: string[], residue: string[]}} the residue and the categories that fired.
+ */
+function residueReport(before, after) {
+  const fired = []
+  let oldTokens = tokenStream(before)
+  let newTokens = tokenStream(after)
+  let residue = residueSize(oldTokens, newTokens)
+  for (const category of declaredCategories) {
+    const oldNext = category.apply(oldTokens)
+    const newNext = category.apply(newTokens)
+    const next = residueSize(oldNext, newNext)
+    if (next < residue) fired.push(category.name)
+    oldTokens = oldNext
+    newTokens = newNext
+    residue = next
+  }
+  const listed = []
+  const remaining = [...newTokens]
+  for (const token of oldTokens) {
+    const index = remaining.indexOf(token)
+    if (index === -1) listed.push(`only old: ${token}`)
+    else remaining.splice(index, 1)
+  }
+  for (const token of remaining) listed.push(`only new: ${token}`)
+  let first = 0
+  while (first < oldTokens.length && first < newTokens.length && oldTokens[first] === newTokens[first]) first++
+  const context = listed.length === 0 ? [] : [
+    `  old: ${oldTokens.slice(Math.max(0, first - 4), first + 8).join(' ')}`,
+    `  new: ${newTokens.slice(Math.max(0, first - 4), first + 8).join(' ')}`,
+  ]
+  return { identical: listed.length === 0, fired, residue: listed, context }
+}
+
 const before = path => execFileSync('git', ['show', `${base}:${path}`], { cwd: repoRoot, encoding: 'utf8' })
 
 let operatorDeltas = 0
 let literalDeltas = 0
 let tokenDeltas = 0
+let residues = 0
 for (const [oldPath, newPath, distPath] of files) {
   const oldText = executable(before(oldPath), oldPath)
   const newText = executable(readFileSync(join(repoRoot, newPath), 'utf8'), newPath)
@@ -309,12 +616,17 @@ for (const [oldPath, newPath, distPath] of files) {
   console.log(`# ${newPath}`)
   console.log(`source operators: ${sourceOperators.length === 0 ? 'identical' : sourceOperators.join(', ')}`)
   console.log(`source literals: ${sourceLiterals.length === 0 ? 'identical' : sourceLiterals.join(', ')}`)
+  console.log(`source structure: ${structureReport(oldText, newText)}`)
   console.log(`source tokens: ${tokenReport(oldText, newText)}`)
   for (const line of tokenContext(oldText, newText)) console.log(line)
-  console.log(`source tokens (normalized): ${normalizedReport(oldText, newText)}`)
+  const sourceResidue = residueReport(oldText, newText)
+  console.log(`source declared categories fired: ${sourceResidue.fired.length === 0 ? 'none' : sourceResidue.fired.join(', ')}`)
+  console.log(`source residue after the declared categories: ${sourceResidue.identical ? 'none' : sourceResidue.residue.join('; ')}`)
+  for (const line of sourceResidue.context) console.log(line)
   if (sourceOperators.length > 0) operatorDeltas += 1
   if (sourceLiterals.length > 0) literalDeltas += 1
   if (!tokenDelta(oldText, newText).identical) tokenDeltas += 1
+  if (!sourceResidue.identical) residues += 1
   // The line report is layout-sensitive and is printed for EVERY file, so a
   // change that keeps the operator counts and the literal multiset exactly is
   // still line-compared. The token report above is the structure-insensitive
@@ -330,12 +642,17 @@ for (const [oldPath, newPath, distPath] of files) {
     const runtimeLiterals = literalDelta(literalCounts(oldText), literalCounts(runtimeText))
     console.log(`runtime operators: ${runtimeOperators.length === 0 ? 'identical' : runtimeOperators.join(', ')}`)
     console.log(`runtime literals: ${runtimeLiterals.length === 0 ? 'identical' : runtimeLiterals.join(', ')}`)
+    console.log(`runtime structure: ${structureReport(oldText, runtimeText)}`)
     console.log(`runtime tokens: ${tokenReport(oldText, runtimeText)}`)
     for (const line of tokenContext(oldText, runtimeText)) console.log(line)
-    console.log(`runtime tokens (normalized): ${normalizedReport(oldText, runtimeText)}`)
+    const runtimeResidue = residueReport(oldText, runtimeText)
+    console.log(`runtime declared categories fired: ${runtimeResidue.fired.length === 0 ? 'none' : runtimeResidue.fired.join(', ')}`)
+    console.log(`runtime residue after the declared categories: ${runtimeResidue.identical ? 'none' : runtimeResidue.residue.join('; ')}`)
+    for (const line of runtimeResidue.context) console.log(line)
     if (runtimeOperators.length > 0) operatorDeltas += 1
     if (runtimeLiterals.length > 0) literalDeltas += 1
     if (!tokenDelta(oldText, runtimeText).identical) tokenDeltas += 1
+    if (!runtimeResidue.identical) residues += 1
     const runtimeLines = lineDelta(oldText, runtimeText)
     if (runtimeLines.length > 0) {
       console.log('runtime lines (layout-sensitive):')
@@ -344,4 +661,9 @@ for (const [oldPath, newPath, distPath] of files) {
   }
   console.log('')
 }
-console.log(`${operatorDeltas} operator delta(s), ${literalDeltas} literal delta(s), ${tokenDeltas} token delta(s) across ${files.length} files`)
+console.log(`${operatorDeltas} operator delta(s), ${literalDeltas} literal delta(s), ${tokenDeltas} token delta(s), `
+  + `${residues} residue(s) after the declared categories, across ${files.length} files`)
+if (residues > 0) {
+  console.error('parity scan: a difference the migration did not declare is left over')
+  process.exit(1)
+}
