@@ -13,7 +13,8 @@ test('a backpressured SSE observer catches up without replaying superseded reply
   const home = makeHome('ourfairy-stream-pressure-')
   const model = await startMockLlmServer({ host: '127.0.0.1', port: 0, apiKey: 'mock-key',
     sequence: [...Array(historyTurns).fill('success'), 'slow_success'],
-    successText: reply, chunkSize: 8, chunkDelayMs: 10 })
+    // Exceed the shared 32 ms publication window so cadence cannot mask transport backlog.
+    successText: reply, chunkSize: 8, chunkDelayMs: 40 })
   const env = { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: 'pressure-password',
     MINIMAX_CN_API_KEY: 'mock-key', OURFAIRY_MINIMAX_BASE_URL: model.baseURL }
   let call

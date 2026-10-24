@@ -1,6 +1,6 @@
 # #214 流式回复推进速率
 
-日期：2026-10-24。票面见 [实施约定](../../../tickets/214/README.md)。
+日期：2026-10-24。票面见 [实施约定](../../../tickets/214-stream-rate.md)。
 开工代码基点：`b5bde93504cd9e6c67da1c73de678b832cfbb033`。
 
 ## 结论与范围
@@ -109,18 +109,29 @@ node work/implementation/evidence/214-stream-rate/measure.mjs \
   `finalVersion=200`。`RemoteChatApiTest` 19 项与 `RemoteChatStateTest` 9 项通过；覆盖完整原文、
   完成/停止/失败正文、SSE framing、取消、恢复与账号隔离。
 - `node --test tests/chat-stream-backpressure.test.mjs tests/chat-multi-observer.test.mjs`：最终 3/3
-  通过。暂停 TCP 读者的回归由旧版 259 帧降至一次最终记录的 60 帧；另覆盖 gzip 开流时即能读到
+  通过。暂停 TCP 读者的回归由旧版 259 帧降至一次实现记录的 60 帧；另覆盖 gzip 开流时即能读到
   完整帧、拒绝 gzip、共享版本一致及重连后的一致性。
 - 高速模型片段逐一发送的回归先失败（258 个 revision），共享发布合并后通过。
 - `npm run typecheck`、多次 `npm run build` 通过。
 - `:app:assemblePerf` 构建成功；在用户授权的 vivo S50 上实际安装独立包并执行上述测量。
 
-- 最终 `npm test`：294/294 通过，0 失败、0 跳过，约 113.45 秒。
+- 最终 `npm test`：294/294 通过，0 失败、0 跳过；评审修补后重跑约 82.34 秒。
 - 最终 `npm run combo:verify`：产品分支基于 `main`、锁定 dsh 提交与 Android 来源声明三项通过。
 - 最终 Android `./gradlew test lintDebug assembleDebug -Pourfairy.identityEndpoint=https://measurement.invalid
   --offline --console=plain`：`BUILD SUCCESSFUL`，约 2 分 22 秒。单测、静态检查与 APK 构建均实际执行；
   真机测量是前文独立记录的另一个验证环节。
 - Android JUnit 汇总：app 203、highlight 53、ui 20，共 276 项，0 失败、0 错误、0 跳过。
+
+## 两轴评审
+
+Standards 指出 1 项测试覆盖缺口：10 ms 模型片段本身会被共享发布窗口合并，可能掩盖写端背压
+退化。将独立背压用例改为 40 ms 片段（超过 32 ms 发布窗口）后，生产实现为 61/256 个正文帧，
+测试通过。仅在隔离的 `/tmp` 产品副本中移除 `observe.ts` 的 `!writable ||` 保护、保留共享发布，
+得到 256/256 帧，同一 `a stalled reader replayed` 断言失败；真实生产源文件未为此修改。
+复跑命令仍为 `node --test tests/chat-stream-backpressure.test.mjs`。
+
+Standards：上述 1 项覆盖缺口已修复，无遗留编码标准违规或需单列的判断性异味。
+Spec：无缺失、越界或错误实现发现；人工核对两份原始真机 JSON 的参数、速率及终态字符数。
 
 ## 未执行项
 
