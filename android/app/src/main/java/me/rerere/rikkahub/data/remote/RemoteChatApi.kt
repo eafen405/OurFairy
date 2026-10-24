@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -219,7 +220,7 @@ class RemoteChatApi(
         call("/chat/checkpoint", json.encodeToString(SessionRef(sessionId)), token).durableThroughSeq
             ?: throw IdentityUnreachable(IllegalStateException("the backend omitted the durable checkpoint"))
 
-    // Closing this lease never calls stop. Each SSE event replaces the previous snapshot.
+    // Closing this lease never calls stop. A newer cumulative snapshot supersedes a queued one.
     override fun observe(token: String, sessionId: String): Flow<RemoteChatProjection> = callbackFlow {
         val request = request(
             path = "/chat/observe",
@@ -253,7 +254,7 @@ class RemoteChatApi(
             reading.cancel()
             call.cancel()
         }
-    }
+    }.conflate()
 
     private val streamingClient: OkHttpClient by lazy {
         client.newBuilder().readTimeout(0, TimeUnit.MILLISECONDS).build()

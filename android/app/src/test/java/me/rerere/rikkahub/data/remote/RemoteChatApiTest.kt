@@ -27,6 +27,7 @@ import org.junit.Test
 import java.net.InetSocketAddress
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 
 /**
@@ -58,6 +59,8 @@ class RemoteChatApiTest {
     private var replyBody = "{}"
     private var sseFrames: List<String> = emptyList()
     private var holdStreamOpen = false
+    private var awaitConsumption = false
+    private val consumed = Semaphore(0)
 
     private val baseUrl: String get() = "http://127.0.0.1:${server.address.port}"
 
@@ -114,6 +117,9 @@ class RemoteChatApiTest {
             for (frame in sseFrames) {
                 out.write(frame.toByteArray(Charsets.UTF_8))
                 out.flush()
+                if (awaitConsumption && frame.startsWith("event: projection")) {
+                    check(consumed.tryAcquire(10, TimeUnit.SECONDS)) { "projection was not consumed" }
+                }
             }
             streamed.countDown()
             if (holdStreamOpen) release.await(10, TimeUnit.SECONDS)
@@ -305,6 +311,8 @@ class RemoteChatApiTest {
 
     @Test
     fun `observe emits each cumulative snapshot whole and completes when the stream closes`() = runTest {
+        // Framing is tested without superseding the frame before it reaches the consumer.
+        awaitConsumption = true
         // A keepalive comment, an event this client does not model, and two
         // projections: none of the first two may reach the caller, and each
         // projection must arrive as one complete snapshot rather than as text
@@ -320,7 +328,9 @@ class RemoteChatApiTest {
             "event: projection\ndata: {\"sessionId\":\"s-1\",\"generation\":\"gen-1\",\ndata: \"version\":3,\"cursor\":2,\"durableThroughSeq\":2,\"messages\":[],\"attempt\":null,\"replyStatus\":0,\"error\":null}\n\n",
         )
 
-        val snapshots = withContext(Dispatchers.IO) { api.observe(TOKEN, "s-1").toList() }
+        val snapshots = withContext(Dispatchers.IO) {
+            api.observe(TOKEN, "s-1").onEach { consumed.release() }.toList()
+        }
 
         val request = onlyRequest()
         assertEquals("POST", request.method)
@@ -344,14 +354,44 @@ class RemoteChatApiTest {
     }
 
     @Test
-    fun `slow rendering still receives the final complete snapshot`() = runTest {
+    fun `slow rendering skips superseded snapshots and receives the final complete snapshot`() = runTest {
         sseFrames = (1..200).map { version ->
             "event: projection\ndata: {\"sessionId\":\"s-1\",\"generation\":\"g\",\"version\":$version}\n\n"
         }
+        val started = System.nanoTime()
         val snapshots = withContext(Dispatchers.IO) {
             api.observe(TOKEN, "s-1").onEach { Thread.sleep(2) }.toList()
         }
+        println("STREAM_CATCH_UP frames=200 applied=${snapshots.size} finalVersion=${snapshots.last().version} elapsedMs=${(System.nanoTime() - started) / 1_000_000.0}")
         assertEquals(200L, snapshots.last().version)
+        assertTrue("a slow consumer must catch up instead of replaying all ${snapshots.size} snapshots", snapshots.size < 200)
+    }
+
+    @Test
+    fun `superseding snapshots preserves complete stopped and failed reply bodies`() = runTest {
+        for (status in listOf(2, 3, 4)) {
+            val raw = " # 完整正文\n\n**bold**  \n"
+            val terminal = RemoteChatProjection(
+                sessionId = "s-1", generation = "g", version = 200,
+                messages = listOf(RemoteChatMessage("reply", 7, null, 2, status, raw)),
+                settledAttempt = RemoteChatSettlement("attempt", 7),
+                error = if (status == 4) "model failed" else null,
+            )
+            sseFrames = (1..199).map { version ->
+                "event: projection\ndata: {\"sessionId\":\"s-1\",\"generation\":\"g\",\"version\":$version,\"replyStatus\":1,\"attempt\":{\"attemptId\":\"attempt\",\"revision\":$version,\"text\":\"prefix\"}}\n\n"
+            } + "event: projection\ndata: ${Json.encodeToString(RemoteChatProjection.serializer(), terminal)}\n\n"
+            val snapshots = withContext(Dispatchers.IO) {
+                api.observe(TOKEN, "s-1").onEach { Thread.sleep(2) }.toList()
+            }
+            assertTrue(snapshots.size < 200)
+            val last = snapshots.last()
+            assertEquals(200L, last.version)
+            assertNull(last.attempt)
+            assertEquals(raw, last.messages.single().text)
+            assertEquals(status, last.messages.single().status)
+            assertEquals(terminal.settledAttempt, last.settledAttempt)
+            assertEquals(terminal.error, last.error)
+        }
     }
 
     @Test
