@@ -20,6 +20,15 @@ export const userMessage = (id, text, { rpcId, attachments } = {}) => ({
   source: { kind: 'user', ...(rpcId === undefined ? {} : { rpcId }), ...(attachments === undefined ? {} : { attachments }) },
 })
 export const assistantMessage = (id, text) => ({ id, role: 'assistant', content: [{ type: 'text', text }], source: { kind: 'model' } })
+/** One assistant step that requested tools: text plus the calls, in block order. */
+export const toolCallMessage = (id, text, calls) => ({
+  id, role: 'assistant',
+  content: [
+    ...(text === '' ? [] : [{ type: 'text', text }]),
+    ...calls.map(call => ({ type: 'tool-call', id: call.id, name: call.name, arguments: call.arguments })),
+  ],
+  source: { kind: 'model' },
+})
 export const noticeMessage = (id, text) => ({ id, role: 'user', content: [{ type: 'text', text }], source: { kind: 'tool-jobs' } })
 export const attachment = (uploadId, bytes) => ({ uploadId, name: `${uploadId}.png`, mime: 'image/png',
   original: { name: `${uploadId}.png`, mime: 'image/png', bytes }, image: { width: 4, height: 4 } })

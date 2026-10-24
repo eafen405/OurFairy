@@ -15,7 +15,10 @@
       "role": 2,
       "status": 2,
       "text": "",
-      "attachments": []
+      "attachments": [],
+      "tools": [
+        "todo_write"
+      ]
     },
     {
       "seq": 17,
@@ -117,7 +120,10 @@
         "role": 2,
         "status": 2,
         "text": "",
-        "attachments": []
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
       }
     ],
     "17": [
@@ -135,7 +141,10 @@
         "role": 2,
         "status": 2,
         "text": "",
-        "attachments": []
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
       },
       {
         "seq": 17,
@@ -161,7 +170,10 @@
         "role": 2,
         "status": 2,
         "text": "",
-        "attachments": []
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
       },
       {
         "seq": 17,
@@ -187,7 +199,10 @@
         "role": 2,
         "status": 2,
         "text": "",
-        "attachments": []
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
       },
       {
         "seq": 17,
@@ -221,7 +236,10 @@
         "role": 2,
         "status": 2,
         "text": "",
-        "attachments": []
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
       },
       {
         "seq": 17,
@@ -262,7 +280,10 @@
         "role": 2,
         "status": 2,
         "text": "",
-        "attachments": []
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
       },
       {
         "seq": 17,
@@ -311,7 +332,10 @@
         "role": 2,
         "status": 2,
         "text": "",
-        "attachments": []
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
       },
       {
         "seq": 17,
@@ -360,7 +384,10 @@
         "role": 2,
         "status": 2,
         "text": "",
-        "attachments": []
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
       },
       {
         "seq": 17,
@@ -417,7 +444,10 @@
         "role": 2,
         "status": 2,
         "text": "",
-        "attachments": []
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
       },
       {
         "seq": 17,
@@ -482,7 +512,10 @@
         "role": 2,
         "status": 2,
         "text": "",
-        "attachments": []
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
       },
       {
         "seq": 17,
