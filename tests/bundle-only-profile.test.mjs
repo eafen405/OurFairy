@@ -9,7 +9,7 @@
  * dependencies, installed by real pnpm.
  *
  * The test then boots the pinned dsh CLI directly against that profile — it
- * does not call `scripts/ourfairy-backend.mjs` to install or start anything —
+ * does not call `scripts/ourfairy-backend.ts` to install or start anything —
  * and drives one authenticated product HTTP request (sign-in, session create,
  * chat send/read) against a local in-process Messages double. The model
  * endpoint is the only replaced dependency.
@@ -32,8 +32,8 @@ import { createRequire } from 'node:module'
 import net from 'node:net'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
-import { flattenEntries, packageOf, readCombo, repoPath } from '../scripts/combo.mjs'
-import { isolatedEnv as compositionEnv, layoutOf } from '../scripts/ourfairy-composition.mjs'
+import { flattenEntries, packageOf, readCombo, repoPath } from '../scripts/combo.ts'
+import { isolatedEnv as compositionEnv, layoutOf } from '../scripts/ourfairy-composition.ts'
 import {
   copyProductRepo, describeRun, httpJson, makeHome, readReport, removeHome, repoRoot,
 } from './helpers/backend.mjs'

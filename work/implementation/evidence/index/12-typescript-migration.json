@@ -30,6 +30,12 @@
         "210-ts-remaining"
       ],
       "note": "#210 T5：delivery、gateway、groups、search、speech、probe 迁 .ts（包内原子）、投递消息源扩展的单一权威与 Events 声明、运算符与字面量的机械复查"
+    },
+    {
+      "dirs": [
+        "211-ts-scripts"
+      ],
+      "note": "#211 T6：scripts 十二个脚本迁 .ts（源码直跑、noEmit 叶子工程、相对 import 带 .ts 说明符）、研究文档索引补三行、全量门禁（293/293、combo:verify、doctor、probe）与工作树清理"
     }
   ]
 }

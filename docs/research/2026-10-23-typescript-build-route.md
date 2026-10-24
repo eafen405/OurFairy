@@ -4,7 +4,7 @@
 
 日期：2026-10-23。实验基线：`main` @ `eb7c2a6c5867dc4af228fa09adb3bbe04e7a40ab`；本文提交时分支已 rebase 到 `c39c83d8c1`（#201 只改 `AGENTS.md`）。实验分支 `research/ts-build-route`（worktree `.worktrees/research-ts-build-route`）。dsh 检出 `/home/eafen405/projects/deepseek-harness`，HEAD = `d1b6099ae716870a2afba705a2c90415408a69f5`，与 [`combo.json`](../../combo.json) 的 `repos.dsh.productCommit` 一致，工作树干净。工具链：Node 24.18.0、dsh 自带的 TypeScript 6.0.3（`node_modules/typescript/bin/tsc`）、`@types/node` 22.20.1、zod 4.4.3。
 
-方法：读产品侧 11 个包 + probe 的 `package.json`、47 个 `src/*.mjs`、[`scripts/ourfairy-composition.mjs`](../../scripts/ourfairy-composition.mjs)、[`scripts/combo.mjs`](../../scripts/combo.mjs)、CI 工作流；读 dsh 的 `tsconfig.base.json`、每包 `tsconfig.json`、`lib/types/*.d.ts`、`scripts/verify-node-next-types.ts`，以及 TypeScript 6.0.3 的 `lib/typescript.js`。实验在 `work/tmp/ts-build-route/`（gitignored）里做：把 `backend/http` 的 `src/*.mjs` **复制**为 `.ts`（产品代码零改动），加一个消费方包、一个故意错误文件、一个真实 `.mjs` 探针；跑完删除。所有命令和结果见 §7。
+方法：读产品侧 11 个包 + probe 的 `package.json`、47 个 `src/*.mjs`、[`scripts/ourfairy-composition.ts`](../../scripts/ourfairy-composition.ts)、[`scripts/combo.ts`](../../scripts/combo.ts)、CI 工作流；读 dsh 的 `tsconfig.base.json`、每包 `tsconfig.json`、`lib/types/*.d.ts`、`scripts/verify-node-next-types.ts`，以及 TypeScript 6.0.3 的 `lib/typescript.js`。实验在 `work/tmp/ts-build-route/`（gitignored）里做：把 `backend/http` 的 `src/*.mjs` **复制**为 `.ts`（产品代码零改动），加一个消费方包、一个故意错误文件、一个真实 `.mjs` 探针；跑完删除。所有命令和结果见 §7。
 
 ## 结论
 
@@ -180,7 +180,7 @@ TypeScript 默认「有错也 emit」。在**未打开** `noEmitOnError` 的试�
 
 ### 2.6 与安装链的交接
 
-`productSourceHash` 从每包 `files` 派生要哈希的文件（[`scripts/ourfairy-composition.mjs:297-305`](../../scripts/ourfairy-composition.mjs)，其集合由 `productSources` 按 `files` 展开），doctor 的 installed-set 也读同一份 `files`（[`scripts/ourfairy-backend.mjs:673-678`](../../scripts/ourfairy-backend.mjs)）。一旦 `files` 包含 `dist`，**构建必须先于 hash/安装/doctor**；否则 hash 会把空目录或旧产物当产品源码。这个先后关系、模板缓存与 CI 缓存归 #200 的安装链票，本文只钉「dist 是安装输入」。
+`productSourceHash` 从每包 `files` 派生要哈希的文件（[`scripts/ourfairy-composition.ts:297-305`](../../scripts/ourfairy-composition.ts)，其集合由 `productSources` 按 `files` 展开），doctor 的 installed-set 也读同一份 `files`（[`scripts/ourfairy-backend.ts:673-678`](../../scripts/ourfairy-backend.ts)）。一旦 `files` 包含 `dist`，**构建必须先于 hash/安装/doctor**；否则 hash 会把空目录或旧产物当产品源码。这个先后关系、模板缓存与 CI 缓存归 #200 的安装链票，本文只钉「dist 是安装输入」。
 
 ## 3. 模块说明符与跨包解析
 
@@ -229,7 +229,7 @@ JS 会被改写，**声明文件不会被改写**（TypeScript 6.0.3 `lib/typesc
 
 ### 4.1 根 `node_modules` 链接农场
 
-链接器（建议放 `scripts/link-types.mjs`，由 tsc wrapper 调用）从 [`combo.json`](../../combo.json) 取 dsh 路径，并尊重 `OURFAIRY_DSH_DIR`（[`scripts/combo.mjs:55-63`](../../scripts/combo.mjs)；CI 就设置它，见 [`.github/workflows/check.yml:46-57`](../../.github/workflows/check.yml)）。在仓库根创建：
+链接器（建议放 `scripts/link-types.mjs`，由 tsc wrapper 调用）从 [`combo.json`](../../combo.json) 取 dsh 路径，并尊重 `OURFAIRY_DSH_DIR`（[`scripts/combo.ts:55-63`](../../scripts/combo.ts)；CI 就设置它，见 [`.github/workflows/check.yml:46-57`](../../.github/workflows/check.yml)）。在仓库根创建：
 
 - `@deepseek-ai/*` → dsh 的 `packages/*/*` + `vendor/*` 中每个 `package.json` 的 `name`；建议再补扫 dsh 根 `node_modules/@deepseek-ai/*` 并去重（覆盖非 workspace 安装项）。
 - `@ourfairy/*` → `productPackages(root)` 给出的每个包目录（bundle + probe + 11 个产品包）。

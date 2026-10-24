@@ -23,7 +23,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { flattenEntries, readCombo, repoPath } from '../scripts/combo.mjs'
+import { flattenEntries, readCombo, repoPath } from '../scripts/combo.ts'
 import { productPackageDirs, repoRoot } from './helpers/backend.mjs'
 
 const docPath = join(repoRoot, 'docs', 'architecture', 'dsh-ecosystem-boundary.md')
@@ -48,7 +48,7 @@ function readDoc() {
  * file the loader reads using the same public app-boot functions a boot uses —
  * `loadOverlayPatches` and `composeEntries` — instead of parsing the YAML here
  * (CODING_STANDARDS forbids a structure check that re-implements the loader).
- * Group-nested rows are flattened by the helper `scripts/combo.mjs` already
+ * Group-nested rows are flattened by the helper `scripts/combo.ts` already
  * uses for its package check, so both readers see the same row set.
  * @returns {{ id: string, package: string }[]}
  */

@@ -1,13 +1,13 @@
 /**
  * The #94 relative gates are executable, not prose (ticket #94).
  *
- * `scripts/bench-gate.mjs` is the command the evidence cites. This test fixes
+ * `scripts/bench-gate.ts` is the command the evidence cites. This test fixes
  * its arithmetic and its failure direction with synthetic benchmark documents:
  * a passing after-run, a history-slope regression, and a missing cell.
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { evaluateGates, median } from '../scripts/bench-gate.mjs'
+import { evaluateGates, median } from '../scripts/bench-gate.ts'
 
 const run = (historyTurns, observers, { cpu, readP95, memoryMb, payloadMb }) => ({
   historyTurns,

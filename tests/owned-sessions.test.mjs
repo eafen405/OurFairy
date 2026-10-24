@@ -2,7 +2,7 @@
  * Ticket #27 acceptance: owned sessions, the fixed primary session, and restart
  * recovery, over the real backend.
  *
- * These drive the shipped launcher (`scripts/ourfairy-backend.mjs start`), which
+ * These drive the shipped launcher (`scripts/ourfairy-backend.ts start`), which
  * boots the real dsh CLI with the OurFairy profile, and then speak HTTP to the
  * listener it bound — no plugin is assembled by hand and no request is faked.
  * Requests go through `node:http`, not `fetch`, so they cannot be routed

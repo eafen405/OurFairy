@@ -1,7 +1,7 @@
 /**
  * Importing the launcher must be inert (ticket #156).
  *
- * `scripts/ourfairy-backend.mjs` used to run its CLI at module load: importing
+ * `scripts/ourfairy-backend.ts` used to run its CLI at module load: importing
  * it parsed argv, read combo.json, and exited. That made the module impossible
  * to import from a test (the test process would exit) and coupled every
  * composition fact to a subprocess. The launcher now guards its CLI behind
@@ -20,7 +20,7 @@ import { pathToFileURL } from 'node:url'
 import { copyProductRepo } from './helpers/backend.mjs'
 
 test('importing the launcher has no side effects and exposes main', async () => {
-  const launcher = await import('../scripts/ourfairy-backend.mjs')
+  const launcher = await import('../scripts/ourfairy-backend.ts')
   assert.equal(
     typeof launcher.main,
     'function',
@@ -36,7 +36,7 @@ test('importing a launcher copy with no combo.json resolves and exposes main', a
   const root = copyProductRepo('ourfairy-launcher-import-')
   try {
     rmSync(join(root, 'combo.json'))
-    const launcher = await import(pathToFileURL(join(root, 'scripts', 'ourfairy-backend.mjs')).href)
+    const launcher = await import(pathToFileURL(join(root, 'scripts', 'ourfairy-backend.ts')).href)
     assert.equal(
       typeof launcher.main,
       'function',

@@ -30,15 +30,116 @@ const repoRoot = resolve(import.meta.dirname, '..')
 /** pnpm's import mode for profile installs: copies, never hardlinks into the worktree. */
 export const PROFILE_IMPORT_METHOD = 'copy'
 
+/**
+ * One repository entry of the recorded combination.
+ *
+ * `lock` names what the entry is pinned to; `productCommit` is absent for the
+ * repository that holds combo.json itself, whose lock is the integration
+ * branch. The remaining fields are read where they are used, so an entry that
+ * does not carry them is not refused here.
+ */
+export interface ComboRepo {
+  readonly role: string
+  readonly lock?: string
+  readonly localPath: string
+  readonly integrationBranch: string
+  readonly productCommit?: string
+  readonly remoteName?: string
+  readonly remoteUrl?: string
+}
+
+/**
+ * The `backend` section of the recorded combination.
+ *
+ * The seven pins `readCombination` validates are required; the launcher and the
+ * doctor only print `launcher` and `pnpmInvocation`, so those two are optional.
+ */
+export interface ComboBackend {
+  readonly profileName: string
+  readonly bundlePackage: string
+  readonly probePackage: string
+  readonly bundlePathInRepo: string
+  readonly probePathInRepo: string
+  readonly nodeRange: string
+  readonly pnpmPin: string
+  readonly launcher?: string
+  readonly pnpmInvocation?: string
+  /** Any further pin the recorded file carries; read where it is used. */
+  readonly [field: string]: unknown
+}
+
+/** The inlined Android client's provenance, as combo.json records it. */
+export interface ComboAndroidSource {
+  readonly role?: string
+  readonly commit?: string
+  readonly declaration?: string
+}
+
+/**
+ * The recorded combination, as combo.json holds it.
+ *
+ * combo.json is the authority for this shape; the fields below are the ones the
+ * scripts read. The recorded file carries more keys than these, and the ones no
+ * script reads are simply not described.
+ */
+export interface Combo {
+  readonly schemaVersion: number
+  readonly product: string
+  readonly repos: Record<string, ComboRepo>
+  readonly backend?: ComboBackend
+  readonly androidSource?: ComboAndroidSource
+}
+
+/** A product package: its published name and its repo-relative directory. */
+export interface ProductPackage {
+  readonly name: string
+  readonly dir: string
+}
+
+/** A linked package's manifest, as the staleness hash reads it. */
+export interface PackageManifest {
+  readonly name?: string
+  readonly version?: string
+  readonly files: string[]
+  readonly dependencies?: Record<string, unknown>
+}
+
+/** The three admission rules a bundle manifest's dependencies must satisfy. */
+export type AdmissionRule = 'file' | 'containment' | 'duplicate'
+
+/** One dependency the bundle manifest may not carry, and the rule it broke. */
+export interface AdmissionRefusal {
+  readonly name: string
+  readonly specifier: unknown
+  readonly target?: string
+  readonly rule: AdmissionRule
+}
+
+/** Resolved isolated layout; every durable path lives under `home`. */
+export interface Layout {
+  readonly home: string
+  readonly dshHome: string
+  readonly userHome: string
+  readonly runDir: string
+  readonly logDir: string
+  readonly pnpmStore: string
+  readonly profileDir: string
+  readonly statePath: string
+}
+
 /** Read combo.json. */
-export function readCombo(root = repoRoot) {
+export function readCombo(root = repoRoot): { combo: Combo; path: string } {
   const path = join(root, 'combo.json')
   if (!existsSync(path)) throw new Error(`combo.json not found at ${path}`)
-  const parsed = JSON.parse(readFileSync(path, 'utf8'))
-  if (parsed === null || typeof parsed !== 'object' || typeof parsed.repos !== 'object') {
+  const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
+  if (parsed === null || typeof parsed !== 'object' || typeof (parsed as { repos?: unknown }).repos !== 'object') {
     throw new Error(`${path} must be an object with a repos map`)
   }
-  return { combo: parsed, path }
+  // combo.json is the authority for the combination's shape: the check above
+  // proves only that the file carries a `repos` map, and every other field is
+  // read where it is used. The cast records that the file, not this module,
+  // defines what the fields hold.
+  return { combo: parsed as Combo, path }
 }
 
 /**
@@ -49,15 +150,17 @@ export function readCombo(root = repoRoot) {
  * decorative, so a recorded version could drift from what actually runs without
  * anything failing.
  */
-export function readCombination(root = repoRoot) {
+export function readCombination(root = repoRoot): ComboBackend {
   const { combo, path } = readCombo(root)
-  const backend = combo.backend ?? {}
+  const backend: Record<string, unknown> = combo.backend ?? {}
   for (const field of ['profileName', 'bundlePackage', 'probePackage', 'bundlePathInRepo', 'probePathInRepo', 'pnpmPin', 'nodeRange']) {
     if (typeof backend[field] !== 'string' || backend[field] === '') {
       throw new Error(`${path} backend.${field} must be a non-empty string; the launcher reads its pins from combo.json`)
     }
   }
-  return backend
+  // The loop above proved the seven pins are non-empty strings; the two the
+  // launcher only prints are carried through as the recorded file holds them.
+  return backend as ComboBackend
 }
 
 /**
@@ -67,7 +170,7 @@ export function readCombination(root = repoRoot) {
  * reads the same recorded field, so both derive the name from combo.json
  * instead of keeping a profile name of their own.
  */
-export function layoutOf(home, root = repoRoot) {
+export function layoutOf(home: string | undefined, root = repoRoot): Layout {
   const homeDir = resolve(home ?? join(root, '.ourfairy'))
   const { profileName } = readCombination(root)
   return {
@@ -83,7 +186,7 @@ export function layoutOf(home, root = repoRoot) {
 }
 
 /** Refuse a home that would write into the host's real home tree. */
-export function assertIsolatedHome(layout, root = repoRoot) {
+export function assertIsolatedHome(layout: Pick<Layout, 'home'>, root = repoRoot): void {
   const host = homedir()
   if (layout.home === '/' || layout.home === host || host.startsWith(layout.home + sep)) {
     throw new Error(`refusing OURFAIRY_HOME=${layout.home}: it is the host home (${host}) or an ancestor of it.`
@@ -99,7 +202,7 @@ export function assertIsolatedHome(layout, root = repoRoot) {
  * all land under `OURFAIRY_HOME`, otherwise a boot quietly writes to the host's
  * real home and the isolation claim is false.
  */
-export function isolatedEnv(layout, { root = repoRoot, extra = {} } = {}) {
+export function isolatedEnv(layout: Layout, { root = repoRoot, extra = {} }: { root?: string; extra?: Record<string, string> } = {}): NodeJS.ProcessEnv {
   return {
     ...process.env,
     HOME: layout.userHome,
@@ -134,7 +237,7 @@ export function isolatedEnv(layout, { root = repoRoot, extra = {} } = {}) {
  * that contains the bundle copy, and must not repeat the bundle or probe entry.
  * The rules are stated once here because two callers read two copies of the
  * same manifest — the launcher reads the worktree copy (containment root = the
- * repository) and combo.mjs reads the installed copy (containment root = the
+ * repository) and combo.ts reads the installed copy (containment root = the
  * profile's `node_modules`). The roots differ; the verdicts must not.
  *
  * `admitted` keeps declaration order and carries each package directory
@@ -142,21 +245,18 @@ export function isolatedEnv(layout, { root = repoRoot, extra = {} } = {}) {
  * into repo-relative sources. `refused` names the violated rule instead of
  * throwing, so a caller that reports rather than fails (doctor's bundle
  * packages check) can turn it into a failure line.
- * @param {{
- *   dependencies?: Record<string, unknown>,
- *   bundleDir: string,
- *   containmentRoot: string,
- *   entries: string[],
- * }} options - `entries` are the bundle and probe package names, the entries a
+ * @param options - `entries` are the bundle and probe package names, the entries a
  *   dependency may not duplicate.
- * @returns {{
- *   admitted: {name: string, dir: string}[],
- *   refused: {name: string, specifier: unknown, target?: string, rule: 'file'|'containment'|'duplicate'}[],
- * }}
+ * @returns
  */
-export function admitBundleDependencies({ dependencies, bundleDir, containmentRoot, entries }) {
-  const admitted = []
-  const refused = []
+export function admitBundleDependencies({ dependencies, bundleDir, containmentRoot, entries }: {
+  dependencies?: Record<string, unknown> | undefined
+  bundleDir: string
+  containmentRoot: string
+  entries: string[]
+}): { admitted: ProductPackage[]; refused: AdmissionRefusal[] } {
+  const admitted: ProductPackage[] = []
+  const refused: AdmissionRefusal[] = []
   const reserved = new Set(entries)
   for (const [name, specifier] of Object.entries(dependencies ?? {})) {
     if (typeof specifier !== 'string' || !specifier.startsWith('file:')) {
@@ -193,10 +293,10 @@ export function admitBundleDependencies({ dependencies, bundleDir, containmentRo
  * separately. Admission is the shared rule above, with this checkout as the
  * containment root; a violation is a hard failure because the launcher cannot
  * derive an installable inventory from it.
- * @param {string} [root] - repository root.
- * @returns {{name: string, dir: string}[]} package name plus repo-relative directory.
+ * @param [root] - repository root.
+ * @returns package name plus repo-relative directory.
  */
-export function productPackages(root = repoRoot) {
+export function productPackages(root = repoRoot): ProductPackage[] {
   const { bundlePackage, probePackage, bundlePathInRepo, probePathInRepo } = readCombination(root)
   const manifest = readPackageManifest(bundlePathInRepo, root)
   const { admitted, refused } = admitBundleDependencies({
@@ -234,11 +334,11 @@ export function productPackages(root = repoRoot) {
  * npm skips it silently, so a package whose build output is missing installs
  * without that output, the hash of the "sources" stays the same, and the boot
  * dies with `ERR_MODULE_NOT_FOUND` long after the install reported success.
- * @param {string} [root] - repository root.
- * @returns {string[]}
+ * @param [root] - repository root.
+ * @returns
  */
-export function productSources(root = repoRoot) {
-  const sources = new Set()
+export function productSources(root = repoRoot): string[] {
+  const sources = new Set<string>()
   for (const { dir } of productPackages(root)) {
     // npm always ships package.json, whether `files` names it or not.
     sources.add(join(dir, 'package.json'))
@@ -264,18 +364,20 @@ export function productSources(root = repoRoot) {
  * module carries no wildcard logic of its own. An entry matching nothing
  * publishes nothing here — npm silently skips it the same way, which is why
  * `productSources` refuses such an entry instead of hashing an empty set.
- * @param {string} dir - repo-relative package directory.
- * @param {string} entry - one `files` entry.
- * @param {string} [root] - repository root.
- * @returns {string[]}
+ * @param dir - repo-relative package directory.
+ * @param entry - one `files` entry.
+ * @param [root] - repository root.
+ * @returns
  */
-export function publishedEntries(dir, entry, root = repoRoot) {
+export function publishedEntries(dir: string, entry: string, root = repoRoot): string[] {
   const base = join(root, dir)
   return globSync(entry, { cwd: base }).flatMap((match) => {
     const absolute = join(base, match)
     if (!statSync(absolute).isDirectory()) return [join(dir, match)]
     // Recursive listing yields directory names too; only files carry content.
-    return readdirSync(absolute, { recursive: true })
+    // Node's types widen the recursive listing to `string[] | Buffer[]`; the
+    // default encoding is utf8, so the names it yields are strings.
+    return (readdirSync(absolute, { recursive: true }) as string[])
       .map(file => join(dir, match, file))
       .filter(file => statSync(join(root, file)).isFile())
   })
@@ -283,30 +385,34 @@ export function publishedEntries(dir, entry, root = repoRoot) {
 
 /**
  * Read a linked package's manifest, refusing one that names no published files.
- * @param {string} dir - repo-relative package directory.
- * @param {string} [root] - repository root.
- * @returns {any}
+ * @param dir - repo-relative package directory.
+ * @param [root] - repository root.
+ * @returns
  */
-export function readPackageManifest(dir, root = repoRoot) {
-  let manifest
+export function readPackageManifest(dir: string, root = repoRoot): PackageManifest {
+  let manifest: unknown
   try {
     manifest = JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8'))
   } catch (error) {
-    throw new Error(`cannot read ${dir}/package.json, which declares what the profile install copies: ${error.message}`)
+    // The caught value is whatever the read or the parse threw; the report only
+    // reads its `message`, exactly as the pre-migration code did.
+    throw new Error(`cannot read ${dir}/package.json, which declares what the profile install copies: ${(error as Error).message}`)
   }
-  if (!Array.isArray(manifest.files) || manifest.files.length === 0) {
+  if (!Array.isArray((manifest as PackageManifest).files) || (manifest as PackageManifest).files.length === 0) {
     throw new Error(`${dir}/package.json declares no "files" list; the staleness hash derives the installed product sources from it,`
       + ' and an unlisted package would hash nothing')
   }
-  return manifest
+  // The manifest is the package's own file: npm declares `files` as a list of
+  // strings, and the check above proved the list is there and not empty.
+  return manifest as PackageManifest
 }
 
 /**
  * Content hash of the product sources, so a stale linked profile is reinstalled.
- * @param {string} [root] - repository root.
- * @returns {string}
+ * @param [root] - repository root.
+ * @returns
  */
-export function productSourceHash(root = repoRoot) {
+export function productSourceHash(root = repoRoot): string {
   const hash = createHash('sha256')
   // Profiles are mutable snapshots; file: hardlinks would also change the worktree.
   hash.update(PROFILE_IMPORT_METHOD)
@@ -318,7 +424,12 @@ export function productSourceHash(root = repoRoot) {
 }
 
 /** The profile manifest the launcher writes for this combination. */
-export function profileManifest(root = repoRoot) {
+export function profileManifest(root = repoRoot): {
+  name: string
+  private: boolean
+  dependencies: Record<string, string>
+  dsh: { profile: { bundles: string[] } }
+} {
   const { profileName, bundlePackage } = readCombination(root)
   return {
     name: `dsh-profile-${profileName}`,
@@ -329,7 +440,7 @@ export function profileManifest(root = repoRoot) {
 }
 
 /** Write the isolated profile project (manifest, pnpm settings, empty user layer). */
-export function writeProfile(layout, root = repoRoot) {
+export function writeProfile(layout: Pick<Layout, 'profileDir'>, root = repoRoot): void {
   mkdirSync(layout.profileDir, { recursive: true })
   writeFileSync(join(layout.profileDir, 'package.json'), `${JSON.stringify(profileManifest(root), undefined, 2)}\n`)
   writeFileSync(join(layout.profileDir, 'pnpm-workspace.yaml'), 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n')
@@ -345,7 +456,7 @@ export function writeProfile(layout, root = repoRoot) {
  * pnpm installs with a hoisted linker, so the linked bundle sits directly under
  * the profile's `node_modules`.
  */
-export function profileLinkedManifestPath(layout, root = repoRoot) {
+export function profileLinkedManifestPath(layout: Pick<Layout, 'profileDir'>, root = repoRoot): string {
   const { bundlePackage } = readCombination(root)
   return join(layout.profileDir, 'node_modules', ...bundlePackage.split('/'), 'package.json')
 }
@@ -356,11 +467,11 @@ export function profileLinkedManifestPath(layout, root = repoRoot) {
  * The name carries both the product-source hash and the pinned pnpm version:
  * a template built by another pnpm layout must never be copied into a profile
  * this launcher will later install into.
- * @param {string} [root] - repository root.
- * @param {string} hash - product-source hash the template was built from.
- * @returns {string}
+ * @param [root] - repository root.
+ * @param hash - product-source hash the template was built from.
+ * @returns
  */
-export function profileTemplateDir(root = repoRoot, hash) {
+export function profileTemplateDir(root = repoRoot, hash: string): string {
   return join(root, '.ourfairy-template', `${hash}-${readCombination(root).pnpmPin}`)
 }
 
@@ -375,11 +486,11 @@ export function profileTemplateDir(root = repoRoot, hash) {
  * than a second install. The hash is returned so the process layer can stamp
  * what it performed without hashing twice. Executing pnpm, and copying, belong
  * to the process layer, which owns subprocesses and file mutation.
- * @param {{home: string, profileDir: string}} layout
- * @param {{root?: string, reinstall?: boolean, template?: boolean}} [options]
- * @returns {{mode: 'cached'|'copy'|'install', hash: string, template?: string}}
+ * @param layout
+ * @param [options]
+ * @returns
  */
-export function installDecision(layout, { root = repoRoot, reinstall = false, template = true } = {}) {
+export function installDecision(layout: Pick<Layout, 'home' | 'profileDir'>, { root = repoRoot, reinstall = false, template = true }: { root?: string; reinstall?: boolean; template?: boolean } = {}): { mode: 'cached' | 'copy' | 'install'; hash: string; template?: string } {
   const stampPath = join(layout.profileDir, '.ourfairy-source-hash')
   const hash = productSourceHash(root)
   const stamped = existsSync(stampPath) ? readFileSync(stampPath, 'utf8').trim() : undefined
@@ -399,10 +510,10 @@ export function installDecision(layout, { root = repoRoot, reinstall = false, te
  * Only the installed artifacts move: the manifest is written from the current
  * root by {@link writeProfile}, so copying the template's own manifest would
  * reintroduce the builder's absolute `file:` paths.
- * @param {{profileDir: string}} layout
- * @param {string} template - directory holding `node_modules` and `pnpm-lock.yaml`.
+ * @param layout
+ * @param template - directory holding `node_modules` and `pnpm-lock.yaml`.
  */
-export function copyProfileTemplate(layout, template) {
+export function copyProfileTemplate(layout: Pick<Layout, 'profileDir'>, template: string): void {
   rmSync(join(layout.profileDir, 'node_modules'), { recursive: true, force: true })
   cpSync(join(template, 'node_modules'), join(layout.profileDir, 'node_modules'), { recursive: true })
   const lock = join(template, 'pnpm-lock.yaml')
@@ -414,12 +525,12 @@ export function copyProfileTemplate(layout, template) {
  *
  * A concurrent publisher may win the rename; that is success, not a failure.
  * The staging directory keeps a half-copied tree from ever being published.
- * @param {{profileDir: string}} layout
- * @param {string} hash - product-source hash the install was built from.
- * @param {string} [root] - repository root.
- * @returns {string} the template directory.
+ * @param layout
+ * @param hash - product-source hash the install was built from.
+ * @param [root] - repository root.
+ * @returns the template directory.
  */
-export function publishProfileTemplate(layout, hash, root = repoRoot) {
+export function publishProfileTemplate(layout: Pick<Layout, 'profileDir'>, hash: string, root = repoRoot): string {
   const target = profileTemplateDir(root, hash)
   if (existsSync(target)) return target
   mkdirSync(dirname(target), { recursive: true })
@@ -434,12 +545,12 @@ export function publishProfileTemplate(layout, hash, root = repoRoot) {
 }
 
 /** Record the product-source hash an install was built from. */
-export function writeSourceStamp(layout, hash) {
+export function writeSourceStamp(layout: Pick<Layout, 'profileDir'>, hash: string): void {
   writeFileSync(join(layout.profileDir, '.ourfairy-source-hash'), `${hash}\n`)
 }
 
 /** The probe overlay path, refusing a probe package that does not ship one. */
-export function probeOverlayPath(root = repoRoot) {
+export function probeOverlayPath(root = repoRoot): string {
   const { probePathInRepo } = readCombination(root)
   const path = join(root, probePathInRepo, 'overlay.patch.yml')
   if (!existsSync(path)) throw new Error(`probe overlay missing at ${path}`)
@@ -451,10 +562,10 @@ export function probeOverlayPath(root = repoRoot) {
  * caller-supplied `--patch` file in argv order. dsh applies later overlays
  * last, so a test row sits above the product profile it extends without the
  * test having to know where that profile lives.
- * @param {{patches: string[]}} options
- * @param {string} [root] - repository root.
- * @returns {string[]}
+ * @param options
+ * @param [root] - repository root.
+ * @returns
  */
-export function bootPatches(options, root = repoRoot) {
+export function bootPatches(options: { patches: string[] }, root = repoRoot): string[] {
   return [probeOverlayPath(root), ...options.patches]
 }

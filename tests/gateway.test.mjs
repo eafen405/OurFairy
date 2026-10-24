@@ -22,7 +22,7 @@ import {
 const PHAETHON_PASSWORD = 'gateway-password'
 const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
 const { loadOverlayPatches } = await import('@deepseek-ai/dsh-app-boot')
-const { flattenEntries } = await import('../scripts/combo.mjs')
+const { flattenEntries } = await import('../scripts/combo.ts')
 const { Config: PiAiConfig } = await import('@deepseek-ai/dsh-llm-pi-ai')
 // The phone-editable allowlist has one authority: the gateway service exports
 // the same set its route validator and save overlay use.

@@ -6,7 +6,7 @@
  * command implementations, and dispatch. Everything that can be decided by
  * reading the checkout — the recorded combination, the isolated layout, the
  * product package inventory, the profile and its staleness decision, the boot
- * overlays — lives in the sibling `ourfairy-composition.mjs`.
+ * overlays — lives in the sibling `ourfairy-composition.ts`.
  *
  * Every command drives the real dsh CLI entry (`apps/cli/lib/bin.js`) with the
  * pinned `ourfairy` profile — no plugin is assembled by hand. The profile and
@@ -28,7 +28,7 @@
  * is accepted by `probe` and `start`; `boot-product` exists to boot the product
  * with no overlay at all, so it refuses one.
  *
- * `--allow-drift` (also on `combo.mjs verify`) is an explicit, opt-in escape
+ * `--allow-drift` (also on `combo.ts verify`) is an explicit, opt-in escape
  * hatch for investigating a checkout that has moved past its pinned commit. It
  * is never used by `probe`, `boot-product`, `start`, or `doctor`; those fail on
  * drift and say which commit is expected.
@@ -45,8 +45,8 @@ import { openSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSyn
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
-import { repoPath, verifyBundlePackages, verifyCombination, verifyInstalledNativeCapabilities, verifyPluginCompatibility } from './combo.mjs'
-import { buildProducts as runProductBuild } from './tsc.mjs'
+import { repoPath, verifyBundlePackages, verifyCombination, verifyInstalledNativeCapabilities, verifyPluginCompatibility } from './combo.ts'
+import { buildProducts as runProductBuild } from './tsc.ts'
 import {
   assertIsolatedHome,
   bootPatches,
@@ -62,12 +62,45 @@ import {
   readCombo,
   writeProfile,
   writeSourceStamp,
-} from './ourfairy-composition.mjs'
+} from './ourfairy-composition.ts'
+import type { Combo, ComboBackend, Layout } from './ourfairy-composition.ts'
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
+/** The launcher's own options, as argv carries them. */
+export type LauncherOptions = {
+  command: string | undefined
+  report: string | undefined
+  json: boolean
+  turn: boolean
+  reinstall: boolean
+  allowDrift: boolean
+  holdMs: number
+  home: string | undefined
+  stopTimeoutMs: number
+  readyTimeoutMs: number
+  patches: string[]
+}
+
+/** The launcher's own recorded state, as the state file holds it. */
+type BackendState = {
+  pid: number
+  startedAt: string
+  logFile: string
+  reportPath: string
+  isolatedHome: string
+  dshHome: string
+  dshHead: string
+  dshLocked: string
+  installMode: string
+  overlaysApplied: string[]
+  ports: number[]
+  ready: boolean
+  readyAt?: string
+}
+
 /** The pinned pnpm invocation the combination records. */
-function pnpmInvocation(combination) {
+function pnpmInvocation(combination: ComboBackend): [string, string[]] {
   return ['corepack', [`pnpm@${combination.pnpmPin}`]]
 }
 
@@ -79,21 +112,21 @@ function pnpmInvocation(combination) {
  * could never appear in its report. The CLI boundary in `main` turns a throw
  * into the launcher's stderr prefix and non-zero exit.
  */
-function fail(message) {
+function fail(message: string): never {
   throw new Error(message)
 }
 
 /** The CLI boundary: one failure message with the launcher prefix, then the exit code. */
-function cliFailure(error) {
+function cliFailure(error: unknown): number {
   process.stderr.write(`ourfairy-backend: ${error instanceof Error ? error.message : String(error)}\n`)
   return 1
 }
 
-function parseArgv(argv) {
-  const options = { command: undefined, report: undefined, json: false, turn: false, reinstall: false, allowDrift: false, holdMs: 0, home: undefined, stopTimeoutMs: 15000, readyTimeoutMs: 120000, patches: [] }
+function parseArgv(argv: string[]): LauncherOptions {
+  const options: LauncherOptions = { command: undefined, report: undefined, json: false, turn: false, reinstall: false, allowDrift: false, holdMs: 0, home: undefined, stopTimeoutMs: 15000, readyTimeoutMs: 120000, patches: [] }
   const args = argv.slice(2)
   for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
+    const arg = args[index]!
     const value = () => {
       const next = args[index + 1]
       if (next === undefined || next.startsWith('--')) fail(`${arg} requires a value`)
@@ -121,20 +154,20 @@ function parseArgv(argv) {
 }
 
 /** The isolated layout for one invocation: the composition's shape, this run's home. */
-function layoutOf(options) {
+function layoutOf(options: LauncherOptions): Layout {
   return compositionLayoutOf(options.home ?? process.env.OURFAIRY_HOME, repoRoot)
 }
 
-function git(args, cwd) {
+function git(args: string[], cwd: string): string | undefined {
   return spawnSync('git', args, { cwd, encoding: 'utf8' }).stdout?.trim()
 }
 
 /** Locate the pinned dsh installation, refusing a drifted commit unless allowed. */
-function resolveDsh(options, combination) {
+function resolveDsh(options: LauncherOptions, combination: ComboBackend): { dir: string; bin: string; head: string | undefined; locked: string | undefined; drifted: boolean; combo: Combo } {
   const { combo } = readCombo(repoRoot)
   const dir = repoPath(combo, 'dsh')
   if (!existsSync(join(dir, '.git'))) {
-    fail(`dsh checkout missing at ${dir}; set OURFAIRY_DSH_DIR or clone ${combo.repos.dsh.remoteUrl}`)
+    fail(`dsh checkout missing at ${dir}; set OURFAIRY_DSH_DIR or clone ${combo.repos.dsh!.remoteUrl}`)
   }
   const bin = join(dir, 'apps', 'cli', 'lib', 'bin.js')
   if (!existsSync(bin)) {
@@ -142,7 +175,7 @@ function resolveDsh(options, combination) {
     fail(`dsh CLI build missing at ${bin}; run '${command} ${args.join(' ')} run build:lib:host' in ${dir}`)
   }
   const head = git(['rev-parse', 'HEAD'], dir)
-  const locked = combo.repos.dsh.productCommit
+  const locked = combo.repos.dsh!.productCommit
   if (head !== locked && !options.allowDrift) {
     fail(`dsh checkout ${dir} is at ${head} but combo.json locks ${locked};`
       + ` run 'git -C ${dir} checkout ${locked}' or pass --allow-drift for a deliberate experiment`)
@@ -151,7 +184,7 @@ function resolveDsh(options, combination) {
 }
 
 /** The build this launcher process already did; undefined until the first call. */
-let productBuild
+let productBuild: string | undefined
 
 /**
  * Build the product packages before the profile install hashes them.
@@ -167,9 +200,9 @@ let productBuild
  * concurrent writers of the same build output; production and CI do not set
  * it. Skipping the build does not skip the guard: the source hash still walks
  * the published files, so a missing or empty build output fails loudly there.
- * @returns {'built'|'skipped'} what this launcher process did.
+ * @returns what this launcher process did.
  */
-function buildProducts() {
+function buildProducts(): string {
   if (productBuild !== undefined) return productBuild
   if (process.env.OURFAIRY_SKIP_BUILD === '1') {
     productBuild = 'skipped'
@@ -190,7 +223,7 @@ function buildProducts() {
  * The composition decides (`cached` / `install`); executing pnpm and recording
  * the hash the install was built from are the process layer's half.
  */
-function installProfile(layout, options, combination) {
+function installProfile(layout: Layout, options: LauncherOptions, combination: ComboBackend): string {
   // The build output must exist and be current before the source hash is
   // computed: the hash walks the files the install copies.
   buildProducts()
@@ -208,7 +241,7 @@ function installProfile(layout, options, combination) {
     // The installed tree is a pure function of the product-source hash, so a
     // shared template is copied instead of paying pnpm again (tens of seconds
     // per test home against tens of milliseconds for the copy).
-    copyProfileTemplate(layout, decision.template)
+    copyProfileTemplate(layout, decision.template!)
     if (!existsSync(linked)) {
       fail(`profile template ${decision.template} is missing ${linked};`
         + ' delete it and rerun to install a fresh copy')
@@ -263,7 +296,7 @@ function installProfile(layout, options, combination) {
   return 'installed'
 }
 
-function childEnv(layout, { reportPath, mode, holdMs }) {
+function childEnv(layout: Layout, { reportPath, mode, holdMs }: { reportPath: string; mode: string; holdMs?: number }): NodeJS.ProcessEnv {
   const env = isolatedEnv(layout, {
     root: repoRoot,
     extra: {
@@ -276,20 +309,20 @@ function childEnv(layout, { reportPath, mode, holdMs }) {
 }
 
 /** {@link bootPatches} in the dsh CLI's repeatable `--patch <path>` form. */
-function patchArgs(options) {
+function patchArgs(options: LauncherOptions): string[] {
   return bootPatches(options, repoRoot).flatMap(path => ['--patch', path])
 }
 
-function readJson(path) {
+function readJson(path: string): Record<string, unknown> | undefined {
   try {
-    return JSON.parse(readFileSync(path, 'utf8'))
+    return JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
   } catch {
     return undefined
   }
 }
 
 /** Attach launcher-side facts to the probe report so one file carries the evidence. */
-function augmentReport(reportPath, facts) {
+function augmentReport(reportPath: string, facts: Record<string, unknown>): void {
   const report = readJson(reportPath)
   if (report === undefined) return
   report.launcher = facts
@@ -301,7 +334,7 @@ function augmentReport(reportPath, facts) {
 }
 
 /** Boot the real CLI with the probe overlay and return its exit code. */
-function commandProbe(layout, options, combination) {
+function commandProbe(layout: Layout, options: LauncherOptions, combination: ComboBackend): number {
   assertIsolatedHome(layout, repoRoot)
   const dsh = resolveDsh(options, combination)
   const installMode = installProfile(layout, options, combination)
@@ -349,7 +382,7 @@ function commandProbe(layout, options, combination) {
  * has a listening port. The boot is then stopped and the port's release is
  * checked, so the command leaves nothing running behind it.
  */
-async function commandBootProduct(layout, options, combination) {
+async function commandBootProduct(layout: Layout, options: LauncherOptions, combination: ComboBackend): Promise<number> {
   assertIsolatedHome(layout, repoRoot)
   const dsh = resolveDsh(options, combination)
   const installMode = installProfile(layout, options, combination)
@@ -368,22 +401,22 @@ async function commandBootProduct(layout, options, combination) {
   })
   child.unref()
 
-  const ready = await waitFor(() => listeningPorts(child.pid).length > 0, options.readyTimeoutMs)
-  const listening = ready ? listeningPorts(child.pid) : []
+  const ready = await waitFor(() => listeningPorts(child.pid!).length > 0, options.readyTimeoutMs)
+  const listening = ready ? listeningPorts(child.pid!) : []
 
   // Stop the boot we started, whether or not it came up, so a failure cannot
   // leave a half-started backend holding the port for the next test. The
   // predicate must stay synchronous: `waitFor` treats it as a boolean, so an
   // async one would hand it a Promise — always truthy — and it would report the
   // boot gone on the first tick instead of waiting for it.
-  const gone = () => !isAlive(child.pid)
-  try { process.kill(-child.pid, 'SIGTERM') } catch { try { process.kill(child.pid, 'SIGTERM') } catch { /* already gone */ } }
+  const gone = () => !isAlive(child.pid!)
+  try { process.kill(-child.pid!, 'SIGTERM') } catch { try { process.kill(child.pid!, 'SIGTERM') } catch { /* already gone */ } }
   if (!await waitFor(gone, 10_000)) {
-    try { process.kill(-child.pid, 'SIGKILL') } catch { try { process.kill(child.pid, 'SIGKILL') } catch { /* already gone */ } }
+    try { process.kill(-child.pid!, 'SIGKILL') } catch { try { process.kill(child.pid!, 'SIGKILL') } catch { /* already gone */ } }
     await waitFor(gone, 10_000)
   }
   const ended = gone()
-  const portsAfter = ended ? [] : listeningPorts(child.pid)
+  const portsAfter = ended ? [] : listeningPorts(child.pid!)
 
   const exitCode = ready && ended ? 0 : 1
   const report = {
@@ -421,11 +454,13 @@ async function commandBootProduct(layout, options, combination) {
   return exitCode
 }
 
-function isAlive(pid) {
+function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0)
   } catch (error) {
-    return error.code === 'EPERM'
+    // The caught value is whatever the signal probe threw; the verdict only
+    // reads its `code`, exactly as the pre-migration code did.
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
   }
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
@@ -437,34 +472,34 @@ function isAlive(pid) {
 }
 
 /** TCP ports the process currently listens on, via its socket inodes. */
-function listeningPorts(pid) {
-  const inodes = new Set()
+function listeningPorts(pid: number): number[] {
+  const inodes = new Set<string>()
   const fdDir = `/proc/${pid}/fd`
   if (!existsSync(fdDir)) return []
   for (const name of readdirSync(fdDir)) {
     try {
       const match = /^socket:\[(\d+)\]$/.exec(readlinkSync(join(fdDir, name)))
-      if (match !== null) inodes.add(match[1])
+      if (match !== null) inodes.add(match[1]!)
     } catch {
       // A descriptor that vanished between readdir and readlink.
     }
   }
   if (inodes.size === 0) return []
-  const ports = new Set()
+  const ports = new Set<number>()
   for (const table of ['/proc/net/tcp', '/proc/net/tcp6']) {
     if (!existsSync(table)) continue
     for (const line of readFileSync(table, 'utf8').split('\n').slice(1)) {
       const fields = line.trim().split(/\s+/)
       if (fields.length < 10 || fields[3] !== '0A') continue
-      if (inodes.has(fields[9])) ports.add(Number.parseInt(fields[1].split(':')[1], 16))
+      if (inodes.has(fields[9]!)) ports.add(Number.parseInt(fields[1]!.split(':')[1]!, 16))
     }
   }
   return [...ports].sort((left, right) => left - right)
 }
 
 /** Processes still running with this isolated home in their environment. */
-function leakScan(layout) {
-  const survivors = []
+function leakScan(layout: Pick<Layout, 'dshHome'>): { pid: number; cmdline: string }[] {
+  const survivors: { pid: number; cmdline: string }[] = []
   for (const entry of readdirSync('/proc')) {
     if (!/^\d+$/.test(entry)) continue
     const pid = Number(entry)
@@ -487,7 +522,7 @@ function leakScan(layout) {
   return survivors
 }
 
-function waitFor(predicate, timeoutMs, intervalMs = 200) {
+function waitFor(predicate: () => boolean, timeoutMs: number, intervalMs = 200): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   return new Promise((resolvePromise) => {
     const tick = () => {
@@ -499,21 +534,23 @@ function waitFor(predicate, timeoutMs, intervalMs = 200) {
   })
 }
 
-function readState(layout) {
-  return readJson(layout.statePath)
+function readState(layout: Pick<Layout, 'statePath'>): BackendState | undefined {
+  // The state file is this launcher's own record; the shape is what
+  // `writeState` writes.
+  return readJson(layout.statePath) as BackendState | undefined
 }
 
-function writeState(layout, state) {
+function writeState(layout: Pick<Layout, 'runDir' | 'statePath'>, state: unknown): void {
   mkdirSync(layout.runDir, { recursive: true })
   writeFileSync(layout.statePath, `${JSON.stringify(state, undefined, 2)}\n`)
 }
 
-function tail(path, lines = 20) {
+function tail(path: string, lines = 20): string {
   if (!existsSync(path)) return '(no log)'
   return readFileSync(path, 'utf8').split('\n').slice(-lines).join('\n')
 }
 
-async function commandStart(layout, options, combination) {
+async function commandStart(layout: Layout, options: LauncherOptions, combination: ComboBackend): Promise<number> {
   assertIsolatedHome(layout, repoRoot)
   const dsh = resolveDsh(options, combination)
   const installMode = installProfile(layout, options, combination)
@@ -535,7 +572,7 @@ async function commandStart(layout, options, combination) {
   })
   child.unref()
   writeState(layout, {
-    pid: child.pid,
+    pid: child.pid!,
     startedAt: new Date().toISOString(),
     logFile,
     reportPath,
@@ -549,22 +586,22 @@ async function commandStart(layout, options, combination) {
     ready: false,
   })
 
-  await waitFor(() => readJson(reportPath)?.ok !== undefined || !isAlive(child.pid), options.readyTimeoutMs)
+  await waitFor(() => readJson(reportPath)?.ok !== undefined || !isAlive(child.pid!), options.readyTimeoutMs)
   const report = readJson(reportPath)
-  const ready = report?.ok === true && isAlive(child.pid)
+  const ready = report?.ok === true && isAlive(child.pid!)
   if (!ready) {
     const reason = report?.ok === false
       ? 'reported a failed readiness check'
-      : !isAlive(child.pid)
+      : !isAlive(child.pid!)
         ? 'exited before reporting ready'
         : `did not report ready within ${options.readyTimeoutMs}ms`
-    try { process.kill(-child.pid, 'SIGKILL') } catch { try { process.kill(child.pid, 'SIGKILL') } catch { /* already gone */ } }
+    try { process.kill(-child.pid!, 'SIGKILL') } catch { try { process.kill(child.pid!, 'SIGKILL') } catch { /* already gone */ } }
     rmSync(layout.statePath, { force: true })
-    fail(`backend (pid ${child.pid}) ${reason};`
+    fail(`backend (pid ${child.pid!}) ${reason};`
       + ` probe report: ${report === undefined ? 'not written' : JSON.stringify(report.failures ?? report)}`
       + `\nlog ${logFile}:\n${tail(logFile)}`)
   }
-  const ports = listeningPorts(child.pid)
+  const ports = listeningPorts(child.pid!)
   const state = { ...readState(layout), ready: true, readyAt: new Date().toISOString(), ports }
   writeState(layout, state)
   const summary = {
@@ -582,7 +619,7 @@ async function commandStart(layout, options, combination) {
   return 0
 }
 
-async function commandStop(layout, options) {
+async function commandStop(layout: Layout, options: LauncherOptions): Promise<number> {
   const state = readState(layout)
   if (state === undefined) {
     process.stdout.write('ourfairy-backend: no recorded backend (nothing to stop)\n')
@@ -622,7 +659,7 @@ async function commandStop(layout, options) {
   return summary.exited && survivors.length === 0 && portsAfter.length === 0 ? 0 : 1
 }
 
-function commandStatus(layout, options) {
+function commandStatus(layout: Layout, options: LauncherOptions): number {
   const state = readState(layout)
   if (state === undefined) {
     // Status is a machine-facing command: it reports the same shape whether or
@@ -657,8 +694,10 @@ function commandStatus(layout, options) {
  * rather than passing silently, so a changed range cannot quietly disable the
  * check.
  */
-function nodeSatisfies(range, version) {
-  const [major, minor] = version.split('.').map(Number)
+function nodeSatisfies(range: string, version: string): boolean {
+  // A node version always carries at least `major.minor`; the cast records
+  // that the split is the one the comparison reads.
+  const [major, minor] = version.split('.').map(Number) as [number, number]
   for (const alternative of range.split('||').map(part => part.trim())) {
     const caret = /^\^(\d+)\.(\d+)\.\d+$/.exec(alternative)
     if (caret !== null) {
@@ -675,9 +714,9 @@ function nodeSatisfies(range, version) {
   return false
 }
 
-function commandDoctor(layout, options, combination) {
-  const checks = []
-  const check = (name, run) => {
+function commandDoctor(layout: Layout, options: LauncherOptions, combination: ComboBackend): number {
+  const checks: { name: string; ok: boolean; detail: string }[] = []
+  const check = (name: string, run: () => string | undefined) => {
     try {
       const detail = run()
       checks.push({ name, ok: true, detail: detail ?? 'ok' })
@@ -685,7 +724,7 @@ function commandDoctor(layout, options, combination) {
       checks.push({ name, ok: false, detail: error instanceof Error ? error.message : String(error) })
     }
   }
-  const must = (condition, message) => {
+  const must = (condition: boolean, message: string) => {
     if (!condition) throw new Error(message)
   }
   const report = () => {
@@ -705,7 +744,7 @@ function commandDoctor(layout, options, combination) {
     assertIsolatedHome(layout, repoRoot)
     return layout.home
   })
-  if (!checks[0].ok) return report()
+  if (!checks[0]!.ok) return report()
 
   check('node version', () => {
     const { nodeRange } = readCombination(repoRoot)
@@ -729,7 +768,7 @@ function commandDoctor(layout, options, combination) {
   })
   check('dsh CLI build', () => {
     const dsh = resolveDsh(options, combination)
-    return `${dsh.bin} (${dsh.head.slice(0, 12)})`
+    return `${dsh.bin} (${dsh.head!.slice(0, 12)})`
   })
   check('product build', () => {
     // The install copies the build output, so the output has to exist before the
@@ -815,10 +854,10 @@ function commandDoctor(layout, options, combination) {
  * This is the only entry point; it owns argv, the CLI boundary, and dispatch.
  * It never calls `process.exit`, so an importing test process keeps its exit
  * code to itself.
- * @param {string[]} argv - the full process argv (`[node, script, ...args]`).
- * @returns {Promise<number>}
+ * @param argv - the full process argv (`[node, script, ...args]`).
+ * @returns
  */
-export async function main(argv) {
+export async function main(argv: string[]): Promise<number> {
   try {
     // The pins are read before argv, as the launcher always did: a broken
     // combination is a configuration failure, not a usage error.

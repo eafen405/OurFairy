@@ -24,7 +24,7 @@
  * and progress to stderr. It is not part of `npm test`.
  *
  * Usage:
- *   node scripts/bench-projection.mjs [--out <path>] [--label <text>]
+ *   node scripts/bench-projection.ts [--out <path>] [--label <text]]
  */
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -33,6 +33,7 @@ import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 import http from 'node:http'
+import type { Combo } from './ourfairy-composition.ts'
 
 /**
  * The fixed workload. Change it only by a commit that also updates the
@@ -70,16 +71,16 @@ export const PARAMS = Object.freeze({
 })
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
-const backendScript = join(repoRoot, 'scripts', 'ourfairy-backend.mjs')
+const backendScript = join(repoRoot, 'scripts', 'ourfairy-backend.ts')
 const PASSWORD = 'bench-projection-password'
 const scriptStartedAt = performance.now()
 const options = parseArgs(process.argv.slice(2))
 const outputPath = options.out
 const runLabel = options.label ?? 'unspecified'
 
-function parseArgs(argv) {
-  let out
-  let label
+function parseArgs(argv: string[]): { out: string | undefined; label: string | undefined } {
+  let out: string | undefined
+  let label: string | undefined
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === '--out' || argv[index] === '--label') {
       const next = argv[index + 1]
@@ -88,27 +89,236 @@ function parseArgs(argv) {
       else label = next
       index += 1
     } else if (argv[index] === '--help') {
-      process.stderr.write('usage: node scripts/bench-projection.mjs [--out <path>] [--label <text>]\n')
+      process.stderr.write('usage: node scripts/bench-projection.ts [--out <path>] [--label <text>]\n')
       process.exit(0)
     } else fail(`unknown argument ${argv[index]}`)
   }
   return { out, label }
 }
 
-function fail(message) {
+function fail(message: string): never {
   process.stderr.write(`bench-projection: ${message}\n`)
   process.exit(1)
 }
 
-function note(message) {
+function note(message: string): void {
   process.stderr.write(`bench-projection: ${message}\n`)
 }
 
+/**
+ * One measurement's distribution, as the benchmark records it.
+ *
+ * The empty sample records only its count, so the rest of the fields are
+ * absent rather than null.
+ */
+type Distribution = {
+  count: number
+  min?: number | null
+  p50?: number | null
+  p95?: number | null
+  max?: number | null
+  mean?: number | null
+}
+
+/** One message of a session projection, as the chat route answers with. */
+type ProjectionMessage = { seq: number; role: number; status: number }
+
+/** A session projection, as the chat route answers with. */
+type Projection = {
+  cursor: number
+  version?: number
+  replyStatus: number
+  attempt?: { text: string }
+  messages: ProjectionMessage[]
+}
+
+/** The product answers the benchmark reads, by route. */
+type ProductAnswer = {
+  token?: string
+  invite?: { code: string }
+  session?: { id: string }
+  receipt?: { acceptedSeq: number }
+  projection?: Projection
+}
+
+/** One `/chat/observe` frame, as the benchmark summarises it. */
+type Frame = {
+  phase: string
+  atMs: number
+  bytes: number
+  cursor: number
+  version: number | undefined
+  replyStatus: number
+  lastSeq: number | null
+  lastRole: number | null
+  lastStatus: number | null
+}
+
+/** One observer's view of the stream. */
+type Observer = {
+  ready: Promise<void>
+  frames: Frame[]
+  mark(): void
+  waitFor(check: (frame: Frame) => boolean, timeoutMs: number, label: string): Promise<Frame>
+  close(): void
+}
+
+/** The model double the benchmark drives, as the mock server answers. */
+type ModelDouble = {
+  baseURL: string
+  requests: { behavior?: string; chunksSent?: number }[]
+  close(): Promise<void>
+}
+
+/** The launcher's own summary, as the benchmark reads it. */
+type BackendSummary = {
+  pid: number
+  dshHead: string
+  installMode: string
+  isolatedHome: string
+  listeningPorts?: number[]
+}
+
+/** One observer's share of the stream window. */
+type Phase = {
+  count: number
+  bytesTotal: number
+  bytes: Distribution
+  intervalMs: Distribution
+  abovePacingMs: Distribution
+  openingBytes: number
+}
+
+/** The measured stream window, as the benchmark records it. */
+type RunStream = {
+  fragments: number
+  mockChunksSent: number | null
+  durationMs: number | null
+  sendRttMs: number | null
+  cpuMs: number | null
+  cpuMsPerFragment: number | null
+  cpuMsPerFragmentPerObserver: number | null
+  probeCpuMsApprox: number | null
+  cpuMsExcludingProbeApprox: number | null
+  cpuMsPerFragmentExcludingProbeApprox: number | null
+  reads: Distribution
+  samplesDuringReply: number
+  sampleIntervalMs: number
+  readSamples: { atMs: number | null; rttMs: number | null; replyStatus: number; attemptChars: number; messages: number }[]
+  frames: {
+    count: number
+    bytesTotal: number
+    perObserver: Phase[]
+    observerSpreadMs: Distribution | null
+  }
+  finalProjection: { cursor: number; messages: number; lastRole: number; lastStatus: number; lastSeq: number }
+  observersAgree: boolean
+}
+
+/** One measured run, as the benchmark records it. */
+type MeasuredRun = {
+  index: number
+  historyTurns: number
+  observers: number
+  startedAt: string
+  sessionId?: string
+  seeding?: {
+    turns: number
+    elapsedMs: number | null
+    eventCount: number
+    cursor: number
+    messages: number
+    sessionLogBytes: number | null
+  }
+  backendStartMs?: number | null
+  quiescentReads?: Distribution
+  quiescentCpuMsPerRead?: number | null
+  stream?: RunStream
+  memory?: {
+    beforeKb: number | null
+    samples: number[]
+    sampledPeakKb: number | null
+    streamEndRssKb: number | null
+    peakVmHwmKb: number | null
+  }
+  endedAt?: string
+}
+
+/** One cell's summary, as the benchmark records it. */
+type SummaryRow = {
+  repetition: number
+  eventCount: number
+  sessionLogBytes: number | null
+  readP50Ms: number | null | undefined
+  readP95Ms: number | null | undefined
+  readCount: number
+  quiescentP95Ms: number | null | undefined
+  quiescentCpuMsPerRead: number | null | undefined
+  frames: number
+  bytesTotal: number
+  intervalP50Ms: number | null
+  intervalP95Ms: number | null
+  observerSpreadP50Ms: number | null
+  observerSpreadP95Ms: number | null
+  cpuMs: number | null
+  cpuMsExcludingProbeApprox: number | null
+  cpuMsPerFragmentPerObserver: number | null
+  cpuMsPerFragmentExcludingProbeApprox: number | null
+  sampledPeakKb: number | null
+  peakVmHwmKb: number | null
+  streamDurationMs: number | null
+}
+
+/** The machine the benchmark ran on, as it records it. */
+type MachineFacts = {
+  uname: string | null
+  kernel: string
+  arch: string
+  node: string
+  cpuModel: string | null
+  cpuCount: number
+  totalMemoryBytes: number
+  productHead: string | null
+  combination: { dsh: string | undefined; androidSource: string | undefined }
+  loadAverageAtStart: number[]
+  loadedAtEnd?: number[]
+}
+
+/** The backend the benchmark booted, as it records it. */
+type BackendFacts = {
+  dshHead: string
+  installMode: string
+  isolatedHome: string
+  firstStartMs: number | null
+  memoryAtFirstStart: { rssKb: number | null; peakKb: number | null }
+}
+
+/** The model double the benchmark drove, as it records it. */
+type MockFacts = { baseURL: string; successTextChars: number; chunkSize: number; chunkDelayMs: number }
+
+/** The benchmark document, as it is written. */
+type BenchDocument = {
+  schemaVersion: number
+  ticket: number
+  benchmark: string
+  label: string
+  startedAt: string
+  params: typeof PARAMS
+  machine: MachineFacts
+  backend?: BackendFacts | undefined
+  mock?: MockFacts | undefined
+  runs: MeasuredRun[]
+  summary?: { byHistory: Record<string, SummaryRow[]> } | undefined
+  error?: string | undefined
+  finishedAt?: string | undefined
+  durationMs?: number | null | undefined
+}
+
 const now = () => performance.now()
-const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+const sleep = (milliseconds: number) => new Promise<void>(resolve => setTimeout(resolve, milliseconds))
 
 /** Deterministic reply text of an exact character length, so the load is reproducible. */
-function benchText(length) {
+function benchText(length: number): string {
   const unit = 'OurFairy 投影基准：固定长度的回复正文，用于制造稳定的事件与帧负载。\n'
   let text = ''
   while (text.length < length) text += unit
@@ -116,18 +326,18 @@ function benchText(length) {
 }
 
 /** Nearest-rank percentile; the same rule the recorded baseline used. */
-function percentile(values, p) {
+function percentile(values: number[], p: number): number | null {
   if (values.length === 0) return null
   const sorted = [...values].sort((left, right) => left - right)
   const rank = Math.max(1, Math.ceil((p / 100) * sorted.length))
-  return round(sorted[Math.min(sorted.length - 1, rank - 1)])
+  return round(sorted[Math.min(sorted.length - 1, rank - 1)]!)
 }
 
-function round(value) {
+function round(value: number): number | null {
   return Number.isFinite(value) ? Math.round(value * 100) / 100 : null
 }
 
-function distribution(values) {
+function distribution(values: number[]): Distribution {
   if (values.length === 0) return { count: 0 }
   const sum = values.reduce((total, value) => total + value, 0)
   return {
@@ -141,9 +351,9 @@ function distribution(values) {
 }
 
 /** One POST/JSON call against the running backend, timing the whole round trip. */
-function postJson(port, path, { token, body } = {}) {
+function postJson(port: number, path: string, { token, body }: { token?: string | undefined; body?: unknown } = {}): Promise<{ status: number | undefined; body: ProductAnswer; rttMs: number; bytes: number }> {
   const payload = Buffer.from(JSON.stringify(body ?? {}))
-  const headers = {
+  const headers: Record<string, string> = {
     host: `127.0.0.1:${port}`,
     'content-type': 'application/json',
     'content-length': String(payload.byteLength),
@@ -152,13 +362,13 @@ function postJson(port, path, { token, body } = {}) {
   return new Promise((resolve, reject) => {
     const started = now()
     const call = http.request({ host: '127.0.0.1', port, path, method: 'POST', headers, agent: false }, response => {
-      const chunks = []
+      const chunks: Buffer[] = []
       response.on('data', chunk => chunks.push(chunk))
       response.on('end', () => {
         const text = Buffer.concat(chunks).toString('utf8')
         const rttMs = now() - started
-        let json
-        try { json = JSON.parse(text) } catch {
+        let json: ProductAnswer
+        try { json = JSON.parse(text) as ProductAnswer } catch {
           reject(new Error(`${path}: ${response.statusCode} ${text.slice(0, 200)}`))
           return
         }
@@ -171,18 +381,18 @@ function postJson(port, path, { token, body } = {}) {
 }
 
 /** A `/chat/observe` SSE client that records one summary per `data:` frame. */
-function observeSession(port, token, sessionId) {
-  const frames = []
-  const waiters = []
+function observeSession(port: number, token: string, sessionId: string): Observer {
+  const frames: Frame[] = []
+  const waiters: { check: (frame: Frame) => boolean; resolve: (frame: Frame) => void }[] = []
   let buffer = ''
-  let response
-  let failure
+  let response: http.IncomingMessage | undefined
+  let failure: unknown
   let phase = 'opening'
-  let firstResolve
-  let firstReject
-  const ready = new Promise((resolve, reject) => { firstResolve = resolve; firstReject = reject })
+  let firstResolve: () => void
+  let firstReject: (reason?: unknown) => void
+  const ready = new Promise<void>((resolve, reject) => { firstResolve = resolve; firstReject = reject })
 
-  function deliver(frame) {
+  function deliver(frame: Frame): void {
     frames.push(frame)
     firstResolve()
     for (const waiter of [...waiters]) {
@@ -213,15 +423,15 @@ function observeSession(port, token, sessionId) {
         buffer = buffer.slice(boundary + 2)
         const dataLine = item.split('\n').find(line => line.startsWith('data: '))
         if (dataLine === undefined) continue // `: keepalive` comment
-        let projection
-        try { projection = JSON.parse(dataLine.slice(6)) } catch (error) {
+        let projection: Projection
+        try { projection = JSON.parse(dataLine.slice(6)) as Projection } catch (error) {
           failure = error
           continue
         }
         const last = projection.messages?.at(-1)
         deliver({
           phase,
-          atMs: round(now()),
+          atMs: round(now())!,
           // The whole `data: {...}` line, excluding its terminating newline.
           bytes: Buffer.byteLength(dataLine, 'utf8'),
           cursor: projection.cursor,
@@ -242,20 +452,20 @@ function observeSession(port, token, sessionId) {
     frames,
     /** Count frames from now on as stream-phase frames. */
     mark() { phase = 'stream' },
-    waitFor(check, timeoutMs, label) {
+    waitFor(check: (frame: Frame) => boolean, timeoutMs: number, label: string): Promise<Frame> {
       return new Promise((resolve, reject) => {
         const existing = frames.find(check)
         if (existing !== undefined) { resolve(existing); return }
         const timer = setTimeout(() => {
           waiters.splice(waiters.indexOf(waiter), 1)
           reject(new Error(`${label} timed out after ${timeoutMs}ms; last frame ${JSON.stringify(frames.at(-1))}`
-            + (failure === undefined ? '' : `; stream error ${failure.message}`)))
+            + (failure === undefined ? '' : `; stream error ${(failure as Error).message}`)))
         }, timeoutMs)
-        const waiter = { check, resolve: frame => { clearTimeout(timer); resolve(frame) } }
+        const waiter = { check, resolve: (frame: Frame) => { clearTimeout(timer); resolve(frame) } }
         waiters.push(waiter)
       })
     },
-    close() {
+    close(): void {
       try { response?.destroy() } catch { /* already closed */ }
       try { call.destroy() } catch { /* already closed */ }
     },
@@ -263,14 +473,14 @@ function observeSession(port, token, sessionId) {
 }
 
 /** Read the backend's memory counters from `/proc/<pid>/status`. */
-function readMemory(pid) {
+function readMemory(pid: number): { rssKb: number | null; peakKb: number | null } {
   try {
     const status = readFileSync(`/proc/${pid}/status`, 'utf8')
     const rss = /VmRSS:\s+(\d+) kB/.exec(status)
     const peak = /VmHWM:\s+(\d+) kB/.exec(status)
     return {
-      rssKb: rss === null ? null : Number(rss[1]),
-      peakKb: peak === null ? null : Number(peak[1]),
+      rssKb: rss === null ? null : Number(rss[1]!),
+      peakKb: peak === null ? null : Number(peak[1]!),
     }
   } catch {
     return { rssKb: null, peakKb: null }
@@ -284,7 +494,7 @@ function readMemory(pid) {
  * utime+stime fields are the fallback at the kernel's 10 ms clock tick. Both
  * count every thread of the process, so worker-thread work is included.
  */
-function readCpuMs(pid) {
+function readCpuMs(pid: number): number | null {
   try {
     const [runtimeNs] = readFileSync(`/proc/${pid}/schedstat`, 'utf8').trim().split(' ')
     const nanoseconds = Number(runtimeNs)
@@ -293,14 +503,14 @@ function readCpuMs(pid) {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
     const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
-    const ticks = Number(fields[11]) + Number(fields[12]) // utime, stime
+    const ticks = Number(fields[11]!) + Number(fields[12]!) // utime, stime
     return Number.isFinite(ticks) ? ticks * 10 : null
   } catch {
     return null
   }
 }
 
-function runLauncher(args, env) {
+function runLauncher(args: string[], env: Record<string, string>): { code: number; stdout: string; stderr: string } {
   const result = spawnSync(process.execPath, [backendScript, ...args], {
     cwd: repoRoot,
     env: { ...process.env, ...env },
@@ -312,10 +522,12 @@ function runLauncher(args, env) {
 }
 
 /** Bytes of this session's durable log under an isolated home, or null while absent. */
-function sessionLogBytes(home, sessionId) {
+function sessionLogBytes(home: string, sessionId: string): number | null {
   try {
     const root = join(home, 'dsh-home', 'sessions')
-    for (const name of readdirSync(root, { recursive: true })) {
+    // Node's types widen the recursive listing to `string[] | Buffer[]`; the
+    // default encoding is utf8, so the names it yields are strings.
+    for (const name of readdirSync(root, { recursive: true }) as string[]) {
       if (!name.includes(sessionId)) continue
       if (!/\.jsonl(\.zstd)?$/.test(name)) continue
       return statSync(join(root, name)).size
@@ -324,9 +536,10 @@ function sessionLogBytes(home, sessionId) {
   return null
 }
 
-async function main() {
-  const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-  const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
+async function main(): Promise<void> {
+  // combo.json is the authority for the combination the benchmark runs on.
+  const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8')) as Combo
+  const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh!.localPath
   const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
 
   const text = benchText(PARAMS.replyChars)
@@ -335,7 +548,7 @@ async function main() {
   // observer count look systematically worse.
   const measuredRuns = PARAMS.historyTurnCounts.flatMap(historyTurns =>
     Array.from({ length: PARAMS.repetitions }, (_, repetition) =>
-      PARAMS.observerCounts.map((_, position) => PARAMS.observerCounts[(repetition + position) % PARAMS.observerCounts.length]))
+      PARAMS.observerCounts.map((_, position) => PARAMS.observerCounts[(repetition + position) % PARAMS.observerCounts.length]!))
       .flat()
       .map(observers => ({ historyTurns, observers })))
   for (const plan of measuredRuns) {
@@ -359,9 +572,9 @@ async function main() {
   const startArgs = ['start', '--json']
   if (process.env.OURFAIRY_DSH_DIR !== undefined && process.env.OURFAIRY_DSH_DIR !== '') startArgs.push('--allow-drift')
 
-  let model
-  let backend
-  const document = {
+  let model: ModelDouble | undefined
+  let backend: { summary: BackendSummary; port: number; startMs: number | null } | undefined
+  const document: BenchDocument = {
     schemaVersion: 1,
     ticket: 72,
     benchmark: 'chat projection read/observe benchmark',
@@ -376,24 +589,25 @@ async function main() {
   }
 
   /** Boot the real launcher into `home` and return its summary plus bound port. */
-  async function startBackend() {
+  async function startBackend(): Promise<{ summary: BackendSummary; port: number; startMs: number | null }> {
     const started = now()
-    const result = runLauncher(startArgs, { ...launchEnv, OURFAIRY_MINIMAX_BASE_URL: model.baseURL })
+    const result = runLauncher(startArgs, { ...launchEnv, OURFAIRY_MINIMAX_BASE_URL: model!.baseURL })
     if (result.code !== 0) throw new Error(`launcher start failed (exit ${result.code})\n${result.stdout}\n${result.stderr}`)
-    const summary = JSON.parse(result.stdout)
-    const port = summary.listeningPorts?.[0]
+    // The launcher's own summary; the port and the pid are what the benchmark reads.
+    const summary = JSON.parse(result.stdout) as BackendSummary
+    const port = summary.listeningPorts?.[0]!
     if (!Number.isInteger(port)) throw new Error(`launcher reported no listening port: ${result.stdout}`)
     return { summary, port, startMs: round(now() - started) }
   }
 
-  function stopBackend() {
+  function stopBackend(): void {
     const stopped = runLauncher(['stop', '--json'], { OURFAIRY_HOME: home })
     if (stopped.code !== 0) note(`stop exited ${stopped.code}: ${stopped.stdout}${stopped.stderr}`)
   }
 
   try {
     model = await startMockLlmServer({ host: '127.0.0.1', port: 0, apiKey: 'mock-key', sequence,
-      successText: text, chunkSize: PARAMS.chunkSize, chunkDelayMs: PARAMS.streamChunkDelayMs })
+      successText: text, chunkSize: PARAMS.chunkSize, chunkDelayMs: PARAMS.streamChunkDelayMs }) as ModelDouble
     note(`model double at ${model.baseURL} (${sequence.length} scripted requests)`)
     document.mock = { baseURL: model.baseURL, successTextChars: text.length, chunkSize: PARAMS.chunkSize,
       chunkDelayMs: PARAMS.streamChunkDelayMs }
@@ -406,7 +620,7 @@ async function main() {
     const invite = await postJson(backend.port, '/identity/invite', { token: admin.body.token })
     if (invite.status !== 200) throw new Error(`invite failed: ${invite.status} ${JSON.stringify(invite.body)}`)
     const registered = await postJson(backend.port, '/identity/register',
-      { body: { inviteCode: invite.body.invite.code, name: 'bench-alice', password: PASSWORD } })
+      { body: { inviteCode: invite.body.invite!.code, name: 'bench-alice', password: PASSWORD } })
     if (registered.status !== 200) throw new Error(`registration failed: ${registered.status} ${JSON.stringify(registered.body)}`)
     document.backend = { dshHead: backend.summary.dshHead, installMode: backend.summary.installMode,
       isolatedHome: backend.summary.isolatedHome, firstStartMs: backend.startMs,
@@ -426,9 +640,9 @@ async function main() {
         measured.backendStartMs = backend.startMs
         document.runs.push(measured)
         note(`run ${index + 1}/${measuredRuns.length} (${plan.historyTurns} turns, observers=${plan.observers}): `
-          + `stream /chat/read p50/p95=${measured.stream.reads.p50}/${measured.stream.reads.p95}ms, `
-          + `frames=${measured.stream.frames.count}, ${measured.stream.frames.bytesTotal}B, `
-          + `cpu=${measured.stream.cpuMs}ms, VmHWM=${measured.memory.peakVmHwmKb}kB`)
+          + `stream /chat/read p50/p95=${measured.stream!.reads.p50}/${measured.stream!.reads.p95}ms, `
+          + `frames=${measured.stream!.frames.count}, ${measured.stream!.frames.bytesTotal}B, `
+          + `cpu=${measured.stream!.cpuMs}ms, VmHWM=${measured.memory!.peakVmHwmKb}kB`)
       } finally {
         const pid = backend.summary.pid
         stopBackend()
@@ -438,8 +652,10 @@ async function main() {
     }
     document.summary = summarize(document.runs)
   } catch (error) {
-    document.error = error.message
-    note(`failed: ${error.message}`)
+    // The caught value is whatever the run threw; the report only reads its
+    // `message`, exactly as the pre-migration code did.
+    document.error = (error as Error).message
+    note(`failed: ${(error as Error).message}`)
     process.exitCode = 1
   } finally {
     if (backend !== undefined) stopBackend()
@@ -459,18 +675,27 @@ async function main() {
 }
 
 /** Sign one registered identity in and return its live credential. */
-async function signIn(port, name, password) {
+async function signIn(port: number, name: string, password: string): Promise<string> {
   const response = await postJson(port, '/identity/sign-in', { body: { name, password } })
   if (response.status !== 200) throw new Error(`sign-in failed: ${response.status} ${JSON.stringify(response.body)}`)
-  return response.body.token
+  return response.body.token!
 }
 
 /** One measured run: fresh session, fixed history, fixed stream, observer count. */
-async function measureRun({ port, token, model, backend, home, index, historyTurns, observers }) {
-  const run = { index, historyTurns, observers, startedAt: new Date().toISOString() }
+async function measureRun({ port, token, model, backend, home, index, historyTurns, observers }: {
+  port: number
+  token: string
+  model: ModelDouble
+  backend: BackendSummary
+  home: string
+  index: number
+  historyTurns: number
+  observers: number
+}): Promise<MeasuredRun> {
+  const run: MeasuredRun = { index, historyTurns, observers, startedAt: new Date().toISOString() }
   const created = await postJson(port, '/sessions/create', { token })
   if (created.status !== 200) throw new Error(`/sessions/create failed: ${created.status} ${JSON.stringify(created.body)}`)
-  run.sessionId = created.body.session.id
+  run.sessionId = created.body.session!.id
 
   const read = async () => {
     const response = await postJson(port, '/chat/read', { token, body: { sessionId: run.sessionId } })
@@ -485,12 +710,12 @@ async function measureRun({ port, token, model, backend, home, index, historyTur
     if (sent.status !== 200) throw new Error(`/chat/send failed: ${sent.status} ${JSON.stringify(sent.body)}`)
     // A read window holds only the newest `maxEvents` events, so settlement is
     // judged by seq: the formal reply must be newer than this turn's user event.
-    const acceptedSeq = sent.body.receipt.acceptedSeq
-    await waitFor(async () => (await read()).body.projection,
+    const acceptedSeq = sent.body.receipt!.acceptedSeq
+    await waitFor(async () => (await read()).body.projection!,
       projection => projection.replyStatus === 0 && isSettledReply(projection, acceptedSeq),
       30_000, `history turn ${turn}`)
   }
-  const seededProjection = (await read()).body.projection
+  const seededProjection = (await read()).body.projection!
   run.seeding = {
     turns: historyTurns,
     elapsedMs: round(now() - seedStarted),
@@ -507,7 +732,7 @@ async function measureRun({ port, token, model, backend, home, index, historyTur
   // reading subtracts as the probe's own share (an approximation, labelled as
   // such); its latency is the no-stream floor the stream window is compared to.
   const quiescentCpuBefore = readCpuMs(backend.pid)
-  const quiescent = []
+  const quiescent: number[] = []
   for (let sample = 0; sample < PARAMS.readSamples; sample += 1) {
     if (sample > 0) await sleep(PARAMS.readSampleIntervalMs)
     quiescent.push((await read()).rttMs)
@@ -517,14 +742,14 @@ async function measureRun({ port, token, model, backend, home, index, historyTur
   run.quiescentCpuMsPerRead = quiescentCpuBefore === null || quiescentCpuAfter === null
     ? null : round((quiescentCpuAfter - quiescentCpuBefore) / quiescent.length)
 
-  const streams = Array.from({ length: observers }, () => observeSession(port, token, run.sessionId))
+  const streams = Array.from({ length: observers }, () => observeSession(port, token, run.sessionId!))
   if (streams.length !== observers || observers < 1) throw new Error(`observers=${observers} produced ${streams.length} streams`)
   try {
     await Promise.all(streams.map(stream => stream.ready))
-    const checkFinal = frame => frame.replyStatus === 0 && frame.lastRole === 2
-      && frame.lastStatus === 2 && frame.lastSeq > streamAcceptedSeq
+    const checkFinal = (frame: Frame) => frame.replyStatus === 0 && frame.lastRole === 2
+      && frame.lastStatus === 2 && frame.lastSeq! > streamAcceptedSeq
 
-    const rssSamples = []
+    const rssSamples: number[] = []
     const rssTimer = setInterval(() => {
       const memory = readMemory(backend.pid)
       if (memory.rssKb !== null) rssSamples.push(memory.rssKb)
@@ -538,7 +763,7 @@ async function measureRun({ port, token, model, backend, home, index, historyTur
     const sent = await postJson(port, '/chat/send', { token,
       body: { sessionId: run.sessionId, requestId: `bench-${index}-stream`, text: '触发本次基准的长回复。' } })
     if (sent.status !== 200) throw new Error(`streaming /chat/send failed: ${sent.status} ${JSON.stringify(sent.body)}`)
-    const streamAcceptedSeq = sent.body.receipt.acceptedSeq
+    const streamAcceptedSeq = sent.body.receipt!.acceptedSeq
     // `/chat/send` returns before the Agent issues its model request; the double
     // records a request when its headers arrive.
     await waitFor(() => model.requests.length, count => count > requestsBefore, 30_000, 'measured model request')
@@ -551,13 +776,13 @@ async function measureRun({ port, token, model, backend, home, index, historyTur
     let settled = false
     const settlement = Promise.all(streams.map(stream => stream.waitFor(checkFinal, PARAMS.streamTimeoutMs, 'stream settlement')))
       .finally(() => { settled = true })
-    const samples = []
+    const samples: { atMs: number | null; rttMs: number | null; replyStatus: number; attemptChars: number; messages: number }[] = []
     while (samples.length < PARAMS.readSamples && !settled) {
       if (samples.length > 0) await sleep(sampleIntervalMs)
       if (settled) break
       const atMs = round(now() - streamStarted)
       const response = await read()
-      const projection = response.body.projection
+      const projection = response.body.projection!
       samples.push({ atMs, rttMs: round(response.rttMs), replyStatus: projection.replyStatus,
         attemptChars: projection.attempt?.text.length ?? 0, messages: projection.messages.length })
     }
@@ -566,7 +791,7 @@ async function measureRun({ port, token, model, backend, home, index, historyTur
     const streamEnded = now()
     const cpuAfterMs = readCpuMs(backend.pid)
     const finalRead = await read()
-    const finalProjection = finalRead.body.projection
+    const finalProjection = finalRead.body.projection!
     if (!isSettledReply(finalProjection, streamAcceptedSeq)) {
       const tail = streams.map(stream => stream.frames.slice(-2))
       throw new Error(`stream did not settle as expected: acceptedSeq=${streamAcceptedSeq}`
@@ -581,7 +806,9 @@ async function measureRun({ port, token, model, backend, home, index, historyTur
 
     const phases = streams.map(stream => {
       const streamFrames = stream.frames.filter(frame => frame.phase === 'stream')
-      const intervals = streamFrames.slice(1).map((frame, position) => round(frame.atMs - streamFrames[position].atMs))
+      // The deltas are differences of two finite timestamps, so the rounded
+      // values are numbers; the cast records that.
+      const intervals = streamFrames.slice(1).map((frame, position) => round(frame.atMs - streamFrames[position]!.atMs)) as number[]
       return {
         count: streamFrames.length,
         bytesTotal: streamFrames.reduce((total, frame) => total + frame.bytes, 0),
@@ -632,7 +859,7 @@ async function measureRun({ port, token, model, backend, home, index, historyTur
         || cpuAfterMs === null ? null
         : round((cpuAfterMs - cpuBeforeMs - run.quiescentCpuMsPerRead * samples.length)
           / PARAMS.replyChars * PARAMS.chunkSize),
-      reads: distribution(samples.map(sample => sample.rttMs)),
+      reads: distribution(samples.map(sample => sample.rttMs) as number[]),
       samplesDuringReply: samples.filter(sample => sample.replyStatus !== 0).length,
       sampleIntervalMs,
       readSamples: samples,
@@ -644,12 +871,12 @@ async function measureRun({ port, token, model, backend, home, index, historyTur
         observerSpreadMs: versionSpreadMs,
       },
       finalProjection: { cursor: finalProjection.cursor, messages: finalProjection.messages.length,
-        lastRole: finalProjection.messages.at(-1).role, lastStatus: finalProjection.messages.at(-1).status,
-        lastSeq: finalProjection.messages.at(-1).seq },
-      observersAgree: lastFrames.every(frame => frame.cursor === finalProjection.cursor
-        && frame.lastSeq === finalProjection.messages.at(-1).seq
-        && frame.lastRole === finalProjection.messages.at(-1).role
-        && frame.lastStatus === finalProjection.messages.at(-1).status),
+        lastRole: finalProjection.messages.at(-1)!.role, lastStatus: finalProjection.messages.at(-1)!.status,
+        lastSeq: finalProjection.messages.at(-1)!.seq },
+      observersAgree: lastFrames.every(frame => frame!.cursor === finalProjection.cursor
+        && frame!.lastSeq === finalProjection.messages.at(-1)!.seq
+        && frame!.lastRole === finalProjection.messages.at(-1)!.role
+        && frame!.lastStatus === finalProjection.messages.at(-1)!.status),
     }
     run.memory = {
       beforeKb: memoryBefore.rssKb,
@@ -666,9 +893,9 @@ async function measureRun({ port, token, model, backend, home, index, historyTur
 }
 
 /** Per-version spread between observers of the same publish, as a distribution. */
-function commonVersionSpread(streams, observers) {
+function commonVersionSpread(streams: Observer[], observers: number): Distribution | null {
   if (observers < 2) return null
-  const arrivals = new Map()
+  const arrivals = new Map<number | undefined, number[]>()
   for (const stream of streams) {
     for (const frame of stream.frames) {
       if (frame.phase !== 'stream') continue
@@ -678,7 +905,7 @@ function commonVersionSpread(streams, observers) {
     }
   }
   const spreads = [...arrivals.values()].filter(times => times.length === observers)
-    .map(times => round(Math.max(...times) - Math.min(...times)))
+    .map(times => round(Math.max(...times) - Math.min(...times))) as number[]
   return distribution(spreads)
 }
 
@@ -689,16 +916,16 @@ function commonVersionSpread(streams, observers) {
  * messages across turns would stop being observable in a long history. The
  * last message's seq and status are the same evidence the SSE frames carry.
  */
-function isSettledReply(projection, acceptedSeq) {
+function isSettledReply(projection: Projection, acceptedSeq: number): boolean {
   const last = projection.messages?.at(-1)
   return projection.replyStatus === 0 && last !== undefined && last.role === 2
     && last.status === 2 && last.seq > acceptedSeq
 }
 
 /** Poll `work` until `check` accepts its value. */
-async function waitFor(work, check, timeoutMs, label) {
+async function waitFor<T>(work: () => T | Promise<T>, check: (value: T) => boolean, timeoutMs: number, label: string): Promise<T> {
   const deadline = now() + timeoutMs
-  let value
+  let value!: T
   do {
     value = await work()
     if (check(value)) return value
@@ -707,7 +934,7 @@ async function waitFor(work, check, timeoutMs, label) {
   throw new Error(`${label} did not settle within ${timeoutMs}ms: ${JSON.stringify(value).slice(0, 400)}`)
 }
 
-function machineFacts(combo) {
+function machineFacts(combo: Combo): MachineFacts {
   const uname = spawnSync('uname', ['-a'], { encoding: 'utf8' }).stdout?.trim() ?? null
   const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).stdout?.trim() ?? null
   return {
@@ -720,18 +947,18 @@ function machineFacts(combo) {
     totalMemoryBytes: totalmem(),
     productHead: head,
     combination: {
-      dsh: combo.repos.dsh.productCommit,
+      dsh: combo.repos.dsh!.productCommit,
       // The client's source commit. Baselines recorded before the client was
       // inlined keyed this as `rikkahub`, when it was a separate repository;
       // those files keep their historical key.
-      androidSource: combo.androidSource.commit,
+      androidSource: combo.androidSource!.commit,
     },
     loadAverageAtStart: loadavg(),
   }
 }
 
 /** Whether a pid still exists, used to prove `stop` released the backend. */
-function isAlive(pid) {
+function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0)
     return true
@@ -740,33 +967,33 @@ function isAlive(pid) {
   }
 }
 
-function summarize(runs) {
-  const byHistory = {}
+function summarize(runs: MeasuredRun[]): { byHistory: Record<string, SummaryRow[]> } {
+  const byHistory: Record<string, SummaryRow[]> = {}
   for (const run of runs) {
     const key = `${run.historyTurns}turns/${run.observers}observers`
     byHistory[key] ??= []
     byHistory[key].push({
       repetition: byHistory[key].length + 1,
-      eventCount: run.seeding.eventCount,
-      sessionLogBytes: run.seeding.sessionLogBytes,
-      readP50Ms: run.stream.reads.p50,
-      readP95Ms: run.stream.reads.p95,
-      readCount: run.stream.reads.count,
-      quiescentP95Ms: run.quiescentReads.p95,
+      eventCount: run.seeding!.eventCount,
+      sessionLogBytes: run.seeding!.sessionLogBytes,
+      readP50Ms: run.stream!.reads.p50,
+      readP95Ms: run.stream!.reads.p95,
+      readCount: run.stream!.reads.count,
+      quiescentP95Ms: run.quiescentReads!.p95,
       quiescentCpuMsPerRead: run.quiescentCpuMsPerRead,
-      frames: run.stream.frames.count,
-      bytesTotal: run.stream.frames.bytesTotal,
-      intervalP50Ms: run.stream.frames.perObserver[0]?.intervalMs.p50 ?? null,
-      intervalP95Ms: run.stream.frames.perObserver[0]?.intervalMs.p95 ?? null,
-      observerSpreadP50Ms: run.stream.frames.observerSpreadMs?.p50 ?? null,
-      observerSpreadP95Ms: run.stream.frames.observerSpreadMs?.p95 ?? null,
-      cpuMs: run.stream.cpuMs,
-      cpuMsExcludingProbeApprox: run.stream.cpuMsExcludingProbeApprox,
-      cpuMsPerFragmentPerObserver: run.stream.cpuMsPerFragmentPerObserver,
-      cpuMsPerFragmentExcludingProbeApprox: run.stream.cpuMsPerFragmentExcludingProbeApprox,
-      sampledPeakKb: run.memory.sampledPeakKb,
-      peakVmHwmKb: run.memory.peakVmHwmKb,
-      streamDurationMs: run.stream.durationMs,
+      frames: run.stream!.frames.count,
+      bytesTotal: run.stream!.frames.bytesTotal,
+      intervalP50Ms: run.stream!.frames.perObserver[0]?.intervalMs.p50 ?? null,
+      intervalP95Ms: run.stream!.frames.perObserver[0]?.intervalMs.p95 ?? null,
+      observerSpreadP50Ms: run.stream!.frames.observerSpreadMs?.p50 ?? null,
+      observerSpreadP95Ms: run.stream!.frames.observerSpreadMs?.p95 ?? null,
+      cpuMs: run.stream!.cpuMs,
+      cpuMsExcludingProbeApprox: run.stream!.cpuMsExcludingProbeApprox,
+      cpuMsPerFragmentPerObserver: run.stream!.cpuMsPerFragmentPerObserver,
+      cpuMsPerFragmentExcludingProbeApprox: run.stream!.cpuMsPerFragmentExcludingProbeApprox,
+      sampledPeakKb: run.memory!.sampledPeakKb,
+      peakVmHwmKb: run.memory!.peakVmHwmKb,
+      streamDurationMs: run.stream!.durationMs,
     })
   }
   return { byHistory }

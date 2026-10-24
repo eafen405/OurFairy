@@ -19,7 +19,7 @@
  * byte-for-byte, in its current order.
  *
  * Usage:
- *   node scripts/evidence-index.mjs [--check]
+ *   node scripts/evidence-index.ts [--check]
  *
  * `--check` renders and compares without writing; it exits 1 when the index is
  * stale. That mode exists for a person resolving a merge, and deliberately does
@@ -38,6 +38,18 @@ export const indexPath = join(evidenceDir, 'README.md')
 /** The table every generated section starts with. */
 const TABLE_HEAD = ['| 目录 | 内容 |', '| --- | --- |']
 
+/** One directory the index lists, with the note it carries. */
+export type DescriptorEntry = {
+  dirs: string | string[]
+  note?: string
+}
+
+/** One descriptor file, as `evidence/index/` holds it. */
+export type Descriptor = {
+  title: string
+  entries: DescriptorEntry[]
+}
+
 /** A section heading in the index. */
 const HEADING = /^## /u
 
@@ -47,16 +59,17 @@ const HEADING = /^## /u
  * The numeric prefix is the order, not the spec number: specs land in waves and
  * the index reads in the order the work happened. A new spec adds one file and
  * gets a section at the end.
- * @param {string} [root] - descriptor directory; defaults to the repository's.
- * @returns {{file: string, title: string, entries: object[]}[]}
+ * @param [root] - descriptor directory; defaults to the repository's.
+ * @returns
  */
-export function readDescriptors(root = descriptorsDir) {
+export function readDescriptors(root = descriptorsDir): (Descriptor & { file: string })[] {
   if (!existsSync(root)) return []
   return readdirSync(root)
     .filter(name => name.endsWith('.json'))
     .sort()
     .map(name => {
-      const descriptor = JSON.parse(readFileSync(join(root, name), 'utf8'))
+      // The descriptor file is the authority for the section it declares.
+      const descriptor = JSON.parse(readFileSync(join(root, name), 'utf8')) as Descriptor
       if (typeof descriptor.title !== 'string' || descriptor.title.trim() === '') {
         throw new Error(`${join(root, name)}: a descriptor needs a non-empty "title"`)
       }
@@ -70,10 +83,10 @@ export function readDescriptors(root = descriptorsDir) {
 /**
  * The first `#` heading of an evidence README, used when a descriptor entry
  * omits its note.
- * @param {string} dir - directory name under the evidence root.
- * @returns {string|undefined}
+ * @param dir - directory name under the evidence root.
+ * @returns
  */
-function headingOf(dir) {
+function headingOf(dir: string): string | undefined {
   const readme = join(evidenceDir, dir, 'README.md')
   if (!existsSync(readme)) return undefined
   const line = readFileSync(readme, 'utf8').split('\n').find(entry => entry.startsWith('# '))
@@ -85,11 +98,11 @@ function headingOf(dir) {
  *
  * Several directories can share a note — a ticket recorded per side shares one
  * summary — so the first column is a ` · ` separated list of links.
- * @param {{dirs: string[], note?: string}} entry
- * @returns {string}
+ * @param entry
+ * @returns
  */
-function renderRow(entry) {
-  const dirs = Array.isArray(entry.dirs) ? entry.dirs : [entry.dirs]
+function renderRow(entry: DescriptorEntry): string {
+  const dirs: string[] = Array.isArray(entry.dirs) ? entry.dirs : [entry.dirs]
   for (const dir of dirs) {
     if (!existsSync(join(evidenceDir, dir, 'README.md'))) {
       throw new Error(`evidence directory "${dir}" has no README.md; the index may not list a missing directory`)
@@ -101,10 +114,10 @@ function renderRow(entry) {
 
 /**
  * One whole section, as it should appear in the index.
- * @param {{title: string, entries: object[]}} section
- * @returns {string[]}
+ * @param section
+ * @returns
  */
-function renderSection(section) {
+function renderSection(section: Descriptor): string {
   return [`## ${section.title}`, '', ...TABLE_HEAD, ...section.entries.map(renderRow), ''].join('\n')
 }
 
@@ -113,13 +126,13 @@ function renderSection(section) {
  *
  * Splitting on headings is enough here: the index is a list of tables, and no
  * hand-written section embeds a `##` line in a fence.
- * @param {string} text
- * @returns {{preamble: string[], sections: {title: string, text: string}[]}}
+ * @param text
+ * @returns
  */
-function splitSections(text) {
-  const preamble = []
-  const sections = []
-  let current
+function splitSections(text: string): { preamble: string[]; sections: { title: string; text: string }[] } {
+  const preamble: string[] = []
+  const sections: { title: string; lines: string[] }[] = []
+  let current: { title: string; lines: string[] } | undefined
   for (const line of text.split('\n')) {
     if (HEADING.test(line)) {
       current = { title: line.slice(3).trim(), lines: [line] }
@@ -142,26 +155,26 @@ function splitSections(text) {
  * A descriptor whose title is not in the index yet is appended after the last
  * section this run touched, so a new spec lands next to the other spec sections
  * rather than below the hand-written tail.
- * @param {string} text - the current index.
- * @param {{title: string, entries: object[]}[]} sections - descriptors, in order.
- * @returns {string}
+ * @param text - the current index.
+ * @param sections - descriptors, in order.
+ * @returns
  */
-export function renderIndex(text, sections) {
+export function renderIndex(text: string, sections: Descriptor[]): string {
   const { preamble, sections: existing } = splitSections(text)
   const rendered = new Map(sections.map(section => [section.title, renderSection(section)]))
   const known = new Set(existing.map(section => section.title))
   const additions = sections
     .filter(section => !known.has(section.title))
-    .map(section => ({ title: section.title, text: rendered.get(section.title) }))
+    .map(section => ({ title: section.title, text: rendered.get(section.title)! }))
 
-  const ordered = []
+  const ordered: { title: string; text: string }[] = []
   let lastRendered = -1
   for (const [index, section] of existing.entries()) {
     if (!rendered.has(section.title)) {
       ordered.push(section)
       continue
     }
-    ordered.push({ title: section.title, text: rendered.get(section.title) })
+    ordered.push({ title: section.title, text: rendered.get(section.title)! })
     lastRendered = index
   }
   // A descriptor the index has never listed lands next to the other spec
@@ -176,14 +189,14 @@ export function renderIndex(text, sections) {
 
 /**
  * Render the index for the repository's current descriptors.
- * @returns {string}
+ * @returns
  */
-export function buildIndex() {
+export function buildIndex(): string {
   return renderIndex(readFileSync(indexPath, 'utf8'), readDescriptors())
 }
 
 /** Entry point: rewrite the index, or report that it is stale under --check. */
-function main(argv) {
+function main(argv: string[]): number {
   const check = argv.includes('--check')
   const next = buildIndex()
   const current = readFileSync(indexPath, 'utf8')
@@ -200,4 +213,4 @@ function main(argv) {
   return 0
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exitCode = main(process.argv.slice(2))
+if (import.meta.main) process.exitCode = main(process.argv.slice(2))

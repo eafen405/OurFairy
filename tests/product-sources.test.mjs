@@ -8,7 +8,7 @@
  * cover leaves the tests booting the previous install while `npm test` stays
  * green.
  *
- * Ticket #156 moved that fact into `scripts/ourfairy-composition.mjs`, so the
+ * Ticket #156 moved that fact into `scripts/ourfairy-composition.ts`, so the
  * assertions import it directly: the hashed set and the cached/install decision
  * are composition facts, not something a subprocess has to report back. The
  * decision's two written inputs — the profile and its source stamp — are
@@ -38,7 +38,7 @@ import {
   profileTemplateDir,
   writeProfile,
   writeSourceStamp,
-} from '../scripts/ourfairy-composition.mjs'
+} from '../scripts/ourfairy-composition.ts'
 import { copyProductRepo, describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
 
 /** The throwaway repository the composition reads; the worktree itself stays untouched. */
