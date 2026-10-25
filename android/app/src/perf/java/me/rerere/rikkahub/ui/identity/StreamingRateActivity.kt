@@ -74,13 +74,11 @@ class StreamingRateActivity : ComponentActivity() {
                     Text("流式速率测量 / #214")
                     RemoteTranscript(
                         messages = projection?.messages.orEmpty(),
-                        attemptText = projection?.attempt?.text,
-                        attemptKey = projection?.let { it.generation to it.attempt?.attemptId },
+                        generation = projection?.generation.orEmpty(),
+                        attempt = projection?.attempt,
+                        settledAttempt = projection?.settledAttempt,
                         downloadEnabled = false,
                         onDownload = { _, _ -> },
-                        settledAttempt = projection?.let { p ->
-                            p.settledAttempt?.let { attemptRowKey(p.generation, it.attemptId) to it.seq }
-                        },
                     )
                 }
             }

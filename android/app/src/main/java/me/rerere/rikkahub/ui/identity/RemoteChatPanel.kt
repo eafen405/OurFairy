@@ -215,10 +215,9 @@ fun RemoteChatPanel(
         key(snapshot.attachmentEpoch) {
             RemoteTranscript(
                 messages = projection?.messages.orEmpty(),
-                attemptText = projection?.attempt?.text,
-                attemptKey = projection?.let { it.generation to it.attempt?.attemptId },
-                attemptTools = projection?.attempt?.tools.orEmpty(),
-                settledAttempt = projection?.settledAttempt?.let { attemptRowKey(projection.generation, it.attemptId) to it.seq },
+                generation = projection?.generation.orEmpty(),
+                attempt = projection?.attempt,
+                settledAttempt = projection?.settledAttempt,
                 modifier = Modifier.weight(1f),
                 downloadEnabled = !snapshot.downloading,
                 onDownload = { message, attachment ->
