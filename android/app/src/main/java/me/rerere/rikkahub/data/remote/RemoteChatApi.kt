@@ -34,6 +34,13 @@ data class RemoteChatAttachment(
 /**
  * Wire role: 1 user, 2 Fairy. Status: 1 pending, 2 complete, 3 interrupted, 4 failed.
  *
+ * `position` is the message's place in the session's presentation order, derived by the backend from
+ * the row's first appearance: unique within the session and stable for one message across pages,
+ * reconnects and generations. It orders presentation only — it is not a seq, promises no
+ * continuity, and a larger position does not mean newer content, so a consumer that needs the
+ * newest output must compare `seq`. There is no default: a snapshot that omits it, moves one
+ * message's place, or gives two messages one place is refused rather than ordered by guesswork.
+ *
  * `tools` names the tools one message requested, in the order it requested them. The backend
  * sends it only when the message requested something, so an older snapshot or an ordinary
  * message decodes as "no tools". Arguments and tool output are not part of the wire shape.
@@ -41,6 +48,7 @@ data class RemoteChatAttachment(
 @Serializable
 data class RemoteChatMessage(
     val messageId: String,
+    val position: Long,
     val seq: Long,
     val requestId: String? = null,
     val role: Int,

@@ -220,6 +220,7 @@ internal class SyntheticChatBackend(
             events += buildJsonObject { put("seq", seq) }
             messages += RemoteChatMessage(
                 messageId = "history-$index",
+                position = index.toLong(),
                 seq = seq,
                 role = if (index % 2 == 0) 1 else 2,
                 status = 2,
@@ -242,7 +243,7 @@ internal class SyntheticChatBackend(
         replyStatus = 0
         val seq = ++cursor
         events += buildJsonObject { put("seq", seq) }
-        messages += RemoteChatMessage("final", seq, role = 2, status = 2, text = attemptText)
+        messages += RemoteChatMessage("final", messages.size.toLong(), seq, role = 2, status = 2, text = attemptText)
         settled = RemoteChatSettlement(attemptId, seq)
         // publish() returns the version it sent; the terminal timestamp is that version's emit time.
         terminalEmitNanos = emitNanos.getValue(publish())

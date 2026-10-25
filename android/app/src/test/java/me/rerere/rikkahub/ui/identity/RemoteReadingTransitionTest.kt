@@ -7,7 +7,7 @@ import org.junit.Test
 
 class RemoteReadingTransitionTest {
     private val source = "Reading [the ending][ref].\n\n```kotlin\nval final = 42\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n\$\$x^2\$\$\n\n[ref]: https://example.com/end"
-    private val terminal = RemoteChatMessage("durable", 9, role = 2, status = 3, text = source)
+    private val terminal = RemoteChatMessage("durable", 2, 9, role = 2, status = 3, text = source)
 
     @Test fun `attempt row key spells the generation scoped attempt convention`() {
         assertEquals("attempt:gen-7:attempt-2", attemptRowKey("gen-7", "attempt-2"))
@@ -46,9 +46,9 @@ class RemoteReadingTransitionTest {
     @Test fun `formal reply before stream end and unrelated delivery retain exactly one settled reading row`() {
         val state = RemoteTranscriptPresentation()
         val liveKey = attemptRowKey("generation", "live")
-        val old = RemoteChatMessage("old", 1, role = 2, status = 2, text = "Earlier")
+        val old = RemoteChatMessage("old", 0, 1, role = 2, status = 2, text = "Earlier")
         val live = state.update(listOf(old), source, liveKey, emptySet(), true).last()
-        val delivery = RemoteChatMessage("delivery", 8, role = 2, status = 2, text = "Independent delivery")
+        val delivery = RemoteChatMessage("delivery", 1, 8, role = 2, status = 2, text = "Independent delivery")
         val overlap = state.update(listOf(old, delivery, terminal), source, liveKey, setOf(live.key), false)
         assertEquals(listOf("old", "delivery", "durable", liveKey), overlap.map { it.key })
         val rows = state.update(listOf(old, delivery, terminal), null, null, setOf(live.key), false, liveKey to terminal.seq)
@@ -75,7 +75,7 @@ class RemoteReadingTransitionTest {
         val first = attemptRowKey("generation", "first")
         val second = attemptRowKey("generation", "second")
         state.update(emptyList(), "", first, emptySet(), true)
-        val delivery = terminal.copy(messageId = "delivery", seq = 8)
+        val delivery = terminal.copy(messageId = "delivery", seq = 8, position = 0)
         val live = state.update(listOf(delivery), source, first, setOf(first), false)
         assertEquals(listOf("delivery", first), live.map { it.key })
         val next = state.update(listOf(delivery, terminal), "next", second, setOf(first), false,

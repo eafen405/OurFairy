@@ -114,7 +114,9 @@ class StreamingRateActivity : ComponentActivity() {
         put("atMs", SystemClock.elapsedRealtimeNanos() / 1_000_000.0)
         put("version", projection.version)
         put("revision", projection.attempt?.revision)
-        put("chars", projection.attempt?.text?.length ?: projection.messages.lastOrNull { it.role == 2 }?.text?.length ?: 0)
+        // Position orders presentation, so the newest output is the greatest seq, not the last row.
+        put("chars", projection.attempt?.text?.length
+            ?: projection.messages.filter { it.role == 2 }.maxByOrNull { it.seq }?.text?.length ?: 0)
         put("replyStatus", projection.replyStatus)
     }
 

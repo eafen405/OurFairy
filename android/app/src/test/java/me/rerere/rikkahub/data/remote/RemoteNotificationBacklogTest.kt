@@ -155,6 +155,26 @@ class RemoteNotificationBacklogTest {
         assertFalse(harness.store.load(key).notificationOwed)
     }
 
+    @Test fun `the reminder preview is the newest output by seq, not the last position`() = runTest {
+        val harness = Harness()
+        val receiver = receiver(harness)
+        receiver.bind("alice", 1); runCurrent()
+        // Position is first appearance, so the newest output can sit before a row
+        // that first appeared earlier and settled later. The preview names the
+        // newest by seq.
+        harness.chats.updates.getValue("alice-main").emit(
+            delivery("alice-main", 9).copy(
+                version = 2,
+                messages = listOf(
+                    RemoteChatMessage("delivery9", 0, 9, role = 2, status = 2, text = "delivered9"),
+                    RemoteChatMessage("older", 1, 5, role = 2, status = 2, text = "delivered5"),
+                ),
+            ),
+        ); runCurrent()
+
+        assertEquals("delivered9", harness.platform.alerts.single().second)
+    }
+
     @Test fun `a refused publication after consumption loses one sound and is not replayed`() = runTest {
         val harness = Harness()
         val receiver = receiver(harness)

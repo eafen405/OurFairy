@@ -375,7 +375,7 @@ class FairyPagesTest {
         updates["main"] = MutableStateFlow(RemoteChatProjection(
             sessionId = "main", cursor = 0, durableThroughSeq = 0,
             events = eventCoverage(0, 0),
-            messages = listOf(RemoteChatMessage("history", 0, role = 1, status = 2, text = "你好，Fairy")),
+            messages = listOf(RemoteChatMessage("history", 0, 0, role = 1, status = 2, text = "你好，Fairy")),
             activity = RemoteActivity(1),
         ))
         conversation()
@@ -431,7 +431,7 @@ class FairyPagesTest {
         updates["main"] = MutableStateFlow(RemoteChatProjection(
             sessionId = "main", cursor = 0, durableThroughSeq = 0,
             events = eventCoverage(0, 0),
-            messages = listOf(RemoteChatMessage("history", 0, role = 1, status = 2, text = "你好，Fairy")),
+            messages = listOf(RemoteChatMessage("history", 0, 0, role = 1, status = 2, text = "你好，Fairy")),
             activity = RemoteActivity(1),
         ))
         var policy: AgoraMotionPolicy? = null
@@ -482,8 +482,8 @@ class FairyPagesTest {
             sessionId = "main", cursor = 0, durableThroughSeq = 0,
             events = eventCoverage(0, 0),
             messages = listOf(
-                RemoteChatMessage("fairy", 0, role = 2, status = 2, text = fairyBody),
-                RemoteChatMessage("user", 1, role = 1, status = 2, text = userBody),
+                RemoteChatMessage("fairy", 0, 0, role = 2, status = 2, text = fairyBody),
+                RemoteChatMessage("user", 1, 1, role = 1, status = 2, text = userBody),
             ),
             activity = RemoteActivity(1),
         ))

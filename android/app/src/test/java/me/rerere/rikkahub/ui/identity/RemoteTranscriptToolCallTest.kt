@@ -30,8 +30,8 @@ import org.robolectric.annotation.GraphicsMode
 class RemoteTranscriptToolCallTest {
     @get:Rule val compose = createComposeRule()
 
-    private val question = RemoteChatMessage("u1", 2, role = 1, status = 2, text = "帮我看看仓库")
-    private val toolStep = RemoteChatMessage("a1", 4, role = 2, status = 2, text = "",
+    private val question = RemoteChatMessage("u1", 0, 2, role = 1, status = 2, text = "帮我看看仓库")
+    private val toolStep = RemoteChatMessage("a1", 1, 4, role = 2, status = 2, text = "",
         tools = listOf("bash", "read"))
 
     private fun show(messages: List<RemoteChatMessage>, attempt: String? = null,
