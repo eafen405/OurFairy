@@ -1,5 +1,9 @@
 package me.rerere.rikkahub.ui.fairy
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,6 +82,7 @@ fun FairyConversationPage(
         sessions.selectedId == sessionId && chat?.sessionId == sessionId
     val snapshot = chat.takeIf { settled }
     val window = snapshot?.fairyWindow() ?: FairyWindowState(presence = FairyPresence.CONNECTING)
+    val screenOpen = rememberFairyScreenOpen(window)
     val tokens = LocalFairyTokens.current
     val failure = sessions.failure?.let {
         if (it == SessionsSnapshot.UNREACHABLE) stringResource(R.string.identity_unreachable) else it
@@ -110,10 +115,7 @@ fun FairyConversationPage(
     ) {
         Box(Modifier.fillMaxSize()) {
             FairyBackground(watermark = false)
-            Box(
-                Modifier.fillMaxSize().statusBarsPadding().padding(top = FairyWindowBarHeight)
-                    .navigationBarsPadding().imePadding(),
-            ) {
+            FairyConversationSurface(screenOpen = screenOpen) {
                 if (settled && selectedChat != null) {
                     key(sessionId) {
                         RemoteChatPanel(
@@ -142,6 +144,7 @@ fun FairyConversationPage(
             }
             FairyWindowTopBar(
                 window = window,
+                screenOpen = screenOpen,
                 subtitle = when {
                     opening -> "正在打开会话…"
                     !settled -> "会话不可用"
@@ -160,6 +163,29 @@ fun FairyConversationPage(
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun FairyConversationSurface(
+    screenOpen: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val extraTop by animateDpAsState(
+        targetValue = if (screenOpen) FairyScreenOpenHeight else 0.dp,
+        animationSpec = if (LocalAgoraMotionPolicy.current.allowSpatialTransitions) {
+            tween(350, easing = FastOutSlowInEasing)
+        } else {
+            snap()
+        },
+        label = "fairy-content-inset",
+    )
+    Box(
+        modifier = Modifier.fillMaxSize().statusBarsPadding()
+            .padding(top = FairyWindowBarHeight + extraTop)
+            .navigationBarsPadding().imePadding(),
+    ) {
+        content()
     }
 }
 

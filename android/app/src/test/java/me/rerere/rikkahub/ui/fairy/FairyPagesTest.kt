@@ -341,8 +341,10 @@ class FairyPagesTest {
             activity = RemoteActivity(1),
         ))
         conversation()
+        val viewportNode = compose.onNodeWithTag("conversation-messages")
         val before = compose.onNodeWithContentDescription("发送消息").fetchSemanticsNode().boundsInRoot
-        val viewport = compose.onNodeWithTag("conversation-messages").fetchSemanticsNode().boundsInRoot
+        val viewport = viewportNode.fetchSemanticsNode().boundsInRoot
+        val density = viewportNode.fetchSemanticsNode().layoutInfo.density.density
         screenshot("conversation")
         compose.runOnIdle {
             val stream = updates.getValue("main")
@@ -351,15 +353,39 @@ class FairyPagesTest {
         compose.mainClock.advanceTimeBy(600)
         compose.onNodeWithText("正在思考…").assertIsDisplayed()
         val during = compose.onNodeWithContentDescription("停止回复").fetchSemanticsNode().boundsInRoot
+        val after = viewportNode.fetchSemanticsNode().boundsInRoot
         assertEquals(before.top, during.top)
-        assertEquals(viewport, compose.onNodeWithTag("conversation-messages").fetchSemanticsNode().boundsInRoot)
+        assertEquals(viewport.bottom, after.bottom)
+        assertEquals(176f * density, after.top - viewport.top, 0.5f)
+        val firstMessage = compose.onNodeWithText("你好，Fairy").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "第一条消息 top ${firstMessage.top}px 应不低于展开眼屏下沿 ${viewport.top + 176f * density}px",
+            firstMessage.top >= viewport.top + 176f * density,
+        )
         screenshot("thinking")
         compose.runOnIdle {
             val stream = updates.getValue("main")
             stream.value = stream.value.copy(version = 2, replyStatus = 0, activity = RemoteActivity(1))
         }
-        compose.mainClock.advanceTimeBy(600)
+        compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithText("正在思考…").assertDoesNotExist()
+        assertEquals(viewport, viewportNode.fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test fun `empty conversation keeps the empty hint below the open screen`() {
+        updates["main"] = MutableStateFlow(RemoteChatProjection(
+            sessionId = "main", cursor = 0, durableThroughSeq = 0,
+            events = eventCoverage(0, 0),
+            activity = RemoteActivity(1),
+        ))
+        conversation()
+        val hint = compose.onNodeWithText("此会话还没有消息。").fetchSemanticsNode()
+        val density = hint.layoutInfo.density.density
+        val top = hint.boundsInRoot.top
+        assertTrue(
+            "空会话提示 top ${top}px 应不低于展开眼屏下沿 ${236f * density}px",
+            top >= 236f * density,
+        )
     }
 
     @Test
