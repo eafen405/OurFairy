@@ -151,7 +151,7 @@ internal fun RemoteTranscript(
         reading.target(keys)?.let { listState.requestScrollToItem(it.index, it.offset) }
     }
     // StateFlow already conflates whole snapshots. Preserve the viewport rather than replaying deltas.
-    LaunchedEffect(messages, generation, attempt, settledAttempt) { preservePosition() }
+    LaunchedEffect(messages, generation, attempt?.attemptId, attempt?.text) { preservePosition() }
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxWidth().testTag("conversation-messages"),
