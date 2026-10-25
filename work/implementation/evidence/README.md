@@ -188,6 +188,12 @@
 | --- | --- |
 | [222-fairy-console](222-fairy-console/README.md) | #222：Quiet 分组信息卡与 Signal Dock 次级入口；当前会话显示与导航同源，全部会话直接显示现有列表 |
 
+## 空会话唯一（#220）
+
+| 目录 | 内容 |
+| --- | --- |
+| [220-empty-session](220-empty-session/README.md) | #220：create 复用已存在的空会话（primary 优先，否则 createdAt 最新的空 ordinary）；日志没有消息事件即视为空，客户端生产代码零改动 |
+
 ## 界面微调（#215/#217/#218）
 
 | 目录 | 内容 |

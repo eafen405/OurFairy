@@ -1,0 +1,11 @@
+{
+  "title": "空会话唯一（#220）",
+  "entries": [
+    {
+      "dirs": [
+        "220-empty-session"
+      ],
+      "note": "#220：create 复用已存在的空会话（primary 优先，否则 createdAt 最新的空 ordinary）；日志没有消息事件即视为空，客户端生产代码零改动"
+    }
+  ]
+}
