@@ -12,35 +12,43 @@ class RemoteReadingTransitionTest {
     private fun attempt(id: String, text: String) =
         RemoteChatAttempt(attemptId = id, revision = 0, text = text)
 
-    @Test fun `attempt row key spells the generation scoped attempt convention`() {
-        val rows = RemoteTranscriptPresentation().update(
-            messages = emptyList(),
+    /**
+     * Backend facts in, visual rows out. Identity is only ever observed through the returned
+     * [RemoteTranscriptRow.key]; the test never spells an attempt key itself.
+     */
+    private fun RemoteTranscriptPresentation.present(
+        messages: List<RemoteChatMessage> = emptyList(),
+        generation: String = "generation",
+        attempt: RemoteChatAttempt? = null,
+        settlement: RemoteChatSettlement? = null,
+        visible: Set<String> = emptySet(),
+        followTail: Boolean = true,
+    ): List<RemoteTranscriptRow> =
+        update(messages, generation, attempt, settlement, visible, followTail)
+
+    @Test fun `attempt row key format is generation scoped and settlement keeps the observed live key`() {
+        val state = RemoteTranscriptPresentation()
+        val live = state.present(generation = "gen-7", attempt = attempt("attempt-2", "streaming")).single()
+        assertEquals("attempt:gen-7:attempt-2", live.key)
+
+        val settled = state.present(
+            messages = listOf(terminal),
             generation = "gen-7",
-            attempt = attempt("attempt-2", "streaming"),
-            settled = null,
-            visibleKeys = emptySet(),
-            followTail = true,
-        )
-        assertEquals("attempt:gen-7:attempt-2", rows.single().key)
+            settlement = RemoteChatSettlement("attempt-2", terminal.seq),
+            visible = setOf(live.key),
+            followTail = false,
+        ).single()
+        assertEquals(live.key, settled.key)
     }
 
     @Test fun `reader keeps same raw layout through terminal and gets parsed complete body after leaving`() {
         val state = RemoteTranscriptPresentation()
-        val live = state.update(
-            messages = emptyList(),
-            generation = "generation",
-            attempt = attempt("live", source),
-            settled = null,
-            visibleKeys = emptySet(),
-            followTail = true,
-        ).single()
+        val live = state.present(attempt = attempt("live", source)).single()
         val settlement = RemoteChatSettlement("live", terminal.seq)
-        val settled = state.update(
+        val settled = state.present(
             messages = listOf(terminal),
-            generation = "generation",
-            attempt = null,
-            settled = settlement,
-            visibleKeys = setOf(live.key),
+            settlement = settlement,
+            visible = setOf(live.key),
             followTail = false,
         ).single()
         assertEquals(live.key, settled.key)
@@ -48,102 +56,75 @@ class RemoteReadingTransitionTest {
         assertTrue(settled.deferFormatting)
         val parsed = parseMarkdown(settled.text)
         assertNull(settled.documentToShow(parsed))
-        val released = state.update(
+        val released = state.present(
             messages = listOf(terminal),
-            generation = "generation",
-            attempt = null,
-            settled = settlement,
-            visibleKeys = emptySet(),
+            settlement = settlement,
+            visible = emptySet(),
             followTail = false,
         ).single()
         assertSame(parsed, released.documentToShow(parsed))
         assertTrue(parsed.blocks.any { it is MarkdownBlock.CodeBlock })
         assertTrue(parsed.blocks.any { it is MarkdownBlock.Table })
         assertTrue(parsed.blocks.filterIsInstance<MarkdownBlock.Paragraph>().any { it.content.any { node -> node is MarkdownInline.Math && node.display } })
-        assertEquals(1, state.update(
+        assertEquals(1, state.present(
             messages = listOf(terminal),
-            generation = "generation",
-            attempt = null,
-            settled = RemoteChatSettlement("unrelated", terminal.seq),
-            visibleKeys = emptySet(),
+            settlement = RemoteChatSettlement("unrelated", terminal.seq),
+            visible = emptySet(),
             followTail = false,
         ).size)
     }
 
     @Test fun `return to tail releases pending formatting while history never waits for scrolling`() {
         val state = RemoteTranscriptPresentation()
-        val live = state.update(
-            messages = emptyList(),
-            generation = "generation",
-            attempt = attempt("live", source),
-            settled = null,
-            visibleKeys = emptySet(),
-            followTail = true,
-        ).single()
+        val live = state.present(attempt = attempt("live", source)).single()
         val settlement = RemoteChatSettlement("live", terminal.seq)
-        assertTrue(state.update(
+        assertTrue(state.present(
             messages = listOf(terminal),
-            generation = "generation",
-            attempt = null,
-            settled = settlement,
-            visibleKeys = setOf(live.key),
+            settlement = settlement,
+            visible = setOf(live.key),
             followTail = false,
         ).single().deferFormatting)
-        val resumed = state.update(
+        val resumed = state.present(
             messages = listOf(terminal),
-            generation = "generation",
-            attempt = null,
-            settled = settlement,
-            visibleKeys = setOf(live.key),
+            settlement = settlement,
+            visible = setOf(live.key),
             followTail = true,
         ).single()
         assertFalse(resumed.deferFormatting)
-        assertFalse(state.update(
+        assertFalse(state.present(
             messages = listOf(terminal),
-            generation = "generation",
-            attempt = null,
-            settled = settlement,
-            visibleKeys = setOf(live.key),
+            settlement = settlement,
+            visible = setOf(live.key),
             followTail = false,
         ).single().deferFormatting)
-        val history = RemoteTranscriptPresentation().update(
+        val history = RemoteTranscriptPresentation().present(
             messages = listOf(terminal),
-            generation = "generation",
-            attempt = null,
-            settled = null,
-            visibleKeys = setOf("durable"),
+            visible = setOf("durable"),
             followTail = false,
         ).single()
         assertFalse(history.deferFormatting)
         assertEquals("durable", history.key)
     }
+
     @Test fun `formal reply before stream end and unrelated delivery retain exactly one settled reading row`() {
         val state = RemoteTranscriptPresentation()
         val old = RemoteChatMessage("old", 1, role = 2, status = 2, text = "Earlier")
-        val live = state.update(
+        val live = state.present(
             messages = listOf(old),
-            generation = "generation",
             attempt = attempt("live", source),
-            settled = null,
-            visibleKeys = emptySet(),
-            followTail = true,
         ).last()
         val delivery = RemoteChatMessage("delivery", 8, role = 2, status = 2, text = "Independent delivery")
-        val overlap = state.update(
+        val overlap = state.present(
             messages = listOf(old, delivery, terminal),
-            generation = "generation",
             attempt = attempt("live", source),
-            settled = null,
-            visibleKeys = setOf(live.key),
+            visible = setOf(live.key),
             followTail = false,
         )
         assertEquals(listOf("old", "delivery", "durable", live.key), overlap.map { it.key })
-        val rows = state.update(
+        val rows = state.present(
             messages = listOf(old, delivery, terminal),
-            generation = "generation",
-            attempt = null,
-            settled = RemoteChatSettlement("live", terminal.seq),
-            visibleKeys = setOf(live.key),
+            settlement = RemoteChatSettlement("live", terminal.seq),
+            visible = setOf(live.key),
             followTail = false,
         )
         assertEquals(listOf("old", "delivery", live.key), rows.map { it.key })
@@ -155,31 +136,22 @@ class RemoteReadingTransitionTest {
         for (status in listOf(3, 4)) {
             val state = RemoteTranscriptPresentation()
             val id = "live-$status"
-            val live = state.update(
-                messages = emptyList(),
-                generation = "generation",
+            val live = state.present(
                 attempt = attempt(id, source.dropLast(8)),
-                settled = null,
-                visibleKeys = emptySet(),
-                followTail = true,
             ).single()
             val settlement = RemoteChatSettlement(id, terminal.seq)
-            val rows = state.update(
+            val rows = state.present(
                 messages = listOf(terminal.copy(status = status)),
-                generation = "generation",
-                attempt = null,
-                settled = settlement,
-                visibleKeys = setOf(live.key),
+                settlement = settlement,
+                visible = setOf(live.key),
                 followTail = false,
             )
             assertEquals(source, rows.single().text)
             assertNull(rows.single().documentToShow(parseMarkdown(source)))
-            val released = state.update(
+            val released = state.present(
                 messages = listOf(terminal.copy(status = status)),
-                generation = "generation",
-                attempt = null,
-                settled = settlement,
-                visibleKeys = setOf(live.key),
+                settlement = settlement,
+                visible = setOf(live.key),
                 followTail = true,
             ).single()
             assertEquals(source, released.documentToShow(parseMarkdown(source))!!.source)
@@ -190,45 +162,142 @@ class RemoteReadingTransitionTest {
         val state = RemoteTranscriptPresentation()
         val firstAttempt = attempt("first", "")
         val secondAttempt = attempt("second", "next")
-        val first = state.update(
-            messages = emptyList(),
-            generation = "generation",
-            attempt = firstAttempt,
-            settled = null,
-            visibleKeys = emptySet(),
-            followTail = true,
-        ).single().key
+        val first = state.present(attempt = firstAttempt).single().key
         val delivery = terminal.copy(messageId = "delivery", seq = 8)
-        val live = state.update(
+        val live = state.present(
             messages = listOf(delivery),
-            generation = "generation",
             attempt = firstAttempt,
-            settled = null,
-            visibleKeys = setOf(first),
+            visible = setOf(first),
             followTail = false,
         )
         assertEquals(listOf("delivery", first), live.map { it.key })
-        val next = state.update(
+        val next = state.present(
             messages = listOf(delivery, terminal),
-            generation = "generation",
             attempt = secondAttempt,
-            settled = RemoteChatSettlement("first", terminal.seq),
-            visibleKeys = setOf(first),
+            settlement = RemoteChatSettlement("first", terminal.seq),
+            visible = setOf(first),
             followTail = false,
         )
-        assertEquals(listOf("delivery", first, "attempt:generation:second"), next.map { it.key })
+        assertEquals(3, next.size)
+        assertEquals("delivery", next[0].key)
+        assertEquals(first, next[1].key)
+        assertEquals(source, next[1].text)
         assertTrue(next[1].deferFormatting)
-        assertFalse(next[0].deferFormatting)
-        val history = RemoteTranscriptPresentation().update(
+        assertEquals("next", next[2].text)
+        assertNotEquals(first, next[2].key)
+        assertNotEquals(next[1].key, next[2].key)
+        val history = RemoteTranscriptPresentation().present(
             messages = listOf(delivery, terminal),
-            generation = "generation",
-            attempt = null,
-            settled = RemoteChatSettlement("first", terminal.seq),
-            visibleKeys = setOf("durable"),
+            settlement = RemoteChatSettlement("first", terminal.seq),
+            visible = setOf("durable"),
             followTail = false,
         )
         assertEquals(listOf("delivery", "durable"), history.map { it.key })
         assertTrue(history.none { it.deferFormatting })
     }
 
+    @Test fun `settlement from another generation neither inherits the observed row nor defers`() {
+        val state = RemoteTranscriptPresentation()
+        val live = state.present(attempt = attempt("live", source)).single()
+        val rows = state.present(
+            messages = listOf(terminal),
+            generation = "other-generation",
+            settlement = RemoteChatSettlement("live", terminal.seq),
+            visible = setOf(live.key),
+            followTail = false,
+        )
+        assertEquals(listOf("durable"), rows.map { it.key })
+        assertFalse(rows.single().deferFormatting)
+    }
+
+    @Test fun `unrelated settlement neither maps nor defers and a later exact settlement still works`() {
+        val state = RemoteTranscriptPresentation()
+        val live = state.present(attempt = attempt("live", source)).single()
+        val unrelated = state.present(
+            messages = listOf(terminal),
+            settlement = RemoteChatSettlement("other", terminal.seq),
+            visible = setOf(live.key),
+            followTail = false,
+        ).single()
+        assertEquals("durable", unrelated.key)
+        assertFalse(unrelated.deferFormatting)
+
+        val settled = state.present(
+            messages = listOf(terminal),
+            settlement = RemoteChatSettlement("live", terminal.seq),
+            visible = setOf(live.key),
+            followTail = false,
+        ).single()
+        assertEquals(live.key, settled.key)
+        assertTrue(settled.deferFormatting)
+    }
+
+    @Test fun `settlement for a live attempt never observed neither maps nor defers`() {
+        val rows = RemoteTranscriptPresentation().present(
+            messages = listOf(terminal),
+            settlement = RemoteChatSettlement("never-observed", terminal.seq),
+            visible = setOf("durable"),
+            followTail = false,
+        )
+        assertEquals(listOf("durable"), rows.map { it.key })
+        assertFalse(rows.single().deferFormatting)
+    }
+
+    @Test fun `settlement only maps a unique Fairy message with the exact seq and a later exact settlement still works`() {
+        val state = RemoteTranscriptPresentation()
+        val live = state.present(attempt = attempt("live", source)).single()
+        val mismatches = listOf(
+            listOf(terminal.copy(seq = terminal.seq + 1)),
+            listOf(RemoteChatMessage("user-same-seq", terminal.seq, role = 1, status = 2, text = source)),
+            listOf(terminal, terminal.copy(messageId = "duplicate-fairy")),
+        )
+        for (messages in mismatches) {
+            val rows = state.present(
+                messages = messages,
+                settlement = RemoteChatSettlement("live", terminal.seq),
+                visible = setOf(live.key),
+                followTail = false,
+            )
+            assertEquals(messages.map { it.messageId }, rows.map { it.key })
+            assertTrue(rows.none { it.deferFormatting })
+        }
+        val settled = state.present(
+            messages = listOf(terminal),
+            settlement = RemoteChatSettlement("live", terminal.seq),
+            visible = setOf(live.key),
+            followTail = false,
+        ).single()
+        assertEquals(live.key, settled.key)
+        assertTrue(settled.deferFormatting)
+    }
+
+    @Test fun `settlement for the previous attempt does not map after a new attempt is current`() {
+        val state = RemoteTranscriptPresentation()
+        val first = state.present(attempt = attempt("first", source)).single()
+        val second = state.present(
+            messages = listOf(terminal),
+            attempt = attempt("second", "next"),
+        ).last()
+        assertEquals("next", second.text)
+        assertNotEquals(first.key, second.key)
+
+        val rows = state.present(
+            messages = listOf(terminal),
+            attempt = attempt("second", "next"),
+            settlement = RemoteChatSettlement("first", terminal.seq),
+            visible = setOf(first.key),
+            followTail = false,
+        )
+        assertEquals(listOf("durable", second.key), rows.map { it.key })
+        assertTrue(rows.none { it.deferFormatting })
+
+        val secondTerminal = RemoteChatMessage("second-durable", 10, role = 2, status = 2, text = "Second answer")
+        val settled = state.present(
+            messages = listOf(terminal, secondTerminal),
+            settlement = RemoteChatSettlement("second", secondTerminal.seq),
+            visible = setOf(second.key),
+            followTail = false,
+        ).single { it.key == second.key }
+        assertTrue(settled.deferFormatting)
+    }
 }
