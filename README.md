@@ -81,6 +81,19 @@ npm run hooks:install   # git config core.hooksPath .githooks
 PR 同步不再触发——带着改动的那次 integration 推送会跑一遍，触发两次只是把同一套件跑两遍。本地钩子可以
 被 `--no-verify` 跳过，服务器上的这次不会。
 
+## 真实服务验收
+
+```sh
+npm run acceptance:real
+npm run acceptance:real -- --skip-pdf --skip-asr
+npm run acceptance:real -- --plan --skip-pdf --skip-asr
+```
+
+`acceptance:real` 是操作者显式发起的真实服务验收，不属于 `npm test` 或 CI。默认会调用当前组合的真实云模型、
+执行 PDF 扫描页路径，并调用 TTS/ASR 外部服务，需要相应凭据。`--skip-pdf --skip-asr` 只保留真实文字模型路径，
+不要求 `VOICE_API_KEY`，不调用 TTS/ASR；跳过的项目会记入报告的 `unexecuted`。`--plan` 只预览这些选择，
+不读取凭据、启动后端或调用服务。
+
 ## 跑后端
 
 ```sh
