@@ -283,10 +283,8 @@ class RemoteChatState(
         val record = load(selected)
         // The episode identity only answers "is anything owed"; session ids stay opaque.
         if (record.notificationEpisodeId == null || !record.notificationOwed) return null
-        // Presentation order is position, so the newest output is the greatest seq, not the last row.
         val preview = mutable.value.projection?.messages
-            ?.filter { it.role == 2 && it.seq <= record.consumedThrough }
-            ?.maxByOrNull { it.seq }?.text
+            ?.newestFairyOutput(record.consumedThrough)?.text
             ?.take(160)?.ifBlank { null } ?: "Fairy 已完成本次活动"
         return selected to preview
     }
@@ -422,19 +420,19 @@ class RemoteChatState(
      * a refused batch cannot move a row the reader already saw.
      */
     private fun mergeMessages(incoming: List<RemoteChatMessage>) {
-        val placeOf = mutableMapOf<String, Long>()
-        val holderOf = mutableMapOf<Long, String>()
+        val positionById = mutableMapOf<String, Long>()
+        val idByPosition = mutableMapOf<Long, String>()
         messages.values.forEach {
-            placeOf[it.messageId] = it.position
-            holderOf[it.position] = it.messageId
+            positionById[it.messageId] = it.position
+            idByPosition[it.position] = it.messageId
         }
         incoming.forEach { message ->
-            val place = placeOf[message.messageId]
-            require(place == null || place == message.position) { "同一消息的位置发生变化" }
-            val holder = holderOf[message.position]
-            require(holder == null || holder == message.messageId) { "两条消息占用了同一位置" }
-            placeOf[message.messageId] = message.position
-            holderOf[message.position] = message.messageId
+            val known = positionById[message.messageId]
+            require(known == null || known == message.position) { "同一消息的位置发生变化" }
+            val owner = idByPosition[message.position]
+            require(owner == null || owner == message.messageId) { "两条消息占用了同一位置" }
+            positionById[message.messageId] = message.position
+            idByPosition[message.position] = message.messageId
         }
         incoming.forEach { message ->
             val previous = messages[message.messageId]

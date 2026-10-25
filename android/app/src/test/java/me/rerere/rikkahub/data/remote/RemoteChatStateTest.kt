@@ -232,6 +232,20 @@ class RemoteChatStateTest {
         assertEquals(-1L, state.snapshot.value.consumedThrough)
     }
 
+    @Test fun `the newest Fairy output is the greatest seq, not the last row`() {
+        // Position orders the transcript, so a row that settled last can sit
+        // before the newest output. The reminder and the perf measurement ask
+        // this one question.
+        val messages = listOf(
+            RemoteChatMessage("newest", 0, 9, null, 2, 2, "newest"),
+            RemoteChatMessage("older", 1, 5, null, 2, 2, "older"),
+            RemoteChatMessage("user", 2, 10, "r1", 1, 2, "user"),
+        )
+        assertEquals("newest", messages.newestFairyOutput()?.text)
+        assertEquals("newest", messages.newestFairyOutput(9)?.text)
+        assertNull(messages.newestFairyOutput(4))
+    }
+
     @Test fun `a committed delivery and a still running attempt stay independent`() = runTest {
         // The delivery is the next event after the connection's fixed cut, so the
         // writer acknowledgement has to cover its sequence or the batch never settles.

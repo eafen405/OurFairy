@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import kotlinx.serialization.SerializationException
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -276,9 +277,15 @@ class RemoteChatApiTest {
             api.read(TOKEN, "s-1")
             fail("expected a message without a position to be refused")
         } catch (unreachable: IdentityUnreachable) {
-            // Both seq and messageId order the transcript differently from the
-            // backend's presentation order, so neither may stand in for position.
-            assertNotNull(unreachable.cause)
+            // The failure must name the missing field itself, not merely an
+            // unreadable document: seq and messageId order the transcript
+            // differently from the backend, so neither may stand in for position.
+            // Coroutine stack-trace recovery may copy the exception once, so
+            // the decode failure is found by walking the cause chain.
+            val naming = generateSequence(unreachable as Throwable?) { it.cause }
+                .filterIsInstance<SerializationException>()
+                .any { it.message?.contains("position") == true }
+            assertTrue("expected a decode failure naming position, got ${unreachable.cause}", naming)
         }
     }
 
