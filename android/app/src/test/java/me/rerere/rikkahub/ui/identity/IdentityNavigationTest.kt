@@ -7,6 +7,7 @@ import androidx.navigation3.runtime.serialization.NavKeySerializer
 import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.remote.AccountSession
+import me.rerere.rikkahub.data.remote.AgentSummary
 import me.rerere.rikkahub.data.remote.CredentialStore
 import me.rerere.rikkahub.data.remote.IdentityBackend
 import me.rerere.rikkahub.data.remote.IdentityRefused
@@ -70,6 +71,8 @@ class IdentityNavigationTest {
         override suspend fun createInvite(token: String): String = error("not used")
 
         override suspend fun session(token: String): IdentityUser = session()
+
+        override suspend fun agents(token: String): List<AgentSummary> = emptyList()
 
         override suspend fun signOut(token: String) = Unit
     }

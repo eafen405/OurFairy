@@ -53,6 +53,8 @@ class AccountSessionTest {
         override suspend fun session(token: String): IdentityUser =
             (answer(token.removePrefix("token-")) as SignedIn).user
 
+        override suspend fun agents(token: String): List<AgentSummary> = emptyList()
+
         override suspend fun signOut(token: String) {
             signedOut += token
         }

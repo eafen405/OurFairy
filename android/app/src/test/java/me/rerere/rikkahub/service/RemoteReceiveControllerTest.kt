@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import me.rerere.rikkahub.data.remote.AccountSession
+import me.rerere.rikkahub.data.remote.AgentSummary
 import me.rerere.rikkahub.data.remote.ChatHistoryPage
 import me.rerere.rikkahub.data.remote.ChatSyncKey
 import me.rerere.rikkahub.data.remote.ChatSyncRecord
@@ -91,6 +92,7 @@ class RemoteReceiveControllerTest {
         override suspend fun register(inviteCode: String, name: String, password: String) = error("not used")
         override suspend fun createInvite(token: String) = error("not used")
         override suspend fun session(token: String) = IdentityUser(1, "alice")
+        override suspend fun agents(token: String): List<AgentSummary> = emptyList()
         override suspend fun signOut(token: String) = Unit
     }
 

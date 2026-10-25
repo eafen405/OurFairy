@@ -188,6 +188,30 @@
 | --- | --- |
 | [222-fairy-console](222-fairy-console/README.md) | #222：Quiet 分组信息卡与 Signal Dock 次级入口；当前会话显示与导航同源，全部会话直接显示现有列表 |
 
+## 空会话唯一（#220）
+
+| 目录 | 内容 |
+| --- | --- |
+| [220-empty-session](220-empty-session/README.md) | #220：create 复用已存在的空会话（primary 优先，否则 createdAt 最新的空 ordinary）；日志没有消息事件即视为空，客户端生产代码零改动 |
+
+## 代理人名册（#219）
+
+| 目录 | 内容 |
+| --- | --- |
+| [219-agent-list](219-agent-list/README.md) | #219：只读 /identity/agents 仅返回用户编号与用户名；客户端设置页折叠组展示同行代理人，含自己 |
+
+## Fairy 动态内容边界（#221）
+
+| 目录 | 内容 |
+| --- | --- |
+| [221-content-boundary](221-content-boundary/README.md) | #221：眼屏展开时正文顶部随 350ms 进度让位 176dp；眼屏/HUD 绘制与收起态布局不变 |
+
+## 集成收口（#219/#220/#221）
+
+| 目录 | 内容 |
+| --- | --- |
+| [219-221-closeout](219-221-closeout/README.md) | #219/#220/#221 集成分支收口：两轴 review 修复（共享过渡常量、overlay 接缝与逐帧断言、AgentSummary 更名、#220 页面用例）、全量门禁、doctor 与 probe；真机未执行 |
+
 ## 界面微调（#215/#217/#218）
 
 | 目录 | 内容 |

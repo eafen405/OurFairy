@@ -23,6 +23,8 @@ credential that speak for them.
   `SessionHeader.owner`.
 - The `/identity/*` paths, their POST body/error envelope, and the
   `ourfairy-identity` authenticator Connection consults for a session token.
+- The `/identity/agents` roster: every live agent's short number and name, and
+  nothing else about them.
 
 ## Does not own
 

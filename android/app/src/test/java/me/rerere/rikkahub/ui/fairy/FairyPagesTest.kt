@@ -3,13 +3,16 @@ package me.rerere.rikkahub.ui.fairy
 import android.app.Application
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -35,6 +38,7 @@ import me.rerere.rikkahub.data.remote.*
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -51,10 +55,11 @@ import org.robolectric.annotation.GraphicsMode
 class FairyPagesTest {
     @get:Rule val compose = createComposeRule()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var user = IdentityUser(2, "代理人")
+    private var user = IdentityUser(2, "agent-two")
     private var listedSessions = OwnedSessions(
         listOf(OwnedSession("main", primary = true), OwnedSession("other")), "main",
     )
+    private var createdSession = OwnedSession("created")
     private val sessions = object : SessionBackend {
         override suspend fun list(token: String) = listedSessions
         override suspend fun read(token: String, sessionId: String): OwnedSession {
@@ -63,7 +68,7 @@ class FairyPagesTest {
         }
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun primary(token: String) = OwnedSession("main", primary = true)
-        override suspend fun create(token: String) = OwnedSession("created")
+        override suspend fun create(token: String) = createdSession
     }
     private val updates = mutableMapOf<String, MutableStateFlow<RemoteChatProjection>>()
     private val backend = object : RemoteChatBackend {
@@ -84,23 +89,31 @@ class FairyPagesTest {
     private val receive = RemoteReceiveState(sessions, scope, {
         RemoteChatState(backend, scope, store, "https://fairy.test")
     })
-    private val account = AccountSession(object : IdentityBackend {
+    private val identityBackend = object : IdentityBackend {
         override suspend fun session(token: String) = user
         override suspend fun signIn(name: String, password: String) = SignedIn("test", session("test"))
         override suspend fun register(inviteCode: String, name: String, password: String) = error("not used")
         override suspend fun createInvite(token: String) = error("not used")
+        override suspend fun agents(token: String): List<AgentSummary> = listOf(
+            AgentSummary(user.shortId, user.name),
+            AgentSummary(3, "agent-three"),
+        )
         override suspend fun signOut(token: String) = Unit
-    }, InMemoryCredentialStore("test"), receive::bindIdentity)
+    }
+    private val account = AccountSession(identityBackend, InMemoryCredentialStore("test"), receive::bindIdentity)
 
     @After fun close() { scope.cancel() }
 
-    private fun show(content: @Composable () -> Unit) {
+    private fun show(
+        reduceMotion: Boolean = true,
+        content: @Composable () -> Unit,
+    ) {
         compose.mainClock.autoAdvance = false
         runBlocking { account.restore() }
         compose.setContent {
             CompositionLocalProvider(LocalDisplayPreferences provides DisplayPreferences()) {
                 FairyAppTheme {
-                    ProvideAgoraMotionPolicy(appReduceMotion = true, content = content)
+                    ProvideAgoraMotionPolicy(appReduceMotion = reduceMotion, content = content)
                 }
             }
         }
@@ -227,10 +240,12 @@ class FairyPagesTest {
         show {
             when (destination) {
                 Screen.Home -> FairyConsolePage({ destination = it }, account, receive)
-                else -> FairySettingsPage({}, {}, account, onBack = { destination = Screen.Home })
+                else -> FairySettingsPage(
+                    {}, {}, account, backend = identityBackend, onBack = { destination = Screen.Home },
+                )
             }
         }
-        compose.onNodeWithText("代理人").assertIsDisplayed()
+        compose.onNodeWithText("agent-two").assertIsDisplayed()
         compose.onNodeWithText("#2").assertIsDisplayed()
         compose.onNodeWithText("AGENT").assertIsDisplayed()
         compose.onNodeWithText("main").assertIsDisplayed()
@@ -240,6 +255,25 @@ class FairyPagesTest {
         compose.onNodeWithText("账号").assertIsDisplayed()
         compose.onNodeWithText("退出登录").assertIsDisplayed()
         screenshot("settings")
+    }
+
+    @Test fun `settings shows the other agents' names when their group is opened`() {
+        show { FairySettingsPage({}, {}, account, backend = identityBackend, onBack = {}) }
+        compose.mainClock.autoAdvance = true
+
+        // The account group opens first and already reads "代理人" as the role,
+        // so close it before the roster title is the one node carrying that text.
+        compose.onNodeWithText("账号").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("代理人").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("agent-two").assertIsDisplayed()
+        compose.onNodeWithText("agent-three").assertIsDisplayed()
+        // Summary only: the roster shows names, never the short numbers.
+        compose.onNodeWithText("#2").assertDoesNotExist()
+        compose.onNodeWithText("#3").assertDoesNotExist()
+        screenshot("agents")
     }
 
     private fun conversation(initial: String = "main") {
@@ -297,6 +331,36 @@ class FairyPagesTest {
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
     }
 
+    @Test fun `creating an existing empty conversation enters it without adding a row`() {
+        createdSession = OwnedSession("other")
+        var target by mutableStateOf("main")
+        show {
+            FairyConversationPage(target, {}, receive,
+                onOpenConversation = { target = it }, onSettings = {})
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.onNodeWithContentDescription("切换会话").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("新建会话").performClick()
+        compose.mainClock.advanceTimeBy(600)
+        compose.runOnIdle {
+            val snapshot = receive.owned.snapshot.value
+            assertEquals("other", snapshot.selectedId)
+            assertEquals("main", snapshot.primarySessionId)
+            assertEquals(2, snapshot.sessions.size)
+            assertTrue(
+                "新建会话应复用已存在的空会话，实际多出了 ${snapshot.sessions.map { it.id }}",
+                snapshot.sessions.none { it.id == "created" },
+            )
+            assertEquals("other", target)
+        }
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
+        compose.onNodeWithText("会话不可用").assertDoesNotExist()
+        compose.onNodeWithContentDescription("切换会话").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onAllNodesWithText("other").assertCountEquals(1)
+    }
+
     @Test fun `unavailable restored conversation offers another session`() {
         conversation("missing")
         compose.onNodeWithText("会话不可用").assertIsDisplayed()
@@ -315,8 +379,10 @@ class FairyPagesTest {
             activity = RemoteActivity(1),
         ))
         conversation()
+        val viewportNode = compose.onNodeWithTag("conversation-messages")
         val before = compose.onNodeWithContentDescription("发送消息").fetchSemanticsNode().boundsInRoot
-        val viewport = compose.onNodeWithTag("conversation-messages").fetchSemanticsNode().boundsInRoot
+        val viewport = viewportNode.fetchSemanticsNode().boundsInRoot
+        val density = viewportNode.fetchSemanticsNode().layoutInfo.density.density
         screenshot("conversation")
         compose.runOnIdle {
             val stream = updates.getValue("main")
@@ -325,15 +391,86 @@ class FairyPagesTest {
         compose.mainClock.advanceTimeBy(600)
         compose.onNodeWithText("正在思考…").assertIsDisplayed()
         val during = compose.onNodeWithContentDescription("停止回复").fetchSemanticsNode().boundsInRoot
+        val after = viewportNode.fetchSemanticsNode().boundsInRoot
+        val overlay = compose.onNodeWithTag("fairy-screen-overlay").fetchSemanticsNode().boundsInRoot
         assertEquals(before.top, during.top)
-        assertEquals(viewport, compose.onNodeWithTag("conversation-messages").fetchSemanticsNode().boundsInRoot)
+        assertEquals(viewport.bottom, after.bottom)
+        assertEquals(FairyScreenOpenHeight.value * density, after.top - viewport.top, 0.5f)
+        val firstMessage = compose.onNodeWithText("你好，Fairy").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "第一条消息 top ${firstMessage.top}px 应不低于展开眼屏下沿 ${overlay.bottom}px",
+            firstMessage.top >= overlay.bottom,
+        )
         screenshot("thinking")
         compose.runOnIdle {
             val stream = updates.getValue("main")
             stream.value = stream.value.copy(version = 2, replyStatus = 0, activity = RemoteActivity(1))
         }
-        compose.mainClock.advanceTimeBy(600)
+        compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithText("正在思考…").assertDoesNotExist()
+        assertEquals(viewport, viewportNode.fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test fun `empty conversation keeps the empty hint below the open screen`() {
+        updates["main"] = MutableStateFlow(RemoteChatProjection(
+            sessionId = "main", cursor = 0, durableThroughSeq = 0,
+            events = eventCoverage(0, 0),
+            activity = RemoteActivity(1),
+        ))
+        conversation()
+        val overlay = compose.onNodeWithTag("fairy-screen-overlay").fetchSemanticsNode().boundsInRoot
+        val hint = compose.onNodeWithText("此会话还没有消息。").fetchSemanticsNode()
+        val top = hint.boundsInRoot.top
+        assertTrue(
+            "空会话提示 top ${top}px 应不低于展开眼屏下沿 ${overlay.bottom}px",
+            top >= overlay.bottom,
+        )
+    }
+
+    @Test fun `content stays below the eye screen while it opens`() {
+        updates["main"] = MutableStateFlow(RemoteChatProjection(
+            sessionId = "main", cursor = 0, durableThroughSeq = 0,
+            events = eventCoverage(0, 0),
+            messages = listOf(RemoteChatMessage("history", 0, role = 1, status = 2, text = "你好，Fairy")),
+            activity = RemoteActivity(1),
+        ))
+        var policy: AgoraMotionPolicy? = null
+        var target by mutableStateOf("main")
+        show(reduceMotion = false) {
+            val resolved = LocalAgoraMotionPolicy.current
+            SideEffect { policy = resolved }
+            FairyConversationPage(target, {}, receive,
+                onOpenConversation = { target = it }, onSettings = {})
+        }
+        assertFalse("该用例必须在允许空间动效的策略下运行", policy!!.reduceMotion)
+        val density = compose.onNodeWithTag("conversation-messages")
+            .fetchSemanticsNode().layoutInfo.density.density
+        compose.runOnIdle {
+            val stream = updates.getValue("main")
+            stream.value = stream.value.copy(version = 1, replyStatus = 1, activity = RemoteActivity(2, listOf(1)))
+        }
+        var observed = 0
+        val overlayHeights = mutableListOf<Float>()
+        for (frame in 1..25) {
+            compose.mainClock.advanceTimeBy(16)
+            val overlay = compose.onAllNodesWithTag("fairy-screen-overlay").fetchSemanticsNodes().firstOrNull()
+                ?: continue
+            observed += 1
+            overlayHeights += overlay.boundsInRoot.height
+            val overlayBottom = overlay.boundsInRoot.bottom
+            val messageTop = compose.onNodeWithText("你好，Fairy").fetchSemanticsNode().boundsInRoot.top
+            assertTrue(
+                "第 ${frame * 16}ms 帧：第一条消息 top ${messageTop}px 应不低于展开眼屏下沿 ${overlayBottom}px",
+                messageTop >= overlayBottom - density,
+            )
+        }
+        assertTrue("过渡期间应至少有一帧看到展开的眼屏", observed > 0)
+        val open = FairyScreenOpenHeight.value * density
+        assertTrue(
+            "过渡期间应采到中间帧，实际高度 ${overlayHeights.map { it / density }}dp",
+            overlayHeights.any { it > 0f && it < open - 1f },
+        )
+        assertEquals(open, compose.onNodeWithTag("fairy-screen-overlay").fetchSemanticsNode().boundsInRoot.height, 1f)
     }
 
     @Test

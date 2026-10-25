@@ -243,4 +243,31 @@ class OwnedSessionStateTest {
         assertEquals("new-alice", state.snapshot.value.selectedId)
         assertEquals(listOf("s-alice", "new-alice"), state.snapshot.value.sessions.map { it.id })
     }
+
+    @Test
+    fun `create that returns a listed empty session neither adds a row nor moves main`() = runTest {
+        val listed = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
+        val empty = OwnedSession(id = "s-empty", owner = "user:alice")
+        val backend = object : SessionBackend {
+            override suspend fun list(token: String) = OwnedSessions(listOf(listed, empty), "s-alice")
+            override suspend fun create(token: String) = empty
+            override suspend fun select(token: String, sessionId: String) = empty
+            override suspend fun primary(token: String) = listed
+            override suspend fun read(token: String, sessionId: String) = empty
+        }
+        val state = OwnedSessionState(backend, this)
+
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        assertEquals(listOf("s-alice", "s-empty"), state.snapshot.value.sessions.map { it.id })
+
+        // #220: the backend answers create with the empty session it already
+        // listed, so the page must stand in it without a second row.
+        state.create()
+        advanceUntilIdle()
+        assertEquals(listOf("s-alice", "s-empty"), state.snapshot.value.sessions.map { it.id })
+        assertEquals("s-empty", state.snapshot.value.selectedId)
+        assertEquals("s-alice", state.snapshot.value.primarySessionId)
+    }
 }

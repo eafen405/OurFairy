@@ -175,6 +175,12 @@ export type PublicUser = {
   createdAt: number
 }
 
+/** One live agent's summary as the roster exposes it: only the short number and the name. */
+export type AgentSummary = {
+  shortId: number
+  name: string
+}
+
 /**
  * One file a delivery names: the selector it points at and the prepared row,
  * if any. Both are the delivery package's own JSON; the store carries them
@@ -699,6 +705,13 @@ export class IdentityStore {
   userByShortId(shortId: number): PublicUser | undefined {
     const row = rowOf<UserRow>(this.#db.prepare('SELECT * FROM users WHERE short_id = ? AND deleted_at IS NULL').get(Number(shortId)))
     return row === undefined ? undefined : publicUser(row)
+  }
+
+  /** Every live agent, in short-number order, for the read-only roster. */
+  listAgents(): AgentSummary[] {
+    return rowsOf<{ short_id: number; name: string }>(
+      this.#db.prepare('SELECT short_id, name FROM users WHERE deleted_at IS NULL ORDER BY short_id').all(),
+    ).map(row => ({ shortId: row.short_id, name: row.name }))
   }
 
   /** Mint one invite code for an administrator. */

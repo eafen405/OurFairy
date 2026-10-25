@@ -1,0 +1,11 @@
+{
+  "title": "集成收口（#219/#220/#221）",
+  "entries": [
+    {
+      "dirs": [
+        "219-221-closeout"
+      ],
+      "note": "#219/#220/#221 集成分支收口：两轴 review 修复（共享过渡常量、overlay 接缝与逐帧断言、AgentSummary 更名、#220 页面用例）、全量门禁、doctor 与 probe；真机未执行"
+    }
+  ]
+}

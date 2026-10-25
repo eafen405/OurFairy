@@ -1,0 +1,11 @@
+{
+  "title": "Fairy 动态内容边界（#221）",
+  "entries": [
+    {
+      "dirs": [
+        "221-content-boundary"
+      ],
+      "note": "#221：眼屏展开时正文顶部随 350ms 进度让位 176dp；眼屏/HUD 绘制与收起态布局不变"
+    }
+  ]
+}

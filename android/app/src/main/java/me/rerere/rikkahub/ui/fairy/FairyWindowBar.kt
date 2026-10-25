@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
@@ -56,7 +57,26 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 
 /** Window-bar content height below the status bar inset. */
-val FairyWindowBarHeight = 60.dp
+internal val FairyWindowBarHeight = 60.dp
+
+/** Inset between the window bar and the opened eye screen. */
+private val FairyScreenTopPadding = 12.dp
+
+/** Height of the opened eye screen. */
+private val FairyScreenHeight = 140.dp
+
+/** Inset below the opened eye screen, where its backdrop fades out. */
+private val FairyScreenBottomPadding = 24.dp
+
+/** Height the opened eye screen covers below [FairyWindowBarHeight]. */
+internal val FairyScreenOpenHeight =
+    FairyScreenTopPadding + FairyScreenHeight + FairyScreenBottomPadding
+
+/**
+ * Duration of the window bar's open/close transition, shared with the
+ * conversation content inset so both move together.
+ */
+internal const val FAIRY_SCREEN_TRANSITION_MS = 350
 
 /** Grace period before a finished response folds the screen back. */
 private const val RESPONSE_COLLAPSE_DELAY_MS = 500L
@@ -66,7 +86,7 @@ private const val RESPONSE_COLLAPSE_DELAY_MS = 500L
  * period after, so a brief status flicker does not fold the screen.
  */
 @Composable
-private fun rememberFairyResponding(awaitingReply: Boolean): Boolean {
+internal fun rememberFairyResponding(awaitingReply: Boolean): Boolean {
     var responding by remember { mutableStateOf(awaitingReply) }
     LaunchedEffect(awaitingReply) {
         if (awaitingReply) {
@@ -80,15 +100,24 @@ private fun rememberFairyResponding(awaitingReply: Boolean): Boolean {
 }
 
 /**
+ * True while the window's eye screen is open: an empty session, or while Fairy
+ * analyzes before her reply shows text (plus the grace period). The window bar
+ * and the conversation's content inset both read this one value.
+ */
+@Composable
+internal fun rememberFairyScreenOpen(window: FairyWindowState): Boolean =
+    window.expanded || rememberFairyResponding(window.awaitingReply)
+
+/**
  * Fairy's window bar: an opaque bgTop strip with a 1 dp hairline bottom edge
  * (content never shows through), holding back arrow, the 64x44 dp mini
  * screen, the Fairy nameplate with a slanted status subtitle, and the
  * frameless more menu. The screen opens below the bar at full width (16 dp
  * margins, 140 dp high, 88 dp eye, HUD overlay) while
  * [FairyWindowState.expanded] (empty session) or while Fairy analyzes before
- * her reply shows text (see [rememberFairyResponding]). It floats over the message
- * list on an opaque backdrop that fades out below it, and folds back over
- * 350 ms; Reduced Motion switches instantly.
+ * her reply shows text (see [rememberFairyScreenOpen]). It floats over the message
+ * list on an opaque backdrop that fades out below it, and folds back with the
+ * same [FAIRY_SCREEN_TRANSITION_MS]; Reduced Motion switches instantly.
  */
 @Composable
 fun FairyWindowTopBar(
@@ -96,6 +125,7 @@ fun FairyWindowTopBar(
     subtitle: String?,
     subtitleLeading: (@Composable () -> Unit)? = null,
     subtitleTag: String? = null,
+    screenOpen: Boolean = rememberFairyScreenOpen(window),
     onNavigateBack: () -> Unit,
     moreMenuContent: (@Composable ColumnScope.(dismiss: () -> Unit) -> Unit)? = null,
     onOpenSessions: (() -> Unit)? = null,
@@ -103,10 +133,8 @@ fun FairyWindowTopBar(
     val tokens = LocalFairyTokens.current
     val allowSpatial = LocalAgoraMotionPolicy.current.allowSpatialTransitions
     var moreMenuOpen by remember { mutableStateOf(false) }
-    val windowSpec = tween<IntSize>(350, easing = FastOutSlowInEasing)
-    val fadeSpec = tween<Float>(350, easing = FastOutSlowInEasing)
-    val responding = rememberFairyResponding(window.awaitingReply)
-    val screenOpen = window.expanded || responding
+    val windowSpec = tween<IntSize>(FAIRY_SCREEN_TRANSITION_MS, easing = FastOutSlowInEasing)
+    val fadeSpec = tween<Float>(FAIRY_SCREEN_TRANSITION_MS, easing = FastOutSlowInEasing)
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
@@ -222,6 +250,7 @@ fun FairyWindowTopBar(
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = screenOpen,
+            modifier = Modifier.testTag("fairy-screen-overlay"),
             enter = if (allowSpatial) fadeIn(fadeSpec) + expandVertically(windowSpec) else EnterTransition.None,
             exit = if (allowSpatial) fadeOut(fadeSpec) + shrinkVertically(windowSpec) else ExitTransition.None,
         ) {
@@ -243,9 +272,14 @@ fun FairyWindowTopBar(
                     hud = true,
                     eye = window.eye,
                     modifier = Modifier
-                        .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp)
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = FairyScreenTopPadding,
+                            bottom = FairyScreenBottomPadding,
+                        )
                         .fillMaxWidth()
-                        .height(140.dp),
+                        .height(FairyScreenHeight),
                 )
             }
         }

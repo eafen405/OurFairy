@@ -248,8 +248,11 @@ async function activityObserver(user, sessionId) {
 
 test('two sessions stay independent and real job settlement never publishes an intermediate quiet episode', async () => {
   const first = (await request('/sessions/create', alice.token)).session.id
-  const second = (await request('/sessions/create', alice.token)).session.id
+  // The job's user message makes the first session non-empty, so the second
+  // create is a genuinely different session rather than the reusable empty one.
   await startJob(alice, first, 'sleep .8; printf done')
+  const second = (await request('/sessions/create', alice.token)).session.id
+  assert.notEqual(second, first, 'a session with content is not reused as the second session')
   const observation = await activityObserver(alice, first)
   try {
     await until(async () => observation.frames, frames => frames.length > 0, 'activity observer opened')

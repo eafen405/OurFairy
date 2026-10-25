@@ -21,6 +21,22 @@ async function request(path, token, body = {}, headers = {}) {
 }
 function user(name) { return registerUser(port, admin.token, name, password) }
 async function session(user) { return (await request('/sessions/create', user.token)).body.session.id }
+let seedSerial = 0
+/**
+ * Give one session a message, so the next create is a new session instead of
+ * the reusable empty one.
+ */
+async function seed(user, sessionId) {
+  const sent = await request('/chat/send', user.token, { sessionId, requestId: `attachment-seed-${++seedSerial}`, text: 'seed' })
+  assert.equal(sent.status, 200, JSON.stringify(sent))
+  const until = Date.now() + 15000
+  do {
+    const read = await request('/chat/read', user.token, { sessionId })
+    if (read.body.projection?.replyStatus === 0 && read.body.projection.messages.some(message => message.role === 2)) return
+    await new Promise(resolve => setTimeout(resolve, 25))
+  } while (Date.now() < until)
+  assert.fail('the seed message did not settle')
+}
 async function propose(user, sessionId, bytes, name = 'notes.txt', mime = 'text/plain') {
   const result = await request('/attachments/propose', user.token, { sessionId, name, mime, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') })
   assert.equal(result.status, 200, JSON.stringify(result)); return result.body.upload
@@ -81,7 +97,10 @@ test('a malformed upload ID list is refused as a bad request before any session 
 })
 
 test('unfinished and foreign receipts never grant message or download access, including identical stored bytes', async () => {
-  const aliceId = await session(alice), aliceOther = await session(alice), bobId = await session(bob)
+  const aliceId = await session(alice)
+  await seed(alice, aliceId)
+  const aliceOther = await session(alice), bobId = await session(bob)
+  assert.notEqual(aliceOther, aliceId, 'a session with content is not reused as the other session')
   const bytes = Buffer.from('same hash gives no authority')
   const pending = await propose(alice, aliceId, bytes)
   assert.equal((await request('/attachments/complete', alice.token, { uploadId: pending.uploadId })).status, 409)
@@ -202,10 +221,13 @@ async function tool(who, sessionId, name, args, uploadIds = []) {
 }
 test('native model file handles permit real read and sandboxed scripts only in the admitted session and stay readonly', async () => {
   await stop(); await model.close(); model = await startToolModel(); await start()
-  const aliceId = await session(alice), bobId = await session(bob), otherId = await session(alice)
+  const aliceId = await session(alice), bobId = await session(bob)
   const bytes = Buffer.from('REAL_ATTACHMENT_CONTENT_私密\n')
   const receipt = await upload(alice, aliceId, bytes, 'private.txt', 'text/plain')
   assert.match(await tool(alice, aliceId, 'read', { file_path: '$INPUT' }, [receipt.uploadId]), /REAL_ATTACHMENT_CONTENT_私密/)
+  // aliceId now has content, so this second session is genuinely different.
+  const otherId = await session(alice)
+  assert.notEqual(otherId, aliceId, 'a session with content is not reused as the other session')
   const bodyText = model.requests.flatMap(item => item.body.messages).flatMap(messageBlocks).filter(c => c.type === 'text').map(c => c.text).join('\n')
   const handle = bodyText.match(/read-only copy saved at ("(?:[^"\\]|\\.)*")/)
   assert.ok(handle, 'actual provider text must contain a usable file handle')
