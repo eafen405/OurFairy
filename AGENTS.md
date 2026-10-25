@@ -22,7 +22,7 @@
 
 ### 编码标准
 
-编写或审查代码时读 `CODING_STANDARDS.md`；实施或交付证据时从 `work/implementation/CONVENTIONS.md` 进入（协作、证据与版本组合协议），按指针读取当前任务所需内容。
+编写或审查代码时读 `CODING_STANDARDS.md`；实施与收尾时从 `work/implementation/CONVENTIONS.md` 进入（协作、证据与版本组合协议），按指针读取当前任务所需内容。
 
 ### 验证节奏
 

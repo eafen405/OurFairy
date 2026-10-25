@@ -49,7 +49,7 @@ git -C /home/eafen405/projects/deepseek-harness worktree add \
 - **合并前**再把集成分支 tip 合进自己的票分支，解决冲突后报告，不要等 Lead 替你解冲突。
 - 每张票只写自己声明过的写范围；跨票公共文件由 Lead 协调。
 - 完成后由 Lead 指定的 merger 把票分支合入对应集成分支，并更新 `combo.json`。
-- worktree 任务结束后由 Lead 清理；不要自行 `git worktree remove` 别人的。
+- **收尾即清场。** 任务结束或交接前，本轮执行者清理自己创建的临时 worktree、已合入本地分支、临时产物和后台任务；交付前确认 `git status --porcelain` 为空、`git worktree list` 无本轮遗留。未提交或未合入内容用 stash 或分支明确保留，不为清场硬合并或丢弃。不要动其他人的 worktree。
 
 ## 3. 工具链
 
