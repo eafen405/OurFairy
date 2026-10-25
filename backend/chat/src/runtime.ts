@@ -106,6 +106,17 @@ export interface ChatProjection {
   readonly error: string | null | undefined
 }
 
+/** One page of a session's durable history at a fixed cut. */
+export interface ChatPage {
+  readonly sessionId: SessionId
+  readonly throughSeq: number
+  readonly fromSeq: number
+  readonly beforeSeq: number | null
+  readonly hasMore: boolean
+  readonly events: SessionEvent[]
+  readonly messages: WireMessage[]
+}
+
 /**
  * One live chat session: the resumed native Agent plus the live inputs a
  * projection adds to the native Session events. Derived runtime state only.
@@ -351,7 +362,7 @@ export class SessionRuntime {
    * is an array slice; otherwise the native read handle returns exactly the
    * requested range. Paging never reads the whole log.
    */
-  async pageEvents(state: LiveSession, fromSeq: number, end: number) {
+  async #pageEvents(state: LiveSession, fromSeq: number, end: number) {
     const seeded = state.window?.events
     if (seeded != null) return seeded.slice(fromSeq, end)
     const handle = await this.ctx.sessionPersistence.open(state.sessionId, 'read')
@@ -475,7 +486,7 @@ export class SessionRuntime {
    * The committed cut this live session can serve. A seeded window is the
    * observed authority; before the first read the session's own sequence is.
    */
-  cursorOf(state: LiveSession) {
+  #cursorOf(state: LiveSession) {
     const events = state.window?.events
     if (events != null) return events.at(-1)?.seq ?? -1
     return state.session.seq - 1
@@ -489,7 +500,7 @@ export class SessionRuntime {
   async projection(state: LiveSession, range: ProjectionRange): Promise<ChatProjection> {
     const window = await this.#windowOf(state)
     const attempt = this.attemptOf(state)
-    const cursor = this.cursorOf(state)
+    const cursor = this.#cursorOf(state)
     const throughSeq = range.throughSeq ?? cursor
     const fromSeq = range.fromSeq ?? Math.max(0, throughSeq - range.maxEvents + 1)
     // One observer retains only its opening tail plus all later formal events.
@@ -507,6 +518,32 @@ export class SessionRuntime {
       attempt,
       settledAttempt: state.settledAttempt,
       replyStatus: state.status === 'idle' ? 0 : state.stopping ? 2 : 1, error: state.error }
+  }
+
+  /**
+   * One page at the caller's fixed cut.
+   *
+   * The cut is dynamic in one direction only: a `throughSeq` beyond the current
+   * cursor names history that does not exist yet and is refused with `null`.
+   * Every cut within the cursor returns a normal page, including one whose
+   * `beforeSeq` ends the range before the first event. The event slice and the
+   * message rows are selected at the same fixed cut, so a retry after later
+   * commits returns the same content.
+   * @param state - the opened live session.
+   * @param throughSeq - the inclusive history cut, already validated.
+   * @param beforeSeq - the exclusive lower bound, already validated.
+   * @param maxEvents - how many events the page keeps, already validated.
+   * @returns the page, or null when throughSeq is beyond the current cursor.
+   */
+  async page(state: LiveSession, throughSeq: number, beforeSeq: number, maxEvents: number): Promise<ChatPage | null> {
+    if (throughSeq > this.#cursorOf(state)) return null
+    const end = Math.min(throughSeq + 1, beforeSeq)
+    const fromSeq = Math.max(0, end - maxEvents)
+    const events = await this.#pageEvents(state, fromSeq, end)
+    return { sessionId: state.sessionId, throughSeq, fromSeq, beforeSeq: fromSeq > 0 ? fromSeq : null,
+      hasMore: fromSeq > 0, events,
+      messages: transcriptAt(this.unitState(state, transcriptDefinition), throughSeq, fromSeq)
+        .filter(message => message.seq < end) }
   }
 
   /** Register one observer after its initial barrier; returns the unsubscribe. */

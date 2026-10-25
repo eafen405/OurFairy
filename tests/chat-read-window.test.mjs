@@ -3,178 +3,23 @@
  * one event window seeded once and then advanced by committed events, and one
  * per-observer slice plus a live overlay.
  *
- * This drives `SessionRuntime` directly over a fake native Agent context. The
- * fake records every `observeSession` read, so the behavior under test is
- * observable at the seam the endpoints use: a streaming fragment must not read
- * the log, and a second observer must not pay for its own seed. The unit
- * definitions are the real ones from `units.mjs`; the fake registry applies
- * them eagerly on append, exactly where the native registry drives them. The
- * end-to-end wire behavior is asserted separately by the real-launcher suites.
+ * This drives `SessionRuntime` directly over the shared fake native world in
+ * `./helpers/chat-world.mjs`, which loads `backend/chat/dist/units.js` and
+ * `backend/chat/dist/runtime.js`; the commit gate selects this suite by that
+ * package path. That world records every `observeSession` read,
+ * so the behavior under test is observable at the seam the endpoints use: a
+ * streaming fragment must not read the log, and a second observer must not pay
+ * for its own seed. The unit definitions are the real ones from `units.mjs`;
+ * the fake registry applies them eagerly on append, exactly where the native
+ * registry drives them. The end-to-end wire behavior is asserted separately by
+ * the real-launcher suites.
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 // Registers Node resolution for the pinned dsh checkout before any product
 // module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
-
-const units = await import('../backend/chat/dist/units.js')
-const { SessionRuntime } = await import('../backend/chat/dist/runtime.js')
-
-const OWNER = { shortId: 1 }
-const SESSION = 'session-1'
-
-const userMessage = (id, text, rpcId) => ({ id, role: 'user', content: [{ type: 'text', text }],
-  source: { kind: 'user', rpcId } })
-const assistantMessage = (id, text) => ({ id, role: 'assistant', content: [{ type: 'text', text }], source: { kind: 'model' } })
-const job = (overrides = {}) => ({ id: 'job-1', owner: SESSION, kind: 'task', label: 'work', status: 'running',
-  startedAt: 10, output: { earliest: 0, total: 0 }, ...overrides })
-
-const tick = () => new Promise(resolve => setTimeout(resolve, 0))
-
-function deferred() {
-  let resolve
-  const promise = new Promise(settle => { resolve = settle })
-  return { promise, resolve }
-}
-
-/** The native Agent's scoped context, with only the surfaces the runtime uses. */
-function makeChannel() {
-  const handlers = new Map()
-  const api = {
-    systemPrompt: { section() {} },
-    on(name, handler) {
-      const list = handlers.get(name) ?? []
-      list.push(handler)
-      handlers.set(name, list)
-      return () => handlers.set(name, list.filter(item => item !== handler))
-    },
-    emit(name, ...args) { for (const handler of handlers.get(name) ?? []) handler(...args) },
-  }
-  return { api }
-}
-
-/**
- * A fake host: one Session per id, a registry that applies the real units
- * eagerly, and a counted `observeSession` read.
- */
-function makeWorld() {
-  const sessions = new Map()
-  const channels = new Map()
-  const reads = []
-  let liveJobs = []
-  let gate = null
-
-  function sessionOf(id = SESSION) {
-    let session = sessions.get(id)
-    if (session === undefined) {
-      session = {
-        id, seq: 0, events: [], header: { id, version: 4, createdAt: 1, isSeeded: false }, inheritedEventCount: 0, states: {},
-        append(type, data, extra = {}) {
-          const event = { seq: this.seq, type, time: this.seq, data, ...extra }
-          this.seq += 1
-          this.events.push(event)
-          for (const definition of [units.transcriptDefinition, units.workDefinition]) {
-            this.states[definition.key] = definition.apply(this.states[definition.key], event)
-          }
-          channels.get(this.id)?.api.emit('session/event', this, event)
-          return event
-        },
-      }
-      session.states[units.transcriptDefinition.key] = units.transcriptDefinition.init(session.header, 0)
-      session.states[units.workDefinition.key] = units.workDefinition.init(session.header, 0)
-      sessions.set(id, session)
-    }
-    return session
-  }
-
-  const listeners = new Map()
-  const emitGlobal = (name, payload) => {
-    for (const handler of listeners.get(name) ?? []) handler(payload)
-  }
-  const ctx = {
-    // The native history seam observes agent frames through the host context.
-    on(name, handler) {
-      const list = listeners.get(name) ?? []
-      list.push(handler)
-      listeners.set(name, list)
-      return () => listeners.set(name, list.filter(item => item !== handler))
-    },
-    effect(execute) { return execute() },
-    ourfairySessions: { async read() {} },
-    agentDefaultModel: { currentSelection: () => ({ provider: 'mock', model: 'mock' }) },
-    agents: {
-      async resume({ resumeSessionId, setup }) {
-        const session = sessionOf(resumeSessionId)
-        const channel = makeChannel()
-        const agent = { id: resumeSessionId, session, status: 'idle', followups: [], cancelled: false,
-          followup(message) { this.followups.push(message) },
-          cancel() { this.cancelled = true } }
-        setup(channel.api, agent)
-        const emit = channel.api.emit.bind(channel.api)
-        channel.api.emit = (name, ...args) => {
-          emit(name, ...args)
-          if (name === 'agent/assistant-stream') emitGlobal(name, { agent, frame: args[0].frame })
-          if (name === 'agent/disposed') emitGlobal(name, { agent })
-        }
-        channels.set(resumeSessionId, channel)
-        return agent
-      },
-    },
-    sessionQuery: {
-      async observeSession(id) {
-        reads.push(id)
-        const session = sessionOf(id)
-        // Snapshot after a delayed gate so the seed can see an event that also
-        // reached the buffer; the merge must drop that duplicate.
-        if (gate !== null) await gate.promise
-        gate = null
-        const cut = session.seq
-        const events = session.events.slice(0, cut)
-        return { events, cursor: cut - 1, [Symbol.dispose]() {} }
-      },
-    },
-    sessions: { async flush() {} },
-    sessionProjections: { stateOf: (session, key) => session.states[key] },
-    jobs: { generation: 'g1', list: () => liveJobs },
-  }
-
-  return {
-    ctx, session: sessionOf, reads,
-    channel: id => channels.get(id),
-    setLiveJobs(jobs) { liveJobs = jobs },
-    /** Make the next observation read wait until `releaseRead`, exposing the seed race. */
-    delayNextRead() { gate = deferred() },
-    releaseRead() { gate?.resolve() },
-  }
-}
-
-/** Open the runtime on a world that already holds `events` in its log. */
-async function openWorld(world, sessionId = SESSION) {
-  const runtime = new SessionRuntime(world.ctx)
-  const state = await runtime.open(OWNER, sessionId)
-  return { runtime, state }
-}
-
-/** Dense revision/index counters per attempt: the native fold rejects a repeat. */
-const streamCursors = new Map()
-function startStream(world, attemptId = 'attempt-1') {
-  streamCursors.set(attemptId, { revision: 1, nextIndex: 0 })
-  world.channel(SESSION).api.emit('agent/assistant-stream', { frame: { type: 'start', attemptId, revision: 1, turn: 1, step: 1 } })
-}
-function chunkStream(world, text, attemptId = 'attempt-1') {
-  const cursor = streamCursors.get(attemptId) ?? { revision: 1, nextIndex: 0 }
-  cursor.revision += 1
-  const index = cursor.nextIndex
-  cursor.nextIndex += 1
-  streamCursors.set(attemptId, cursor)
-  world.channel(SESSION).api.emit('agent/assistant-stream', { frame: { type: 'chunk', attemptId, revision: cursor.revision, index, time: 0,
-    chunk: { type: 'text-delta', index, text } } })
-}
-function endStream(world, seq, attemptId = 'attempt-1') {
-  const cursor = streamCursors.get(attemptId) ?? { revision: 1, nextIndex: 0 }
-  world.channel(SESSION).api.emit('agent/assistant-stream', { frame: { type: 'end', attemptId, revision: cursor.revision + 1, index: 0,
-    outcome: { kind: 'committed', eventType: 'assistant/message', seq } } })
-}
+import { SESSION, assistantMessage, chunkStream, endStream, job, makeWorld, openWorld, startStream, tick, userMessage } from './helpers/chat-world.mjs'
 
 test('one seed serves every observer and streaming fragments never reread the log', async () => {
   const world = makeWorld()
