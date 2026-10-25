@@ -16,8 +16,8 @@
   `Object.hasOwn(state.rows, taskId)`，`__proto__` / `constructor` 一类继承名不会伪造任务。
 - `backend/chat/src/runtime.ts`：新增 `SessionRuntime.taskOf(state, taskId)`；直接读 work
   projection unit state 与 `ctx.jobs` 原生注册表，不调用 `projection`，因此不初始化事件 window
-  （全部用例在 `sessionQuery.observeSession` 替身处断言 0 次读取）。非字符串与不存在的 id
-  返回 `null`。
+  （除同源比较用例先 seed 一次列表投影外，各用例在 `sessionQuery.observeSession` 替身处断言
+  0 次读取；比较用例再断言查找不新增读取）。非字符串与不存在的 id 返回 `null`。
 - `backend/chat/src/jobs.ts`：`jobOutput` / `jobStop` 改用 `runtime.taskOf` 与返回的原生 `JobId`
   调用 `ctx.jobs.readAt` / `get` / `kill`；删除按 generation 长度切割产品 taskId 的逻辑，不再
   为找一个任务构造整份会话投影。404、不可用输出形状（`availability: 0`、空 `chunks`、既有
@@ -59,8 +59,9 @@
   降级 6 与 availability；列表投影 seed 后查找不新增 `observeSession` 读取。
 - 字段级降级：可用/不可用两种状态下 `status`、`availability`、`report.status` 逐字段断言
   （含报告降级 6）。
-- 全部用例在 `sessionQuery.observeSession` 替身处断言 `world.reads.length === 0`，不以
-  `state.window` 作证据；同源比较用例断言列表投影的 1 次 seed 之后查找不增加读取。
+- 除同源比较用例外，全部用例在 `sessionQuery.observeSession` 替身处断言
+  `world.reads.length === 0`，不以 `state.window` 作证据；同源比较用例先经列表投影 seed 一次，
+  再断言查找不新增读取。
 
 ## red-green 与命令结果
 

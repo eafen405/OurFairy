@@ -53,12 +53,12 @@ T2 [#227](https://github.com/eafen405/OurFairy/issues/227)）。
 | ID 10 | 查找只有 `null` / `task` + `null jobId` / `task` + `JobId` 三态 | `chat-task-lookup` 的 missing、old-generation、retained、available 用例 | 通过 |
 | ID 11 | 只暴露原生 `JobId`；jobs 用 `readAt`/`get`/`kill`，不切割 taskId | `chat-task-lookup` 对 `world.jobCalls` 的精确 id 断言 | 通过 |
 | ID 12 | 列表与查找共用行投影、状态映射、报告降级与 generation 判断 | 新增的 `the looked-up task equals the list row projection` 两态比较 | 通过 |
-| ID 13 | 任务查找只读 work projection 与原生注册表，不初始化事件 window | `chat-task-lookup` 全部用例的零 `observeSession` 读取断言；`taskAt` 入参只有 work state（attempt/transcript 不在可达范围） | 通过 |
+| ID 13 | 任务查找只读 work projection 与原生注册表，不初始化事件 window | `chat-task-lookup` 的查找用例断言零 `observeSession` 读取；同源比较用例先 seed 列表投影一次、再断言查找不新增读取；`taskAt` 入参只有 work state（attempt/transcript 不在可达范围） | 通过 |
 | ID 14 | jobs 继续拥有偏移校验、输出、停止、404 与不可用输出形状 | `chat-task-lookup`（不可用形状/停止 0）、`native-job-status`、`jobs.test.mjs`（真实 HTTP 404） | 通过 |
 | ID 15 | 可用输出取注册表最新；停止进入 barrier；结果 1/2；未知结果 500 | `chat-task-lookup`（readAt/get/kill 与 flush）、`native-job-stop-outcome`、`jobs.test.mjs` | 通过 |
 | ID 16 | 任务身份 = generation + 原生 id；旧 generation 不解析到重启后同名任务 | `chat-task-lookup` old-generation 用例；`jobs.test.mjs` 的重启身份用例 | 通过 |
 | TD 5 | 页与任务测试复用同一 fake native world，不复制第二套世界 | 唯一 helper `tests/helpers/chat-world.mjs`；`chat-page-cut`/`chat-read-window`/`chat-task-lookup` 均导入它 | 通过（结构） |
-| TD 9-10 | 经 `jobOutput`/`jobStop` 进入真实查找，并在 native seam 断言零 `observeSession` | `chat-task-lookup` 全部用例 | 通过 |
+| TD 9-10 | 经 `jobOutput`/`jobStop` 进入真实查找，并在 native seam 断言零 `observeSession` | `chat-task-lookup` 的 `jobOutput`/`jobStop` 用例断言零读取；同源比较用例不经这两个操作，单独断言列表投影 seed 一次后查找不新增读取 | 通过 |
 | TD 14-17 | 最终状态跑全量门禁、两轴评审、证据如实 | 本 README 的验证节与命令记录 | 通过 |
 
 无法给出检查的声称已删除或收窄，而不是补断言：`runtime.taskOf` 注释不再声称
