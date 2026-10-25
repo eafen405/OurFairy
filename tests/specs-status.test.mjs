@@ -144,6 +144,24 @@ test('the report keeps the tracker half injectable and offline mode honest', () 
   assert.equal(online.rows[0].title, 'a spec')
 })
 
+test('a non-spec integration branch is a batch row with actionable status', () => {
+  const root = fixture()
+  commitOn(root, 'integration/fixes-219-221', 'work/implementation/evidence/fixes-219-221/README.md')
+
+  const report = collect({ root, offline: true })
+
+  assert.equal(report.rows.some(row => row.branch === 'integration/fixes-219-221'), false)
+  const batch = report.batchRows.find(row => row.branch === 'integration/fixes-219-221')
+  assert.ok(batch, 'the fixes branch is discovered without inventing a spec number')
+  assert.equal(batch.name, 'fixes-219-221')
+  assert.equal(batch.state, 'unpushed')
+  assert.equal(batch.pushed, false)
+  assert.equal(batch.landed, false)
+  assert.equal(batch.ahead, 1)
+  assert.equal(batch.defect, true)
+  assert.match(render(report), /fixes-219-221 unpushed/u)
+})
+
 test('the landing branch having unpushed commits is reported, and rendered', () => {
   const root = fixture()
   git(root, ['checkout', '--quiet', LANDING_BRANCH])
