@@ -136,7 +136,7 @@ test('a retained task whose live job the current registry no longer holds is una
   assert.equal(world.reads.length, 0, 'task access must not observe the event stream')
 })
 
-test('the looked-up row is the list row projection, including report degradation', async () => {
+test('the lookup reports status, availability and report degradation for the folded row', async () => {
   const world = makeWorld()
   taskSession(world, { report: { delivery: 'wakeup' } })
   world.setLiveJobs([job({ id: 'job-1', owner: SESSION, status: 'running' })])
@@ -148,7 +148,7 @@ test('the looked-up row is the list row projection, including report degradation
     jobId: 'job-1',
   })
   // The same folded row with no live job: current generation, unavailable
-  // native task, and a pending report degrades exactly as the full list does.
+  // native task, and a pending report degrades to 6.
   world.setLiveJobs([])
   assert.deepEqual(runtime.taskOf(state, 'g1/job-1'), {
     task: { taskId: 'g1/job-1', kind: 'task', label: 'work', status: 0, availability: 0,
@@ -156,4 +156,32 @@ test('the looked-up row is the list row projection, including report degradation
     jobId: null,
   })
   assert.equal(world.reads.length, 0, 'task access must not observe the event stream')
+})
+
+test('the looked-up task equals the list row projection, available and unavailable', async () => {
+  const world = makeWorld()
+  taskSession(world, { report: { delivery: 'wakeup' } })
+  world.setLiveJobs([job({ id: 'job-1', owner: SESSION, status: 'running' })])
+  const { runtime, state } = await taskAccess(world)
+  // Both sides read through production paths: the list through the full
+  // projection (which seeds the observed window), the lookup through taskOf.
+  const listed = async () => (await runtime.projection(state, { maxEvents: 1 })).tasks.find(task => task.taskId === 'g1/job-1')
+  const looked = () => runtime.taskOf(state, 'g1/job-1')?.task
+
+  const available = await listed()
+  assert.equal(world.reads.length, 1, 'the list projection seeds the observed window once')
+  assert.notEqual(available, undefined, 'the list must carry the folded task')
+  assert.equal(available.availability, 1, 'the live registry job makes the listed task available')
+  assert.deepEqual(looked(), available, 'the available lookup must equal the row the list publishes')
+  assert.equal(world.reads.length, 1, 'the lookup adds no event-window seed')
+
+  // Same folded row after the registry drops the live job: the availability
+  // and report degradation must agree in both paths too.
+  world.setLiveJobs([])
+  const unavailable = await listed()
+  assert.notEqual(unavailable, undefined, 'the list must still carry the retained task')
+  assert.equal(unavailable.availability, 0, 'a dropped live job makes the listed task unavailable')
+  assert.equal(unavailable.report.status, 6, 'the pending report degrades in the listed row')
+  assert.deepEqual(looked(), unavailable, 'the unavailable lookup must equal the row the list publishes')
+  assert.equal(world.reads.length, 1, 'the lookup adds no event-window seed')
 })

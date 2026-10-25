@@ -653,7 +653,8 @@ function liveJobsOf(ctx: Context, sessionId: SessionId) {
  * One folded row as the wire task, overlaid with the live native job when it has
  * one. This is the only task-row projection: the full list and the single
  * lookup both read through it, so status mapping, report degradation and
- * generation availability cannot drift apart.
+ * generation availability cannot drift apart. `tests/chat-task-lookup.test.mjs`
+ * compares the two paths' outputs in the available and the unavailable case.
  */
 function taskRowOf(row: JobRow & { report: ReturnType<typeof reportState> }, job: JobView | undefined) {
   const available = job !== undefined
