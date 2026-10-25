@@ -10,19 +10,22 @@
  * publication and stamp write.
  *
  * Every case uses a throwaway repository copy and an isolated home, because a
- * successful install publishes a template under the repository root.
+ * successful install publishes a template under the repository root. The
+ * failure cases also read the process result: a failed install must fail the
+ * whole `doctor` run, not only its profile check.
  */
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { copyProductRepo, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
+import { copyProductRepo, describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
 import {
   corepackCalls,
   fakeCorepackEnv,
   installFakeCorepack,
   removeFakeCorepack,
 } from './helpers/fake-corepack.mjs'
+import { assertPublishedTemplate, checkNamed, linkedBundleManifestPath } from './helpers/profile-install.mjs'
 
 const roots = []
 const homes = []
@@ -39,7 +42,7 @@ after(() => {
  * home, and the fake corepack that answers its pnpm calls.
  * @param {{installs: string[], lockfile?: 'stale'|'absent'}} options - the fake's
  *   per-install outcomes, and whether the profile starts with a stale lockfile.
- * @returns {{root: string, home: string, fake: object, combination: object, profileDir: string}}
+ * @returns {{root: string, home: string, fake: object, backend: object, profileDir: string}}
  */
 function isolatedCase({ installs, lockfile = 'absent' }) {
   const root = copyProductRepo('ourfairy-install-recovery-repo-')
@@ -48,16 +51,17 @@ function isolatedCase({ installs, lockfile = 'absent' }) {
   homes.push(home)
   const fake = installFakeCorepack({ installs })
   fakes.push(fake)
-  const combination = JSON.parse(readFileSync(join(root, 'combo.json'), 'utf8'))
-  const profileDir = join(home, 'dsh-home', 'profiles', combination.backend.profileName)
+  const { backend } = JSON.parse(readFileSync(join(root, 'combo.json'), 'utf8'))
+  const profileDir = join(home, 'dsh-home', 'profiles', backend.profileName)
   mkdirSync(profileDir, { recursive: true })
   if (lockfile === 'stale') writeFileSync(join(profileDir, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
-  return { root, home, fake, combination, profileDir }
+  return { root, home, fake, backend, profileDir }
 }
 
 /**
  * Run `doctor --json` against one case's copy and home.
- * @returns the report parsed from the first `{` of stdout.
+ * @returns {{run: {code: number, stdout: string, stderr: string}, report: object}}
+ *   the process result and the report parsed from the first `{` of stdout.
  */
 function doctor({ root, home, fake }) {
   const run = runBackend(['doctor', '--json'], {
@@ -67,29 +71,8 @@ function doctor({ root, home, fake }) {
     ...fakeCorepackEnv(fake),
   }, { root })
   const start = run.stdout.indexOf('{')
-  assert.ok(start >= 0, `doctor printed no JSON report:\n${run.stdout}\n${run.stderr}`)
-  const report = JSON.parse(run.stdout.slice(start))
-  // Doctor asks the pinned pnpm version once, before the install check. Every
-  // case asserts it here so the call log stays the authority for the process
-  // seam: an extra version query would be a changed launcher, not this test.
-  const versions = corepackCalls(fake).filter(call => call.kind === 'version')
-  assert.equal(
-    versions.length,
-    1,
-    `doctor must ask the pinned pnpm version exactly once; the log holds ${JSON.stringify(corepackCalls(fake))}`,
-  )
-  return report
-}
-
-/**
- * The doctor check with this name.
- * @param {{checks: Array<{name: string}>}} report - a parsed doctor report.
- * @param {string} name - the check to read.
- */
-function checkNamed(report, name) {
-  const check = report.checks.find(entry => entry.name === name)
-  assert.ok(check !== undefined, `doctor must record ${name}; it recorded ${JSON.stringify(report.checks.map(entry => entry.name))}`)
-  return check
+  assert.ok(start >= 0, `doctor printed no JSON report:\n${describeRun('doctor', run)}`)
+  return { run, report: JSON.parse(run.stdout.slice(start)) }
 }
 
 /** The fake's install calls, in the order pnpm was asked to install. */
@@ -97,11 +80,10 @@ function installCalls(fake) {
   return corepackCalls(fake).filter(call => call.kind === 'install')
 }
 
-/** A failed install must leave neither a published template nor a source stamp. */
+/** A failed install must leave no template directory and no source stamp. */
 function assertNoInstallArtifacts({ root, profileDir }) {
   const templateRoot = join(root, '.ourfairy-template')
-  const templates = existsSync(templateRoot) ? readdirSync(templateRoot) : []
-  assert.deepEqual(templates, [], `a failed install must not publish a template: ${JSON.stringify(templates)}`)
+  assert.equal(existsSync(templateRoot), false, `a failed install must not publish a template under ${templateRoot}`)
   assert.equal(
     existsSync(join(profileDir, '.ourfairy-source-hash')),
     false,
@@ -109,9 +91,16 @@ function assertNoInstallArtifacts({ root, profileDir }) {
   )
 }
 
+/** A failure only counts when the whole report and the process say so. */
+function assertFailedRun({ report, run }) {
+  assert.equal(report.ok, false, `a failed install must fail the whole doctor report: ${JSON.stringify(report.checks)}`)
+  assert.notEqual(run.code, 0, `doctor must exit non-zero when the install failed:\n${describeRun('doctor', run)}`)
+}
+
 test('an install that fails with a stale lockfile is retried once and reports installed', () => {
-  const c = isolatedCase({ installs: ['fail', 'succeed'], lockfile: 'stale' })
-  const report = doctor(c)
+  const world = isolatedCase({ installs: ['fail', 'succeed'], lockfile: 'stale' })
+  const { bundlePackage, pnpmPin } = world.backend
+  const { report } = doctor(world)
 
   const linked = checkNamed(report, 'profile project linked')
   assert.equal(linked.ok, true, `the retried install must succeed: ${JSON.stringify(linked)}`)
@@ -119,68 +108,48 @@ test('an install that fails with a stale lockfile is retried once and reports in
     linked.detail.endsWith(' (installed)'),
     `the profile check must report the mode of the performed install: ${JSON.stringify(linked.detail)}`,
   )
-  assert.equal(
-    checkNamed(report, 'corepack pnpm pin available').ok,
-    true,
-    'the fake corepack must answer the pin probe doctor runs before installing',
+
+  const calls = corepackCalls(world.fake)
+  assert.deepEqual(
+    calls.filter(call => call.kind !== 'version').map(call => call.kind),
+    ['install', 'install'],
+    `beyond the pin query, the launcher must only ask pnpm to install: ${JSON.stringify(calls)}`,
   )
-
-  const calls = corepackCalls(c.fake)
-  const versions = calls.filter(call => call.kind === 'version')
-  assert.equal(versions.length, 1, `doctor must ask the pin once; the log holds ${JSON.stringify(calls)}`)
-  assert.deepEqual(versions[0].argv, [`pnpm@${c.combination.backend.pnpmPin}`, '--version'])
-
-  const installs = installCalls(c.fake)
+  const installs = installCalls(world.fake)
   assert.equal(installs.length, 2, `a stale-lockfile failure must be retried exactly once: ${JSON.stringify(installs)}`)
   // The lockfile the launcher read at the start of each call: present before the
   // first attempt, gone before the retry. That is the whole recovery contract.
   assert.deepEqual(installs.map(call => call.lockfile), [true, false], JSON.stringify(installs))
   assert.deepEqual(installs.map(call => call.attempt), [1, 2])
   assert.deepEqual(installs.map(call => call.outcome), ['fail', 'succeed'])
-  assert.deepEqual(installs.map(call => call.cwd), [c.profileDir, c.profileDir])
-  assert.deepEqual(installs[0].argv, [
-    `pnpm@${c.combination.backend.pnpmPin}`,
-    'install',
-    '--ignore-scripts',
-    '--package-import-method',
-    'copy',
-    '--store-dir',
-    join(c.home, 'pnpm-store'),
-  ])
+  assert.deepEqual(installs.map(call => call.cwd), [world.profileDir, world.profileDir])
 
   // The successful retry publishes the shared template and stamps the profile
   // with the hash its directory name carries.
-  const templateRoot = join(c.root, '.ourfairy-template')
-  assert.ok(existsSync(templateRoot), 'a successful install must publish its template under the repository root')
-  const templates = readdirSync(templateRoot)
-  assert.equal(templates.length, 1, `one install publishes one template: ${JSON.stringify(templates)}`)
-  const template = join(templateRoot, templates[0])
-  const stampPath = join(c.profileDir, '.ourfairy-source-hash')
+  const stampPath = join(world.profileDir, '.ourfairy-source-hash')
   assert.ok(existsSync(stampPath), 'a successful install must stamp the profile with the hash it installed')
-  const stamp = readFileSync(stampPath, 'utf8').trim()
-  assert.equal(
-    templates[0],
-    `${stamp}-${c.combination.backend.pnpmPin}`,
-    'the stamp must name the template hash the install published',
-  )
-  const linkedManifest = join(template, 'node_modules', ...c.combination.backend.bundlePackage.split('/'), 'package.json')
-  assert.ok(existsSync(linkedManifest), `the template must carry the linked bundle manifest: ${linkedManifest}`)
-  assert.equal(JSON.parse(readFileSync(linkedManifest, 'utf8')).name, c.combination.backend.bundlePackage)
+  const { template } = assertPublishedTemplate({
+    templateRoot: join(world.root, '.ourfairy-template'),
+    stamp: readFileSync(stampPath, 'utf8').trim(),
+    pnpmPin,
+    bundlePackage,
+  })
   assert.equal(
     readFileSync(join(template, 'pnpm-lock.yaml'), 'utf8'),
-    readFileSync(join(c.profileDir, 'pnpm-lock.yaml'), 'utf8'),
+    readFileSync(join(world.profileDir, 'pnpm-lock.yaml'), 'utf8'),
     'the template lockfile must be the one the successful install produced',
   )
 })
 
 test('an install that fails twice keeps both failures and publishes nothing', () => {
-  const c = isolatedCase({ installs: ['fail', 'fail'], lockfile: 'stale' })
-  const report = doctor(c)
+  const world = isolatedCase({ installs: ['fail', 'fail'], lockfile: 'stale' })
+  const { report, run } = doctor(world)
+  assertFailedRun({ report, run })
 
   const linked = checkNamed(report, 'profile project linked')
   assert.equal(linked.ok, false, `two failed installs must fail the profile check: ${JSON.stringify(linked)}`)
   assert.ok(
-    linked.detail.startsWith(`profile install failed in ${c.profileDir} (exit 1):\n`),
+    linked.detail.startsWith(`profile install failed in ${world.profileDir} (exit 1):\n`),
     `the check must keep the install-failure contract: ${JSON.stringify(linked.detail)}`,
   )
   assert.ok(
@@ -203,21 +172,22 @@ test('an install that fails twice keeps both failures and publishes nothing', ()
     )
   }
 
-  const installs = installCalls(c.fake)
+  const installs = installCalls(world.fake)
   assert.equal(installs.length, 2, `a stale lockfile is dropped once and the install retried once: ${JSON.stringify(installs)}`)
   assert.deepEqual(installs.map(call => call.lockfile), [true, false], JSON.stringify(installs))
   assert.deepEqual(installs.map(call => call.outcome), ['fail', 'fail'])
-  assertNoInstallArtifacts(c)
+  assertNoInstallArtifacts(world)
 })
 
 test('a first install failure without a stale lockfile is not retried', () => {
-  const c = isolatedCase({ installs: ['fail'], lockfile: 'absent' })
-  const report = doctor(c)
+  const world = isolatedCase({ installs: ['fail'], lockfile: 'absent' })
+  const { report, run } = doctor(world)
+  assertFailedRun({ report, run })
 
   const linked = checkNamed(report, 'profile project linked')
   assert.equal(linked.ok, false, `a failed install must fail the profile check: ${JSON.stringify(linked)}`)
   assert.ok(
-    linked.detail.startsWith(`profile install failed in ${c.profileDir} (exit 1):\n`),
+    linked.detail.startsWith(`profile install failed in ${world.profileDir} (exit 1):\n`),
     `the check must keep the install-failure contract: ${JSON.stringify(linked.detail)}`,
   )
   assert.ok(
@@ -235,20 +205,22 @@ test('a first install failure without a stale lockfile is not retried', () => {
     `no retry means no first-failure section: ${JSON.stringify(linked.detail)}`,
   )
 
-  const installs = installCalls(c.fake)
+  const installs = installCalls(world.fake)
   assert.equal(installs.length, 1, `an install failure with no lockfile is not retried: ${JSON.stringify(installs)}`)
   assert.deepEqual(installs.map(call => call.lockfile), [false])
   assert.deepEqual(installs.map(call => call.outcome), ['fail'])
-  assertNoInstallArtifacts(c)
+  assertNoInstallArtifacts(world)
 })
 
 test('an install that reports success without the linked bundle fails loudly', () => {
-  const c = isolatedCase({ installs: ['succeed-without-linked'] })
-  const report = doctor(c)
+  const world = isolatedCase({ installs: ['succeed-without-linked'] })
+  const { bundlePackage } = world.backend
+  const { report, run } = doctor(world)
+  assertFailedRun({ report, run })
 
   const linked = checkNamed(report, 'profile project linked')
   assert.equal(linked.ok, false, `a success with no linked bundle must fail the profile check: ${JSON.stringify(linked)}`)
-  const linkedManifest = join(c.profileDir, 'node_modules', ...c.combination.backend.bundlePackage.split('/'), 'package.json')
+  const linkedManifest = linkedBundleManifestPath(world.profileDir, bundlePackage)
   assert.ok(
     linked.detail.includes(`profile install reported success but ${linkedManifest} is missing;`),
     `the check must name the missing linked bundle: ${JSON.stringify(linked.detail)}`,
@@ -258,12 +230,12 @@ test('an install that reports success without the linked bundle fails loudly', (
     `the check must explain why a missing linked bundle is fatal: ${JSON.stringify(linked.detail)}`,
   )
 
-  const installs = installCalls(c.fake)
+  const installs = installCalls(world.fake)
   assert.equal(installs.length, 1, `the fake reported success, so there is nothing to retry: ${JSON.stringify(installs)}`)
   assert.deepEqual(installs.map(call => call.outcome), ['succeed-without-linked'])
   // The install really did report success at the process seam: the fake wrote
   // its lockfile and only the linked bundle manifest is absent.
-  assert.ok(existsSync(join(c.profileDir, 'pnpm-lock.yaml')), 'the fake must leave the lockfile a successful install writes')
+  assert.ok(existsSync(join(world.profileDir, 'pnpm-lock.yaml')), 'the fake must leave the lockfile a successful install writes')
   assert.equal(existsSync(linkedManifest), false, 'this case is defined by the linked bundle manifest being absent')
-  assertNoInstallArtifacts(c)
+  assertNoInstallArtifacts(world)
 })
