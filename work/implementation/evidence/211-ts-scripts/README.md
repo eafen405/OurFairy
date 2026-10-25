@@ -132,16 +132,16 @@ Node v24.18.0，pnpm 由 `corepack pnpm@11.28.5` 提供，dsh 检出 `d1b6099ae7
 | `ourfairy-composition.ts:380` | `readdirSync(...) as string[]` | Node 的类型把递归列举放宽成 `string[] \| Buffer[]`；默认编码是 utf8，得到的名字是字符串 |
 | `ourfairy-composition.ts:401,407` | `manifest as PackageManifest` | 清单是包自己的文件：npm 把 `files` 声明成字符串数组，上面的检查证明它在且非空 |
 | `ourfairy-composition.ts:399` | `(error as Error).message` | catch 到什么就报什么；报告只读它的 `message`，与迁移前逐字相同 |
-| `combo.ts:270,528,589,655,683` | `(error as Error).message` | 同上（启动器/校验器读 `message`） |
-| `combo.ts:386` | `createRequire(...)('@deepseek-ai/dsh-app-boot') as DshAppBoot` | 模块从**已安装的 profile** 加载（`createRequire`），运行期副本是启动器会读的那份；类型取自钉住的 dsh 检出（同一个包） |
+| `combo.ts:271,529,590,656,684` | `(error as Error).message` | 同上（启动器/校验器读 `message`） |
+| `combo.ts:387` | `createRequire(...)('@deepseek-ai/dsh-app-boot') as DshAppBoot` | 模块从**已安装的 profile** 加载（`createRequire`），运行期副本是启动器会读的那份；类型取自钉住的 dsh 检出（同一个包） |
 | `combo.ts` 的 `combo.repos[key]!`、`row[index]!`、`widths[index]!` | `!` | 键与列号都由调用方给定，且列数一致；断言只记录「这里一定有值」 |
-| `link-types.ts:134`、`precommit.ts:134` | `JSON.parse(...) as { name?: unknown }` | 清单是包自己的文件，npm 把 `name` 声明成字符串 |
+| `package-manifest.ts:19` | `JSON.parse(...) as { name?: unknown }` | 清单是包自己的文件，npm 把 `name` 声明成字符串 |
 | `specs-status.ts` 的 `(issue: {…}) =>` | 箭头参数标注 | tracker 按查询回答三个字段；标注让类型来自查询而不是 `any` |
-| `ourfairy-backend.ts:318,540` | `as Record<string, unknown>`、`as BackendState \| undefined` | 状态文件是启动器自己的记录，形状由 `writeState` 写定 |
-| `ourfairy-backend.ts:463` | `(error as NodeJS.ErrnoException).code` | 信号探针抛什么就读它的 `code`，与迁移前逐字相同 |
+| `ourfairy-backend.ts:319,541` | `as Record<string, unknown>`、`as BackendState \| undefined` | 状态文件是启动器自己的记录，形状由 `writeState` 写定 |
+| `ourfairy-backend.ts:464` | `(error as NodeJS.ErrnoException).code` | 信号探针抛什么就读它的 `code`，与迁移前逐字相同 |
 | `ourfairy-backend.ts` 的 `child.pid!`、`dsh.head!`、`checks[0]!`、`combo.repos.dsh!` | `!` | 读取点紧跟产生点：子进程刚 spawn 一定有 pid；`combo.backend`/`combo.repos` 由 combo.json 声明 |
 | `ourfairy-backend.ts` 的 `version.split('.').map(Number) as [number, number]` | `as` | node 版本至少带 `major.minor`；断言记录被比较的就是这一个拆分 |
-| `bench-gate.ts:105` | `as BenchmarkDocument` | 基准文档是投影基准写出的文件，形状由基准定义 |
+| `bench-gate.ts:106` | `as BenchmarkDocument` | 基准文档是投影基准写出的文件，形状由基准定义 |
 | `bench-gate.ts` 的 `runs[0]!`、`run[metric]!`、`changed[cell]!` | `!` | 单元存在时它的度量必有；`median` 的空样本分支在单元缺失时才可能命中，而那已被 `missing` 挡掉 |
 | `bench-projection.ts:371,427,541,597,610` | `as ProductAnswer` / `as Projection` / `as Combo` / `as BackendSummary` / `as ModelDouble` | 各自的产品路由、投影、combo.json、启动器摘要与模型替身回答形状由各自所有者定义 |
 | `bench-projection.ts:811,862,908` | `as number[]` | 差值、往返时间与展开都是两个有限数之差，round 之后是数字；断言记录这一点 |
@@ -647,9 +647,10 @@ node --no-warnings work/implementation/evidence/211-ts-scripts/parity-scan.mjs
 
 评审修复本身另有证据：§10.1（守卫的可执行检查）与 §10.9（漂移脚本的实测输出）。
 
-### 10.13 本票的最终门禁（真实输出）
+### 10.13 收口评审分支与落地分支的门禁（真实输出）
 
-全部在 `.worktrees/212-review-fixes`（分支 `ticket/212-review-fixes`）上跑，Node `v24.18.0`，
+收口评审的九项修复在 `.worktrees/212-review-fixes`（分支 `ticket/212-review-fixes`）上跑，
+Node `v24.18.0`，
 corepack pnpm `11.28.5`，dsh 检出 `/home/eafen405/projects/deepseek-harness` @ `d1b6099ae716`。
 
 | 命令 | 结果 | 输出 |
@@ -665,27 +666,29 @@ corepack pnpm `11.28.5`，dsh 检出 `/home/eafen405/projects/deepseek-harness` 
 | `node work/implementation/evidence/211-ts-scripts/type-drift.mjs` | 通过 | 漂移 1/2/3 无错误、漂移 4 两处 `TS2345`、漂移 5 一处 `TS2724`（§6.1 与 §10.9） |
 | `node --no-warnings work/implementation/evidence/211-ts-scripts/parity-scan.mjs` | 通过（退出码 0） | `0 residue(s) after them, across 12 files`（口径见 §10.12） |
 
-**套件计数的来龙去脉。** 改动前是 **294/294**；本票新增 `tests/cli-guard.test.mjs`（5 个测试），
-所以现在是 **299/299**。其中**一个**测试文件是并行会话 #214 带进来的
-（`tests/chat-stream-backpressure.test.mjs`，1 个测试；#214 只**新增**这一个测试文件，
-`tests/chat-multi-observer.test.mjs` 是改已有用例的断言、没加新用例）。
-**去掉那一个测试文件，本规格自己的内容是 298 个测试**，全部通过。
+**套件计数。** 集成分支在收口评审前是 **294/294**；收口评审新增 `tests/cli-guard.test.mjs`
+（5 个测试），所以 `ticket/212-review-fixes` 上是 **299/299**。这 299 个里有一个测试文件是
+并行会话 #214 带进来的（`tests/chat-stream-backpressure.test.mjs`，1 个测试；#214 只**新增**
+这一个测试文件，`tests/chat-multi-observer.test.mjs` 是改已有用例的断言、没加新用例）。
+本规格自己的基线因此是 294 − 1 = **293**，加上 cli-guard 的 5 个，落地分支是 **298**。
 
-**落地分支（`landing/spec-205`，本分支的最终状态）。** 这一支**只含本规格 #205 的内容**：
-并行会话的 #213 / #214 不在这里（那两个票各有各的范围与验收），因此本分支的门禁数字
-是本规格自己的数字：
+**落地分支（`landing/spec-205`）的独立复跑。** 这一支只含本规格 #205 的内容：并行会话的
+#213 / #214 不在其中（那两个票各有各的范围与验收）。下面的输出是落地前在
+`.worktrees/landing-spec-205`（HEAD `6a7cfd1837`）上独立复跑得到的：
 
-| 命令 | 结果 |
-| --- | --- |
-| `npm run clean && npm run build` | 通过（`removed 12 build output directories`，构建退出码 0） |
-| `npm test` | **298 tests / 298 pass / 0 fail** |
-| `npm run combo:verify` | 通过（combo: combination verified） |
-| `npm run backend:doctor` | 通过（`node version: 24.18.0 satisfies ^22.19.0 \|\| >=24.2.0`，`doctor: all checks passed`） |
-| `OURFAIRY_PORT=0 npm run backend:probe` | 通过（`ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)`） |
+| 命令 | 结果 | 输出 |
+| --- | --- | --- |
+| `npm run clean && npm run build` | 通过 | `removed 12 build output directories`；退出码 0 |
+| `npm test` | **298 tests / 298 pass / 0 fail** | `ℹ tests 298`、`ℹ pass 298`、`ℹ fail 0`，89 104 ms |
+| `npm run combo:verify` | 通过 | `combo: combination verified`（ourfairy@`6a7cfd183766`、dsh@`d1b6099ae716`、android source@`460109d1b89b`） |
+| `npm run backend:doctor` | 通过 | `doctor: all checks passed`（`node version: 24.18.0 satisfies ^22.19.0 \|\| >=24.2.0`） |
+| `OURFAIRY_PORT=0 npm run backend:probe` | 通过 | `ourfairy-baseline-probe: ok (24 services live, 51 rows composed, mode boot)` |
 
-**298 = 293（本规格原有）+ 5（收口评审新增的 `tests/cli-guard.test.mjs`）**。
+**298 = 293（本规格原有，即 294 去掉 #214 的那一个测试文件）+ 5（收口评审新增的
+`tests/cli-guard.test.mjs`）**。
+
 `backend/` 与 `scripts/` 的 `.mjs` 数量：**0**。`android/` 在本分支上**一个字节都没动**
 （`git diff main...landing/spec-205 -- android/` 为空），本规格的「不改 Android 客户端」成立。
 
-**同一组门禁在 `integration/spec-205` 上的数字是 305/305**（多出来的是并行会话 #213 的
-6 个测试与 #214 的 1 个测试文件）。两处的差别只来自那些不属于本规格的提交。
+**`integration/spec-205` 上的同一组门禁是 305/305**（比本规格多 #213 的 6 个测试与 #214 的
+1 个测试文件）。那 305 属于集成分支、不属于本落地分支；本分支上的数字是上表的 298/298。

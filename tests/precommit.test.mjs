@@ -20,7 +20,7 @@
  * suite still passes.
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { globSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import {
@@ -29,6 +29,7 @@ import {
   TYPECHECK_COMMANDS,
   classify,
   plan,
+  testFiles,
 } from '../scripts/precommit.ts'
 import { repoRoot } from './helpers/backend.mjs'
 
@@ -152,5 +153,18 @@ test('CI runs the full gate on push and manual dispatch, and builds before it te
   assert.ok(
     workflow.indexOf('npm run build') >= 0 && workflow.indexOf('npm run build') < workflow.indexOf('npm test'),
     'the build must run before the suite, so a build failure and a test failure stay separate',
+  )
+})
+
+test('the related gate selects exactly the files `npm test` runs', () => {
+  const manifest = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
+  const command = manifest.scripts.test
+  const glob = command.match(/^node --test "([^"]+)"$/u)?.[1]
+  assert.ok(glob, `the test script must be one quoted glob; it is ${command}`)
+  const live = globSync(glob, { cwd: repoRoot }).sort()
+  assert.deepEqual(
+    testFiles(repoRoot),
+    live,
+    'a test file the suite runs must stay selectable by the related gate',
   )
 })

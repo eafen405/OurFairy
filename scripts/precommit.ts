@@ -106,11 +106,14 @@ const FULL_AUTHORITY = Object.freeze([
 ])
 
 /**
- * The test files the repository runs, mirroring `npm test`'s glob.
+ * The test files the repository runs.
+ *
+ * `npm test`'s glob is the authority; `tests/precommit.test.mjs` pins this walk
+ * against that glob, so a new test cannot silently drop out of the related gate.
  * @param root
  * @returns repo-relative paths.
  */
-function testFiles(root: string): string[] {
+export function testFiles(root: string): string[] {
   const found: string[] = []
   const walk = (dir: string, prefix: string) => {
     if (!existsSync(dir)) return
