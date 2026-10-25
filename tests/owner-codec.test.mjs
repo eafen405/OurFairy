@@ -11,7 +11,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 test('the codec\'s two directions round-trip exactly the short numbers it accepts', async () => {
-  const { ownerOf, shortIdOf } = await import('../backend/identity/src/owner.mjs')
+  const { ownerOf, shortIdOf } = await import('../backend/identity/dist/owner.js')
 
   assert.equal(ownerOf(1), 'user:1')
   for (const shortId of [1, 2, 42, Number.MAX_SAFE_INTEGER]) {

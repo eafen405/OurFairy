@@ -1,0 +1,24 @@
+{
+  // Solution file for `tsc -b tsconfig.json`. Keep `files` empty; every product
+  // package is a project reference. An empty solution with no references is
+  // TS18002, so the first package lands with this file.
+  "files": [],
+  "references": [
+    { "path": "./backend/http" },
+    { "path": "./backend/identity" },
+    { "path": "./backend/sessions" },
+    { "path": "./backend/sessions/tsconfig.test-support.json" },
+    { "path": "./backend/spaces" },
+    { "path": "./backend/spaces/tsconfig.test-support.json" },
+    { "path": "./backend/attachments" },
+    { "path": "./backend/chat" },
+    { "path": "./backend/chat/tsconfig.test-support.json" },
+    { "path": "./backend/groups" },
+    { "path": "./backend/search" },
+    { "path": "./backend/speech" },
+    { "path": "./backend/delivery" },
+    { "path": "./backend/gateway" },
+    { "path": "./backend/probe" },
+    { "path": "./scripts" }
+  ]
+}

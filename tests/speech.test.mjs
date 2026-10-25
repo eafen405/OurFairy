@@ -65,8 +65,19 @@ test('speech proxy uses configured provider, returns editable text, and reports 
     await new Promise(resolve => setTimeout(resolve, 30))
     assert.equal((await transcribe()).status, 429)
     controller.abort(); await assert.rejects(pending, { name: 'AbortError' })
-    await new Promise(resolve => setTimeout(resolve, 30)); mode = 'ok'
-    assert.equal((await transcribe()).status, 200, 'cancel releases this one-shot ASR budget')
+    // The server releases the one-shot budget once it has noticed that the
+    // client went away. A fixed sleep is a guess: on a loaded event loop the
+    // notice and the release can take longer than any fixed delay, and the
+    // request below then still sees the budget held and comes back 429. Wait
+    // for the release instead of guessing how long it takes.
+    mode = 'ok'
+    const deadline = Date.now() + 5_000
+    let status = 429
+    while (status === 429 && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 25))
+      status = (await transcribe()).status
+    }
+    assert.equal(status, 200, 'cancel releases this one-shot ASR budget')
   } finally {
     await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home }); removeHome(home)
     provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve))

@@ -17,12 +17,18 @@
 import { createRequire, registerHooks } from 'node:module'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { dshDir, repoRoot } from './backend.mjs'
+import { manifestName } from '../../scripts/package-manifest.ts'
+import { dshDir, productPackageDirs, repoRoot } from './backend.mjs'
 
 /**
  * Each package's own manifest anchors Node's lookup, so a subpath export
  * (`@deepseek-ai/dsh-session/surface`) resolves through that package's
  * `exports` map instead of a hand-written file path.
+ *
+ * The anchor is the manifest, never a file inside the package: that is what
+ * lets `exports` decide, so a package whose `exports` point at its build
+ * output resolves there and an unmigrated package still resolves at its
+ * sources, without the anchor changing.
  */
 const anchors = {
   '@deepseek-ai/cordis': join(dshDir, 'vendor', 'cordis', 'package.json'),
@@ -35,10 +41,12 @@ const anchors = {
   '@deepseek-ai/dsh-agent': join(dshDir, 'packages', 'core', 'agent', 'package.json'),
   '@deepseek-ai/dsh-jobs': join(dshDir, 'packages', 'jobs', 'jobs', 'package.json'),
   '@deepseek-ai/schemastery': join(dshDir, 'vendor', 'schemastery', 'package.json'),
-  '@ourfairy/dsh-identity': join(repoRoot, 'backend', 'identity', 'package.json'),
-  '@ourfairy/dsh-http': join(repoRoot, 'backend', 'http', 'package.json'),
-  '@ourfairy/dsh-sessions': join(repoRoot, 'backend', 'sessions', 'package.json'),
   zod: join(dshDir, 'package.json'),
+  ...Object.fromEntries(productPackageDirs().flatMap(dir => {
+    const manifest = join(repoRoot, dir, 'package.json')
+    const name = manifestName(manifest)
+    return name === undefined ? [] : [[name, manifest]]
+  })),
 }
 
 /** The first two path segments of a specifier: the package a bare request names. */

@@ -12,7 +12,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { after, test } from 'node:test'
-import { repoRoot, verifyCombination } from '../scripts/combo.mjs'
+import { repoRoot, verifyCombination } from '../scripts/combo.ts'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
 const declared = JSON.parse(readFileSync(join(repoRoot, combo.androidSource.declaration), 'utf8'))

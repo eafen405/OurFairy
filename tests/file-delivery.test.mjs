@@ -249,7 +249,7 @@ test('a file delivery flush failure leaves a ready retry and never confirms inco
   const target=await primary(bob),path=join(home,'dsh-home','spaces','private',String(alice.user.shortId),'flush-file.txt')
   await tool(alice,'write',{file_path:path,content:'FLUSH RETRY ORIGINAL'},senderSession)
   await stopBackend()
-  const fixture=new URL('../backend/chat/test-support/fail-outlets.mjs',import.meta.url).pathname
+  const fixture=new URL('../backend/chat/test-support/fail-outlets.ts',import.meta.url).pathname
   const layer=writeOverlay(home,[{insert:[{id:'delivery-faults',name:fixture,config:{sessionId:target,failFlush:true}}]}],'file-flush-failure.patch.yml')
   await startBackend([layer]);await projection(bob,target)
   const args={recipientShortId:bob.user.shortId,text:'File checkpoint retry',files:[{path}]}

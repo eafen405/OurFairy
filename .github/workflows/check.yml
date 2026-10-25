@@ -4,12 +4,15 @@ name: check
 # wave it was bypassed with `--no-verify` 27 times, and three of six integration
 # branches never left the machine, so nothing ran at all. This workflow runs the
 # same full gate on the server, where a bypassed hook cannot reach.
+#
+# The gate runs on pushes to main and to the integration branches, and on demand.
+# A pull request sync does not run it: the integration push that carries the
+# change does, and running both meant the same suite twice per change.
 on:
   push:
     branches:
       - main
       - 'integration/**'
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -73,6 +76,16 @@ jobs:
             $step
             echo "::endgroup::"
           done
+
+      # The product packages are built before the suite runs: the profile the
+      # tests install publishes the build output, so a build failure and a test
+      # failure stay separate lines in this log.
+      #
+      # The explicit step stays even though the suite's own `pretest` hook also
+      # builds: it makes the build a distinct, named step, and a failing build
+      # stops the job before the suite starts.
+      - name: Build the product packages
+        run: npm run build
 
       - name: Full suite and combination
         run: |

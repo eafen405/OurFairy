@@ -40,7 +40,7 @@ part of the pinned dsh installation recorded in `combo.json`.
   and exit facts to numeric status: a worker the service terminates (the 10 s
   deadline, a caller stop, the resource limit) and a `152`/`137` exit map to
   `resource-limit`; any other non-zero exit is `worker-unavailable`. See
-  [`backend/attachments/src/pdf.mjs`](../../backend/attachments/src/pdf.mjs) and
+  [`backend/attachments/src/pdf.ts`](../../backend/attachments/src/pdf.ts) and
   [`backend/attachments/pdf/README.md`](../../backend/attachments/pdf/README.md).
 - **Compatibility tests.** [`tests/pdf-worker-cancel.test.mjs`](../../tests/pdf-worker-cancel.test.mjs)
   (the service registers, cancellation kills the worker, no process survives,
@@ -88,7 +88,7 @@ part of the pinned dsh installation recorded in `combo.json`.
 - **Behavior relied on.** An oversized tool result reaches the model as a
   bounded preview with a file locator and an omitted-bytes notice; the complete
   result is a session-scoped file under the mounted root. The product's
-  [`backend/chat/src/spill-read.mjs`](../../backend/chat/src/spill-read.mjs)
+  [`backend/chat/src/spill-read.ts`](../../backend/chat/src/spill-read.ts)
   grants that one directory read-only per session, so `read` and the confined
   shell can retrieve it while other sessions and users are denied. The budget
   measurement and value are in [ticket #82's evidence](../../work/implementation/evidence/82-native-rows/README.md);
@@ -112,7 +112,7 @@ part of the pinned dsh installation recorded in `combo.json`.
   `SessionHistoryGapError`. It exists at dsh commit
   `5b8ec0f175d3d7ba0fc7f120165d5cad6fd81aaf` (added by #84 in
   `ffb5a266aa`). The product imports it in
-  [`backend/chat/src/runtime.mjs`](../../backend/chat/src/runtime.mjs).
+  [`backend/chat/src/runtime.ts`](../../backend/chat/src/runtime.ts).
 - **Behavior relied on.** `assistantStream(sessionId)` returns the native
   baseline: the active attempt's `attemptId`, revision and compact stream, and
   `needsResync` when the fold dropped a corrupted attempt. The product publishes
@@ -151,9 +151,9 @@ be changed or deleted with the behavior, rather than silently kept.
 
 The product keeps its own `/attachments/propose`, `/attachments/chunk`,
 `/attachments/complete` and `/attachments/download` protocol
-([`backend/attachments/src/index.mjs`](../../backend/attachments/src/index.mjs))
+([`backend/attachments/src/index.ts`](../../backend/attachments/src/index.ts))
 and the upload lifecycle in
-[`backend/attachments/src/service.mjs`](../../backend/attachments/src/service.mjs).
+[`backend/attachments/src/service.ts`](../../backend/attachments/src/service.ts).
 
 - **Why.** The protocol is resumable at the acknowledged offset (a lost chunk
   ACK can repeat exact bytes; a conflicting offset is refused), uploads expire
@@ -176,13 +176,13 @@ and the upload lifecycle in
 ### Job output and stop
 
 The product keeps `/chat/jobs/output` and `/chat/jobs/stop`
-([`backend/chat/src/jobs.mjs`](../../backend/chat/src/jobs.mjs),
-[`backend/chat/src/index.mjs`](../../backend/chat/src/index.mjs)) over the
+([`backend/chat/src/jobs.ts`](../../backend/chat/src/jobs.ts),
+[`backend/chat/src/index.ts`](../../backend/chat/src/index.ts)) over the
 native job registry's `readAt`, `get` and `kill`.
 
 - **Why.** The product projection folds `jobs/lifecycle`, `jobs/report`, inbox
   splices and turn ends into a durable per-session task list
-  ([`backend/chat/src/units.mjs`](../../backend/chat/src/units.mjs), and the
+  ([`backend/chat/src/units.ts`](../../backend/chat/src/units.ts), and the
   "后台任务折叠" section of [`backend/chat/README.md`](../../backend/chat/README.md)).
   That fold survives a restart and keeps task identities tied to the registry
   generation, so an old task id stays unavailable instead of resolving to a new

@@ -6,7 +6,7 @@ import { createReadStream } from 'node:fs'
 import { mkdtemp, open, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createDownloadResponder } from '../backend/attachments/src/download.mjs'
+import { createDownloadResponder } from '../backend/attachments/dist/download.js'
 
 // Exercise the shipped download responder factory itself against real HTTP: the
 // abort path is observable at its byte-stream boundary through the exported

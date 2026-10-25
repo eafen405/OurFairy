@@ -33,5 +33,14 @@ empty row is the smallest thing that puts the transport in both lists.
 The transport knows nothing about users, invites or sessions. It was split out
 of `@ourfairy/dsh-identity` so the product packages that only need
 `postHandler`/`sendJson` can drop their identity dependency (#139, #140). Its
-manifest has no `peerDependencies` field, and `src/http.mjs` has no import
-declarations: the module names no package, product or otherwise.
+manifest has no `peerDependencies` field, and `src/http.ts` has no import
+declarations of product packages: the module names no product package.
+
+## Where the code lives
+
+The sources are TypeScript under `src/`; the package publishes the build output
+under `dist/`. `npm run build` in the repository root compiles them with the
+TypeScript the pinned dsh checkout carries, and the manifest's `files` list
+publishes `dist/**/*.js` and `dist/**/*.d.ts` — not `src/`. The profile install
+therefore copies the compiled module, and the `./http` subpath resolves to
+`dist/http.js`.

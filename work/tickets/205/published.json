@@ -1,0 +1,12 @@
+{
+  "parent": 205,
+  "title": "TypeScript 全量迁移：施工",
+  "children": [
+    { "file": "01-infra-and-guards.md", "issue": 206, "title": "T1 基础设施与守卫：构建链、hash 守卫、测试门禁与 http 试点" },
+    { "file": "02-identity-and-sessions.md", "issue": 207, "title": "T2 identity + sessions 迁 .ts" },
+    { "file": "03-spaces-and-attachments.md", "issue": 208, "title": "T3 spaces + attachments 迁 .ts（含 pdf-worker.py 搬家）" },
+    { "file": "04-chat.md", "issue": 209, "title": "T4 chat 迁 .ts" },
+    { "file": "05-remaining-packages.md", "issue": 210, "title": "T5 delivery/gateway/search/speech/groups + probe 迁 .ts" },
+    { "file": "06-closeout.md", "issue": 211, "title": "T6 收口：scripts 迁 .ts、文档索引、全量门禁与清理" }
+  ]
+}

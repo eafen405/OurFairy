@@ -5,14 +5,19 @@
   "description": "OurFairy's group row: the group membership tools and the group-root contribution to the product's file spaces.",
   "type": "module",
   "license": "UNLICENSED",
-  "main": "./src/index.mjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.mjs",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
-    "src",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "README.md",
     "locale/*.json"
   ],

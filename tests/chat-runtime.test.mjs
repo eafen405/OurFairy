@@ -8,7 +8,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { SessionQueues } from '../backend/chat/src/queues.mjs'
+import { SessionQueues } from '../backend/chat/dist/queues.js'
 
 function deferred() {
   let resolve

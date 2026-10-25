@@ -25,7 +25,7 @@ The qualified original is copied into a private temporary directory, mounted
 read-only alongside this wheel and worker, and deleted after the call. No derived
 database or persistent cache is created.
 
-`src/pdf.mjs` bounds concurrent parsers to two, each with 512 MiB address space,
+`src/pdf.ts` bounds concurrent parsers to two, each with 512 MiB address space,
 5 CPU seconds, 10 wall-clock seconds, 64 file descriptors and 256 KiB stdout.
 The existing upload limit is 32 MiB. Documents are limited to 500 pages; each call
 reads at most five selected pages and returns at most 4,000 characters per page.

@@ -22,7 +22,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { readCombo, repoPath } from '../scripts/combo.mjs'
+import { readCombo, repoPath } from '../scripts/combo.ts'
 import { copyProductRepo, describeRun, makeHome, productPackageDirs, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
 
 const roots = []

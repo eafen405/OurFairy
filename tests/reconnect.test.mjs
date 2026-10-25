@@ -344,7 +344,7 @@ test('a lost Assistant frame drops the live attempt instead of publishing text f
   const triggerPath = join(home, 'frame-gap-trigger')
   const reportPath = join(home, 'frame-gap-report.json')
   const overlay = writeOverlay(home, [{ insert: [{
-    id: 'assistant-frame-gap', name: fixture('frame-gap.mjs'),
+    id: 'assistant-frame-gap', name: fixture('frame-gap.ts'),
     config: { sessionId, afterChunks: 1, triggerPath, marker: 'FRAME_GAP_TEXT', reportPath },
   }] }], 'frame-gap.patch.yml')
   await start([overlay])
@@ -398,7 +398,7 @@ test('a torn durable read is reopened from a fresh cut instead of publishing the
   const triggerPath = join(home, 'lost-event-trigger')
   const reportPath = join(home, 'lost-event-report.json')
   const overlay = writeOverlay(home, [{ insert: [{
-    id: 'session-event-loss', name: fixture('lost-event.mjs'),
+    id: 'session-event-loss', name: fixture('lost-event.ts'),
     config: { sessionId, triggerPath, reportPath },
   }] }], 'lost-event.patch.yml')
   // A projection reads the log once, when it seeds the session window. The tear

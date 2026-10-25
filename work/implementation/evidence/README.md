@@ -165,6 +165,17 @@
 | --- | --- |
 | [182-dsh-rc2-merge](182-dsh-rc2-merge/README.md) | spec #182 证据索引：三条 fork 独有接缝的上游等价物裁决、真合并 17 处冲突取舍、四条必需构建、冲突面测试、产品侧改接与组合锁（#185–#191） |
 
+## TypeScript 全量迁移（规格 #205）
+
+| 目录 | 内容 |
+| --- | --- |
+| [206-ts-infra](206-ts-infra/README.md) | #206 T1：构建链（tsconfig solution、链接农场、dsh 自带 tsc）、hash 守卫（files 条目零文件硬失败）、测试门禁四模式与 http 试点 |
+| [207-ts-identity-sessions](207-ts-identity-sessions/README.md) | #207 T2：identity 与 sessions 迁 .ts（包内原子）、strict 标注与类型边界、test-support 夹具的 noEmit 工程与类型剥离路线 |
+| [208-ts-spaces-attachments](208-ts-spaces-attachments/README.md) | #208 T3：spaces 与 attachments 迁 .ts（包内原子）、pdf worker 搬到包根 assets/ 并随包发布、文件权限与沙箱行为不变 |
+| [209-ts-chat](209-ts-chat/README.md) | #209 T4：chat 迁 .ts（包内原子，1400 行最大包）、投影单元的 SessionProjectionStateMap 声明、test-support 夹具的 noEmit 工程与类型剥离路线、运算符与字面量的机械复查 |
+| [210-ts-remaining](210-ts-remaining/README.md) | #210 T5：delivery、gateway、groups、search、speech、probe 迁 .ts（包内原子）、投递消息源扩展的单一权威与 Events 声明、运算符与字面量的机械复查 |
+| [211-ts-scripts](211-ts-scripts/README.md) | #211 T6：scripts 十二个脚本迁 .ts（源码直跑、noEmit 叶子工程、相对 import 带 .ts 说明符）、研究文档索引补三行、全量门禁（293/293、combo:verify、doctor、probe）与工作树清理；**收口评审的九项发现见同一 README 的 §10**（Node 下限与 CLI 守卫、包名权威、bench:projection 补跑） |
+
 ## Triage 修复
 
 | 目录 | 内容 |

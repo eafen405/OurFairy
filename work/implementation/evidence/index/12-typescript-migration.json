@@ -1,0 +1,41 @@
+{
+  "title": "TypeScript 全量迁移（规格 #205）",
+  "entries": [
+    {
+      "dirs": [
+        "206-ts-infra"
+      ],
+      "note": "#206 T1：构建链（tsconfig solution、链接农场、dsh 自带 tsc）、hash 守卫（files 条目零文件硬失败）、测试门禁四模式与 http 试点"
+    },
+    {
+      "dirs": [
+        "207-ts-identity-sessions"
+      ],
+      "note": "#207 T2：identity 与 sessions 迁 .ts（包内原子）、strict 标注与类型边界、test-support 夹具的 noEmit 工程与类型剥离路线"
+    },
+    {
+      "dirs": [
+        "208-ts-spaces-attachments"
+      ],
+      "note": "#208 T3：spaces 与 attachments 迁 .ts（包内原子）、pdf worker 搬到包根 assets/ 并随包发布、文件权限与沙箱行为不变"
+    },
+    {
+      "dirs": [
+        "209-ts-chat"
+      ],
+      "note": "#209 T4：chat 迁 .ts（包内原子，1400 行最大包）、投影单元的 SessionProjectionStateMap 声明、test-support 夹具的 noEmit 工程与类型剥离路线、运算符与字面量的机械复查"
+    },
+    {
+      "dirs": [
+        "210-ts-remaining"
+      ],
+      "note": "#210 T5：delivery、gateway、groups、search、speech、probe 迁 .ts（包内原子）、投递消息源扩展的单一权威与 Events 声明、运算符与字面量的机械复查"
+    },
+    {
+      "dirs": [
+        "211-ts-scripts"
+      ],
+      "note": "#211 T6：scripts 十二个脚本迁 .ts（源码直跑、noEmit 叶子工程、相对 import 带 .ts 说明符）、研究文档索引补三行、全量门禁（293/293、combo:verify、doctor、probe）与工作树清理"
+    }
+  ]
+}

@@ -14,7 +14,7 @@
 | --- | --- |
 | `backend/` | 产品模块与显式后端装配（dsh profile 的 bundle 与各产品包） |
 | `android/` | Android 客户端。正常的 Gradle 工程，内部结构与上游 RikkaHub 保持原相对位置 |
-| `scripts/` | 后端入口 `ourfairy-backend.mjs`、版本组合 `combo.mjs`、验收与基准脚本 |
+| `scripts/` | 后端入口 `ourfairy-backend.ts`、版本组合 `combo.ts`、验收与基准脚本 |
 | `tests/` | 产品测试与仓库结构检查：行为测试经启动器驱动真实后端，模型与网络使用替身 |
 | `docs/` | 规格、架构边界、决策与调查 |
 | `work/` | 实施期的工作区：票面副本与交付证据 |
@@ -23,7 +23,7 @@
 
 | 需要 | 版本 / 位置 |
 | --- | --- |
-| Node | `^22.19.0 \|\| >=24` |
+| Node | `^22.19.0 \|\| >=24.2.0`（`import.meta.main` 自 22.18.0 与 24.2.0 起提供） |
 | pnpm | 用 corepack 固定：`corepack pnpm@11.28.5` |
 | deepseek-harness 检出 | 路径与锁定提交见 [combo.json](combo.json) 的 `repos.dsh` |
 | Linux 沙箱 | bubblewrap（`bwrap`），并允许创建非特权用户命名空间 |
@@ -37,6 +37,7 @@
 ## 跑测试
 
 ```sh
+npm run build       # 编译产品包：链接类型、清理产物、tsc -b
 npm test            # 全量：node --test "tests/**/*.test.mjs"
 npm run combo:verify   # 版本组合：本仓库、dsh、客户端来源三条
 npm run backend:doctor # 环境自检：工具链、profile 装配、包与行、插件兼容、原生能力
@@ -46,6 +47,9 @@ npm run specs:status   # 每张 spec 的分支、推送、落地与 worktree 现
 `npm test` 不联网、不调用真实模型：它经启动器起真实后端，模型与网络走替身。耗时随机器与并发负载
 变化，以测试输出的 `duration_ms` 为准；本次环境修复的测量见
 [验证记录](work/implementation/evidence/repo-environment-2026-10-22/README.md)。
+
+产品包的源码是 TypeScript，`npm test` 会先经 `pretest` 编译一次（`npm run build`）。编译用的
+TypeScript 取自 `combo.json` 锁定的 dsh 检出，不是本仓库的依赖。
 
 单独跑一个文件：
 
@@ -63,16 +67,18 @@ node --test tests/chat-read-window.test.mjs
 npm run hooks:install   # git config core.hooksPath .githooks
 ```
 
-之后每次提交都会过一道门禁，按改动内容分流（`scripts/precommit.mjs`）：只改 Markdown 时跑
-`tests/docs.test.mjs` 与 `npm run combo:verify`，其余改动跑 `npm test` 与 `npm run combo:verify`。
-任一失败即阻止提交；检查针对当前工作树，未暂存的改动同样会影响结果。全量 `npm test` 仍在交付前与
-CI 上跑，钩子只是不再让每条证据提交都等它。
+之后每次提交都会过一道门禁，按改动内容分四种（`scripts/precommit.ts`）：只改 Markdown 跑
+`tests/docs.test.mjs`；改动面能选出相关测试时跑 `npm run build` 与选中的测试文件；源码改动但选不出
+相关测试时跑 `npm run typecheck`；根构建权威、包 manifest、共享 fixture、合并提交或 `--full` 跑全量
+`npm test`。四种门禁都保留 `npm run combo:verify`。任一失败即阻止提交；检查针对当前工作树，未暂存的
+改动同样会影响结果。全量 `npm test` 仍在交付前与 CI 上跑，钩子只是不再让每条证据提交都等它。
 
 ### CI
 
-`.github/workflows/check.yml` 在 push 到 `main` 或 `integration/**`、以及每个 PR 上跑同一道全量门禁：
-按 `combo.json` 的锁检出并构建 dsh，再跑 `npm test` 与 `npm run combo:verify`。本地钩子可以被
-`--no-verify` 跳过，服务器上的这次不会。
+`.github/workflows/check.yml` 在 push 到 `main` 或 `integration/**`、以及手动触发时跑同一道全量门禁：
+按 `combo.json` 的锁检出并构建 dsh，再跑 `npm run build`、`npm test` 与 `npm run combo:verify`。
+PR 同步不再触发——带着改动的那次 integration 推送会跑一遍，触发两次只是把同一套件跑两遍。本地钩子可以
+被 `--no-verify` 跳过，服务器上的这次不会。
 
 ## 跑后端
 

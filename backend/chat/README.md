@@ -108,7 +108,7 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 
 ### 投影单元
 
-`src/units.mjs` 把 transcript 与「任务 + 活动」注册到原生 `ctx.sessionProjections`
+`src/units.ts` 把 transcript 与「任务 + 活动」注册到原生 `ctx.sessionProjections`
 （key `ourfairyTranscript` / `ourfairyWork`，均无 `wire`，只用公开的 `register` / `stateOf`）。
 两个单元都是同步纯 fold，state 为纯 JSON；不关心的事件返回同一 state 引用。
 每个单元声明 `key`、`stateVersion`、zod `stateSchema`、`init(header)` 与 `apply(state,event)`：
@@ -136,11 +136,11 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 
 ### 投影派生
 
-传输契约里的 live 字段不在 durable state 里，由 `src/runtime.mjs` 的 `LiveSession` 在读取时
+传输契约里的 live 字段不在 durable state 里，由 `src/runtime.ts` 的 `LiveSession` 在读取时
 叠加：
 
 - `generation`：每次 live 会话（含冷恢复）新建的 UUID。`version`：每次已发布输入变化时递增
-  （`src/runtime.mjs` 的 `changed()`）。
+  （`src/runtime.ts` 的 `changed()`）。
 - `cursor`：已种子事件窗口的最后一个 seq；首次读取前为 `session.seq - 1`。
 - `durableThroughSeq`：`barrier` 在 await 前捕获 `session.seq - 1`，`ctx.sessions.flush` 后只
   向前推进；投影返回 `min(cursor, durableThroughSeq)`。
@@ -225,7 +225,7 @@ spill 文件来自工具执行（超长工具结果落到原生 spill 目录）�
 增加 HTTP 路由。模型在后续 `read` 中按 locator 取回文件时，需要把执行会话自己的 spill 目录
 作为一个只读根。
 
-chat 拥有这个授权，因为 chat 拥有产生 spill 文件的回合与工具执行。`src/spill-read.mjs` 通过
+chat 拥有这个授权，因为 chat 拥有产生 spill 文件的回合与工具执行。`src/spill-read.ts` 通过
 `ctx.ourfairySpaces.contributeReadonlyFiles` 只贡献当前会话的 `sessionDir`（realpath），不贡献
 spill 根、`DSH_HOME` 或 attachments 数据目录。贡献按文件操作求值，目录在会话第一次 spill 后
 才存在；从未 spill 的会话不授予任何路径。
@@ -241,20 +241,20 @@ spill 文件，贡献返回空；声明它会让所有 chat 路由等待一个�
 ### 服务依赖
 
 `inject` 的取舍规则：只声明缺席会让 chat 契约错误的服务；需要理由的例外列在下表，完整声明以
-`src/index.mjs` 为准。本 spec 按 Testing Decisions 不新增 inject 字面量断言，因此最小性由审查
+`src/index.ts` 为准。本 spec 按 Testing Decisions 不新增 inject 字面量断言，因此最小性由审查
 与提交说明承担，没有自动守卫。
 
 | 服务 | 声明 | 依据 |
 | --- | --- | --- |
 | `agentLoop` | `inject` | 不为调用，只为排序：它注册的 Agent 工厂必须先于本行可用；chat 内没有 `ctx.agentLoop` 调用。 |
 | `llm` | `inject` | 图片能力检查在带图片的回合开始时调用 `resolveModelInfo`；缺席时本行不会进入工作状态（未满足 inject 的行保持 pending），而不是等图片轮次抛错。 |
-| `sessionQuery` | `inject` | 不直接调用；经 `src/runtime.mjs` 的 `readSessionEvents(this.ctx, …)`，由 `backend/sessions/src/events.mjs` 调 `ctx.sessionQuery.observeSession`。 |
+| `sessionQuery` | `inject` | 不直接调用；经 `src/runtime.ts` 的 `readSessionEvents(this.ctx, …)`，由 `backend/sessions/src/events.ts` 调 `ctx.sessionQuery.observeSession`。 |
 | `systemPrompt` | `inject` | 不直接调用；Agent setup 里通过 `agentCtx.systemPrompt.section` 使用。 |
 | `spillStore` | 不声明，动态读取 | `ctx.get('spillStore')?.root`；缺席是受支持的降级，理由见读取处注释。 |
 | `identity`、`tools` | 不声明 | chat 内没有 `ctx.identity`/`ctx.tools` 引用；可用性由保留声明传递：`ourfairySessions` 自己 inject `identity`，`agentLoop` 自己 inject `tools`（`AgentLoop.inject`）。 |
 
-其余条目在源码里各有使用处；新增或删除 `inject` 时，以 `src/index.mjs` 的声明与注释为准，并在
-提交说明里写明依据。`spillStore` 的动态读取与缺席语义写在 `src/spill-read.mjs` 的读取处；本节
+其余条目在源码里各有使用处；新增或删除 `inject` 时，以 `src/index.ts` 的声明与注释为准，并在
+提交说明里写明依据。`spillStore` 的动态读取与缺席语义写在 `src/spill-read.ts` 的读取处；本节
 只做索引。
 
 ## dsh 升级复核
@@ -276,7 +276,7 @@ spill 文件，贡献返回空；声明它会让所有 chat 路由等待一个�
 | `node --test tests/native-job-status.test.mjs tests/native-job-stop-outcome.test.mjs` | 运行时语义 | 原生任务状态与停止返回值的逐项对账。 |
 | `node --test tests/spill-read.test.mjs` | 运行时语义 | 本会话 spill 目录授权。 |
 | `node --test tests/gateway.test.mjs`（图片能力用例） | 运行时语义 | `llm` 声明的图片能力检查。 |
-| `node scripts/bench-projection.mjs --label after-upgrade --out /tmp/projection-upgrade.json` | 运行时语义 | 投影成本。 |
+| `node scripts/bench-projection.ts --label after-upgrade --out /tmp/projection-upgrade.json` | 运行时语义 | 投影成本。 |
 
 若 registry 接口、事件形状或 `stateOf` 消失，插件会在 `inject`/`stateOf` 处失败、相关测试
 报错，不能靠保留第二套 fold 绕过。两条对账用例 `native job status vocabulary matches the

@@ -1,0 +1,17 @@
+{
+  // The test-support rows are test-only plugin sources: they are loaded from
+  // the worktree by the tests and never published with the package, so they get
+  // their own type-checked project. `noEmit` keeps them out of the package's
+  // `dist`; Node runs the sources directly and strips the types.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "tsBuildInfoFile": "dist/.tsbuildinfo.test-support"
+  },
+  "include": ["test-support/**/*.ts"],
+  "references": [
+    { "path": "." }
+  ]
+}

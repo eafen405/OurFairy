@@ -18,7 +18,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { LANDING_BRANCH, collect, render, specStatus, worktreeNamesSpec } from '../scripts/specs-status.mjs'
+import { LANDING_BRANCH, collect, render, specStatus, worktreeNamesSpec } from '../scripts/specs-status.ts'
 
 const roots = []
 

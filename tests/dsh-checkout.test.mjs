@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { readCombo, repoPath } from '../scripts/combo.mjs'
+import { readCombo, repoPath } from '../scripts/combo.ts'
 import { copyProductRepo, removeHome, repoRoot } from './helpers/backend.mjs'
 
 test('test dependencies resolve from the overridden dsh checkout when the canonical path is absent', () => {

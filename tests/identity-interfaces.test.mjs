@@ -13,8 +13,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { identityInterfaces } from '../backend/identity/src/interfaces.mjs'
-import { IdentityStore } from '../backend/identity/src/store.mjs'
+import { identityInterfaces } from '../backend/identity/dist/interfaces.js'
+import { IdentityStore } from '../backend/identity/dist/store.js'
 
 const NOW = 1_700_000_000_000
 const dir = mkdtempSync(join(tmpdir(), 'ourfairy-identity-interfaces-'))
@@ -104,11 +104,11 @@ test('uploads and deliveries answer under their own domain', () => {
 
 test('the service and its consumers reach identity through the domain faces, never the store', () => {
   const read = path => readFileSync(new URL(`../backend/${path}`, import.meta.url), 'utf8')
-  const service = read('identity/src/index.mjs')
+  const service = read('identity/src/index.ts')
   assert.doesNotMatch(service, /this\.store\s*=/u, 'IdentityService must not republish the store')
   assert.match(service, /identityInterfaces\(/u, 'IdentityService must build the domain faces')
 
-  for (const consumer of ['delivery/src/index.mjs', 'groups/src/index.mjs', 'attachments/src/service.mjs', 'search/src/index.mjs']) {
+  for (const consumer of ['delivery/src/index.ts', 'groups/src/index.ts', 'attachments/src/service.ts', 'search/src/index.ts']) {
     assert.doesNotMatch(read(consumer), /identity\s*\.\s*store\b/u, `${consumer} must not read the bare store`)
   }
 })

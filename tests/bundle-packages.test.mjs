@@ -19,8 +19,8 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, globSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { readCombo, repoPath } from '../scripts/combo.mjs'
-import { isolatedEnv, layoutOf } from '../scripts/ourfairy-composition.mjs'
+import { readCombo, repoPath } from '../scripts/combo.ts'
+import { isolatedEnv, layoutOf } from '../scripts/ourfairy-composition.ts'
 import { copyProductRepo, describeRun, makeHome, productPackageDirs, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
 
 const roots = []

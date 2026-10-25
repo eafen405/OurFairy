@@ -23,7 +23,7 @@ import {
   SESSION, attachment, event, job, transcriptLog, userMessage, workCases, workLog,
 } from './fixtures/projection-logs.mjs'
 
-const units = await import('../backend/chat/src/units.mjs')
+const units = await import('../backend/chat/dist/units.js')
 const expected = JSON.parse(readFileSync(new URL('./fixtures/projection-expected.json', import.meta.url), 'utf8'))
 
 /** Fold one log with one unit definition, asserting the intermediate states stay plain JSON. */

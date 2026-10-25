@@ -25,7 +25,7 @@
 
 调查采用 [combo.json](../../combo.json) 当时锁定的 dsh 产品提交 `fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee`，对照研究上游 `d743267388641bc76f17c45ce8b4c231aed1d32c`；OurFairy 为 `902bc11a0f12fe936bde430b1b11ba06719b0d06`。本节为静态源码调查，实际运行证据见下文。
 
-- 身份、邀请、授权、空间规则及投递协调已经主要在 OurFairy 中实现。源码入口：[身份](../../backend/identity/src/index.mjs)、[会话](../../backend/sessions/src/service.mjs)、[空间](../../backend/spaces/src/index.mjs)、[投递](../../backend/delivery/src/index.mjs)。
+- 身份、邀请、授权、空间规则及投递协调已经主要在 OurFairy 中实现。源码入口：[身份](../../backend/identity/src/index.ts)、[会话](../../backend/sessions/src/service.ts)、[空间](../../backend/spaces/src/index.ts)、[投递](../../backend/delivery/src/index.ts)。
 - dsh fork 的改动涉及会话归属 header、正式投递消息、第二凭据接入、任务持久事实和中文子串搜索。正式投递扩大了 assistant 消息来源类型，涉及模型回放、查询及导出等消费者。依据：[消息来源类型](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/llm/llm/src/message.ts)、[会话表面](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/core/session/src/surface.ts)、[凭据接入](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/client/connection/src/rpc-host.ts)、[任务完成接线](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/jobs/tool-jobs/src/index.ts)。
 - 上游会话表面使用有限事件集合，自定义事件能否被保存与能否进入模型历史是不同能力。依据：[原上游表面投影](https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/packages/core/session/src/surface.ts)、[事件兼容规则](https://github.com/deepseek-ai/deepseek-harness/blob/d743267388641bc76f17c45ce8b4c231aed1d32c/packages/core/session/src/known-event-types.ts)。外置方案需要分别验证持久化、授权、模型历史和恢复。
 - 产品使用显式 [bundle](../../backend/v1-bundle/cordis.patch.yml)。维护成本也包含随上游核对装配和配置联动，不能仅以 Git 补丁数量衡量。
@@ -44,7 +44,7 @@
 
 固定产品提交与官方 rc.2 的核心选模及 turn 循环契约一致。原生 `selectModel` 的选择按后续 step 生效；一轮回复在工具调用后还可能继续请求模型，因此直接调用该命令可能在本轮中途切换。原生 [`installModelSelection`](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/core/agent/src/model-selection.ts#L78) 与 [`turn/start` 生命周期](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/core/agent-loop/src/agent.ts#L299) 提供了产品侧接线的候选：每轮开始读取共用选择，在该轮内保持固定。原生 turn 包含多个模型 step 和工具调用；`running` 状态可连续覆盖多个 turn，等待整个 Agent idle 会推迟切换。
 
-当前产品在 [resume](../../backend/chat/src/runtime.mjs) 时取得共用默认值，尚未实现每轮跟随共用选择。后续应以“首请求 → 工具暂停 → 修改共用选择 → 同轮续请求 → 下一轮”验证既定行为，并覆盖既有及冷恢复会话。附件能力检查也需与实际执行选择相符。这些是待实施验证的接线建议，本轮未修改运行时代码。
+当前产品在 [resume](../../backend/chat/src/runtime.ts) 时取得共用默认值，尚未实现每轮跟随共用选择。后续应以“首请求 → 工具暂停 → 修改共用选择 → 同轮续请求 → 下一轮”验证既定行为，并覆盖既有及冷恢复会话。附件能力检查也需与实际执行选择相符。这些是待实施验证的接线建议，本轮未修改运行时代码。
 
 （已被 #43 取代：每轮开始重读共用选择已实现，[tests/gateway.test.mjs](../../tests/gateway.test.mjs) 有此断言。）
 
@@ -56,11 +56,11 @@
 
 `providers` 在 [配置定义](https://github.com/eafen405/deepseek-harness/blob/fe2bbc3b1c14efd7e1247cdc2990a657ab51f3ee/packages/llm/llm-pi-ai/src/config.ts) 中声明为 volatile。正常 settings 修改可热更新，同一 adapter 原子替换路由集合，单独修改未使用的路由不会先卸载其他路由。整插件重载、上下文或装配变化则覆盖全部路由；覆盖整个字典时被省略的路由也须计入影响范围。
 
-本轮没有业务数据库结构改动方案；配置沿用原生持久化。父规格中主会话定位也已按 [现有实现](../../backend/sessions/src/service.mjs) 校正为用户编号确定标识、原生日志核对归属。
+本轮没有业务数据库结构改动方案；配置沿用原生持久化。父规格中主会话定位也已按 [现有实现](../../backend/sessions/src/service.ts) 校正为用户编号确定标识、原生日志核对归属。
 
 ## 投递验证与上游合并演练
 
-2026-10-18 执行 `node --test tests/text-delivery.test.mjs`，**6/6 通过**。测试使用真实产品装配和本地模型替身，覆盖冷会话投递、生成中投递、后续模型历史、重启及幂等恢复、并发投递、持久化失败和通知出口失败。冷会话及生成中投递均断言模型请求只来自发送会话。首次运行因沙箱禁止本机端口监听而未完成；允许回环监听后原命令通过。源码与断言见 [delivery/src/index.mjs](../../backend/delivery/src/index.mjs) 和 [text-delivery.test.mjs](../../tests/text-delivery.test.mjs)。
+2026-10-18 执行 `node --test tests/text-delivery.test.mjs`，**6/6 通过**。测试使用真实产品装配和本地模型替身，覆盖冷会话投递、生成中投递、后续模型历史、重启及幂等恢复、并发投递、持久化失败和通知出口失败。冷会话及生成中投递均断言模型请求只来自发送会话。首次运行因沙箱禁止本机端口监听而未完成；允许回环监听后原命令通过。源码与断言见 [delivery/src/index.ts](../../backend/delivery/src/index.ts) 和 [text-delivery.test.mjs](../../tests/text-delivery.test.mjs)。
 
 在 `/tmp/ourfairy-dsh-upgrade-probe.git` 的隔离 bare 仓库内执行：
 
@@ -88,13 +88,13 @@ git merge-tree --write-tree --messages \
 
 不过 [`admit`](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/client/connection/src/rpc-host.ts#L129) 仍只接受原生浏览器/API cookie；创建 Peer 不等于产品 Bearer 凭据通过网络准入。新版 exact `/api` Fetch 路径还要求 owner 身份，产品普通用户不能映射成 owner。
 
-当前 [chat](../../backend/chat/src/index.mjs) 与 [sessions](../../backend/sessions/src/http.mjs) 直接注册产品 HTTP 路径，独立认证并复用 `connection.fence`。下一步应结合网关实际管理范围，明确哪些操作需要原生 `/api`，再确定最小准入补丁；新版已经提供的 Peer 生命周期应优先复用。以上是静态核对结论，尚未实现或验证补丁收缩。
+当前 [chat](../../backend/chat/src/index.ts) 与 [sessions](../../backend/sessions/src/http.ts) 直接注册产品 HTTP 路径，独立认证并复用 `connection.fence`。下一步应结合网关实际管理范围，明确哪些操作需要原生 `/api`，再确定最小准入补丁；新版已经提供的 Peer 生命周期应优先复用。以上是静态核对结论，尚未实现或验证补丁收缩。
 
 ### 任务事件复用
 
 官方 rc.2 的 [`job/registered`、`job/settled`](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/jobs/jobs/src/types.ts) 已记录任务归属、种类、时间、创建工具调用及终态；[jobs-local](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/jobs/jobs-local/src/index.ts) 采用 UUID 任务标识，并在通知实时订阅者前记录生命周期。这为复用官方任务事实、收缩产品 generation 接线提供了依据。
 
-[tool-jobs 的完成路径](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/jobs/tool-jobs/src/index.ts) 仍未记录实际 followup/inject/不报告/失败决定，也缺少 jobId 与入队 messageId 的关联。产品 [投影单元](../../backend/chat/src/units.mjs) 依赖这些事实衔接任务结束、报告消费和取消，避免提前静默。升级应优先复用官方生命周期，仅在现有报告交付职责处保留缺少的决定及消息关联；具体删除项须验证旧会话读取、未知状态和实际失败恢复。
+[tool-jobs 的完成路径](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/jobs/tool-jobs/src/index.ts) 仍未记录实际 followup/inject/不报告/失败决定，也缺少 jobId 与入队 messageId 的关联。产品 [投影单元](../../backend/chat/src/units.ts) 依赖这些事实衔接任务结束、报告消费和取消，避免提前静默。升级应优先复用官方生命周期，仅在现有报告交付职责处保留缺少的决定及消息关联；具体删除项须验证旧会话读取、未知状态和实际失败恢复。
 
 本轮还执行了仓库要求的检查：
 

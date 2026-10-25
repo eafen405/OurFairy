@@ -5,14 +5,22 @@
   "description": "OurFairy owned sessions: SessionHeader.owner as the only ownership authority, plus the identity's deterministic fixed primary session, with the product's own request paths.",
   "type": "module",
   "license": "UNLICENSED",
-  "main": "./src/index.mjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.mjs",
-    "./events": "./src/events.mjs",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "default": "./dist/events.js"
+    },
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
-    "src",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "README.md",
     "locale/*.json"
   ],

@@ -2,7 +2,7 @@
  * Ticket #27 acceptance: owned sessions, the fixed primary session, and restart
  * recovery, over the real backend.
  *
- * These drive the shipped launcher (`scripts/ourfairy-backend.mjs start`), which
+ * These drive the shipped launcher (`scripts/ourfairy-backend.ts start`), which
  * boots the real dsh CLI with the OurFairy profile, and then speak HTTP to the
  * listener it bound — no plugin is assembled by hand and no request is faked.
  * Requests go through `node:http`, not `fetch`, so they cannot be routed
@@ -343,7 +343,7 @@ describe('OurFairy owned sessions over real HTTP', () => {
       { id: foreignId, owner: `user:${owner.json.user.shortId}` },
       { id: takenId, owner: `user:${owner.json.user.shortId}` },
     ]
-    const fixturePlugin = fileURLToPath(new URL('../backend/sessions/test-support/persist-fixtures.mjs', import.meta.url))
+    const fixturePlugin = fileURLToPath(new URL('../backend/sessions/test-support/persist-fixtures.ts', import.meta.url))
     stopBackend()
     const overlay = writeOverlay(home, [{ insert: [{
       id: 'cold-session-fixtures', name: fixturePlugin, config: { fixtures },
@@ -418,7 +418,7 @@ describe('OurFairy owned sessions over real HTTP', () => {
     const owner = await register(await createInvite(admin.token), 'agent-resume-empty')
     assert.equal(owner.status, 200, owner.text)
     const reportPath = join(home, 'empty-resume-report.json')
-    const plugin = fileURLToPath(new URL('../backend/sessions/test-support/resume-empty.mjs', import.meta.url))
+    const plugin = fileURLToPath(new URL('../backend/sessions/test-support/resume-empty.ts', import.meta.url))
     stopBackend()
     const overlay = writeOverlay(home, [{ insert: [{
       id: 'resume-empty-owned-session', name: plugin,

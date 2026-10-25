@@ -8,7 +8,7 @@
  * cover leaves the tests booting the previous install while `npm test` stays
  * green.
  *
- * Ticket #156 moved that fact into `scripts/ourfairy-composition.mjs`, so the
+ * Ticket #156 moved that fact into `scripts/ourfairy-composition.ts`, so the
  * assertions import it directly: the hashed set and the cached/install decision
  * are composition facts, not something a subprocess has to report back. The
  * decision's two written inputs — the profile and its source stamp — are
@@ -38,7 +38,7 @@ import {
   profileTemplateDir,
   writeProfile,
   writeSourceStamp,
-} from '../scripts/ourfairy-composition.mjs'
+} from '../scripts/ourfairy-composition.ts'
 import { copyProductRepo, describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
 
 /** The throwaway repository the composition reads; the worktree itself stays untouched. */
@@ -47,8 +47,14 @@ const homes = []
 /** Repository copies a case needs to keep clear of the stand-in template above. */
 const roots = []
 
-/** A product source file that no hand-maintained list would know about yet. */
-const addedSource = join(repoCopy, 'backend', 'identity', 'src', 'staleness-probe.mjs')
+/**
+ * A product file that no hand-maintained list would know about yet.
+ *
+ * The identity package publishes its build output, so a file it publishes
+ * lives in its `dist`: the probe writes there, where the package's own
+ * `files` entry picks it up.
+ */
+const addedSource = join(repoCopy, 'backend', 'identity', 'dist', 'staleness-probe.js')
 
 after(() => {
   rmSync(addedSource, { force: true })
@@ -76,19 +82,71 @@ function installedProfile() {
 }
 
 /**
- * Product sources walked from the copy: every packaged file under a `src/`
- * directory plus each package's manifest. Expected coverage is built from the
- * disk here, never from whatever the composition chose to report.
+ * The files the product packages publish, read from the manifests and the disk
+ * here.
+ *
+ * The expectation comes from each package's `files` declaration rather than from
+ * a hardcoded `src/` list: a package that publishes its build output instead of
+ * its sources is still fully covered by the staleness hash, and a source file
+ * the manifest does not publish is not published at all. The glob semantics are
+ * re-implemented here on purpose — the composition expands the entries with
+ * Node's resolver, and a test that used the same resolver would only prove that
+ * both sides made the same mistake.
+ * @param {string} root - repository root to walk.
+ * @returns {string[]} repo-relative paths.
  */
 function copiedSources(root) {
-  const found = []
-  for (const file of readdirSync(join(root, 'backend'), { recursive: true })) {
-    const parts = file.split(sep)
-    if (parts.length < 2 || !statSync(join(root, 'backend', file)).isFile()) continue
-    const rest = parts.slice(1).join('/')
-    if (rest === 'package.json' || rest.startsWith('src/')) found.push(`backend/${parts[0]}/${rest}`)
+  const published = new Set()
+  for (const dir of readdirSync(join(root, 'backend'), { withFileTypes: true })) {
+    if (!dir.isDirectory()) continue
+    const packageDir = `backend/${dir.name}`
+    const manifestPath = join(root, packageDir, 'package.json')
+    if (!existsSync(manifestPath)) continue
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    // npm always ships package.json, whether `files` names it or not.
+    published.add(`${packageDir}/package.json`)
+    const entries = manifest.files ?? []
+    for (const file of readdirSync(join(root, packageDir), { recursive: true })) {
+      if (!statSync(join(root, packageDir, file)).isFile()) continue
+      const relativePath = file.split(sep).join('/')
+      if (entries.some(entry => publishes(entry, relativePath))) published.add(`${packageDir}/${relativePath}`)
+    }
   }
-  return found
+  return [...published].sort()
+}
+
+/**
+ * Whether one `files` entry publishes one package-relative path, with npm's
+ * glob semantics: `*` stays inside a path segment, `**` spans segments, and a
+ * plain path publishes the file itself or everything under the directory.
+ * @param {string} entry - one `files` entry, package-relative.
+ * @param {string} path - package-relative path.
+ * @returns {boolean}
+ */
+function publishes(entry, path) {
+  // A plain path names a file or a directory; a directory publishes everything
+  // under it, which is what `files: ["src"]` means.
+  if (!entry.includes('*')) return path === entry || path.startsWith(`${entry}/`)
+  const segments = entry.split('/')
+  const parts = path.split('/')
+  const match = (pattern, rest) => {
+    if (pattern.length === 0) return rest.length === 0
+    if (pattern[0] === '**') return rest.some((_, index) => match(pattern.slice(1), rest.slice(index)))
+    if (rest.length === 0) return false
+    return segmentMatches(pattern[0], rest[0]) && match(pattern.slice(1), rest.slice(1))
+  }
+  return match(segments, parts)
+}
+
+/**
+ * Whether one path segment matches one glob segment.
+ * @param {string} pattern
+ * @param {string} name
+ * @returns {boolean}
+ */
+function segmentMatches(pattern, name) {
+  const source = pattern.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('[^/]*')
+  return new RegExp(`^${source}$`, 'u').test(name)
 }
 
 test('the hashed set follows what the packages publish, not their test fixtures', () => {
@@ -109,13 +167,47 @@ test('the hashed set follows what the packages publish, not their test fixtures'
     `the PDF wheel ships in the installed package, so it must be hashed; the composition listed ${files.join(', ')}`,
   )
 
-  const missing = copiedSources(repoCopy).filter(file => !files.includes(file))
-  assert.deepEqual(missing, [], `product source(s) left out of the staleness hash: ${missing.join(', ')}`)
+  const published = copiedSources(repoCopy)
+  const missing = published.filter(file => !files.includes(file))
+  assert.deepEqual(missing, [], `published product file(s) left out of the staleness hash: ${missing.join(', ')}`)
 
   // The other direction: every hashed entry is a file that actually publishes,
   // so the hash cannot be fed a path that no install copies.
-  const absent = files.filter(file => !statSync(join(repoCopy, file)).isFile())
-  assert.deepEqual(absent, [], `hashed product source(s) missing from the copy: ${absent.join(', ')}`)
+  const absent = files.filter(file => !published.includes(file))
+  assert.deepEqual(absent, [], `hashed product source(s) the manifests do not publish: ${absent.join(', ')}`)
+})
+
+test('a package that publishes its build output is hashed by that output', () => {
+  const files = productSources(repoCopy)
+
+  assert.ok(
+    files.includes('backend/http/dist/http.js'),
+    `the http package publishes its build output, so the hash must cover it; the composition listed ${files.join(', ')}`,
+  )
+  assert.ok(
+    !files.some(file => file.startsWith('backend/http/src/')),
+    `the http package publishes dist, not src, so its sources must not decide profile staleness; the composition listed ${files.join(', ')}`,
+  )
+})
+
+test('a files entry that publishes no file is refused instead of silently skipped', () => {
+  const root = copyProductRepo('ourfairy-product-sources-empty-')
+  roots.push(root)
+  const dist = join(root, 'backend', 'http', 'dist')
+  for (const shape of ['missing', 'empty']) {
+    rmSync(dist, { recursive: true, force: true })
+    if (shape === 'empty') mkdirSync(dist, { recursive: true })
+    assert.throws(
+      () => productSources(root),
+      (error) => {
+        assert.match(error.message, /backend\/http/u, `the failure must name the package: ${error.message}`)
+        assert.match(error.message, /dist\/\*\*\/\*\.js/u, `the failure must name the files entry: ${error.message}`)
+        assert.match(error.message, /npm run build/u, `the failure must name the remedy: ${error.message}`)
+        return true
+      },
+      `a ${shape} dist must be refused, not hashed as an empty set`,
+    )
+  }
 })
 
 test('unchanged product sources decide cached', () => {
@@ -152,6 +244,7 @@ test('a new product source file changes the hash and decides install', () => {
   const layout = installedProfile()
   const before = productSourceHash(repoCopy)
   const added = relative(repoCopy, addedSource)
+  mkdirSync(dirname(addedSource), { recursive: true })
   writeFileSync(addedSource, '// Ticket #48 staleness probe: a product source added after the last install.\n')
   try {
     const after = productSourceHash(repoCopy)

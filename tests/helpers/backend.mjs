@@ -1,7 +1,7 @@
 /**
  * Shared helpers for the OurFairy baseline tests.
  *
- * Every test drives the real product entry (`scripts/ourfairy-backend.mjs`),
+ * Every test drives the real product entry (`scripts/ourfairy-backend.ts`),
  * which in turn boots the shipped dsh CLI profile machinery — no plugin is
  * assembled by hand here.
  */
@@ -12,7 +12,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { readCombo, repoPath } from '../../scripts/combo.mjs'
+import { readCombo, repoPath } from '../../scripts/combo.ts'
+import { linkTypes } from '../../scripts/link-types.ts'
 
 /** Absolute path of this ticket worktree (the repository under test). */
 export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
@@ -21,7 +22,7 @@ export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 export const dshDir = repoPath(readCombo(repoRoot).combo, 'dsh', repoRoot)
 
 /** Path of the product launcher every test drives. */
-export const backendScript = join(repoRoot, 'scripts', 'ourfairy-backend.mjs')
+export const backendScript = join(repoRoot, 'scripts', 'ourfairy-backend.ts')
 
 /**
  * Directories of the packages under `backend/` that carry a manifest, as paths
@@ -73,12 +74,19 @@ export const EPHEMERAL_PORT = '0'
 /**
  * Environment for one launcher command: the caller's entries layered over the
  * process environment, with an ephemeral port unless the caller chose one.
+ *
+ * The build is skipped by default. Dozens of launcher invocations run
+ * concurrently across the suite, and each one building would make them
+ * concurrent writers of the same build output. A caller that wants the launcher
+ * to build passes `OURFAIRY_SKIP_BUILD: undefined`; the skip removes the
+ * build, not the guard — a missing or empty build output still fails loudly.
  * @param {Record<string, string|undefined>} [env]
  * @returns {Record<string, string|undefined>}
  */
 export function launchEnv(env = {}) {
   const merged = mergedEnv(env)
   if (merged.OURFAIRY_PORT === undefined) merged.OURFAIRY_PORT = EPHEMERAL_PORT
+  if (!Object.hasOwn(env, 'OURFAIRY_SKIP_BUILD')) merged.OURFAIRY_SKIP_BUILD = '1'
   return merged
 }
 
@@ -98,14 +106,26 @@ export function removeHome(path) {
  * A test that must change a product input (the bundle patch, a product source
  * file) can then run the real launcher against its copy instead of mutating the
  * worktree that every other test file's launcher is reading concurrently.
+ *
+ * The build inputs come with it: the root TypeScript configuration, and the
+ * package projects under `backend/`. The `node_modules` link farm is rebuilt
+ * rather than copied — it is a generated artifact, and a copied farm carries
+ * the machine paths of the checkout it was made in. The build info is filtered
+ * out: a copy that kept it would let a build in the copy report success while
+ * leaving a missing artifact behind.
  * @param {string} [prefix] - temporary directory prefix.
  * @returns {string} the copied repository root; the caller removes it.
  */
 export function copyProductRepo(prefix = 'ourfairy-repo-') {
   const root = mkdtempSync(join(tmpdir(), prefix))
-  for (const entry of ['backend', 'scripts', 'combo.json', 'package.json']) {
-    cpSync(join(repoRoot, entry), join(root, entry), { recursive: true })
+  const entries = ['backend', 'scripts', 'combo.json', 'package.json', 'tsconfig.base.json', 'tsconfig.json']
+  for (const entry of entries) {
+    cpSync(join(repoRoot, entry), join(root, entry), {
+      recursive: true,
+      filter: source => !source.endsWith('.tsbuildinfo'),
+    })
   }
+  linkTypes(root)
   return root
 }
 
@@ -121,7 +141,7 @@ export function copyProductRepo(prefix = 'ourfairy-repo-') {
  */
 export function runBackend(args, env = {}, options = {}) {
   const root = options.root ?? repoRoot
-  const result = spawnSync(process.execPath, [join(root, 'scripts', 'ourfairy-backend.mjs'), ...args], {
+  const result = spawnSync(process.execPath, [join(root, 'scripts', 'ourfairy-backend.ts'), ...args], {
     cwd: options.cwd ?? root,
     env: launchEnv(env),
     encoding: 'utf8',
