@@ -1,0 +1,29 @@
+{
+  "parent": 229,
+  "title": "Profile 安装：恢复与模板复用的生命周期回归",
+  "children": [
+    {
+      "file": "01-install-recovery.md",
+      "issue": 230,
+      "title": "T1 确定性安装恢复：fake corepack 进程替身与重试验证",
+      "blockedBy": []
+    },
+    {
+      "file": "02-template-reuse.md",
+      "issue": 231,
+      "title": "T2 模板复用闭环：真实安装发布、跨 home 复制与缓存命中",
+      "blockedBy": [
+        230
+      ]
+    },
+    {
+      "file": "03-closeout.md",
+      "issue": 232,
+      "title": "T3 收口：两轴评审修复、证据与全量门禁",
+      "blockedBy": [
+        230,
+        231
+      ]
+    }
+  ]
+}
