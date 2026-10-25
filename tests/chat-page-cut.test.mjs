@@ -1,86 +1,143 @@
 /**
- * `/chat/page` takes its event range at the fixed cut (ticket #91).
+ * `/chat/page` is one complete runtime page operation (ticket #225).
  *
- * The page used to read the whole session log and slice it in memory. These
- * assertions pin the behaviour that replaced it: a page asks only for its own
- * `K..end-1` range through the native read handle, and a page served from an
- * already-seeded live window slices that window instead of reading again.
- *
- * The fake context is the seam the runtime already exposes (`ctx.sessionPersistence`),
- * so this file never reaches into a private method: it counts the ranges the
- * runtime asks the native handle for, which is exactly the observable the
- * ticket's acceptance criterion names ("only this page's events, not the full log").
+ * Every case opens a real `LiveSession` through `SessionRuntime.open` in
+ * `backend/chat` and calls `runtime.page` with the same already-validated
+ * numbers `/chat/page` passes; no `LiveSession` shape is built by hand and no
+ * internal window field is inspected. The shared fake world records the native
+ * reads, so a page's cost is observed at the seam the runtime actually uses:
+ * `sessionPersistence` for a cold page, the seeded window for a warm one.
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-// Registers Node resolution for the pinned dsh checkout before product modules load.
+// Registers Node resolution for the pinned dsh checkout before any product
+// module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
+import { SESSION, assistantMessage, makeWorld, openWorld, userMessage } from './helpers/chat-world.mjs'
 
-const { SessionRuntime } = await import('../backend/chat/dist/runtime.js')
+/** The seqs of a page's events, the one thing the wire ordering exposes. */
+const seqs = events => events.map(event => event.seq)
+/** Every seq in `[from, to)`. */
+const range = (from, to) => Array.from({ length: to - from }, (_, offset) => from + offset)
 
-/** One committed event at `seq`. */
-const at = seq => ({ seq, type: 'test/event', data: {} })
-const log = count => Array.from({ length: count }, (_, seq) => at(seq))
-
-/** A persistence service that records every range it is asked for. */
-function persistenceOf(events) {
-  const reads = []
-  const opened = []
-  return {
-    reads,
-    opened,
-    open: async (sessionId, access) => {
-      opened.push({ sessionId, access })
-      return {
-        read: async (offset, length) => {
-          reads.push({ offset, length })
-          return { eventState: 'owned', events: events.slice(offset, offset + length) }
-        },
-        close: async () => {},
-      }
-    },
-  }
+/** Commit `count` generic events; the transcript unit ignores this type. */
+function appendEvents(session, count) {
+  for (let index = 0; index < count; index++) session.append('test/event', { index })
 }
 
-const stateOf = (overrides = {}) => ({ sessionId: 'session-1', window: null, ...overrides })
-/** Paging touches only the persistence seam; the native history seam is constructed, never read. */
-const contextOf = persistence => ({ sessionPersistence: persistence, on: () => () => {}, effect: execute => execute() })
+/** The four-event turn the message tests page over. */
+function appendConversation(session) {
+  session.append('turn/start', { turn: 1 })
+  session.append('agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [userMessage('u1', 'hello', 'r1')] })
+  session.append('user/message', userMessage('u1', 'hello', 'r1'), { surfaceOp: 'append' })
+  session.append('assistant/message', { turn: 1, step: 1, message: assistantMessage('a1', 'hi'), stream: [] }, { surfaceOp: 'append' })
+}
 
-test('a page asks the native handle for exactly its own range', async () => {
-  const persistence = persistenceOf(log(100))
-  const runtime = new SessionRuntime(contextOf(persistence))
-  const events = await runtime.pageEvents(stateOf(), 40, 64)
+test('an uninitialized window asks the native handle for exactly this page range', async () => {
+  const world = makeWorld()
+  appendEvents(world.session(), 100)
+  const { runtime, state } = await openWorld(world)
 
-  assert.deepEqual(events.map(event => event.seq), Array.from({ length: 24 }, (_, index) => 40 + index))
-  assert.deepEqual(persistence.reads, [{ offset: 40, length: 24 }], 'only the page range is read')
-  assert.deepEqual(persistence.opened, [{ sessionId: 'session-1', access: 'read' }])
+  const page = await runtime.page(state, 63, 64, 24)
+  assert.ok(page !== null)
+  assert.deepEqual(seqs(page.events), range(40, 64))
+  assert.deepEqual(world.pageReads, [{ offset: 40, length: 24 }], 'only the page range is read')
+  assert.deepEqual(world.pageOpens, [{ sessionId: SESSION, access: 'read' }])
+  assert.deepEqual(world.reads, [], 'a cold page never seeds the observed window')
+  assert.equal(page.sessionId, SESSION)
+  assert.equal(page.throughSeq, 63)
+  assert.equal(page.fromSeq, 40)
+  assert.equal(page.beforeSeq, 40)
+  assert.equal(page.hasMore, true)
 })
 
-test('the page cut comes from the seeded window or the live session end', () => {
-  const runtime = new SessionRuntime(contextOf(persistenceOf(log(100))))
+test('the page ends at the smaller of throughSeq + 1 and beforeSeq', async () => {
+  const world = makeWorld()
+  appendEvents(world.session(), 100)
+  const { runtime, state } = await openWorld(world)
 
-  assert.equal(runtime.cursorOf({ session: { seq: 12 }, window: null }), 11,
-    'before a seed the live session knows the observed end')
-  assert.equal(runtime.cursorOf({ session: { seq: 12 }, window: { events: log(5) } }), 4,
-    'a seeded window is the observed authority')
-  assert.equal(runtime.cursorOf({ session: { seq: 0 }, window: null }), -1)
+  const page = await runtime.page(state, 63, 50, 24)
+  assert.ok(page !== null)
+  assert.deepEqual(seqs(page.events), range(26, 50), 'beforeSeq is the exclusive lower bound, so it ends the page')
+  assert.equal(page.fromSeq, 26)
+  assert.equal(page.beforeSeq, 26)
+  assert.equal(page.hasMore, true)
+  assert.deepEqual(world.pageReads, [{ offset: 26, length: 24 }])
 })
 
-test('a page slices a seeded window instead of reading the log again', async () => {
-  const persistence = persistenceOf(log(100))
-  const runtime = new SessionRuntime(contextOf(persistence))
-  const state = stateOf({ window: { events: log(100), nextSeq: 100, buffer: [] } })
-  const events = await runtime.pageEvents(state, 10, 12)
+test('a page over an initialized window slices it and reads no log again', async () => {
+  const world = makeWorld()
+  appendEvents(world.session(), 100)
+  const { runtime, state } = await openWorld(world)
+  await runtime.projection(state, { maxEvents: 100 })
+  assert.equal(world.reads.length, 1, 'the projection seeds the window once')
 
-  assert.deepEqual(events.map(event => event.seq), [10, 11])
-  assert.deepEqual(persistence.reads, [], 'a seeded window needs no log read')
+  const page = await runtime.page(state, 63, 64, 24)
+  assert.ok(page !== null)
+  assert.deepEqual(seqs(page.events), range(40, 64))
+  assert.deepEqual(world.pageReads, [], 'a seeded window needs no persistence read')
+  assert.equal(world.reads.length, 1, 'and no extra observation read')
 })
 
-test('an empty page range reads nothing and returns no events', async () => {
-  const persistence = persistenceOf(log(10))
-  const runtime = new SessionRuntime(contextOf(persistence))
-  const events = await runtime.pageEvents(stateOf(), 0, 0)
+test('a valid empty page is a normal page object', async () => {
+  const emptyWorld = makeWorld()
+  const empty = await openWorld(emptyWorld)
+  assert.deepEqual(await empty.runtime.page(empty.state, -1, 0, 64),
+    { sessionId: SESSION, throughSeq: -1, fromSeq: 0, beforeSeq: null, hasMore: false, events: [], messages: [] },
+    'an empty session pages normally at its cut of -1')
 
-  assert.deepEqual(events, [])
-  assert.deepEqual(persistence.reads, [{ offset: 0, length: 0 }])
+  const world = makeWorld()
+  appendConversation(world.session())
+  const { runtime, state } = await openWorld(world)
+  assert.deepEqual(await runtime.page(state, 3, 0, 64),
+    { sessionId: SESSION, throughSeq: 3, fromSeq: 0, beforeSeq: null, hasMore: false, events: [], messages: [] },
+    'paging before the first event ends at beforeSeq instead of failing')
+})
+
+test('page messages carry the seqs of the page event range at the fixed cut', async () => {
+  const world = makeWorld()
+  appendConversation(world.session())
+  const { runtime, state } = await openWorld(world)
+
+  const page = await runtime.page(state, 3, 4, 2)
+  assert.ok(page !== null)
+  assert.deepEqual(seqs(page.events), [2, 3])
+  assert.deepEqual(page.messages.map(message => [message.messageId, message.seq, message.role]),
+    [['u1', 2, 1], ['a1', 3, 2]])
+  for (const message of page.messages) {
+    assert.ok(message.seq >= page.fromSeq && message.seq < 4,
+      `message ${message.messageId} at seq ${message.seq} lies outside [${page.fromSeq}, 4)`)
+  }
+})
+
+test('a repeated page at a fixed cut returns identical content after events append', async () => {
+  const world = makeWorld()
+  const session = world.session()
+  appendConversation(session)
+  const { runtime, state } = await openWorld(world)
+  const first = await runtime.page(state, 3, 4, 2)
+  assert.ok(first !== null)
+  assert.deepEqual(seqs(first.events), [2, 3])
+
+  session.append('user/message', userMessage('u2', 'later', 'r2'), { surfaceOp: 'append' })
+  session.append('assistant/message', { turn: 1, step: 1, message: assistantMessage('a2', 'later reply'), stream: [] }, { surfaceOp: 'append' })
+  session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+  const repeated = await runtime.page(state, 3, 4, 2)
+  assert.deepEqual(repeated, first, 'the fixed cut keeps its events and messages after new commits')
+})
+
+test('only a throughSeq beyond the current cursor returns null', async () => {
+  const world = makeWorld()
+  const session = world.session()
+  appendEvents(session, 10)
+  const { runtime, state } = await openWorld(world)
+
+  assert.equal(await runtime.page(state, 10, 11, 64), null, 'throughSeq 10 is beyond cursor 9')
+  assert.deepEqual(world.pageReads, [], 'the dynamic cut check runs before any log read')
+
+  await runtime.projection(state, { maxEvents: 64 })
+  assert.equal(await runtime.page(state, 10, 11, 64), null, 'a seeded window is the same authority for the cut')
+  const boundary = await runtime.page(state, 9, 10, 64)
+  assert.ok(boundary !== null)
+  assert.deepEqual(seqs(boundary.events), range(0, 10), 'the current cursor is a valid inclusive bound, clamped to the log start')
 })

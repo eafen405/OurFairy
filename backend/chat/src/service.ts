@@ -3,7 +3,7 @@ import { Service } from '@deepseek-ai/cordis'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { uploadIdsOf } from '@ourfairy/dsh-attachments'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { receiptFrom, transcriptAt, transcriptDefinition } from './units.js'
+import { receiptFrom, transcriptDefinition } from './units.js'
 import { requestedSessionId } from './runtime.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { IncomingMessage } from 'node:http'
@@ -45,6 +45,11 @@ function maxEventsOf(value: unknown = 64): number {
     throw new ChatError(400, 'chat/invalid-page', 'maxEvents must be an integer from 1 to 256')
   }
   return value
+}
+
+/** The one 400 for a page whose numbers do not name a range at a committed cut. */
+function invalidPage(): ChatError {
+  return new ChatError(400, 'chat/invalid-page', 'name a fixed inclusive throughSeq and exclusive beforeSeq within that cut')
 }
 
 /** One receipt match, as the transcript unit reports it. */
@@ -117,21 +122,16 @@ export class RemoteChat extends Service {
     const limit = maxEventsOf(maxEvents)
     const id = requestedSessionId(sessionId)
     const state = await this.runtime.open(owner, id)
-    // The live session already knows its observed cut; a page never re-reads
-    // the log to learn it.
-    const cursor = this.runtime.cursorOf(state)
-    if (!isSafeInteger(throughSeq) || throughSeq < -1 || throughSeq > cursor
+    // Only the static shape of the range is validated here. Whether that cut
+    // exists yet is the runtime page operation's dynamic decision, mapped to
+    // the same HTTP error below.
+    if (!isSafeInteger(throughSeq) || throughSeq < -1
       || !isSafeInteger(beforeSeq) || beforeSeq < 0 || beforeSeq > throughSeq + 1) {
-      throw new ChatError(400, 'chat/invalid-page', 'name a fixed inclusive throughSeq and exclusive beforeSeq within that cut')
+      throw invalidPage()
     }
-    const end = Math.min(throughSeq + 1, beforeSeq)
-    const fromSeq = Math.max(0, end - limit)
-    // Project at the fixed cut, then select rows whose authoritative seq belongs
-    // to this page. A page can validly contain no bubbles but still fills event coverage.
-    return { sessionId: id, throughSeq, fromSeq, beforeSeq: fromSeq > 0 ? fromSeq : null,
-      hasMore: fromSeq > 0, events: await this.runtime.pageEvents(state, fromSeq, end),
-      messages: transcriptAt(this.transcriptState(state), throughSeq, fromSeq)
-        .filter(message => message.seq < end) }
+    const page = await this.runtime.page(state, throughSeq, beforeSeq, limit)
+    if (page === null) throw invalidPage()
+    return page
   }
   async checkpoint(owner: SessionOwner, { sessionId }: ChatRequest) {
     const state = await this.runtime.open(owner, requestedSessionId(sessionId))
