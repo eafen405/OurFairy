@@ -3,10 +3,9 @@
  * one event window seeded once and then advanced by committed events, and one
  * per-observer slice plus a live overlay.
  *
- * This drives `SessionRuntime` directly over the shared fake native world in
- * `./helpers/chat-world.mjs`, which loads `backend/chat/dist/units.js` and
- * `backend/chat/dist/runtime.js`; the commit gate selects this suite by that
- * package path. That world records every `observeSession` read,
+ * This drives the real chat read path — `backend/chat/dist/units.js` and
+ * `backend/chat/dist/runtime.js` — over the shared fake native world in
+ * `./helpers/chat-world.mjs`. That world records every `observeSession` read,
  * so the behavior under test is observable at the seam the endpoints use: a
  * streaming fragment must not read the log, and a second observer must not pay
  * for its own seed. The unit definitions are the real ones from `units.mjs`;

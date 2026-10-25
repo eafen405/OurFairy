@@ -34,7 +34,7 @@ export const job = (overrides = {}) => ({ id: 'job-1', owner: SESSION, kind: 'ta
 /** Resolve on the next macrotask: enough for the runtime's microtask publications. */
 export const tick = () => new Promise(resolve => setTimeout(resolve, 0))
 
-export function deferred() {
+function deferred() {
   let resolve
   const promise = new Promise(settle => { resolve = settle })
   return { promise, resolve }
