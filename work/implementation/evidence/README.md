@@ -182,6 +182,12 @@
 | --- | --- |
 | [213-tool-calls](213-tool-calls/README.md) | #213：投影的 messages 增加工具名（只名字，不含参数与输出），客户端按序渲染为可见条目；stateVersion 4 重折历史 |
 
+## Fairy 首页（#222）
+
+| 目录 | 内容 |
+| --- | --- |
+| [222-fairy-console](222-fairy-console/README.md) | #222：Quiet 分组信息卡与 Signal Dock 次级入口；当前会话显示与导航同源，全部会话直接显示现有列表 |
+
 ## 界面微调（#215/#217/#218）
 
 | 目录 | 内容 |

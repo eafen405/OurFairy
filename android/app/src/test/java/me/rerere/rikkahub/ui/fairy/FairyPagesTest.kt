@@ -41,6 +41,7 @@ import org.junit.Test
 import kotlin.math.abs
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -50,13 +51,15 @@ import org.robolectric.annotation.GraphicsMode
 class FairyPagesTest {
     @get:Rule val compose = createComposeRule()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var user = IdentityUser(2, "代理人")
+    private var listedSessions = OwnedSessions(
+        listOf(OwnedSession("main", primary = true), OwnedSession("other")), "main",
+    )
     private val sessions = object : SessionBackend {
-        override suspend fun list(token: String) = OwnedSessions(
-            listOf(OwnedSession("main", primary = true), OwnedSession("other")), "main",
-        )
+        override suspend fun list(token: String) = listedSessions
         override suspend fun read(token: String, sessionId: String): OwnedSession {
             if (sessionId == "missing") throw IdentityRefused(404, "session/not-found", "会话已不存在")
-            return OwnedSession(sessionId, primary = sessionId == "main")
+            return OwnedSession(sessionId, primary = sessionId == listedSessions.primarySessionId)
         }
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun primary(token: String) = OwnedSession("main", primary = true)
@@ -82,7 +85,7 @@ class FairyPagesTest {
         RemoteChatState(backend, scope, store, "https://fairy.test")
     })
     private val account = AccountSession(object : IdentityBackend {
-        override suspend fun session(token: String) = IdentityUser(2, "代理人")
+        override suspend fun session(token: String) = user
         override suspend fun signIn(name: String, password: String) = SignedIn("test", session("test"))
         override suspend fun register(inviteCode: String, name: String, password: String) = error("not used")
         override suspend fun createInvite(token: String) = error("not used")
@@ -113,6 +116,112 @@ class FairyPagesTest {
         }
     }
 
+    private fun home(onOpen: (Screen) -> Unit) {
+        show { FairyConsolePage(onOpen, account, receive) }
+    }
+
+    @Test fun `home displays and opens the recently selected session`() {
+        var destination: Screen? = null
+        home { destination = it }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.runOnIdle { receive.owned.select("other") }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        screenshot("home-selected")
+
+        compose.onNodeWithText("other").assertIsDisplayed()
+        compose.onNodeWithText("进入会话").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(Screen.Conversation("other"), destination) }
+    }
+
+    @Test fun `home without an enterable session opens the session list`() {
+        listedSessions = OwnedSessions(emptyList(), null)
+        var destination: Screen? = null
+        home { destination = it }
+
+        compose.onNodeWithText("—").assertIsDisplayed()
+        compose.onNodeWithText("0").assertIsDisplayed()
+        compose.onNodeWithText("进入会话").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(Screen.Sessions, destination) }
+    }
+
+    @Test fun `home opens all sessions directly with their real count`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        show {
+            when (val target = destination) {
+                Screen.Home -> FairyConsolePage({ destination = it }, account, receive)
+                Screen.Sessions -> FairyConversationPage(
+                    null, { destination = Screen.Home }, receive,
+                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
+                )
+                is Screen.Conversation -> FairyConversationPage(
+                    target.sessionId, { destination = Screen.Home }, receive,
+                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
+                )
+                else -> error("Unexpected destination: $target")
+            }
+        }
+
+        compose.onNodeWithText("全部会话").performScrollTo()
+        compose.onNodeWithText("2 SESSIONS").assertIsDisplayed()
+        compose.onNodeWithText("全部会话").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("关闭会话列表").assertIsDisplayed()
+        compose.onNodeWithText("主会话").assertIsDisplayed()
+        compose.onNodeWithText("other").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(Screen.Sessions, destination) }
+    }
+
+    @Test
+    @Config(qualifiers = "zh-rCN-w320dp-h640dp")
+    fun `home keeps long content bounded and actions reachable on narrow screens`() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        val longName = "长用户名".repeat(12)
+        val longSession = "session-" + "0123456789abcdef".repeat(4)
+        user = IdentityUser(2, longName)
+        listedSessions = OwnedSessions(
+            listOf(OwnedSession("main", primary = true), OwnedSession(longSession)), "main",
+        )
+        var destination: Screen? = null
+        home { destination = it }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.runOnIdle { receive.owned.select(longSession) }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == longSession }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = true
+
+        val viewport = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        fun assertBounded(text: String) {
+            val bounds = compose.onNodeWithText(text).performScrollTo().assertIsDisplayed()
+                .fetchSemanticsNode().boundsInRoot
+            assertTrue(
+                "Text exceeds the ${viewport.width}px viewport: $bounds",
+                bounds.left >= viewport.left && bounds.right <= viewport.right,
+            )
+        }
+        assertBounded(longName)
+        assertBounded(longSession)
+        compose.onNodeWithText("全部会话").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("设置").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("进入会话").performScrollTo()
+        screenshot("home-narrow-long")
+        compose.onNodeWithText("进入会话").performClick()
+        compose.runOnIdle { assertEquals(Screen.Conversation(longSession), destination) }
+    }
+
+    @Test fun `home shows a compact admin identity`() {
+        user = IdentityUser(1, "法厄同", isAdmin = true)
+        home {}
+
+        compose.onNodeWithText("法厄同").assertIsDisplayed()
+        compose.onNodeWithText("#1").assertIsDisplayed()
+        compose.onNodeWithText("ADMIN").assertIsDisplayed()
+        compose.onNodeWithText("AGENT").assertDoesNotExist()
+    }
+
     @Test fun `home opens settings with visible account content`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
@@ -121,6 +230,10 @@ class FairyPagesTest {
                 else -> FairySettingsPage({}, {}, account, onBack = { destination = Screen.Home })
             }
         }
+        compose.onNodeWithText("代理人").assertIsDisplayed()
+        compose.onNodeWithText("#2").assertIsDisplayed()
+        compose.onNodeWithText("AGENT").assertIsDisplayed()
+        compose.onNodeWithText("main").assertIsDisplayed()
         screenshot("home")
         compose.onNodeWithText("设置").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(500)
@@ -150,6 +263,7 @@ class FairyPagesTest {
         }
         compose.onNodeWithText("进入会话").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(600)
+        compose.runOnIdle { assertEquals(Screen.Conversation("main"), destination) }
         compose.onNodeWithContentDescription("切换会话").assertIsDisplayed()
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
     }
