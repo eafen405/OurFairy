@@ -9,7 +9,8 @@
 - `/chat/page` 的固定截点校验、页范围计算、事件读取与消息选择收进 `SessionRuntime.page`：接收已打开
   `LiveSession` 与已校验数字 `throughSeq` / `beforeSeq` / `maxEvents`；`throughSeq` 超出当前 cursor 返回
   `null`，其余（含有效空页）返回正常页对象。`RemoteChat.page` 只保留认证、打开、不可信 JSON 校验与
-  `null -> 400 chat/invalid-page` 映射，未新增 writer queue 或 durability barrier。
+  `null -> 400 chat/invalid-page` 映射（五个无效页请求体在 HTTP 回归中断言 400 且
+  `error.code === 'chat/invalid-page'`），未新增 writer queue 或 durability barrier。
 - 分页定义未变：`end = min(throughSeq + 1, beforeSeq)`、`fromSeq = max(0, end - maxEvents)`；消息仍按
   `throughSeq` 经 `transcriptAt` 派生并过滤到 `seq < end`。证据见
   [chat-page-cut.test.mjs](../../../../tests/chat-page-cut.test.mjs) 的范围、空页、重试与 seq 断言。
@@ -104,10 +105,20 @@ node --test tests/chat-page-cut.test.mjs tests/chat-read-window.test.mjs tests/r
 ## 未完成项与残留风险
 
 - T2（任务身份访问）在同一规格内、不在本票范围；本分支未改 jobs 查找。
-- 按票面要求未在最终 tip 跑全量 `npm test`；全量套件只在 `2474b51c27` 的 helper 提交门禁上跑过一次
-  （通过）。最终集成状态的全量 `npm test` / `combo:verify` 由 Lead 收口执行。
+- T1 交付时未在最终 tip 跑全量 `npm test`；规格级最终状态的全量 `npm test` / `combo:verify` 在 T3
+  收口执行，见 [225-closeout](../225-closeout/README.md)。
 - `SessionRuntime.page` 信任调用方已校验的数字参数（票面即如此分工）；静态数字校验与 `maxEvents` 范围仍在
   `RemoteChat.page`。直接调用 runtime 的其它入口若将来出现，需要自带校验。
 - 共享 fake world 的 `sessionPersistence` 是内存切片，不模拟原生读失败、压缩或文件权限；这些路径由
   `reconnect` 的真实后端用例覆盖。
 - 未执行 Android、真机、真实模型服务或数据库验收（本票无相关改动）。
+
+## T3 收口更新（#228）
+
+- 页证据声称 `null -> 400 chat/invalid-page`，但 T1 的 HTTP 回归只断言了 400。T3 在
+  `tests/reconnect.test.mjs` 的无效页用例为全部五个请求体（含 `throughSeq: cut + 1` 超出 cursor 的
+  动态 null 路径）补 `error.code === 'chat/invalid-page'`，状态 400 断言保留。
+- `tests/helpers/chat-world.mjs` 的 `deferred` 改为非导出（只被 helper 内部的 `delayNextRead` 使用）；
+  `tests/chat-read-window.test.mjs` 头注释不再描述提交门禁的选取方式，改为陈述其穿过 `backend/chat`
+  真实读取路径的行为。断言与覆盖不变。
+- 精确命令、计数与时长见 [225-closeout](../225-closeout/README.md)。

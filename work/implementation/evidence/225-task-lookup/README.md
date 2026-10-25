@@ -7,15 +7,17 @@
 
 ## 结论与范围
 
-- `backend/chat/src/units.ts`：任务行投影收敛成一份 `taskRowOf`。完整列表 `tasksAt` 与新增的
-  `taskAt(state, ctx, sessionId, taskId)` 都经 `taskRowWithJob` 组装，共用状态映射、报告降级
-  （`report.status` 1/2 → 6）、generation 可用性与 live overlay。`taskAt` 返回 `{ task, jobId }`
-  或 `null`；`jobId` 仅在行 generation 等于 `ctx.jobs.generation` 且该会话仍持有同名原生 job 时
-  为非空 `JobId`。`taskId` 来自不可信 JSON，查找先过 `Object.hasOwn(state.rows, taskId)`，
-  `__proto__` / `constructor` 一类继承名不会伪造任务。
-- `backend/chat/src/runtime.ts`：新增 `SessionRuntime.taskOf(state, taskId)`；只读 work projection
-  unit state 与 `ctx.jobs` 原生注册表，不读 attempt / messages / activity，不调用 `projection`，
-  不初始化事件 window。非字符串与不存在的 id 返回 `null`。
+- `backend/chat/src/units.ts`：任务行投影收敛成一份 `wireTaskOf`。完整列表 `tasksAt` 与新增的
+  `taskAt(state, ctx, sessionId, taskId)` 都经 `taskLookupOf` 组装，共用状态映射、报告降级
+  （`report.status` 1/2 → 6）、generation 可用性与 live overlay；`rowWithReport`、`wireTaskOf`
+  与 `taskLookupOf` 共用 `TaskRow = JobRow & { report }` 表达行与报告的固定组合。`taskAt`
+  返回 `{ task, jobId }` 或 `null`；`jobId` 仅在行 generation 等于 `ctx.jobs.generation` 且该会话
+  仍持有同名原生 job 时为非空 `JobId`。`taskId` 来自不可信 JSON，查找先过
+  `Object.hasOwn(state.rows, taskId)`，`__proto__` / `constructor` 一类继承名不会伪造任务。
+- `backend/chat/src/runtime.ts`：新增 `SessionRuntime.taskOf(state, taskId)`；直接读 work
+  projection unit state 与 `ctx.jobs` 原生注册表，不调用 `projection`，因此不初始化事件 window
+  （全部用例在 `sessionQuery.observeSession` 替身处断言 0 次读取）。非字符串与不存在的 id
+  返回 `null`。
 - `backend/chat/src/jobs.ts`：`jobOutput` / `jobStop` 改用 `runtime.taskOf` 与返回的原生 `JobId`
   调用 `ctx.jobs.readAt` / `get` / `kill`；删除按 generation 长度切割产品 taskId 的逻辑，不再
   为找一个任务构造整份会话投影。404、不可用输出形状（`availability: 0`、空 `chunks`、既有
@@ -29,11 +31,12 @@
 
 ## 改动面
 
-- `backend/chat/src/units.ts`：`rowWithReport` / `liveJobsOf` / `taskRowOf` / `taskRowWithJob`，
-  新增导出 `taskAt`；`rosterOf`、`tasksAt` 改走同一行投影。
+- `backend/chat/src/units.ts`：`rowWithReport` / `liveJobsOf` / `wireTaskOf` / `taskLookupOf`，
+  新增 `TaskRow` 与导出 `taskAt`；`rosterOf`、`tasksAt` 改走同一行投影。
 - `backend/chat/src/runtime.ts`：新增 `taskOf`。
-- `backend/chat/src/jobs.ts`：两个操作改走查找结果的原生 `JobId`。
-- `tests/chat-task-lookup.test.mjs`（新）：6 条经 `runtime.open` + 生产 `installJobs` 的行为用例。
+- `backend/chat/src/jobs.ts`：两个操作改走查找结果的原生 `JobId`，共用一个 `taskOr404` 查找。
+- `tests/chat-task-lookup.test.mjs`（新）：经 `runtime.open` + 生产 `installJobs` 的行为用例
+  （T2 交付 6 条，T3 收口补同源比较后 7 条）。
 - `tests/helpers/chat-world.mjs`：jobs registry 替身与 flush 记录。
 - `tests/native-job-status.test.mjs`、`tests/native-job-stop-outcome.test.mjs`：runtime 替身改为只提供
   `taskOf` 的 `{task, jobId}`，不再构造整份 projection；词表对账保持不变。
@@ -51,10 +54,13 @@
   stop 结果 1 与 2 保留，并进入 durability barrier。
 - 当前 generation 但注册表已不持有该 job 的保留任务：降级输出保留既有形状，停止 0 不调用
   `kill`。
-- 查找行与列表行同源：可用/不可用两种状态下 `status`、`availability`、`report.status`
-  逐字段断言（含报告降级 6）。
+- 查找行与列表行同源：经生产路径比较 `runtime.projection(...).tasks` 中的行与
+  `runtime.taskOf(...)?.task`——可用状态与清空 fake live jobs 后的不可用状态各比较一次，含报告
+  降级 6 与 availability；列表投影 seed 后查找不新增 `observeSession` 读取。
+- 字段级降级：可用/不可用两种状态下 `status`、`availability`、`report.status` 逐字段断言
+  （含报告降级 6）。
 - 全部用例在 `sessionQuery.observeSession` 替身处断言 `world.reads.length === 0`，不以
-  `state.window` 作证据。
+  `state.window` 作证据；同源比较用例断言列表投影的 1 次 seed 之后查找不增加读取。
 
 ## red-green 与命令结果
 
@@ -127,8 +133,23 @@ node --test tests/chat-task-lookup.test.mjs tests/native-job-status.test.mjs \
   chat/unknown-stop-outcome` 的覆盖来自 `tests/native-job-stop-outcome.test.mjs`，与改动前一致。
 - fake jobs registry 是内存替身：输出环、retention、spill 与跨进程重启语义由 `jobs.test.mjs`
   的真实后端用例覆盖，本次没有复制这些路径。
-- 最终提交序列中全量 `npm test` 在 `23e0975299`（helper 改动触发）跑过；其后只有两个词表测试与
-  本证据文档，分别经 related / docs gate。按票面未在最终 HEAD 再跑全量 `npm test`，最终集成状态的
-  全量门禁由 Lead 收口执行。
+- 最终提交序列中全量 `npm test` 在 `23e0975299`（helper 改动触发）跑过；T2 交付时未在最终 HEAD
+  再跑全量。规格级最终状态的全量门禁在 T3 收口执行，见
+  [225-closeout](../225-closeout/README.md)。
 - 未执行 Android、真机、官方模型服务或数据库验收（本票无相关改动）。
 - 未记录性能数据；「任务访问不初始化事件 window」是本票的行为断言，不构成延迟或内存承诺。
+
+## T3 收口更新（#228）
+
+- 命名：`taskRowOf` → `wireTaskOf`（返回 wire task），`taskRowWithJob` → `taskLookupOf`
+  （返回 `{task, jobId}`，不是行）；`rowWithReport`、`wireTaskOf`、`taskLookupOf` 共用一个
+  `TaskRow = JobRow & { report }` 类型。`taskLookupOf` 只取 `ctx.jobs.generation`，不再接收整个
+  ctx；调用方传入 `ctx.jobs.generation`。
+- 同源检查：新增 `the looked-up task equals the list row projection, available and unavailable`，
+  经 `runtime.projection` 与 `runtime.taskOf` 在可用、不可用两种状态比较；原
+  `the looked-up row is the list row projection, including report degradation` 只断言字段值，
+  改名为 `the lookup reports status, availability and report degradation for the folded row`。
+  `tests/chat-task-lookup.test.mjs` 由 6 条增至 7 条。
+- `runtime.taskOf` 注释收窄为被测试固定的设计事实（直接读 work 单元与 jobs 注册表、不经
+  `projection`、不初始化观察 window），不再声称未经测试的 attempt/transcript/activity 读取检查。
+- 精确命令、计数与时长见 [225-closeout](../225-closeout/README.md)。
