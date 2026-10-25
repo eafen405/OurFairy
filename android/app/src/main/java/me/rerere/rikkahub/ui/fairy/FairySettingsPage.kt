@@ -29,6 +29,7 @@ import me.rerere.rikkahub.data.remote.IdentityBackend
 import me.rerere.rikkahub.data.remote.IdentityRefused
 import me.rerere.rikkahub.data.remote.IdentityUnreachable
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,16 +51,18 @@ import me.rerere.rikkahub.ui.identity.RemoteReceiveSetup
 import org.koin.compose.koinInject
 
 /**
- * Settings as three collapsed groups rather than one flat list: the identity
- * this device is acting as, background reception, and the administrator's
- * operations, with sign-out at the bottom. Each group opens on tap and shows a
- * one-line summary while closed, so the page fits on one screen.
+ * Settings as collapsed groups rather than one flat list: the identity this
+ * device is acting as, the other agents on the backend, background reception,
+ * display, and the administrator's operations, with sign-out at the bottom.
+ * Each group opens on tap and shows a one-line summary while closed, so the
+ * page fits on one screen.
  */
 @Composable
 fun FairySettingsPage(
     onOpenGateway: () -> Unit,
     onSignedOut: () -> Unit,
     session: AccountSession = koinInject(),
+    backend: IdentityBackend = koinInject(),
     onBack: () -> Unit,
 ) {
     val tokens = LocalFairyTokens.current
@@ -128,6 +131,16 @@ fun FairySettingsPage(
                     },
                     modifier = Modifier.fillMaxWidth().height(46.dp),
                 )
+            }
+
+            FairySettingsGroup(
+                title = "代理人",
+                tag = "AGENTS",
+                summary = "同行的代理人",
+                open = open == "agents",
+                onToggle = { open = if (open == "agents") null else "agents" },
+            ) {
+                AgentRoster(session, backend)
             }
 
             FairySettingsGroup(
@@ -286,4 +299,36 @@ private fun InviteAction(session: AccountSession, backend: IdentityBackend = koi
     }) { Text(if (busy) "正在生成…" else "生成邀请码") }
     invite?.let { SelectionContainer { Text(it, style = MaterialTheme.typography.titleMedium) } }
     failure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+}
+
+/** The live agents' names, read once each time the roster group is opened. */
+@Composable
+private fun AgentRoster(session: AccountSession, backend: IdentityBackend = koinInject()) {
+    val tokens = LocalFairyTokens.current
+    var names by remember(session.token) { mutableStateOf<List<String>?>(null) }
+    var unavailable by remember(session.token) { mutableStateOf(false) }
+
+    LaunchedEffect(session.token) {
+        val token = session.token ?: return@LaunchedEffect
+        try {
+            names = backend.agents(token).map { agent -> agent.name }
+        } catch (_: IdentityRefused) {
+            unavailable = true
+        } catch (_: IdentityUnreachable) {
+            unavailable = true
+        }
+    }
+
+    val loaded = names
+    if (loaded != null) {
+        loaded.forEach { name ->
+            Text(name, style = MaterialTheme.typography.bodyMedium, color = tokens.textPrimary)
+        }
+    } else {
+        Text(
+            text = if (unavailable) "暂时无法获取代理人列表" else "正在读取…",
+            style = MaterialTheme.typography.bodyMedium,
+            color = tokens.textMuted,
+        )
+    }
 }

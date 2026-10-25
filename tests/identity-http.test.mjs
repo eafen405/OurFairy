@@ -1,6 +1,7 @@
 /**
  * Ticket #26 acceptance: invite registration, sign-in, and session credentials
- * over the real backend.
+ * over the real backend. Ticket #219 adds the agent roster: one credential-only
+ * read of every live agent's short number and name.
  *
  * These drive the shipped launcher (`scripts/ourfairy-backend.ts start`), which
  * boots the real dsh CLI with the OurFairy profile, and then speak HTTP to the
@@ -148,6 +149,49 @@ describe('OurFairy identity over real HTTP', () => {
 
     const forged = await request('/identity/session', { token: 'not-a-real-session-token' })
     assert.equal(forged.status, 401, `a forged credential must be refused: ${forged.text}`)
+  })
+
+  test('an agent reads every live agent, itself included, as only a number and a name', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const caller = await register(await createInvite(phaethon.token), 'agent-roster-caller')
+    assert.equal(caller.status, 200, `the caller must exist: ${caller.text}`)
+    const peer = await register(await createInvite(phaethon.token), 'agent-roster-peer')
+    assert.equal(peer.status, 200, `the peer must exist: ${peer.text}`)
+
+    const roster = await request('/identity/agents', { token: caller.json.token })
+    assert.equal(roster.status, 200, `a live credential must read the roster: ${roster.text}`)
+    assert.equal(roster.json.ok, true)
+    const agents = roster.json.agents
+    assert.ok(Array.isArray(agents), `the roster must be a list: ${roster.text}`)
+
+    // Order is the short number, and an entry carries existence only: no
+    // administrator flag and no creation time may travel with it.
+    assert.deepEqual(agents.map(agent => agent.shortId),
+      [...agents.map(agent => agent.shortId)].sort((left, right) => left - right),
+      'the roster must be ordered by short number')
+    for (const agent of agents) {
+      assert.deepEqual(Object.keys(agent).sort(), ['name', 'shortId'],
+        `a roster entry must name only the short number and the name: ${JSON.stringify(agent)}`)
+    }
+
+    const names = new Map(agents.map(agent => [agent.shortId, agent.name]))
+    assert.equal(names.get(caller.json.user.shortId), 'agent-roster-caller',
+      'the caller must see itself in the roster')
+    assert.equal(names.get(peer.json.user.shortId), 'agent-roster-peer',
+      'the caller must see the other agents')
+    assert.equal(names.get(1), 'phaethon', 'the administrator appears as an ordinary agent')
+  })
+
+  test('the roster stays unreachable without a live credential', async () => {
+    const anonymous = await request('/identity/agents')
+    assert.equal(anonymous.status, 401, `an anonymous caller must be refused: ${anonymous.text}`)
+    assert.equal(anonymous.json.error.code, 'identity/unauthorized')
+    assert.equal(anonymous.json.agents, undefined, 'a refusal must not carry part of the roster')
+
+    const forged = await request('/identity/agents', { token: 'not-a-real-session-token' })
+    assert.equal(forged.status, 401, `a forged credential must be refused: ${forged.text}`)
+    assert.equal(forged.json.error.code, 'identity/unauthorized')
+    assert.equal(forged.json.agents, undefined, 'a forged credential must not be handed the roster')
   })
 
   test('signing out ends the credential it was presented with', async () => {

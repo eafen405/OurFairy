@@ -19,6 +19,7 @@ export const IDENTITY_PATHS = Object.freeze([
   '/identity/sign-in',
   '/identity/session',
   '/identity/sign-out',
+  '/identity/agents',
 ])
 
 /** One handler the carrier registers on the web server. */
@@ -71,5 +72,9 @@ export function identityHandlers({ service, store, fence }: {
       ok: true,
       ...await service.signOutRequest(request),
     }))],
+    ['/identity/agents', post(async (_body, request) => {
+      callerOf(request)
+      return { ok: true, agents: store.listAgents() }
+    })],
   ])
 }

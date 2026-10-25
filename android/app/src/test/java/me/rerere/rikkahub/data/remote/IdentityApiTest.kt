@@ -169,6 +169,39 @@ class IdentityApiTest {
     }
 
     @Test
+    fun `the agent roster is a credential-only POST that reads the names back`() = runTest {
+        reply(
+            200,
+            """{"ok":true,"agents":[{"shortId":2,"name":"agent-one"},{"shortId":3,"name":"agent-two"}]}""",
+        )
+
+        val agents = api().agents("token-phaethon")
+
+        assertEquals(listOf(AgentPresence(2, "agent-one"), AgentPresence(3, "agent-two")), agents)
+        val sent = recorded.single()
+        assertEquals("POST", sent.method)
+        assertEquals("/identity/agents", sent.path)
+        assertEquals("Bearer token-phaethon", sent.authorization)
+        // Reading the roster is decided by the credential alone: there is no
+        // document to send, so there is no media type to declare either.
+        assertEquals("the roster request must carry nothing", "", sent.body)
+        assertNull("the roster request must not declare a media type", sent.contentType)
+    }
+
+    @Test
+    fun `a refused roster is a typed refusal and not an empty list`() = runTest {
+        reply(401, """{"ok":false,"error":{"code":"identity/unauthorized","message":"present a live session credential"}}""")
+
+        try {
+            api().agents("forged")
+            fail("a forged credential must not read the roster")
+        } catch (refused: IdentityRefused) {
+            assertEquals(401, refused.status)
+            assertEquals("identity/unauthorized", refused.code)
+        }
+    }
+
+    @Test
     fun `an unreachable backend is a transport failure and not a refusal`() = runTest {
         server.stop(0)
         try {

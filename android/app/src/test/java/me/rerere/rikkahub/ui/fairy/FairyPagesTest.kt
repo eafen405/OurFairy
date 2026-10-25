@@ -51,7 +51,7 @@ import org.robolectric.annotation.GraphicsMode
 class FairyPagesTest {
     @get:Rule val compose = createComposeRule()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var user = IdentityUser(2, "代理人")
+    private var user = IdentityUser(2, "agent-two")
     private var listedSessions = OwnedSessions(
         listOf(OwnedSession("main", primary = true), OwnedSession("other")), "main",
     )
@@ -84,13 +84,18 @@ class FairyPagesTest {
     private val receive = RemoteReceiveState(sessions, scope, {
         RemoteChatState(backend, scope, store, "https://fairy.test")
     })
-    private val account = AccountSession(object : IdentityBackend {
+    private val identityBackend = object : IdentityBackend {
         override suspend fun session(token: String) = user
         override suspend fun signIn(name: String, password: String) = SignedIn("test", session("test"))
         override suspend fun register(inviteCode: String, name: String, password: String) = error("not used")
         override suspend fun createInvite(token: String) = error("not used")
+        override suspend fun agents(token: String): List<AgentPresence> = listOf(
+            AgentPresence(user.shortId, user.name),
+            AgentPresence(3, "agent-three"),
+        )
         override suspend fun signOut(token: String) = Unit
-    }, InMemoryCredentialStore("test"), receive::bindIdentity)
+    }
+    private val account = AccountSession(identityBackend, InMemoryCredentialStore("test"), receive::bindIdentity)
 
     @After fun close() { scope.cancel() }
 
@@ -227,10 +232,12 @@ class FairyPagesTest {
         show {
             when (destination) {
                 Screen.Home -> FairyConsolePage({ destination = it }, account, receive)
-                else -> FairySettingsPage({}, {}, account, onBack = { destination = Screen.Home })
+                else -> FairySettingsPage(
+                    {}, {}, account, backend = identityBackend, onBack = { destination = Screen.Home },
+                )
             }
         }
-        compose.onNodeWithText("代理人").assertIsDisplayed()
+        compose.onNodeWithText("agent-two").assertIsDisplayed()
         compose.onNodeWithText("#2").assertIsDisplayed()
         compose.onNodeWithText("AGENT").assertIsDisplayed()
         compose.onNodeWithText("main").assertIsDisplayed()
@@ -240,6 +247,25 @@ class FairyPagesTest {
         compose.onNodeWithText("账号").assertIsDisplayed()
         compose.onNodeWithText("退出登录").assertIsDisplayed()
         screenshot("settings")
+    }
+
+    @Test fun `settings shows the other agents' names when their group is opened`() {
+        show { FairySettingsPage({}, {}, account, backend = identityBackend, onBack = {}) }
+        compose.mainClock.autoAdvance = true
+
+        // The account group opens first and already reads "代理人" as the role,
+        // so close it before the roster title is the one node carrying that text.
+        compose.onNodeWithText("账号").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("代理人").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("agent-two").assertIsDisplayed()
+        compose.onNodeWithText("agent-three").assertIsDisplayed()
+        // Presence only: the roster shows names, never the short numbers.
+        compose.onNodeWithText("#2").assertDoesNotExist()
+        compose.onNodeWithText("#3").assertDoesNotExist()
+        screenshot("agents")
     }
 
     private fun conversation(initial: String = "main") {
@@ -315,8 +341,10 @@ class FairyPagesTest {
             activity = RemoteActivity(1),
         ))
         conversation()
+        val viewportNode = compose.onNodeWithTag("conversation-messages")
         val before = compose.onNodeWithContentDescription("发送消息").fetchSemanticsNode().boundsInRoot
-        val viewport = compose.onNodeWithTag("conversation-messages").fetchSemanticsNode().boundsInRoot
+        val viewport = viewportNode.fetchSemanticsNode().boundsInRoot
+        val density = viewportNode.fetchSemanticsNode().layoutInfo.density.density
         screenshot("conversation")
         compose.runOnIdle {
             val stream = updates.getValue("main")
@@ -325,15 +353,39 @@ class FairyPagesTest {
         compose.mainClock.advanceTimeBy(600)
         compose.onNodeWithText("正在思考…").assertIsDisplayed()
         val during = compose.onNodeWithContentDescription("停止回复").fetchSemanticsNode().boundsInRoot
+        val after = viewportNode.fetchSemanticsNode().boundsInRoot
         assertEquals(before.top, during.top)
-        assertEquals(viewport, compose.onNodeWithTag("conversation-messages").fetchSemanticsNode().boundsInRoot)
+        assertEquals(viewport.bottom, after.bottom)
+        assertEquals(176f * density, after.top - viewport.top, 0.5f)
+        val firstMessage = compose.onNodeWithText("你好，Fairy").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "第一条消息 top ${firstMessage.top}px 应不低于展开眼屏下沿 ${viewport.top + 176f * density}px",
+            firstMessage.top >= viewport.top + 176f * density,
+        )
         screenshot("thinking")
         compose.runOnIdle {
             val stream = updates.getValue("main")
             stream.value = stream.value.copy(version = 2, replyStatus = 0, activity = RemoteActivity(1))
         }
-        compose.mainClock.advanceTimeBy(600)
+        compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithText("正在思考…").assertDoesNotExist()
+        assertEquals(viewport, viewportNode.fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test fun `empty conversation keeps the empty hint below the open screen`() {
+        updates["main"] = MutableStateFlow(RemoteChatProjection(
+            sessionId = "main", cursor = 0, durableThroughSeq = 0,
+            events = eventCoverage(0, 0),
+            activity = RemoteActivity(1),
+        ))
+        conversation()
+        val hint = compose.onNodeWithText("此会话还没有消息。").fetchSemanticsNode()
+        val density = hint.layoutInfo.density.density
+        val top = hint.boundsInRoot.top
+        assertTrue(
+            "空会话提示 top ${top}px 应不低于展开眼屏下沿 ${236f * density}px",
+            top >= 236f * density,
+        )
     }
 
     @Test

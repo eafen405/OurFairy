@@ -22,6 +22,7 @@ class RemoteNotificationNavigationTest {
         override suspend fun session(token: String) = IdentityUser(2, "Alice")
         override suspend fun signIn(name: String, password: String) = SignedIn(name, IdentityUser(if (name == "alice") 2 else 3, name))
         override suspend fun register(inviteCode: String, name: String, password: String) = error("unused")
+        override suspend fun agents(token: String): List<AgentPresence> = emptyList()
         override suspend fun signOut(token: String) = Unit
         override suspend fun createInvite(token: String) = error("unused")
     }

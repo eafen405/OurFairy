@@ -58,6 +58,19 @@ import me.rerere.rikkahub.R
 /** Window-bar content height below the status bar inset. */
 val FairyWindowBarHeight = 60.dp
 
+/** Inset between the window bar and the opened eye screen. */
+val FairyScreenTopPadding = 12.dp
+
+/** Height of the opened eye screen. */
+val FairyScreenHeight = 140.dp
+
+/** Inset below the opened eye screen, where its backdrop fades out. */
+val FairyScreenBottomPadding = 24.dp
+
+/** Height the opened eye screen covers below [FairyWindowBarHeight]. */
+val FairyScreenOpenHeight =
+    FairyScreenTopPadding + FairyScreenHeight + FairyScreenBottomPadding
+
 /** Grace period before a finished response folds the screen back. */
 private const val RESPONSE_COLLAPSE_DELAY_MS = 500L
 
@@ -66,7 +79,7 @@ private const val RESPONSE_COLLAPSE_DELAY_MS = 500L
  * period after, so a brief status flicker does not fold the screen.
  */
 @Composable
-private fun rememberFairyResponding(awaitingReply: Boolean): Boolean {
+internal fun rememberFairyResponding(awaitingReply: Boolean): Boolean {
     var responding by remember { mutableStateOf(awaitingReply) }
     LaunchedEffect(awaitingReply) {
         if (awaitingReply) {
@@ -80,13 +93,22 @@ private fun rememberFairyResponding(awaitingReply: Boolean): Boolean {
 }
 
 /**
+ * True while the window's eye screen is open: an empty session, or while Fairy
+ * analyzes before her reply shows text (plus the grace period). The window bar
+ * and the conversation's content inset both read this one value.
+ */
+@Composable
+internal fun rememberFairyScreenOpen(window: FairyWindowState): Boolean =
+    window.expanded || rememberFairyResponding(window.awaitingReply)
+
+/**
  * Fairy's window bar: an opaque bgTop strip with a 1 dp hairline bottom edge
  * (content never shows through), holding back arrow, the 64x44 dp mini
  * screen, the Fairy nameplate with a slanted status subtitle, and the
  * frameless more menu. The screen opens below the bar at full width (16 dp
  * margins, 140 dp high, 88 dp eye, HUD overlay) while
  * [FairyWindowState.expanded] (empty session) or while Fairy analyzes before
- * her reply shows text (see [rememberFairyResponding]). It floats over the message
+ * her reply shows text (see [rememberFairyScreenOpen]). It floats over the message
  * list on an opaque backdrop that fades out below it, and folds back over
  * 350 ms; Reduced Motion switches instantly.
  */
@@ -96,6 +118,7 @@ fun FairyWindowTopBar(
     subtitle: String?,
     subtitleLeading: (@Composable () -> Unit)? = null,
     subtitleTag: String? = null,
+    screenOpen: Boolean = rememberFairyScreenOpen(window),
     onNavigateBack: () -> Unit,
     moreMenuContent: (@Composable ColumnScope.(dismiss: () -> Unit) -> Unit)? = null,
     onOpenSessions: (() -> Unit)? = null,
@@ -105,8 +128,6 @@ fun FairyWindowTopBar(
     var moreMenuOpen by remember { mutableStateOf(false) }
     val windowSpec = tween<IntSize>(350, easing = FastOutSlowInEasing)
     val fadeSpec = tween<Float>(350, easing = FastOutSlowInEasing)
-    val responding = rememberFairyResponding(window.awaitingReply)
-    val screenOpen = window.expanded || responding
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
@@ -243,9 +264,14 @@ fun FairyWindowTopBar(
                     hud = true,
                     eye = window.eye,
                     modifier = Modifier
-                        .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp)
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = FairyScreenTopPadding,
+                            bottom = FairyScreenBottomPadding,
+                        )
                         .fillMaxWidth()
-                        .height(140.dp),
+                        .height(FairyScreenHeight),
                 )
             }
         }
