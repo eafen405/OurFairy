@@ -489,9 +489,14 @@ type Activity = z.infer<typeof activitySchema>
 const emptyActivity = (): Activity => ({ episode: null, completed: null, delivery: null, executing: false, parked: false,
   latestOutput: null, decisions: [], unavailable: [] })
 
+/** One folded row with its report interpretation: the roster's row composition. */
+function rowWithReport(state: WorkState, row: JobRow) {
+  return { ...row, report: reportState(row.taskId, state) }
+}
+
 /** The roster after the folded prefix, with each row's report interpretation. */
 function rosterOf(state: WorkState) {
-  return state.order.map(taskId => ({ ...state.rows[taskId] as JobRow, report: reportState(taskId, state) }))
+  return state.order.map(taskId => rowWithReport(state, state.rows[taskId] as JobRow))
 }
 
 /** One report's state comes only from the native decision, inbox and turn records. */
@@ -639,24 +644,65 @@ export const workDefinition: ProjectionDefinition<'ourfairyWork', WorkState> = {
   },
 }
 
+/** The live jobs this session owns, keyed by native id: the availability authority. */
+function liveJobsOf(ctx: Context, sessionId: SessionId) {
+  return new Map<string, JobView>(ctx.jobs.list(sessionId).filter(job => job.owner === sessionId).map(job => [job.id, job]))
+}
+
+/**
+ * One folded row as the wire task, overlaid with the live native job when it has
+ * one. This is the only task-row projection: the full list and the single
+ * lookup both read through it, so status mapping, report degradation and
+ * generation availability cannot drift apart.
+ */
+function taskRowOf(row: JobRow & { report: ReturnType<typeof reportState> }, job: JobView | undefined) {
+  const available = job !== undefined
+  const current = job ?? row
+  const status = taskStatusOf(current.status)
+  const report = { ...row.report }
+  // A restored queue does not schedule inference by itself.
+  if (!available && [1, 2].includes(report.status)) report.status = 6
+  return { taskId: row.taskId, kind: current.kind, label: current.label,
+    status: !available && !terminal(status) ? 0 : status, availability: available ? 1 : 0,
+    startedAt: current.startedAt, ...(current.finishedAt === undefined ? {} : { finishedAt: current.finishedAt }),
+    ...(current.detail === undefined ? {} : { detail: current.detail }),
+    ...(current.progress === undefined ? {} : { progress: current.progress }),
+    output: { earliest: current.output.earliest, total: current.output.total }, report }
+}
+
+/**
+ * One folded row's wire task and the native `JobId` that backs it.
+ *
+ * `jobId` is non-null only when the row's generation is the registry's current
+ * generation and that generation still holds the job for this session. An older
+ * generation's row is retained history, never a live identity, even when a
+ * same-named job exists after a restart.
+ */
+function taskRowWithJob(row: JobRow & { report: ReturnType<typeof reportState> }, ctx: Context, live: ReadonlyMap<string, JobView>) {
+  const job = row.generation === ctx.jobs.generation ? live.get(row.id) : undefined
+  return { task: taskRowOf(row, job), jobId: job === undefined ? null : job.id }
+}
+
 /** Wire tasks: the folded roster enriched with the live registry's availability. */
 function tasksAt(state: WorkState, ctx: Context, sessionId: SessionId) {
-  const live = new Map<string, JobView>(ctx.jobs.list(sessionId).filter(job => job.owner === sessionId).map(job => [job.id, job]))
-  return rosterOf(state).map(row => {
-    const job = row.generation === ctx.jobs.generation ? live.get(row.id) : undefined
-    const available = job !== undefined
-    const current = job ?? row
-    const status = taskStatusOf(current.status)
-    const report = { ...row.report }
-    // A restored queue does not schedule inference by itself.
-    if (!available && [1, 2].includes(report.status)) report.status = 6
-    return { taskId: row.taskId, kind: current.kind, label: current.label,
-      status: !available && !terminal(status) ? 0 : status, availability: available ? 1 : 0,
-      startedAt: current.startedAt, ...(current.finishedAt === undefined ? {} : { finishedAt: current.finishedAt }),
-      ...(current.detail === undefined ? {} : { detail: current.detail }),
-      ...(current.progress === undefined ? {} : { progress: current.progress }),
-      output: { earliest: current.output.earliest, total: current.output.total }, report }
-  })
+  const live = liveJobsOf(ctx, sessionId)
+  return rosterOf(state).map(row => taskRowWithJob(row, ctx, live).task)
+}
+
+/**
+ * Look one task up by its product id, with the native job that currently backs
+ * it. Reads the work unit state and the jobs registry only.
+ * @param state - the work unit state.
+ * @param ctx - host context carrying the jobs registry.
+ * @param sessionId - the session whose live jobs are read.
+ * @param taskId - the untrusted product task id; only an own folded row names a task.
+ * @returns `{task, jobId}`, or null when no folded row has that id.
+ */
+export function taskAt(state: WorkState, ctx: Context, sessionId: SessionId, taskId: string) {
+  // The id arrives from untrusted JSON: inherited names such as `__proto__`
+  // must not read Object.prototype as if it were a folded row.
+  if (!Object.hasOwn(state.rows, taskId)) return null
+  return taskRowWithJob(rowWithReport(state, state.rows[taskId] as JobRow), ctx, liveJobsOf(ctx, sessionId))
 }
 
 /** Read-time activity summary over the durable machine state, the live roster and `running`. */

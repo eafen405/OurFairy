@@ -57,6 +57,63 @@ function makeChannel() {
 }
 
 /**
+ * The fake native jobs registry behind `ctx.jobs`: the process generation,
+ * the live job list and the read/get/kill seams `jobs.ts` uses, each recording
+ * its calls. `list` mirrors the registry contract (caller-owned plus unowned);
+ * tests set the live list, the output a read returns and the kill result.
+ */
+function makeJobs() {
+  const calls = { list: [], get: [], readAt: [], kill: [] }
+  const subscriptions = []
+  const outputs = new Map()
+  let liveJobs = []
+  let killResult = 'requested'
+  const find = (id, caller) => liveJobs.find(item => item.id === id && (caller === undefined || item.owner === caller))
+  const unknown = (method, id) => new Error(`fake jobs.${method}: no live job ${id}`)
+  const registry = {
+    generation: 'g1',
+    events: {
+      subscribe(filter, listener) {
+        const subscription = { filter, listener }
+        subscriptions.push(subscription)
+        return () => {
+          const at = subscriptions.indexOf(subscription)
+          if (at >= 0) subscriptions.splice(at, 1)
+        }
+      },
+    },
+    list(caller) {
+      calls.list.push({ caller })
+      return liveJobs.filter(item => caller === undefined ? item.owner === undefined : item.owner === caller || item.owner === undefined)
+    },
+    get(id, caller) {
+      calls.get.push({ id, caller })
+      const item = find(id, caller)
+      if (item === undefined) throw unknown('get', id)
+      return item
+    },
+    readAt(id, from, caller) {
+      calls.readAt.push({ id, from, caller })
+      const item = find(id, caller)
+      if (item === undefined) throw unknown('readAt', id)
+      return outputs.get(id) ?? { chunks: [], next: item.output.total, lossy: false }
+    },
+    kill(id, caller, reason) {
+      calls.kill.push({ id, caller, reason })
+      if (find(id, caller) === undefined) throw unknown('kill', id)
+      return killResult
+    },
+  }
+  return {
+    registry, calls,
+    setLiveJobs(next) { liveJobs = next },
+    setGeneration(value) { registry.generation = value },
+    setOutput(id, output) { outputs.set(id, output) },
+    setKillResult(value) { killResult = value },
+  }
+}
+
+/**
  * A fake host: one Session per id, a registry that applies the real units
  * eagerly, one counted `observeSession` read and one counted persistence
  * handle.
@@ -64,6 +121,8 @@ function makeChannel() {
  * `reads` records every `sessionQuery.observeSession` call (the window seed);
  * `pageReads` records every `sessionPersistence` range and `pageOpens` every
  * handle open, so the page tests can assert the exact range a page asks for.
+ * `jobCalls` records the native jobs registry reads and controls task access
+ * makes, and `flushes` every durability barrier.
  */
 export function makeWorld() {
   const sessions = new Map()
@@ -71,7 +130,8 @@ export function makeWorld() {
   const reads = []
   const pageReads = []
   const pageOpens = []
-  let liveJobs = []
+  const flushes = []
+  const jobs = makeJobs()
   let gate = null
 
   function sessionOf(id = SESSION) {
@@ -156,15 +216,19 @@ export function makeWorld() {
         }
       },
     },
-    sessions: { async flush() {} },
+    sessions: { async flush(session) { flushes.push(session.id) } },
     sessionProjections: { stateOf: (session, key) => session.states[key] },
-    jobs: { generation: 'g1', list: () => liveJobs },
+    jobs: jobs.registry,
   }
 
   return {
-    ctx, session: sessionOf, reads, pageReads, pageOpens,
+    ctx, session: sessionOf, reads, pageReads, pageOpens, flushes,
     channel: id => channels.get(id),
-    setLiveJobs(jobs) { liveJobs = jobs },
+    jobCalls: jobs.calls,
+    setLiveJobs: jobs.setLiveJobs,
+    setJobGeneration: jobs.setGeneration,
+    setJobOutput: jobs.setOutput,
+    setKillResult: jobs.setKillResult,
     /** Make the next observation read wait until `releaseRead`, exposing the seed race. */
     delayNextRead() { gate = deferred() },
     releaseRead() { gate?.resolve() },
