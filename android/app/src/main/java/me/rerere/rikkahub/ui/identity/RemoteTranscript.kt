@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.identity
 
+import android.content.ClipData
+import android.widget.Toast
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +27,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,13 +41,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Download01
@@ -56,6 +65,7 @@ import me.rerere.rikkahub.ui.components.message.ChatMessageFileChip
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.fairy.FairyDialogPaddingH
 import me.rerere.rikkahub.ui.fairy.FairyDialogPaddingV
+import me.rerere.rikkahub.ui.fairy.FairyMessagePaddingH
 import me.rerere.rikkahub.ui.fairy.LocalFairyTokens
 import me.rerere.rikkahub.ui.fairy.fairyDialogPanel
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
@@ -88,6 +98,10 @@ internal fun RemoteTranscript(
     }
 
     var detail by remember { mutableStateOf<RemoteChatMessage?>(null) }
+    var menuRowKey by remember { mutableStateOf<String?>(null) }
+    val clipboard = LocalClipboard.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     detail?.let { message ->
         AlertDialog(
             onDismissRequest = { detail = null },
@@ -117,6 +131,9 @@ internal fun RemoteTranscript(
     )
     val keys = rows.map { it.key }
     val currentKeys by rememberUpdatedState(keys)
+    // The menu's click reads this when it runs: copying a streaming row takes the text that
+    // has arrived by then, not the snapshot from when the menu opened.
+    val currentRows by rememberUpdatedState(rows)
     LaunchedEffect(dragging) {
         if (dragging) reading = reading.copy(followTail = false, userScrolling = true)
     }
@@ -150,15 +167,15 @@ internal fun RemoteTranscript(
                     modifier = Modifier.align(if (fairy) Alignment.CenterStart else Alignment.CenterEnd)
                         .then(if (fairy) Modifier.fillMaxWidth()
                             .fairyDialogPanel(active = message == null)
-                            .padding(horizontal = FairyDialogPaddingH, vertical = FairyDialogPaddingV)
+                            .padding(horizontal = FairyMessagePaddingH, vertical = FairyDialogPaddingV)
                         else Modifier.widthIn(max = 340.dp)
                             .background(tokens.userBubble, tokens.userBubbleShape)
                             .border(1.dp, tokens.userBubbleBorder, tokens.userBubbleShape)
                             .padding(12.dp))
-                        .then(if (message != null) Modifier.combinedClickable(
+                        .then(if (row.text.isNotBlank() || message != null) Modifier.combinedClickable(
                             onClick = {},
-                            onLongClickLabel = "查看全文",
-                            onLongClick = { detail = message },
+                            onLongClickLabel = if (message != null) "查看全文或复制" else "复制",
+                            onLongClick = { menuRowKey = row.key },
                         ) else Modifier),
                 ) {
                     // Same heading/body geometry before and after a streaming row settles.
@@ -197,6 +214,34 @@ internal fun RemoteTranscript(
                                 text = if (message.status == 3) "已停止" else "回复失败",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = menuRowKey == row.key,
+                        onDismissRequest = { menuRowKey = null },
+                        containerColor = tokens.panelOpaque,
+                    ) {
+                        if (row.text.isNotBlank()) {
+                            DropdownMenuItem(
+                                text = { Text("复制") },
+                                onClick = {
+                                    menuRowKey = null
+                                    val body = currentRows.firstOrNull { it.key == row.key }?.text ?: row.text
+                                    scope.launch {
+                                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("message", body)))
+                                        Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                            )
+                        }
+                        if (message != null) {
+                            DropdownMenuItem(
+                                text = { Text("查看全文") },
+                                onClick = {
+                                    menuRowKey = null
+                                    detail = message
+                                },
                             )
                         }
                     }

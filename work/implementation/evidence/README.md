@@ -174,13 +174,21 @@
 | [208-ts-spaces-attachments](208-ts-spaces-attachments/README.md) | #208 T3：spaces 与 attachments 迁 .ts（包内原子）、pdf worker 搬到包根 assets/ 并随包发布、文件权限与沙箱行为不变 |
 | [209-ts-chat](209-ts-chat/README.md) | #209 T4：chat 迁 .ts（包内原子，1400 行最大包）、投影单元的 SessionProjectionStateMap 声明、test-support 夹具的 noEmit 工程与类型剥离路线、运算符与字面量的机械复查 |
 | [210-ts-remaining](210-ts-remaining/README.md) | #210 T5：delivery、gateway、groups、search、speech、probe 迁 .ts（包内原子）、投递消息源扩展的单一权威与 Events 声明、运算符与字面量的机械复查 |
-| [211-ts-scripts](211-ts-scripts/README.md) | #211 T6：scripts 十二个脚本迁 .ts（源码直跑、noEmit 叶子工程、相对 import 带 .ts 说明符）、研究文档索引补三行、全量门禁（293/293、combo:verify、doctor、probe）与工作树清理；**收口评审的九项发现见同一 README 的 §10**（Node 下限与 CLI 守卫、包名权威、bench:projection 补跑） |
+| [211-ts-scripts](211-ts-scripts/README.md) | #211 T6：scripts 十二个脚本迁 .ts（源码直跑、noEmit 叶子工程、相对 import 带 .ts 说明符）、研究文档索引补三行、全量门禁（293/293、combo:verify、doctor、probe）与工作树清理 |
 
 ## 工具调用呈现（#213）
 
 | 目录 | 内容 |
 | --- | --- |
 | [213-tool-calls](213-tool-calls/README.md) | #213：投影的 messages 增加工具名（只名字，不含参数与输出），客户端按序渲染为可见条目；stateVersion 4 重折历史 |
+
+## 界面微调（#215/#217/#218）
+
+| 目录 | 内容 |
+| --- | --- |
+| [ui-215](ui-215/README.md) | #215 聊天正文与屏幕左右边缘留出留白（Fairy 正文 34dp、用户正文 32dp；360dp Robolectric 断言；真机未执行） |
+| [ui-217](ui-217/README.md) | #217 启动图标替换为 Fairy 徽记（五档密度、adaptive 前景/单色层与旧版位图；真机未执行） |
+| [ui-218](ui-218/README.md) | #218 长按消息复制正文，含流式进行中的行；保留查看全文与 toast（真机未执行） |
 
 ## Triage 修复
 
