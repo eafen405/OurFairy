@@ -177,7 +177,7 @@ class IdentityApiTest {
 
         val agents = api().agents("token-phaethon")
 
-        assertEquals(listOf(AgentPresence(2, "agent-one"), AgentPresence(3, "agent-two")), agents)
+        assertEquals(listOf(AgentSummary(2, "agent-one"), AgentSummary(3, "agent-two")), agents)
         val sent = recorded.single()
         assertEquals("POST", sent.method)
         assertEquals("/identity/agents", sent.path)

@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
@@ -56,20 +57,26 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 
 /** Window-bar content height below the status bar inset. */
-val FairyWindowBarHeight = 60.dp
+internal val FairyWindowBarHeight = 60.dp
 
 /** Inset between the window bar and the opened eye screen. */
-val FairyScreenTopPadding = 12.dp
+private val FairyScreenTopPadding = 12.dp
 
 /** Height of the opened eye screen. */
-val FairyScreenHeight = 140.dp
+private val FairyScreenHeight = 140.dp
 
 /** Inset below the opened eye screen, where its backdrop fades out. */
-val FairyScreenBottomPadding = 24.dp
+private val FairyScreenBottomPadding = 24.dp
 
 /** Height the opened eye screen covers below [FairyWindowBarHeight]. */
-val FairyScreenOpenHeight =
+internal val FairyScreenOpenHeight =
     FairyScreenTopPadding + FairyScreenHeight + FairyScreenBottomPadding
+
+/**
+ * Duration of the window bar's open/close transition, shared with the
+ * conversation content inset so both move together.
+ */
+internal const val FAIRY_SCREEN_TRANSITION_MS = 350
 
 /** Grace period before a finished response folds the screen back. */
 private const val RESPONSE_COLLAPSE_DELAY_MS = 500L
@@ -109,8 +116,8 @@ internal fun rememberFairyScreenOpen(window: FairyWindowState): Boolean =
  * margins, 140 dp high, 88 dp eye, HUD overlay) while
  * [FairyWindowState.expanded] (empty session) or while Fairy analyzes before
  * her reply shows text (see [rememberFairyScreenOpen]). It floats over the message
- * list on an opaque backdrop that fades out below it, and folds back over
- * 350 ms; Reduced Motion switches instantly.
+ * list on an opaque backdrop that fades out below it, and folds back with the
+ * same [FAIRY_SCREEN_TRANSITION_MS]; Reduced Motion switches instantly.
  */
 @Composable
 fun FairyWindowTopBar(
@@ -126,8 +133,8 @@ fun FairyWindowTopBar(
     val tokens = LocalFairyTokens.current
     val allowSpatial = LocalAgoraMotionPolicy.current.allowSpatialTransitions
     var moreMenuOpen by remember { mutableStateOf(false) }
-    val windowSpec = tween<IntSize>(350, easing = FastOutSlowInEasing)
-    val fadeSpec = tween<Float>(350, easing = FastOutSlowInEasing)
+    val windowSpec = tween<IntSize>(FAIRY_SCREEN_TRANSITION_MS, easing = FastOutSlowInEasing)
+    val fadeSpec = tween<Float>(FAIRY_SCREEN_TRANSITION_MS, easing = FastOutSlowInEasing)
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
@@ -243,6 +250,7 @@ fun FairyWindowTopBar(
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = screenOpen,
+            modifier = Modifier.testTag("fairy-screen-overlay"),
             enter = if (allowSpatial) fadeIn(fadeSpec) + expandVertically(windowSpec) else EnterTransition.None,
             exit = if (allowSpatial) fadeOut(fadeSpec) + shrinkVertically(windowSpec) else ExitTransition.None,
         ) {

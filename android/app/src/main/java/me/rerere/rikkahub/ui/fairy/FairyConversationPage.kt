@@ -174,7 +174,7 @@ private fun FairyConversationSurface(
     val extraTop by animateDpAsState(
         targetValue = if (screenOpen) FairyScreenOpenHeight else 0.dp,
         animationSpec = if (LocalAgoraMotionPolicy.current.allowSpatialTransitions) {
-            tween(350, easing = FastOutSlowInEasing)
+            tween(FAIRY_SCREEN_TRANSITION_MS, easing = FastOutSlowInEasing)
         } else {
             snap()
         },

@@ -19,11 +19,11 @@ data class IdentityUser(
 )
 
 /**
- * One other agent's presence, as the roster exposes it: a short number and the
+ * One other agent's summary, as the roster exposes it: a short number and the
  * login name, and nothing else.
  */
 @Serializable
-data class AgentPresence(
+data class AgentSummary(
     val shortId: Int,
     val name: String,
 )
@@ -61,7 +61,7 @@ interface IdentityBackend {
 
     suspend fun session(token: String): IdentityUser
 
-    suspend fun agents(token: String): List<AgentPresence>
+    suspend fun agents(token: String): List<AgentSummary>
 
     suspend fun signOut(token: String)
 }
@@ -72,7 +72,7 @@ internal data class IdentityEnvelope(
     val token: String? = null,
     val user: IdentityUser? = null,
     val invite: Invite? = null,
-    val agents: List<AgentPresence>? = null,
+    val agents: List<AgentSummary>? = null,
     val error: Failure? = null,
 ) {
     @Serializable
@@ -132,7 +132,7 @@ class IdentityApi(
         )
     }
 
-    override suspend fun agents(token: String): List<AgentPresence> =
+    override suspend fun agents(token: String): List<AgentSummary> =
         call("/identity/agents", token = token).agents.orEmpty()
 
     override suspend fun signOut(token: String) {

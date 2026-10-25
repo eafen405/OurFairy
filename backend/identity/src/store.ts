@@ -175,8 +175,8 @@ export type PublicUser = {
   createdAt: number
 }
 
-/** One live agent as the roster exposes it: only the short number and the name. */
-export type AgentPresence = {
+/** One live agent's summary as the roster exposes it: only the short number and the name. */
+export type AgentSummary = {
   shortId: number
   name: string
 }
@@ -708,7 +708,7 @@ export class IdentityStore {
   }
 
   /** Every live agent, in short-number order, for the read-only roster. */
-  listAgents(): AgentPresence[] {
+  listAgents(): AgentSummary[] {
     return rowsOf<{ short_id: number; name: string }>(
       this.#db.prepare('SELECT short_id, name FROM users WHERE deleted_at IS NULL ORDER BY short_id').all(),
     ).map(row => ({ shortId: row.short_id, name: row.name }))
