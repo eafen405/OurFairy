@@ -66,6 +66,19 @@ ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew :app:testDebugUnitTest --tests
 `9518ef7793` 的提交门禁在相关模式下还跑了 `combo:verify`，输出
 `combo: combination verified`（ourfairy / dsh / android source 三行 ok）。
 
+收尾时 `integration/fixes-219-221` 前进到 `b5648585e7`（#219 已合入），已 `git merge --no-edit` 合入本分支
+（合并提交 `9493ba3532`），并在合并后重跑：
+
+```sh
+npm run build
+node --test tests/plugin-compatibility.test.mjs tests/owned-sessions.test.mjs tests/jobs.test.mjs \
+  tests/attachments.test.mjs tests/conversation-search.test.mjs tests/spill-read.test.mjs
+# 39/39 通过，0 失败
+```
+
+其中 `plugin-compatibility` 覆盖了本次新增的 `@deepseek-ai/dsh-session` peer 声明。分支
+`ticket/220-empty-session` 已推送到 `origin`。
+
 ## 边界与未执行项
 
 - **并发串行点是进程内 `_exclusively`**：同一 owner 的 `/primary` 与 `/create` 在同一后端进程内串行，
