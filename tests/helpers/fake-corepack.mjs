@@ -16,12 +16,13 @@
  *
  * - `succeed`: write a lockfile and the minimal linked bundle manifest the
  *   launcher validates, then exit 0;
- * - `fail`: print a distinguishable failure for that attempt and exit 1;
+ * - `fail`: record the attempt, print a distinguishable failure and exit 1;
  * - `succeed-without-linked`: write only a lockfile and exit 0, which is the
- *   "install claimed success but the bundle is missing" state;
- * - `forbid`: record the call and exit 1 without writing anything. A template
- *   reuse case uses it so an install that must not happen is both visible in
- *   the log and loud in the launcher's error.
+ *   "install claimed success but the bundle is missing" state.
+ *
+ * A template-reuse case scripts `fail` for the installs it must not run: the
+ * call log records the attempt before the fake exits non-zero, so a wrong copy
+ * decision is visible in the log and loud in the launcher's error.
  *
  * The fake's state lives in a temporary directory: `config.json` (the script)
  * and `calls.jsonl` (one JSON object per invocation). POSIX only, like the
@@ -36,21 +37,24 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 export const INSTALL_SUCCEEDED = 'succeed'
 export const INSTALL_FAILED = 'fail'
 export const INSTALL_SUCCEEDED_WITHOUT_LINKED = 'succeed-without-linked'
-export const INSTALL_FORBIDDEN = 'forbid'
 
-const OUTCOMES = [INSTALL_SUCCEEDED, INSTALL_FAILED, INSTALL_SUCCEEDED_WITHOUT_LINKED, INSTALL_FORBIDDEN]
+const OUTCOMES = [INSTALL_SUCCEEDED, INSTALL_FAILED, INSTALL_SUCCEEDED_WITHOUT_LINKED]
 
 /** This module, imported by the generated executable. */
 const helperUrl = pathToFileURL(fileURLToPath(import.meta.url)).href
 
 /**
  * Create the fake and its empty state directory.
- * @param {{installs?: string[]}} [options] - one outcome per install call, in
- *   order; later calls repeat the last outcome.
+ * @param {{installs: string[]}} options - one outcome per install call, in
+ *   order; later calls repeat the last outcome. Required: a fake with no
+ *   scripted outcome could only succeed by accident.
  * @returns {{dir: string, binDir: string, stateDir: string}} paths to clean up
  *   with {@link removeFakeCorepack}.
  */
-export function installFakeCorepack({ installs = [INSTALL_SUCCEEDED] } = {}) {
+export function installFakeCorepack({ installs } = {}) {
+  if (!Array.isArray(installs)) {
+    throw new Error('fake corepack needs an "installs" list; pass one outcome per install call')
+  }
   if (installs.length === 0) throw new Error('fake corepack needs at least one scripted install outcome')
   for (const outcome of installs) {
     if (!OUTCOMES.includes(outcome)) {
@@ -132,11 +136,6 @@ export function runFakeCorepack() {
   const attempt = corepackCalls({ stateDir }).filter(call => call.kind === 'install').length + 1
   const outcome = config.installs[Math.min(attempt - 1, config.installs.length - 1)]
   recordCall(stateDir, { kind: 'install', argv, cwd, lockfile, attempt, outcome })
-  if (outcome === INSTALL_FORBIDDEN) {
-    process.stderr.write(`fake corepack: install attempt ${attempt} is forbidden; this case must reuse the published template\n`)
-    process.exitCode = 1
-    return
-  }
   if (outcome === INSTALL_FAILED) {
     process.stdout.write(`fake corepack: install attempt ${attempt} failed\n`)
     process.stderr.write(`fake corepack stderr: simulated pnpm failure on attempt ${attempt}\n`)

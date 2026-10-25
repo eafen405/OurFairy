@@ -7,16 +7,23 @@
  * profile's source stamp are production results, not test fixtures. A second
  * home with the same product-source hash then reuses that template through the
  * launcher's own copy decision. For that home a fake corepack is first on PATH
- * with an outcome that records but refuses every install: the pin query is
- * answered, and any install attempt fails loudly and shows up in the call log,
- * so "copied" cannot quietly hide a second real install. A third home shows the
- * existing error when the reuse input itself is damaged: the template is still
- * there but its linked bundle manifest is gone, no install runs, and the failed
- * copy leaves no source stamp.
+ * with a scripted `fail`: the pin query is answered, and any install attempt is
+ * recorded before it exits non-zero, so "copied" cannot quietly hide a second
+ * real install. The call log is the proof: it may hold version queries, never
+ * an install. A third home shows the existing error when the reuse input itself
+ * is damaged: the template is still there but its linked bundle manifest is
+ * gone, no install runs, and the failed copy leaves no source stamp.
+ *
+ * The real install runs once in a `before` hook, so any single case can run on
+ * its own: the copy and damaged cases read the publisher's report, stamp and
+ * template rather than depending on the first case having run. The damaged case
+ * restores the manifest it deletes in a `finally`, so the shared template
+ * outlives the case.
  *
  * `doctor` exits non-zero in these copies for an unrelated reason: a copy is
- * not a Git checkout, so its "combo combination" check fails. Only the
- * "profile project linked" check is read, as in the other copy-based suites.
+ * not a Git checkout, so its "combo combination" check fails. The success cases
+ * therefore read only the "profile project linked" check, as the other
+ * copy-based suites do; the failure case also asserts the process result.
  *
  * Real-pnpm evidence is the first home only. The copy, cached, and damaged
  * template cases are fake-recorder evidence; the fake replaces the pnpm
@@ -25,17 +32,18 @@
  */
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, readdirSync, readlinkSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { after, test } from 'node:test'
+import { after, before, test } from 'node:test'
 import { copyProductRepo, describeRun, makeHome, removeHome, runBackend } from './helpers/backend.mjs'
 import {
   corepackCalls,
   fakeCorepackEnv,
-  INSTALL_FORBIDDEN,
+  INSTALL_FAILED,
   installFakeCorepack,
   removeFakeCorepack,
 } from './helpers/fake-corepack.mjs'
+import { assertPublishedTemplate, checkNamed, linkedBundleManifestPath } from './helpers/profile-install.mjs'
 
 /** The one repository copy the whole closed loop reads; the worktree stays untouched. */
 const root = copyProductRepo('ourfairy-template-reuse-repo-')
@@ -52,12 +60,11 @@ const fakes = []
 const templateRoot = join(root, '.ourfairy-template')
 const profileDir = home => join(home, 'dsh-home', 'profiles', profileName)
 const stampPath = home => join(profileDir(home), '.ourfairy-source-hash')
-/** The linked bundle manifest under one installed tree (profile or template). */
-function linkBundlePath(dir) {
-  return join(dir, 'node_modules', ...bundlePackage.split('/'), 'package.json')
-}
 /** The linked bundle manifest in one home's installed profile. */
-const linkedManifestPath = home => linkBundlePath(profileDir(home))
+const linkedManifestPath = home => linkedBundleManifestPath(profileDir(home), bundlePackage)
+
+/** What the real install published, read once by the `before` hook. */
+let publisher
 
 after(() => {
   rmSync(root, { recursive: true, force: true })
@@ -75,7 +82,8 @@ after(() => {
  * @param {string} home - the isolated home to diagnose.
  * @param {{binDir: string, stateDir: string}} [fake] - a fake corepack, when the
  *   copy/reuse path must not install.
- * @returns the parsed doctor report.
+ * @returns {{run: {code: number, stdout: string, stderr: string}, report: object}}
+ *   the process result and the report parsed from the first `{` of stdout.
  */
 function doctor(home, fake) {
   const run = runBackend(['doctor', '--json'], {
@@ -89,22 +97,7 @@ function doctor(home, fake) {
   }, { root, timeoutMs: fake === undefined ? 900_000 : 120_000 })
   const start = run.stdout.indexOf('{')
   assert.ok(start >= 0, `doctor printed no JSON report:\n${describeRun('doctor', run)}`)
-  return JSON.parse(run.stdout.slice(start))
-}
-
-/** The doctor check with this name. */
-function checkNamed(report, name) {
-  const check = report.checks.find(entry => entry.name === name)
-  assert.ok(check !== undefined, `doctor must record ${name}; it recorded ${JSON.stringify(report.checks.map(entry => entry.name))}`)
-  return check
-}
-
-/** The one template the first home published, refusing an empty or ambiguous directory. */
-function publishedTemplate() {
-  assert.ok(existsSync(templateRoot), `the real install must publish its template under ${templateRoot}`)
-  const templates = readdirSync(templateRoot)
-  assert.equal(templates.length, 1, `one real install publishes one template: ${JSON.stringify(templates)}`)
-  return join(templateRoot, templates[0])
+  return { run, report: JSON.parse(run.stdout.slice(start)) }
 }
 
 /**
@@ -155,52 +148,52 @@ function treeDigest(dir) {
   return hash.digest('hex')
 }
 
-test('a real install publishes the profile template and stamps its source hash', () => {
-  const report = doctor(homeA)
+before(() => {
+  const { report } = doctor(homeA)
   const linked = checkNamed(report, 'profile project linked')
   assert.equal(linked.ok, true, `the real install must succeed: ${JSON.stringify(linked)}`)
   assert.ok(
     linked.detail.endsWith(' (installed)'),
     `the first home must report the install it performed: ${JSON.stringify(linked.detail)}`,
   )
+  assert.ok(existsSync(stampPath(homeA)), `the real install must stamp the first home: ${stampPath(homeA)}`)
+  publisher = { report, stamp: readFileSync(stampPath(homeA), 'utf8').trim() }
+})
 
-  const stamp = readFileSync(stampPath(homeA), 'utf8').trim()
-  const template = publishedTemplate()
-  assert.equal(
-    template,
-    join(templateRoot, `${stamp}-${pnpmPin}`),
-    'the published template directory must be named by the stamp the install wrote and the pinned pnpm version',
-  )
+test('a real install publishes the profile template and stamps its source hash', () => {
+  const linked = checkNamed(publisher.report, 'profile project linked')
+  assert.equal(linked.ok, true, `the real install must succeed: ${JSON.stringify(linked)}`)
   assert.ok(
-    existsSync(linkBundlePath(template)),
-    `the template must carry the linked bundle manifest: ${linkBundlePath(template)}`,
+    linked.detail.endsWith(' (installed)'),
+    `the first home must report the install it performed: ${JSON.stringify(linked.detail)}`,
   )
-  assert.equal(
-    JSON.parse(readFileSync(linkBundlePath(template), 'utf8')).name,
+
+  assertPublishedTemplate({
+    templateRoot,
+    stamp: publisher.stamp,
+    pnpmPin,
     bundlePackage,
-    'the template manifest must name the product bundle',
-  )
-  assert.ok(
-    existsSync(join(template, 'pnpm-lock.yaml')),
-    'the template must carry the lockfile the successful install produced',
-  )
+  })
   // The comparison in the next case needs the publisher's copy of both.
   assert.ok(existsSync(linkedManifestPath(homeA)), `the real install must link the bundle into its profile: ${linkedManifestPath(homeA)}`)
 })
 
 test('a second home copies the template and then reports cached, without an install', () => {
-  const template = publishedTemplate()
-  const bundleInTemplate = linkBundlePath(template)
-  assert.ok(existsSync(bundleInTemplate), `the reuse input must be the real install's template: ${bundleInTemplate}`)
+  const { template } = assertPublishedTemplate({
+    templateRoot,
+    stamp: publisher.stamp,
+    pnpmPin,
+    bundlePackage,
+  })
   const templateBefore = treeDigest(template)
   assert.equal(existsSync(stampPath(homeB)), false, 'the second home must start without a source stamp')
 
-  const fake = installFakeCorepack({ installs: [INSTALL_FORBIDDEN] })
+  const fake = installFakeCorepack({ installs: [INSTALL_FAILED] })
   fakes.push(fake)
 
   const copied = doctor(homeB, fake)
   assertOnlyVersionQueries(fake, 1)
-  const copiedCheck = checkNamed(copied, 'profile project linked')
+  const copiedCheck = checkNamed(copied.report, 'profile project linked')
   assert.equal(copiedCheck.ok, true, `copying the published template must succeed: ${JSON.stringify(copiedCheck)}`)
   assert.ok(
     copiedCheck.detail.endsWith(' (copied)'),
@@ -221,7 +214,7 @@ test('a second home copies the template and then reports cached, without an inst
   assert.equal(treeDigest(template), templateBefore, 'copying a template is read-only: the published content must not change')
 
   const cached = doctor(homeB, fake)
-  const cachedCheck = checkNamed(cached, 'profile project linked')
+  const cachedCheck = checkNamed(cached.report, 'profile project linked')
   assert.equal(cachedCheck.ok, true, `the copied home must stay valid: ${JSON.stringify(cachedCheck)}`)
   assert.ok(
     cachedCheck.detail.endsWith(' (cached)'),
@@ -234,29 +227,40 @@ test('a second home copies the template and then reports cached, without an inst
 })
 
 test('a template missing its linked bundle fails the copy loudly and leaves no stamp', () => {
-  const template = publishedTemplate()
-  const bundleInTemplate = linkBundlePath(template)
-  rmSync(bundleInTemplate)
-  assert.equal(existsSync(bundleInTemplate), false, 'this case is defined by the template manifest being gone')
-  assert.equal(existsSync(stampPath(homeC)), false, 'the damaged-template home must start without a source stamp')
+  const { linkedManifest } = assertPublishedTemplate({
+    templateRoot,
+    stamp: publisher.stamp,
+    pnpmPin,
+    bundlePackage,
+  })
+  const manifestBefore = readFileSync(linkedManifest)
+  rmSync(linkedManifest)
+  try {
+    assert.equal(existsSync(linkedManifest), false, 'this case is defined by the template manifest being gone')
+    assert.equal(existsSync(stampPath(homeC)), false, 'the damaged-template home must start without a source stamp')
 
-  const fake = installFakeCorepack({ installs: [INSTALL_FORBIDDEN] })
-  fakes.push(fake)
+    const fake = installFakeCorepack({ installs: [INSTALL_FAILED] })
+    fakes.push(fake)
 
-  const report = doctor(homeC, fake)
-  assertOnlyVersionQueries(fake, 1)
-  const linked = checkNamed(report, 'profile project linked')
-  assert.equal(linked.ok, false, `a copy without the linked bundle must fail the profile check: ${JSON.stringify(linked)}`)
-  for (const fragment of ['profile template ', ' is missing ', 'delete it and rerun to install a fresh copy']) {
+    const { run, report } = doctor(homeC, fake)
+    assertOnlyVersionQueries(fake, 1)
+    assert.equal(report.ok, false, `a failed copy must fail the whole doctor report: ${JSON.stringify(report.checks)}`)
+    assert.notEqual(run.code, 0, `doctor must exit non-zero when the copy failed:\n${describeRun('doctor', run)}`)
+    const linked = checkNamed(report, 'profile project linked')
+    assert.equal(linked.ok, false, `a copy without the linked bundle must fail the profile check: ${JSON.stringify(linked)}`)
+    for (const fragment of ['profile template ', ' is missing ', 'delete it and rerun to install a fresh copy']) {
+      assert.ok(
+        linked.detail.includes(fragment),
+        `the existing template-missing error must be reported; ${JSON.stringify(fragment)} is missing from ${JSON.stringify(linked.detail)}`,
+      )
+    }
     assert.ok(
-      linked.detail.includes(fragment),
-      `the existing template-missing error must be reported; ${JSON.stringify(fragment)} is missing from ${JSON.stringify(linked.detail)}`,
+      linked.detail.includes(linkedManifestPath(homeC)),
+      `the failure must name the linked manifest the copy lacked: ${JSON.stringify(linked.detail)}`,
     )
+    assert.equal(existsSync(linkedManifestPath(homeC)), false, 'the failed copy must not invent the missing linked manifest')
+    assert.equal(existsSync(stampPath(homeC)), false, 'a failed copy must not stamp the home as installed')
+  } finally {
+    writeFileSync(linkedManifest, manifestBefore)
   }
-  assert.ok(
-    linked.detail.includes(linkedManifestPath(homeC)),
-    `the failure must name the linked manifest the copy lacked: ${JSON.stringify(linked.detail)}`,
-  )
-  assert.equal(existsSync(linkedManifestPath(homeC)), false, 'the failed copy must not invent the missing linked manifest')
-  assert.equal(existsSync(stampPath(homeC)), false, 'a failed copy must not stamp the home as installed')
 })

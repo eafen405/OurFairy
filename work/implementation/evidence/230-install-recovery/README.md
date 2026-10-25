@@ -62,7 +62,7 @@ install 的完整 argv（`install --ignore-scripts --package-import-method copy 
 | `node --test tests/product-sources.test.mjs` | 9 pass / 0 fail（6.6s） |
 | `git merge integration/spec-229` | `Already up to date.`（集成分支 tip 仍是 `d489923a34`，无冲突） |
 | 合并后 `node --test tests/install-recovery.test.mjs` | **4 pass / 0 fail**（1.1s） |
-| 提交时的仓库 pre-commit 钩子（自动） | 按 `scripts/precommit.ts` 的分类，本票只改测试文件，进入 related 门禁：构建、命中的相关测试与 `npm run combo:verify`；全量 `npm test` 与 `npm run combo:verify` 的最终结果留给 #232 收口记录 |
+| 提交时的仓库 pre-commit 钩子（自动） | 本次提交改动了 `tests/helpers/fake-corepack.mjs`，该路径在 `scripts/precommit.ts` 的 `FULL_AUTHORITY` 中，因此钩子的分类是 **full**（构建 + `npm test` + `npm run combo:verify`），不是 related。T1 提交本身的全量输出未单独留存；可复查的全量记录是 #231 提交 `d24d5e125d`（`npm test` 318 pass / 0 fail，87.4s，`combo:verify` 三行 ok）与 #232 收口的最终运行 |
 
 ## 替身证据 vs 真实 pnpm 证据
 
