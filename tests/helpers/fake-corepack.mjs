@@ -18,7 +18,10 @@
  *   launcher validates, then exit 0;
  * - `fail`: print a distinguishable failure for that attempt and exit 1;
  * - `succeed-without-linked`: write only a lockfile and exit 0, which is the
- *   "install claimed success but the bundle is missing" state.
+ *   "install claimed success but the bundle is missing" state;
+ * - `forbid`: record the call and exit 1 without writing anything. A template
+ *   reuse case uses it so an install that must not happen is both visible in
+ *   the log and loud in the launcher's error.
  *
  * The fake's state lives in a temporary directory: `config.json` (the script)
  * and `calls.jsonl` (one JSON object per invocation). POSIX only, like the
@@ -33,8 +36,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 export const INSTALL_SUCCEEDED = 'succeed'
 export const INSTALL_FAILED = 'fail'
 export const INSTALL_SUCCEEDED_WITHOUT_LINKED = 'succeed-without-linked'
+export const INSTALL_FORBIDDEN = 'forbid'
 
-const OUTCOMES = [INSTALL_SUCCEEDED, INSTALL_FAILED, INSTALL_SUCCEEDED_WITHOUT_LINKED]
+const OUTCOMES = [INSTALL_SUCCEEDED, INSTALL_FAILED, INSTALL_SUCCEEDED_WITHOUT_LINKED, INSTALL_FORBIDDEN]
 
 /** This module, imported by the generated executable. */
 const helperUrl = pathToFileURL(fileURLToPath(import.meta.url)).href
@@ -128,6 +132,11 @@ export function runFakeCorepack() {
   const attempt = corepackCalls({ stateDir }).filter(call => call.kind === 'install').length + 1
   const outcome = config.installs[Math.min(attempt - 1, config.installs.length - 1)]
   recordCall(stateDir, { kind: 'install', argv, cwd, lockfile, attempt, outcome })
+  if (outcome === INSTALL_FORBIDDEN) {
+    process.stderr.write(`fake corepack: install attempt ${attempt} is forbidden; this case must reuse the published template\n`)
+    process.exitCode = 1
+    return
+  }
   if (outcome === INSTALL_FAILED) {
     process.stdout.write(`fake corepack: install attempt ${attempt} failed\n`)
     process.stderr.write(`fake corepack stderr: simulated pnpm failure on attempt ${attempt}\n`)
