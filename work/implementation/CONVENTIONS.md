@@ -66,7 +66,7 @@ git -C /home/eafen405/projects/deepseek-harness worktree add \
 
 - **Gradle 下载发行版超时 ≠ 代理没配**：Java/Gradle 不读 `http_proxy`/`https_proxy` 环境变量，`curl` 能下不代表 Gradle 能下。
 - **依赖解析期间日志长时间无输出是正常推进，不是卡死**：Gradle 只在任务完成时打印 `> Task`。
-- **长构建要脱离 agent turn 运行**：用 `setsid nohup ... &`，日志落到 `work/implementation/evidence/` 下本票的目录里供任何人轮询。
+- **长构建使用托管后台任务**：用支持任务句柄的后台执行工具（本环境为 `bash` 的 `run_in_background` 与 `job_output`），保留任务 id，交付前收集或取消相关任务。原始运行日志放在 `work/tmp/<票号>/`；交付 README 记录实际命令与结果，日志本身不作为提交物。
 
 ## 4. 常用命令
 
