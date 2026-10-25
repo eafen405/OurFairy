@@ -13,9 +13,29 @@
  * @module @ourfairy/dsh-sessions/src/events
  */
 import type { Context } from '@deepseek-ai/cordis'
+import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import type { SessionEvent, SessionId, SessionSeqCursor } from '@deepseek-ai/dsh-session'
 // The dsh context's own seam: the session query service this read observes.
 import type {} from '@deepseek-ai/dsh-session-query'
+
+/**
+ * Whether a session's log already carries a message.
+ *
+ * The product's create path reuses a session while its log has no message, so
+ * this predicate is the single authority for "empty". It is deliberately
+ * narrow: only append-origin message events count, so a replacement copy or a
+ * non-message event (attempt, job, inbox splice) does not make a session
+ * non-empty on its own. A tool-jobs report is a `user/message`, so it counts.
+ *
+ * @param events - one session's events, as {@link readSessionEvents} returns them.
+ * @returns true when at least one message event is present.
+ */
+export function hasMessages(events: readonly SessionEvent[]): boolean {
+  return events.some(event => MESSAGE_EVENT_TYPES.has(event.type) && isAppendSurfaceEvent(event))
+}
+
+/** The message-bearing surface event types a human transcript is built from. */
+const MESSAGE_EVENT_TYPES = new Set<string>(['user/message', 'assistant/message', 'delivery/message'])
 
 /**
  * Read one session's events and cursor once, then release the observation.

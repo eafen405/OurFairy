@@ -200,13 +200,17 @@ test('another session and another user are denied the locator even though the fi
   const admin = (await httpJson(port, '/identity/sign-in', { body: { name: 'phaethon', password: PASSWORD } })).token
   const alice = await registerUser(port, admin, 'spill-alice', PASSWORD)
   const { session } = await httpJson(port, '/sessions/create', { token: admin, body: {} })
-  const otherSession = (await httpJson(port, '/sessions/create', { token: admin, body: {} })).session
   const aliceSession = (await httpJson(port, '/sessions/create', { token: alice.token, body: {} })).session
   try {
     const spill = await tool(port, admin, session.id, 'bash', { command: SPILL_COMMAND, description: 'print a large result' })
     assert.equal(spill.isError, false)
     const locator = locatorOf(model.requests.at(-1))
     assert.ok(locator !== undefined, 'the owner received a locator')
+
+    // The owning session now has content, so a second create is a genuinely
+    // different session: the denial below must be scope, not the same session.
+    const otherSession = (await httpJson(port, '/sessions/create', { token: admin, body: {} })).session
+    assert.notEqual(otherSession.id, session.id, 'a session with content is not reused as the other session')
 
     // The denial is scope, not file permission: the process itself can read the
     // file, and the owning session does read it.
