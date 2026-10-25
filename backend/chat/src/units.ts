@@ -40,7 +40,6 @@
 
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import { assembleAssistantStream } from '@deepseek-ai/dsh-llm/assistant-stream'
-import { JobId } from '@deepseek-ai/dsh-jobs'
 import { z } from 'zod'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
@@ -681,7 +680,7 @@ function taskRowOf(row: JobRow & { report: ReturnType<typeof reportState> }, job
  */
 function taskRowWithJob(row: JobRow & { report: ReturnType<typeof reportState> }, ctx: Context, live: ReadonlyMap<string, JobView>) {
   const job = row.generation === ctx.jobs.generation ? live.get(row.id) : undefined
-  return { task: taskRowOf(row, job), jobId: job === undefined ? null : JobId(row.id) }
+  return { task: taskRowOf(row, job), jobId: job === undefined ? null : job.id }
 }
 
 /** Wire tasks: the folded roster enriched with the live registry's availability. */
