@@ -147,15 +147,11 @@ class PresentationBenchmarkActivity : ComponentActivity() {
                         Text(summary, style = MaterialTheme.typography.bodySmall)
                         RemoteTranscript(
                             messages = snapshot.projection?.messages.orEmpty(),
-                            attemptText = snapshot.projection?.attempt?.text,
-                            attemptKey = snapshot.projection?.let { it.generation to it.attempt?.attemptId },
+                            generation = snapshot.projection?.generation.orEmpty(),
+                            attempt = snapshot.projection?.attempt,
+                            settledAttempt = snapshot.projection?.settledAttempt,
                             downloadEnabled = false,
                             onDownload = { _, _ -> },
-                            settledAttempt = snapshot.projection?.let { projection ->
-                                projection.settledAttempt?.let {
-                                    attemptRowKey(projection.generation, it.attemptId) to it.seq
-                                }
-                            },
                             onFinalPresented = {
                                 if (!terminalPresented.isCompleted && backend.terminalEmitNanos > 0) {
                                     terminalRichMs =

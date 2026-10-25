@@ -212,6 +212,12 @@
 | --- | --- |
 | [219-221-closeout](219-221-closeout/README.md) | #219/#220/#221 集成分支收口：两轴 review 修复（共享过渡常量、overlay 接缝与逐帧断言、AgentSummary 更名、#220 页面用例）、全量门禁、doctor 与 probe；真机未执行 |
 
+## #233 Android 呈现：attempt 行身份由后端事实派生
+
+| 目录 | 内容 |
+| --- | --- |
+| [234-presentation-identity](234-presentation-identity/README.md) · [235-reading-regression](235-reading-regression/README.md) · [233-closeout](233-closeout/README.md) | 234 — T1 呈现接口：attempt 行身份由后端事实派生 · 235 — T2 阅读过渡回归：后端事实驱动行身份 · 233 — T3 收口：attempt 行身份由后端事实派生 |
+
 ## Profile 安装恢复与模板复用（规格 #229）
 
 | 目录 | 内容 |

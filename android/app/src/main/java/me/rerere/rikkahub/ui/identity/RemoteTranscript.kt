@@ -57,7 +57,9 @@ import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.rikkahub.data.remote.RemoteChatAttachment
+import me.rerere.rikkahub.data.remote.RemoteChatAttempt
 import me.rerere.rikkahub.data.remote.RemoteChatMessage
+import me.rerere.rikkahub.data.remote.RemoteChatSettlement
 import me.rerere.rikkahub.data.remote.RemoteMessageFormat
 import me.rerere.rikkahub.data.remote.remoteAttemptFormat
 import me.rerere.rikkahub.data.remote.remoteMessageFormat
@@ -73,16 +75,15 @@ import me.rerere.rikkahub.ui.theme.LocalDarkMode
 @Composable
 internal fun RemoteTranscript(
     messages: List<RemoteChatMessage>,
-    attemptText: String?,
-    attemptKey: Pair<String, String?>?,
+    generation: String,
+    attempt: RemoteChatAttempt?,
     downloadEnabled: Boolean,
     onDownload: (RemoteChatMessage, RemoteChatAttachment) -> Unit,
     onFinalPresented: () -> Unit = {},
-    settledAttempt: Pair<String, Long>? = null,
-    attemptTools: List<String> = emptyList(),
+    settledAttempt: RemoteChatSettlement? = null,
     modifier: Modifier = Modifier,
 ) {
-    if (messages.isEmpty() && attemptText == null) {
+    if (messages.isEmpty() && attempt == null) {
         Box(
             modifier = modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center,
@@ -125,9 +126,7 @@ internal fun RemoteTranscript(
     }
     val presentation = remember { RemoteTranscriptPresentation() }
     val rows = presentation.update(
-        messages, attemptText,
-        attemptKey?.takeIf { attemptText != null }?.let { attemptRowKey(it.first, it.second) },
-        visibleKeys, reading.followTail, settledAttempt,
+        messages, generation, attempt, settledAttempt, visibleKeys, reading.followTail,
     )
     val keys = rows.map { it.key }
     val currentKeys by rememberUpdatedState(keys)
@@ -152,7 +151,7 @@ internal fun RemoteTranscript(
         reading.target(keys)?.let { listState.requestScrollToItem(it.index, it.offset) }
     }
     // StateFlow already conflates whole snapshots. Preserve the viewport rather than replaying deltas.
-    LaunchedEffect(messages, attemptText, attemptKey) { preservePosition() }
+    LaunchedEffect(messages, generation, attempt?.attemptId, attempt?.text) { preservePosition() }
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxWidth().testTag("conversation-messages"),
@@ -190,14 +189,14 @@ internal fun RemoteTranscript(
                             text = row.text,
                             onBeforeFormat = ::preservePosition,
                             onRichPresented = {
-                                if (row.key == rows.lastOrNull()?.key && attemptText == null) onFinalPresented()
+                                if (row.key == rows.lastOrNull()?.key && attempt == null) onFinalPresented()
                             },
                             foreground = if (fairy) LocalFairyTokens.current.textPrimary else MaterialTheme.colorScheme.onSurface,
                             presentationRow = row,
                         )
                     }
                     // The live row has no message yet; its tools come from the attempt.
-                    val tools = message?.tools ?: attemptTools
+                    val tools = message?.tools ?: attempt?.tools.orEmpty()
                     if (tools.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
                         ToolCallLines(tools)
