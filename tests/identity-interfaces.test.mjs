@@ -45,16 +45,16 @@ test('the store stays inside the package: four domain faces and nothing else', (
   }
 })
 
-test('the store publishes exactly the nineteen methods spec 132 named', () => {
+test('the store publishes exactly the twenty methods spec 132 and #219 named', () => {
   const published = Object.getOwnPropertyNames(IdentityStore.prototype)
     .filter(name => name !== 'constructor')
     .sort()
   assert.deepEqual(published, [
     'authenticate', 'changeGroupMember', 'close', 'completeDelivery', 'createGroup', 'createInvite',
-    'groupsForMember', 'insertUpload', 'ownsGroup', 'pendingDeliveries', 'prepareDelivery',
+    'groupsForMember', 'insertUpload', 'listAgents', 'ownsGroup', 'pendingDeliveries', 'prepareDelivery',
     'prepareDeliveryFile', 'readUpload', 'register', 'seedPhaethon', 'signIn', 'signOut',
     'updateUpload', 'userByShortId',
-  ], 'the published surface is exactly the nineteen methods spec 132 named')
+  ], 'the published surface is exactly the twenty methods spec 132 and #219 named')
   // A method assigned to the instance would not appear on the prototype, so the
   // list above would miss it; the store keeps nothing callable off the prototype.
   assert.deepEqual(Object.getOwnPropertyNames(store).filter(name => typeof store[name] === 'function'), [],
