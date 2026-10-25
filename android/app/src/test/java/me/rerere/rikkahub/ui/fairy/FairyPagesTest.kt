@@ -51,7 +51,7 @@ import org.robolectric.annotation.GraphicsMode
 class FairyPagesTest {
     @get:Rule val compose = createComposeRule()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var user = IdentityUser(2, "代理人")
+    private var user = IdentityUser(2, "agent-two")
     private var listedSessions = OwnedSessions(
         listOf(OwnedSession("main", primary = true), OwnedSession("other")), "main",
     )
@@ -84,13 +84,18 @@ class FairyPagesTest {
     private val receive = RemoteReceiveState(sessions, scope, {
         RemoteChatState(backend, scope, store, "https://fairy.test")
     })
-    private val account = AccountSession(object : IdentityBackend {
+    private val identityBackend = object : IdentityBackend {
         override suspend fun session(token: String) = user
         override suspend fun signIn(name: String, password: String) = SignedIn("test", session("test"))
         override suspend fun register(inviteCode: String, name: String, password: String) = error("not used")
         override suspend fun createInvite(token: String) = error("not used")
+        override suspend fun agents(token: String): List<AgentPresence> = listOf(
+            AgentPresence(user.shortId, user.name),
+            AgentPresence(3, "agent-three"),
+        )
         override suspend fun signOut(token: String) = Unit
-    }, InMemoryCredentialStore("test"), receive::bindIdentity)
+    }
+    private val account = AccountSession(identityBackend, InMemoryCredentialStore("test"), receive::bindIdentity)
 
     @After fun close() { scope.cancel() }
 
@@ -227,10 +232,12 @@ class FairyPagesTest {
         show {
             when (destination) {
                 Screen.Home -> FairyConsolePage({ destination = it }, account, receive)
-                else -> FairySettingsPage({}, {}, account, onBack = { destination = Screen.Home })
+                else -> FairySettingsPage(
+                    {}, {}, account, backend = identityBackend, onBack = { destination = Screen.Home },
+                )
             }
         }
-        compose.onNodeWithText("代理人").assertIsDisplayed()
+        compose.onNodeWithText("agent-two").assertIsDisplayed()
         compose.onNodeWithText("#2").assertIsDisplayed()
         compose.onNodeWithText("AGENT").assertIsDisplayed()
         compose.onNodeWithText("main").assertIsDisplayed()
@@ -240,6 +247,25 @@ class FairyPagesTest {
         compose.onNodeWithText("账号").assertIsDisplayed()
         compose.onNodeWithText("退出登录").assertIsDisplayed()
         screenshot("settings")
+    }
+
+    @Test fun `settings shows the other agents' names when their group is opened`() {
+        show { FairySettingsPage({}, {}, account, backend = identityBackend, onBack = {}) }
+        compose.mainClock.autoAdvance = true
+
+        // The account group opens first and already reads "代理人" as the role,
+        // so close it before the roster title is the one node carrying that text.
+        compose.onNodeWithText("账号").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("代理人").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("agent-two").assertIsDisplayed()
+        compose.onNodeWithText("agent-three").assertIsDisplayed()
+        // Presence only: the roster shows names, never the short numbers.
+        compose.onNodeWithText("#2").assertDoesNotExist()
+        compose.onNodeWithText("#3").assertDoesNotExist()
+        screenshot("agents")
     }
 
     private fun conversation(initial: String = "main") {

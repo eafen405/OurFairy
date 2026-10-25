@@ -18,6 +18,16 @@ data class IdentityUser(
     val isAdmin: Boolean = false,
 )
 
+/**
+ * One other agent's presence, as the roster exposes it: a short number and the
+ * login name, and nothing else.
+ */
+@Serializable
+data class AgentPresence(
+    val shortId: Int,
+    val name: String,
+)
+
 /** A live credential together with the identity it names. */
 data class SignedIn(
     val token: String,
@@ -51,6 +61,8 @@ interface IdentityBackend {
 
     suspend fun session(token: String): IdentityUser
 
+    suspend fun agents(token: String): List<AgentPresence>
+
     suspend fun signOut(token: String)
 }
 
@@ -60,6 +72,7 @@ internal data class IdentityEnvelope(
     val token: String? = null,
     val user: IdentityUser? = null,
     val invite: Invite? = null,
+    val agents: List<AgentPresence>? = null,
     val error: Failure? = null,
 ) {
     @Serializable
@@ -83,10 +96,11 @@ private data class RegisterDocument(val inviteCode: String, val name: String, va
  * cannot exist beneath it. Sign-in is the one request that must work with no
  * credential at all.
  *
- * Note which requests carry a document. `/identity/invite`, `/identity/session`
- * and `/identity/sign-out` act purely on the presented credential, so they send
- * no body and declare no media type — the backend answers `415` to a media type
- * that was never sent, and that is a real bug this client must not provoke.
+ * Note which requests carry a document. `/identity/invite`, `/identity/session`,
+ * `/identity/agents` and `/identity/sign-out` act purely on the presented
+ * credential, so they send no body and declare no media type — the backend
+ * answers `415` to a media type that was never sent, and that is a real bug this
+ * client must not provoke.
  */
 class IdentityApi(
     private val baseUrl: String,
@@ -117,6 +131,9 @@ class IdentityApi(
             IllegalStateException("the backend accepted the credential without naming an identity"),
         )
     }
+
+    override suspend fun agents(token: String): List<AgentPresence> =
+        call("/identity/agents", token = token).agents.orEmpty()
 
     override suspend fun signOut(token: String) {
         call("/identity/sign-out", token = token)
