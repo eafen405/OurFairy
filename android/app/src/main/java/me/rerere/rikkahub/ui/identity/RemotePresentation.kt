@@ -76,7 +76,7 @@ internal class RemoteTranscriptPresentation {
         messages: List<RemoteChatMessage>,
         generation: String,
         attempt: RemoteChatAttempt?,
-        settled: RemoteChatSettlement?,
+        settlement: RemoteChatSettlement?,
         visibleKeys: Set<String>,
         followTail: Boolean,
     ): List<RemoteTranscriptRow> {
@@ -84,13 +84,13 @@ internal class RemoteTranscriptPresentation {
             RemoteTranscriptRow(attemptRowKey(generation, it.attemptId), it.text)
         }
         // Only a live row this view actually observed can be carried into its formal row.
-        settled?.let { settlement ->
-            val settledKey = attemptRowKey(generation, settlement.attemptId)
-            if (settledKey == observedLiveKey) {
-                messages.singleOrNull { it.seq == settlement.seq && it.role == 2 }?.let { final ->
+        settlement?.let { endedAttempt ->
+            val settlementKey = attemptRowKey(generation, endedAttempt.attemptId)
+            if (settlementKey == observedLiveKey) {
+                messages.singleOrNull { it.seq == endedAttempt.seq && it.role == 2 }?.let { final ->
                     if (final.messageId !in rowKeys) {
-                        rowKeys[final.messageId] = settledKey
-                        if (!followTail && settledKey in visibleKeys) deferred += settledKey
+                        rowKeys[final.messageId] = settlementKey
+                        if (!followTail && settlementKey in visibleKeys) deferred += settlementKey
                     }
                     observedLiveKey = null
                 }
