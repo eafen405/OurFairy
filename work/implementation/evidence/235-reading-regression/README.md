@@ -10,9 +10,10 @@ Worktree `.worktrees/235-reading-regression`，分支 `ticket/235-reading-regres
 - 重写 `RemoteReadingTransitionTest`：每个场景只经公开
   `RemoteTranscriptPresentation.update(messages, generation, RemoteChatAttempt?, RemoteChatSettlement?, visibleKeys, followTail)`
   输入后端事实，经返回的 `RemoteTranscriptRow.key` 与 `deferFormatting` 观察身份和延迟状态。
-  测试侧没有 `attemptRowKey` 调用、没有预拼 live/settled 行键、没有读取 `rowKeys`/`deferred`/
-  `observedLiveKey`。唯一的 `attempt:<generation>:<attemptId>` 字面量只出现在行键格式测试里；
-  其余断言使用先前公开更新返回行捕获的 key。
+  测试没有调用 `attemptRowKey`，也没有读取 `rowKeys`/`deferred`/`observedLiveKey`；这是 `private`
+  可见性造成的编译期约束（见下节）。当前测试文件也没有自行拼出 live/settled 行键——这是对现有
+  文件的观察，不是编译期保证，字符串字面量无法被 `private` 挡住；唯一有意的例外是 Testing
+  Decision 5 要求的格式断言。其余断言使用先前公开更新返回行捕获的 key。
 - 保留全部既有场景及断言意图：阅读中保留原始布局到终态、离开该行释放、回到尾部释放、历史不等待、
   停止/失败保留最终增量并释放完整排版、正式消息先于流结束仍只一行、独立投递、同文本不同身份、
   连续新 attempt。行键格式测试同时经返回行证明 settlement 行与已观察 live 行同 key。
@@ -63,14 +64,13 @@ cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew :app:testDebugUn
 | `ScreenIdentityDestinationTest` | 1 | 0 | 0 | 0 |
 | **合计** | **44** | **0** | **0** | **0** |
 
-测试侧约束的机械检查（在 `android/app/src/test/java/me/rerere/rikkahub/ui/identity/` 上）：
-
-```
-grep -rn '"attempt:' .
-grep -rn 'attemptRowKey\|observedLiveKey\|rowKeys\|deferred' .
-```
-
-第一条只命中 `RemoteReadingTransitionTest.kt:32` 的行键格式断言；第二条无命中。
+测试侧无法调用行键构造函数或读取私有状态，这是编译期可见性，不是源码扫描的结论：
+`attemptRowKey` 是 `RemotePresentation.kt` 的 file-private 顶层函数，`rowKeys`、`deferred`、
+`observedLiveKey` 是 `RemoteTranscriptPresentation` 的 private 成员。测试与呈现实现同在
+`me.rerere.rikkahub.ui.identity` 包内，但 Kotlin 的 `private` 仍挡住调用与读取；测试若尝试，
+下面记录的 `:app:testDebugUnitTest` 会在 `:app:compileDebugUnitTestKotlin` 阶段失败。编译期只保证
+无法调用构造函数或读取私有状态，不保证测试不写行键字面量；当前文件除 Testing Decision 5 要求的
+格式断言外，其余断言都使用先前公开更新返回行捕获的 key，这是对现有测试的观察。
 
 提交 `c98375a122` 时仓库 pre-commit gate 按改动路径（`android/` 属全量权威）实际执行了
 `npm test` 与 `npm run combo:verify`：`tests 311`、`pass 311`、`combo: combination verified`。
