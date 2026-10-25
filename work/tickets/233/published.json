@@ -1,0 +1,11 @@
+{
+  "parent": 233,
+  "title": "Android 呈现：attempt 行身份由后端事实派生",
+  "baseBranch": "integration/spec-233",
+  "baselineCommit": "6662bef17e",
+  "children": [
+    { "file": "01-presentation-identity.md", "issue": 234, "title": "T1 呈现接口：attempt 行身份由后端事实派生", "blockedBy": [] },
+    { "file": "02-reading-regression.md", "issue": 235, "title": "T2 行身份回归：公开更新结果与否定场景", "blockedBy": [234] },
+    { "file": "03-closeout.md", "issue": 236, "title": "T3 收口：两轴评审、证据与全量门禁", "blockedBy": [234, 235] }
+  ]
+}
