@@ -11,7 +11,9 @@
  *
  * The adapter test drives the stop handler with a native outcome the table
  * cannot name; the booted suite cannot produce one because the native registry
- * only ever reports its own members.
+ * only ever reports its own members. The runtime stub supplies the task-lookup
+ * result directly, so the adapter test does not build a whole session
+ * projection to reach the outcome mapping.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -48,17 +50,16 @@ function nativeStopOutcomes() {
 }
 
 /** One stop call through the adapter, with a native `kill` result the test chooses. */
-function stop(result, availability = 1) {
-  const task = { taskId: 'generation-1/job-1', availability, output: { earliest: 0, total: 0 } }
+function stop(result, available = true) {
+  const task = { taskId: 'generation-1/job-1', availability: available ? 1 : 0, output: { earliest: 0, total: 0 } }
   const calls = []
   const ctx = { jobs: {
-    generation: 'generation-1',
     events: { subscribe: () => {} },
     kill: (...args) => { calls.push(args); return result },
   } }
   const runtime = {
-    open: async () => ({}),
-    projection: async () => ({ tasks: [task] }),
+    open: async () => ({ sessionId: 'session-1' }),
+    taskOf: () => ({ task, jobId: available ? 'job-1' : null }),
     barrier: async () => {},
   }
   return { done: installJobs(ctx, runtime).jobStop('session-1', { sessionId: 'session-1', taskId: task.taskId }), calls }
@@ -75,9 +76,12 @@ test('native job stop outcome vocabulary matches the adapter', () => {
 })
 
 test('known native stop outcomes keep their numeric wire contract', async () => {
-  assert.equal(await stop('requested').done, 1)
+  const requested = stop('requested')
+  assert.equal(await requested.done, 1)
+  assert.deepEqual(requested.calls, [['job-1', 'session-1', 'cancelled by the user']],
+    'the stop handler kills the native JobId the task lookup returned')
   assert.equal(await stop('already-finished').done, 2)
-  const unavailable = stop('requested', 0)
+  const unavailable = stop('requested', false)
   assert.equal(await unavailable.done, 0)
   assert.deepEqual(unavailable.calls, [], 'an unavailable task keeps returning 0 without calling kill')
 })
