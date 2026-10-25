@@ -12,7 +12,8 @@
 - 处理 Lead 在 `code-review`（Standards + Spec 两轴）中提出的问题：回到所属 module 修复，每条
   修复配会失败的具体检查或复用既有检查并说明断言的是同一事实。
 - 新增规格级证据 `work/implementation/evidence/225-closeout/README.md`：实际命令、结果摘要、
-  未完成项；在 `work/implementation/evidence/README.md` 登记入口。
+  未完成项；按 `scripts/evidence-index.ts` 的约定新增 `work/implementation/evidence/index/`
+  描述文件并运行 `npm run evidence:index`，不手改生成的表格。
 - 在最终集成状态运行 `npm test` 与 `npm run combo:verify`；必要时运行 `npm run backend:doctor`。
 - 逐条核对规格中可执行的声称都有对应行为测试；答不出的声称删除，不为它补断言。
 - 确认本次增量没有修改 Android、数据库结构、projection 持久 state/stateVersion、dsh fork、
