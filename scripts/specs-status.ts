@@ -198,11 +198,14 @@ export function worktreeNamesSpec(path: string, spec: number): boolean {
   return name === `spec-${spec}` || name.startsWith(`spec-${spec}-`) || name.startsWith(`${spec}-`)
 }
 
-/** Associate real worktrees by branch; retain names for detached or injected entries. */
+/** Associate real worktrees by integration or ticket branch; retain names for detached or injected entries. */
 function associatedWorktrees(branch: string, spec: number | undefined, entries: Array<string | Worktree>): string[] {
   return entries.filter(entry => {
     if (typeof entry === 'string') return spec !== undefined && worktreeNamesSpec(entry, spec)
-    if (entry.branch !== null) return entry.branch === branch
+    if (entry.branch !== null) {
+      return entry.branch === branch
+        || (spec !== undefined && entry.branch.startsWith(`ticket/${spec}-`))
+    }
     return spec !== undefined && worktreeNamesSpec(entry.path, spec)
   }).map(entry => typeof entry === 'string' ? entry : entry.path)
 }
@@ -308,7 +311,10 @@ export function collect({ root = repoRoot, offline = false, specs = [], tracker 
     .filter(branch => !/^integration\/spec-\d+$/u.test(branch))
     .sort()
     .map(branch => batchStatus(branch, context))
-  const associated = new Set([...rows, ...batchRows].flatMap(row => row.worktrees))
+  const associated = new Set(batchRows.flatMap(row => row.worktrees))
+  for (const spec of known) {
+    for (const path of associatedWorktrees(`integration/spec-${spec}`, spec, entries)) associated.add(path)
+  }
   const orphanWorktrees = paths.filter(path => !associated.has(path))
   return {
     tracker: offline ? 'skipped' : resolved === undefined ? 'unavailable' : 'ok',

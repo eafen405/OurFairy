@@ -253,6 +253,25 @@ test('running from a secondary worktree does not report the main checkout as orp
   assert.doesNotMatch(render(report), new RegExp(root.replaceAll('/', '\\/'), 'u'))
 })
 
+test('a landed spec still counts its ticket worktree by the real branch', () => {
+  const root = fixture()
+  commitOn(root, 'integration/spec-911', 'work/implementation/evidence/911-closeout/README.md')
+  git(root, ['push', '--quiet', 'origin', 'integration/spec-911'])
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  git(root, ['merge', '--quiet', '--no-ff', 'integration/spec-911', '-m', 'merge 911'])
+  git(root, ['push', '--quiet', 'origin', LANDING_BRANCH])
+  const ticket = join(root, '911-review')
+  roots.push(ticket)
+  git(root, ['worktree', 'add', '--quiet', '-b', 'ticket/911-review', ticket])
+
+  const report = collect({ root, offline: true })
+  const row = report.rows.find(row => row.spec === 911)
+
+  assert.equal(row.state, 'stale-worktree')
+  assert.deepEqual(row.worktrees, [ticket])
+  assert.deepEqual(report.orphanWorktrees, [])
+})
+
 test('worktrees are associated by the branch checked out in porcelain', () => {
   const root = fixture()
   commitOn(root, 'integration/spec-907', 'work/implementation/evidence/907-closeout/README.md')
@@ -264,6 +283,25 @@ test('worktrees are associated by the branch checked out in porcelain', () => {
 
   assert.deepEqual(report.rows.find(row => row.spec === 907).worktrees, [secondary])
   assert.deepEqual(report.orphanWorktrees, [])
+})
+
+test('--spec filters rows without orphaning other known worktrees', () => {
+  const root = fixture()
+  commitOn(root, 'integration/spec-912', 'work/implementation/evidence/912-filter/README.md')
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  commitOn(root, 'integration/spec-913', 'work/implementation/evidence/913-filter/README.md')
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  const selected = join(root, 'spec-912')
+  const unselected = join(root, 'spec-913')
+  roots.push(selected, unselected)
+  git(root, ['worktree', 'add', '--quiet', selected, 'integration/spec-912'])
+  git(root, ['worktree', 'add', '--quiet', unselected, 'integration/spec-913'])
+
+  const report = collect({ root, offline: true, specs: [912] })
+
+  assert.deepEqual(report.rows.map(row => row.spec), [912])
+  assert.deepEqual(report.orphanWorktrees, [])
+  assert.doesNotMatch(render(report), /worktrees outside known integration branches/u)
 })
 
 test('the landing branch drift appears only once', () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { launchEnv, makeHome, removeHome, repoRoot } from './helpers/backend.mjs'
@@ -31,6 +31,59 @@ test('--skip-pdf --skip-asr selects text-only acceptance without a voice credent
       'ASR transcription (--skip-asr)',
     ],
   })
+})
+
+test('--plan returns before credential, process, and service side effects', () => {
+  const home = makeHome('ourfairy-real-plan-guard-')
+  try {
+    const guard = join(home, 'plan-guard.cjs')
+    writeFileSync(guard, String.raw`
+const fs = require('node:fs')
+const childProcess = require('node:child_process')
+const http = require('node:http')
+const https = require('node:https')
+const fail = operation => {
+  process.exitCode = 97
+  throw new Error('--plan attempted ' + operation)
+}
+const originalRead = fs.readFileSync
+fs.readFileSync = (path, ...args) => {
+  const name = String(path)
+  if (/(?:VOICE_API_KEY[.]env|DEEPSEEK_API_KEY[.]env|[.]credentials[.]yaml)$/u.test(name)) fail('credential read ' + name)
+  return originalRead(path, ...args)
+}
+childProcess.spawnSync = () => fail('process spawn')
+http.request = () => fail('HTTP request')
+https.request = () => fail('HTTPS request')
+globalThis.fetch = () => fail('service fetch')
+`)
+    writeFileSync(join(home, 'VOICE_API_KEY.env'), 'VOICE_API_KEY=fake\n')
+    const control = spawnSync(process.execPath, [
+      '--require', guard, '--input-type=module', '-e',
+      "import { readFileSync } from 'node:fs'; readFileSync('VOICE_API_KEY.env', 'utf8')",
+    ], { cwd: home, encoding: 'utf8', timeout: 10_000 })
+    assert.notEqual(control.status, 0, 'the guard must reject a deliberate credential read')
+    assert.match(control.stderr, /--plan attempted credential read/u)
+
+    const run = spawnSync(process.execPath, [
+      '--require', guard, join(repoRoot, 'scripts', 'real-acceptance.ts'), '--plan', '--skip-pdf', '--skip-asr',
+    ], {
+      cwd: repoRoot,
+      env: { ...process.env, VOICE_API_KEY: undefined },
+      encoding: 'utf8',
+      timeout: 10_000,
+    })
+    assert.equal(run.status, 0, run.stderr || run.stdout)
+    assert.deepEqual(JSON.parse(run.stdout), {
+      steps: ['text'],
+      unexecuted: [
+        'PDF scan page smoke (--skip-pdf)',
+        'ASR transcription (--skip-asr)',
+      ],
+    })
+  } finally {
+    removeHome(home)
+  }
 })
 
 test('text-only acceptance reaches the model boundary without voice credentials or ASR', () => {

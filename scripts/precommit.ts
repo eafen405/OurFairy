@@ -254,9 +254,9 @@ export function stagedPaths(root: string): string[] {
   }).trim()
   let out: string
   try {
-    out = read(['diff', '--cached', '--name-only', 'HEAD'])
+    out = read(['diff', '--cached', '--name-only', '--no-renames', 'HEAD'])
   } catch {
-    out = read(['diff', '--cached', '--name-only'])
+    out = read(['diff', '--cached', '--name-only', '--no-renames'])
   }
   return out.split('\n').filter(Boolean)
 }

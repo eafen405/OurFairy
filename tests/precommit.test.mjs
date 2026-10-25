@@ -20,7 +20,9 @@
  * suite still passes.
  */
 import assert from 'node:assert/strict'
-import { globSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import {
@@ -29,6 +31,7 @@ import {
   TYPECHECK_COMMANDS,
   classify,
   plan,
+  stagedPaths,
   testFiles,
 } from '../scripts/precommit.ts'
 import { repoRoot } from './helpers/backend.mjs'
@@ -127,6 +130,30 @@ test('an Android source change keeps the root gate and adds one Gradle check in 
     ...FULL_COMMANDS,
     { command: './gradlew', args: ['test', 'lintDebug'], cwd: 'android' },
   ])
+})
+
+test('a staged Android rename keeps both paths in the Gradle gate', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ourfairy-precommit-rename-'))
+  try {
+    const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    git(['init', '--quiet', '--initial-branch=main'])
+    git(['config', 'user.email', 'fixture@example.invalid'])
+    git(['config', 'user.name', 'Fixture'])
+    git(['config', 'diff.renames', 'true'])
+    mkdirSync(join(root, 'android'), { recursive: true })
+    writeFileSync(join(root, 'android', 'A.kt'), 'val renamed = 1\n')
+    git(['add', '.'])
+    git(['commit', '--quiet', '-m', 'initial'])
+    mkdirSync(join(root, 'scripts'), { recursive: true })
+    git(['mv', 'android/A.kt', 'scripts/A.ts'])
+
+    const paths = stagedPaths(root)
+
+    assert.deepEqual(paths.sort(), ['android/A.kt', 'scripts/A.ts'])
+    assert.ok(plan(paths).commands.some(step => step.command === './gradlew' && step.cwd === 'android'))
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('a merge and an explicit --full run the full suite whatever changed', () => {
