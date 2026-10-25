@@ -98,6 +98,67 @@ test('a pushed branch is in flight until it lands, and landed once merged', () =
   assert.equal(landed.defect, false)
 })
 
+test('cherry-picked content is landed without an ancestor merge', () => {
+  const root = fixture()
+  commitOn(root, 'integration/spec-908', 'work/implementation/evidence/908-closeout/README.md')
+  git(root, ['push', '--quiet', 'origin', 'integration/spec-908'])
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  git(root, ['cherry-pick', '--no-commit', 'integration/spec-908'])
+  git(root, ['commit', '--quiet', '-m', 'apply 908'])
+  git(root, ['push', '--quiet', 'origin', LANDING_BRANCH])
+
+  const report = collect({ root, offline: true })
+  const row = report.rows.find(row => row.spec === 908)
+
+  assert.equal(row.merged, false, 'the cherry-pick is not the branch ancestor')
+  assert.equal(row.contentLanded, true, 'the same change is already in main')
+  assert.equal(row.landed, true)
+  assert.equal(row.state, 'landed')
+  assert.equal(row.defect, false)
+  const output = render(report)
+  assert.match(output, /spec\/batch\s+state\s+branch\s+tip\s+push\s+merged\s+content\s+land/u)
+  assert.match(output, /908\s+landed\s+integration\/spec-908\s+\S+\s+ok\s+-\s+ok\s+ok/u)
+})
+
+test('content that has not been applied is not content landed', () => {
+  const root = fixture()
+  commitOn(root, 'integration/spec-909', 'work/implementation/evidence/909-closeout/README.md')
+  git(root, ['push', '--quiet', 'origin', 'integration/spec-909'])
+
+  const row = collect({ root, offline: true }).rows.find(row => row.spec === 909)
+
+  assert.equal(row.merged, false)
+  assert.equal(row.contentLanded, false)
+  assert.equal(row.landed, false)
+  assert.equal(row.state, 'in-flight')
+})
+
+test('a merge conflict never gets a green content landing', () => {
+  const root = fixture()
+  writeFileSync(join(root, 'shared.txt'), 'base\n')
+  git(root, ['add', '.'])
+  git(root, ['commit', '--quiet', '-m', 'shared base'])
+  git(root, ['push', '--quiet', 'origin', LANDING_BRANCH])
+  git(root, ['checkout', '--quiet', '-b', 'integration/spec-910', LANDING_BRANCH])
+  writeFileSync(join(root, 'shared.txt'), 'branch\n')
+  git(root, ['add', '.'])
+  git(root, ['commit', '--quiet', '-m', 'branch change'])
+  git(root, ['push', '--quiet', 'origin', 'integration/spec-910'])
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  writeFileSync(join(root, 'shared.txt'), 'main\n')
+  git(root, ['add', '.'])
+  git(root, ['commit', '--quiet', '-m', 'main change'])
+
+  const report = collect({ root, offline: true })
+  const row = report.rows.find(row => row.spec === 910)
+
+  assert.equal(row.merged, false)
+  assert.equal(row.contentLanded, false)
+  assert.equal(row.landed, false)
+  assert.equal(row.state, 'in-flight')
+  assert.match(render(report), /910\s+in-flight\s+integration\/spec-910\s+\S+\s+ok\s+-\s+-\s+-/u)
+})
+
 test('a landed spec that still holds a worktree is a defect', () => {
   const root = fixture()
   commitOn(root, 'integration/spec-902', 'work/implementation/evidence/902-closeout/README.md')
@@ -156,10 +217,13 @@ test('a non-spec integration branch is a batch row with actionable status', () =
   assert.equal(batch.name, 'fixes-219-221')
   assert.equal(batch.state, 'unpushed')
   assert.equal(batch.pushed, false)
+  assert.equal(batch.merged, false)
+  assert.equal(batch.contentLanded, false)
   assert.equal(batch.landed, false)
   assert.equal(batch.ahead, 1)
+  assert.deepEqual(batch.worktrees, [])
   assert.equal(batch.defect, true)
-  assert.match(render(report), /fixes-219-221 unpushed/u)
+  assert.match(render(report), /specs-status: 1 need attention — fixes-219-221 unpushed/u)
 })
 
 test('the landing branch having unpushed commits is reported, and rendered', () => {

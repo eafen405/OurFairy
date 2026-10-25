@@ -55,6 +55,8 @@ type BranchRow = {
   branch: string | null
   tip: string | null | undefined
   pushed: boolean
+  merged: boolean
+  contentLanded: boolean
   landed: boolean
   ahead: number
   worktrees: string[]
@@ -210,6 +212,15 @@ function carriesCopies(root: string, ref: string, spec: number): boolean {
   return git(root, ['cat-file', '-e', `${ref}:work/tickets/${spec}`]) !== undefined
 }
 
+/** Whether merging the ref would leave the landing tree unchanged. */
+function contentLanded(root: string, ref: string | undefined): boolean {
+  if (ref === undefined) return false
+  const mergedTree = git(root, ['merge-tree', '--write-tree', LANDING_BRANCH, ref])
+  const landingTree = git(root, ['rev-parse', `${LANDING_BRANCH}^{tree}`])
+  // merge-tree exits non-zero on conflicts; run() turns that into no result.
+  return mergedTree !== undefined && landingTree !== undefined && mergedTree === landingTree
+}
+
 /** Read the branch facts shared by specs and non-spec integration batches. */
 function branchStatus(branch: string, context: SpecContext, spec?: number): BranchRow {
   const { root } = context
@@ -221,8 +232,11 @@ function branchStatus(branch: string, context: SpecContext, spec?: number): Bran
   // The landing fact follows whichever ref exists: a remote-only branch can be
   // landed on origin even when this checkout never fetched the local branch.
   const landedRef = hasBranch ? branch : orphan ? `refs/remotes/origin/${branch}` : undefined
-  const landed = landedRef !== undefined
+  const merged = landedRef !== undefined
     && git(root, ['merge-base', '--is-ancestor', landedRef, LANDING_BRANCH]) !== undefined
+  const content = contentLanded(root, landedRef)
+  // Keep the old overall field while exposing why the branch is landed.
+  const landed = merged || content
   const leftover = associatedWorktrees(branch, spec, context.worktrees)
 
   let state: SpecState = 'planned'
@@ -236,6 +250,8 @@ function branchStatus(branch: string, context: SpecContext, spec?: number): Bran
     branch: hasBranch ? branch : null,
     tip: hasBranch ? git(root, ['rev-parse', '--short', branch]) : null,
     pushed,
+    merged,
+    contentLanded: content,
     landed,
     ahead: hasBranch ? Number(git(root, ['rev-list', '--count', `${LANDING_BRANCH}..${branch}`]) ?? 0) : 0,
     worktrees: leftover,
@@ -306,7 +322,7 @@ export function collect({ root = repoRoot, offline = false, specs = [], tracker 
 
 /** Human-readable table; columns are the facts `state` is derived from. */
 export function render(report: SpecReport): string {
-  const head = ['spec/batch', 'state', 'branch', 'tip', 'push', 'land', 'ahead', 'copies', 'worktree', 'issue']
+  const head = ['spec/batch', 'state', 'branch', 'tip', 'push', 'merged', 'content', 'land', 'ahead', 'copies', 'worktree', 'issue']
   const tableRows: Array<{ label: string; row: ReportRow }> = [
     ...report.rows.map(row => ({ label: String(row.spec), row })),
     ...report.batchRows.map(row => ({ label: row.name, row })),
@@ -317,6 +333,8 @@ export function render(report: SpecReport): string {
     row.branch ?? '-',
     row.tip ?? '-',
     row.branch === null ? '-' : row.pushed ? 'ok' : 'MISSING',
+    row.branch === null ? '-' : row.merged ? 'ok' : '-',
+    row.branch === null ? '-' : row.contentLanded ? 'ok' : '-',
     row.branch === null ? '-' : row.landed ? 'ok' : '-',
     String(row.ahead),
     'spec' in row ? row.copies ? 'ok' : 'MISSING' : '-',
