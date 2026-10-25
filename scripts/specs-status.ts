@@ -40,11 +40,13 @@ export type SpecState = 'planned' | 'unpushed' | 'in-flight' | 'landed' | 'orpha
 /** The tracker half of the report: spec number to issue facts. */
 export type TrackerFacts = Map<number, { state: string; title: string }>
 
+type Worktree = { path: string; branch: string | null }
+
 /** What one spec's facts are read from. */
 export type SpecContext = {
   root: string
   tracker: TrackerFacts | undefined
-  worktrees: string[]
+  worktrees: Array<string | Worktree>
 }
 
 /** One spec's facts, as the report prints them. */
@@ -152,20 +154,40 @@ export function specsInCheckout(root: string): Set<number> {
   return specs
 }
 
+/** Read worktrees and their actual branches, excluding the main checkout. */
+function readWorktrees(root: string): Worktree[] {
+  const out = git(root, ['worktree', 'list', '--porcelain']) ?? ''
+  // Git lists the main checkout first, regardless of the caller's worktree.
+  return out.split('\n\n').slice(1).flatMap(block => {
+    const lines = block.split('\n')
+    const pathLine = lines.find(line => line.startsWith('worktree '))
+    if (pathLine === undefined) return []
+    const branchLine = lines.find(line => line.startsWith('branch refs/heads/'))
+    return [{
+      path: pathLine.slice('worktree '.length),
+      branch: branchLine === undefined ? null : branchLine.slice('branch refs/heads/'.length),
+    }]
+  })
+}
+
 /** Worktree paths, excluding the main checkout itself. */
 export function worktrees(root: string): string[] {
-  const out = git(root, ['worktree', 'list', '--porcelain']) ?? ''
-  const main = git(root, ['rev-parse', '--show-toplevel'])
-  return out.split('\n')
-    .filter(line => line.startsWith('worktree '))
-    .map(line => line.slice('worktree '.length))
-    .filter(path => path !== main)
+  return readWorktrees(root).map(entry => entry.path)
 }
 
 /** Whether a worktree path names this spec, directly or as one of its tickets. */
 export function worktreeNamesSpec(path: string, spec: number): boolean {
   const name = path.split('/').pop() ?? ''
   return name === `spec-${spec}` || name.startsWith(`spec-${spec}-`) || name.startsWith(`${spec}-`)
+}
+
+/** Associate real worktrees by branch; retain names for detached or injected entries. */
+function associatedWorktrees(branch: string, spec: number | undefined, entries: Array<string | Worktree>): string[] {
+  return entries.filter(entry => {
+    if (typeof entry === 'string') return spec !== undefined && worktreeNamesSpec(entry, spec)
+    if (entry.branch !== null) return entry.branch === branch
+    return spec !== undefined && worktreeNamesSpec(entry.path, spec)
+  }).map(entry => typeof entry === 'string' ? entry : entry.path)
 }
 
 /** Whether the branch tip carries the spec's ticket copies. */
@@ -196,7 +218,7 @@ export function specStatus(spec: number, context: SpecContext): SpecRow {
   const landedRef = hasBranch ? branch : orphan ? `refs/remotes/origin/${branch}` : undefined
   const landed = landedRef !== undefined
     && git(root, ['merge-base', '--is-ancestor', landedRef, LANDING_BRANCH]) !== undefined
-  const leftover = context.worktrees.filter(path => worktreeNamesSpec(path, spec))
+  const leftover = associatedWorktrees(branch, spec, context.worktrees)
   const tracked = tracker?.get(spec)
 
   let state: SpecState = 'planned'
@@ -221,8 +243,8 @@ export function specStatus(spec: number, context: SpecContext): SpecRow {
 }
 
 /** Whether a branch carries commits origin does not have, or the reverse. */
-export function branchDrift(root: string, branches: string[] = ['main', LANDING_BRANCH]): BranchDrift[] {
-  return branches.map(branch => {
+export function branchDrift(root: string, branches: string[] = [LANDING_BRANCH]): BranchDrift[] {
+  return [...new Set(branches)].map(branch => {
     const ahead = git(root, ['rev-list', '--count', `origin/${branch}..${branch}`])
     const behind = git(root, ['rev-list', '--count', `${branch}..origin/${branch}`])
     return {
@@ -244,10 +266,12 @@ export function collect({ root = repoRoot, offline = false, specs = [], tracker 
   const resolved = tracker ?? (offline ? undefined : readTracker(root))
   const known = specsInCheckout(root)
   const wanted = specs.length === 0 ? [...known] : specs
-  const paths = worktrees(root)
-  const context = { root, tracker: resolved, worktrees: paths }
+  const entries = readWorktrees(root)
+  const paths = entries.map(entry => entry.path)
+  const context = { root, tracker: resolved, worktrees: entries }
   const rows = wanted.sort((a, b) => a - b).map(number => specStatus(number, context))
-  const orphanWorktrees = paths.filter(path => ![...known].some(spec => worktreeNamesSpec(path, spec)))
+  const associated = new Set(rows.flatMap(row => row.worktrees))
+  const orphanWorktrees = paths.filter(path => !associated.has(path))
   return {
     tracker: offline ? 'skipped' : resolved === undefined ? 'unavailable' : 'ok',
     landing: branchDrift(root),

@@ -158,6 +158,40 @@ test('the landing branch having unpushed commits is reported, and rendered', () 
   assert.match(render(report), /need attention/u)
 })
 
+test('running from a secondary worktree does not report the main checkout as orphan', () => {
+  const root = fixture()
+  const secondary = join(root, 'spec-906')
+  roots.push(secondary)
+  git(root, ['worktree', 'add', '--quiet', '-b', 'integration/spec-906', secondary])
+
+  const report = collect({ root: secondary, offline: true })
+
+  assert.equal(report.orphanWorktrees.includes(root), false, 'the primary checkout is not an orphan')
+  assert.equal(report.rows.find(row => row.spec === 906).worktrees.includes(secondary), true)
+  assert.doesNotMatch(render(report), new RegExp(root.replaceAll('/', '\\/'), 'u'))
+})
+
+test('worktrees are associated by the branch checked out in porcelain', () => {
+  const root = fixture()
+  commitOn(root, 'integration/spec-907', 'work/implementation/evidence/907-closeout/README.md')
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  const secondary = join(root, 'arbitrary-location')
+  git(root, ['worktree', 'add', '--quiet', secondary, 'integration/spec-907'])
+
+  const report = collect({ root, offline: true })
+
+  assert.deepEqual(report.rows.find(row => row.spec === 907).worktrees, [secondary])
+  assert.deepEqual(report.orphanWorktrees, [])
+})
+
+test('the landing branch drift appears only once', () => {
+  const root = fixture()
+
+  const report = collect({ root, offline: true })
+
+  assert.deepEqual(report.landing.map(entry => entry.branch), [LANDING_BRANCH])
+})
+
 test('a branch that exists only on origin is reported instead of vanishing', () => {
   const root = fixture()
   commitOn(root, 'integration/spec-903', 'work/implementation/evidence/903-closeout/README.md')
