@@ -490,7 +490,10 @@ const emptyActivity = (): Activity => ({ episode: null, completed: null, deliver
   latestOutput: null, decisions: [], unavailable: [] })
 
 /** One folded row with its report interpretation: the roster's row composition. */
-function rowWithReport(state: WorkState, row: JobRow) {
+type TaskRow = JobRow & { report: ReturnType<typeof reportState> }
+
+/** One folded row with its report interpretation attached. */
+function rowWithReport(state: WorkState, row: JobRow): TaskRow {
   return { ...row, report: reportState(row.taskId, state) }
 }
 
@@ -653,9 +656,10 @@ function liveJobsOf(ctx: Context, sessionId: SessionId) {
  * One folded row as the wire task, overlaid with the live native job when it has
  * one. This is the only task-row projection: the full list and the single
  * lookup both read through it, so status mapping, report degradation and
- * generation availability cannot drift apart.
+ * generation availability cannot drift apart. `tests/chat-task-lookup.test.mjs`
+ * compares the two paths' outputs in the available and the unavailable case.
  */
-function taskRowOf(row: JobRow & { report: ReturnType<typeof reportState> }, job: JobView | undefined) {
+function wireTaskOf(row: TaskRow, job: JobView | undefined) {
   const available = job !== undefined
   const current = job ?? row
   const status = taskStatusOf(current.status)
@@ -677,16 +681,19 @@ function taskRowOf(row: JobRow & { report: ReturnType<typeof reportState> }, job
  * generation and that generation still holds the job for this session. An older
  * generation's row is retained history, never a live identity, even when a
  * same-named job exists after a restart.
+ * @param row - the folded row with its report interpretation.
+ * @param generation - the native registry's current generation.
+ * @param live - the live jobs this session owns, by native id.
  */
-function taskRowWithJob(row: JobRow & { report: ReturnType<typeof reportState> }, ctx: Context, live: ReadonlyMap<string, JobView>) {
-  const job = row.generation === ctx.jobs.generation ? live.get(row.id) : undefined
-  return { task: taskRowOf(row, job), jobId: job === undefined ? null : job.id }
+function taskLookupOf(row: TaskRow, generation: string, live: ReadonlyMap<string, JobView>) {
+  const job = row.generation === generation ? live.get(row.id) : undefined
+  return { task: wireTaskOf(row, job), jobId: job === undefined ? null : job.id }
 }
 
 /** Wire tasks: the folded roster enriched with the live registry's availability. */
 function tasksAt(state: WorkState, ctx: Context, sessionId: SessionId) {
   const live = liveJobsOf(ctx, sessionId)
-  return rosterOf(state).map(row => taskRowWithJob(row, ctx, live).task)
+  return rosterOf(state).map(row => taskLookupOf(row, ctx.jobs.generation, live).task)
 }
 
 /**
@@ -702,7 +709,7 @@ export function taskAt(state: WorkState, ctx: Context, sessionId: SessionId, tas
   // The id arrives from untrusted JSON: inherited names such as `__proto__`
   // must not read Object.prototype as if it were a folded row.
   if (!Object.hasOwn(state.rows, taskId)) return null
-  return taskRowWithJob(rowWithReport(state, state.rows[taskId] as JobRow), ctx, liveJobsOf(ctx, sessionId))
+  return taskLookupOf(rowWithReport(state, state.rows[taskId] as JobRow), ctx.jobs.generation, liveJobsOf(ctx, sessionId))
 }
 
 /** Read-time activity summary over the durable machine state, the live roster and `running`. */

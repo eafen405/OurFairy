@@ -483,9 +483,12 @@ export class SessionRuntime {
   }
 
   /**
-   * One task's wire row and live native identity, read from the work unit and
-   * the jobs registry only. No attempt, transcript, activity or event-window
-   * read: task access never initialises the observed window.
+   * One task's wire row and live native identity.
+   *
+   * Task access reads the work unit state and the jobs registry directly,
+   * without `projection`, so it never seeds the observed event window; the
+   * zero `observeSession` reads this path performs are pinned in
+   * `tests/chat-task-lookup.test.mjs`.
    * @param state - the opened live session.
    * @param taskId - the untrusted product task id a request carried.
    * @returns the task and its native JobId, or null when taskId names no row.

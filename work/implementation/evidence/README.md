@@ -212,6 +212,12 @@
 | --- | --- |
 | [219-221-closeout](219-221-closeout/README.md) | #219/#220/#221 集成分支收口：两轴 review 修复（共享过渡常量、overlay 接缝与逐帧断言、AgentSummary 更名、#220 页面用例）、全量门禁、doctor 与 probe；真机未执行 |
 
+## #225 会话读取 seam（完整页操作与任务身份访问）
+
+| 目录 | 内容 |
+| --- | --- |
+| [225-page-read](225-page-read/README.md) · [225-task-lookup](225-task-lookup/README.md) · [225-closeout](225-closeout/README.md) | #225 T1/T2/T3：页读取收进 runtime.page，任务访问收进 work 单元窄查找并返回原生 JobId；收口修复两轴 Standards 发现，在最终 tip 跑全量门禁 |
+
 ## 界面微调（#215/#217/#218）
 
 | 目录 | 内容 |

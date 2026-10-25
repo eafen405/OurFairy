@@ -1,0 +1,13 @@
+{
+  "title": "#225 会话读取 seam（完整页操作与任务身份访问）",
+  "entries": [
+    {
+      "dirs": [
+        "225-page-read",
+        "225-task-lookup",
+        "225-closeout"
+      ],
+      "note": "#225 T1/T2/T3：页读取收进 runtime.page，任务访问收进 work 单元窄查找并返回原生 JobId；收口修复两轴 Standards 发现，在最终 tip 跑全量门禁"
+    }
+  ]
+}

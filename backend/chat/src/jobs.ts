@@ -4,7 +4,7 @@ import { taskStatusOf } from './units.js'
 import { requestedSessionId } from './runtime.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { SessionOwner, SessionRuntime } from './runtime.js'
+import type { LiveSession, SessionOwner, SessionRuntime } from './runtime.js'
 
 /**
  * `Number.isSafeInteger` as a type guard, so a checked value narrows to a
@@ -37,11 +37,16 @@ export function installJobs(ctx: Context, runtime: SessionRuntime) {
     const state = runtime.live(event.job.owner as SessionId)
     if (state !== undefined) runtime.changed(state)
   })
+  /** The one task a request names, or the existing 404; both controls share this lookup. */
+  const taskOr404 = (state: LiveSession, taskId: unknown) => {
+    const found = runtime.taskOf(state, taskId)
+    if (found === null) throw new ChatError(404, 'chat/job-not-found', 'task does not belong to this session')
+    return found
+  }
   const jobOutput = async (owner: SessionOwner, { sessionId, taskId, from }: Record<string, unknown>) => {
     const state = await runtime.open(owner, requestedSessionId(sessionId))
     if (!isSafeInteger(from) || from < 0) throw new ChatError(400, 'chat/invalid-offset', 'from must be a nonnegative byte offset')
-    const found = runtime.taskOf(state, taskId)
-    if (found === null) throw new ChatError(404, 'chat/job-not-found', 'task does not belong to this session')
+    const found = taskOr404(state, taskId)
     if (found.jobId === null) return { taskId, availability: 0, chunks: [], next: found.task.output.total,
       ...found.task.output, lossy: true, status: found.task.status }
     const output = ctx.jobs.readAt(found.jobId, from, state.sessionId)
@@ -51,8 +56,7 @@ export function installJobs(ctx: Context, runtime: SessionRuntime) {
   }
   const jobStop = async (owner: SessionOwner, { sessionId, taskId }: Record<string, unknown>) => {
     const state = await runtime.open(owner, requestedSessionId(sessionId))
-    const found = runtime.taskOf(state, taskId)
-    if (found === null) throw new ChatError(404, 'chat/job-not-found', 'task does not belong to this session')
+    const found = taskOr404(state, taskId)
     if (found.jobId === null) return 0
     const result = ctx.jobs.kill(found.jobId, state.sessionId, 'cancelled by the user')
     await runtime.barrier(state)
