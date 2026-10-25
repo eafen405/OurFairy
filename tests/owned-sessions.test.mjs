@@ -25,11 +25,15 @@ import { createHash } from 'node:crypto'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { after, before, describe, test } from 'node:test'
-import { describeRun, httpJson, makeHome, removeHome, runBackend, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
+import { describeRun, dshDir, httpJson, makeHome, removeHome, runBackend, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
+
+const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
 
 const PHAETHON_PASSWORD = 'test-phaethon-password'
 const home = makeHome('ourfairy-owned-sessions-')
 const backend = { port: undefined }
+let model
+let messageSerial = 0
 
 /** Boot the real backend on an ephemeral port and remember the one it bound. */
 function startBackend(overlays = []) {
@@ -37,8 +41,8 @@ function startBackend(overlays = []) {
     OURFAIRY_HOME: home,
     OURFAIRY_PORT: '0',
     OURFAIRY_PHAETHON_PASSWORD: PHAETHON_PASSWORD,
-    MINIMAX_CN_API_KEY: undefined,
-    OURFAIRY_MINIMAX_BASE_URL: undefined,
+    MINIMAX_CN_API_KEY: 'mock-key',
+    OURFAIRY_MINIMAX_BASE_URL: `${model.baseURL}`,
   })
   backend.port = startedPort(run)
 }
@@ -51,16 +55,39 @@ function stopBackend() {
     `stopping the backend must not leave a process behind:\n${run.stdout}`)
 }
 
-before(() => { startBackend() })
+before(async () => {
+  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['success'], repeatLast: true, successText: 'OK' })
+  startBackend()
+})
 
-after(() => {
+after(async () => {
   stopBackend()
   removeHome(home)
+  await model?.close()
 })
 
 /** One HTTP request against the running backend, with the raw response kept. */
 function request(path, options = {}) {
   return httpJson(backend.port, path, { ...options, expect: false })
+}
+
+/**
+ * Send one chat message and wait until its reply settles, so the session's log
+ * is durably non-empty before the next `create` reads it.
+ */
+async function say(token, sessionId, text = 'owned-session content') {
+  const sent = await request('/chat/send', { token, body: { sessionId, requestId: `owned-message-${++messageSerial}`, text } })
+  assert.equal(sent.status, 200, `sending a message must succeed: ${sent.text}`)
+  const until = Date.now() + 15000
+  let projection
+  do {
+    const read = await request('/chat/read', { token, body: { sessionId } })
+    assert.equal(read.status, 200, `reading the sent session must succeed: ${read.text}`)
+    projection = read.json.projection
+    if (projection.replyStatus === 0 && projection.messages.some(message => message.role === 2)) return
+    await new Promise(resolve => setTimeout(resolve, 25))
+  } while (Date.now() < until)
+  assert.fail(`the sent message did not settle: ${JSON.stringify(projection)}`)
 }
 
 /** Sign one identity in and return its session credential. */
@@ -142,7 +169,10 @@ describe('OurFairy owned sessions over real HTTP', () => {
     assert.equal(typeof first.json.session.id, 'string')
     assert.ok(first.json.session.id.length > 0, 'a created session needs a real identifier')
 
-    // A second session belongs to the same owner and must not displace the primary.
+    // Only an empty session is reused. Content makes the next create a new
+    // ordinary session, which belongs to the same owner and must not displace
+    // the primary.
+    await say(token, first.json.session.id)
     const second = await request('/sessions/create', { token })
     assert.equal(second.status, 200, `creating a second session must succeed: ${second.text}`)
     assert.notEqual(second.json.session.id, first.json.session.id)
@@ -191,6 +221,97 @@ describe('OurFairy owned sessions over real HTTP', () => {
     assert.equal(read.status, 200, `reading an owned session must succeed: ${read.text}`)
     assert.equal(read.json.session.owner, owner)
     assert.equal(read.json.session.id, first.json.session.id)
+  })
+
+  test('create reuses the empty primary session, even when the log was never opened', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const agent = await register(await createInvite(phaethon.token), 'agent-empty-reuse')
+    assert.equal(agent.status, 200, agent.text)
+    const token = agent.json.token
+
+    const first = await request('/sessions/create', { token })
+    assert.equal(first.status, 200, first.text)
+    assert.equal(first.json.session.primary, true)
+
+    const second = await request('/sessions/create', { token })
+    assert.equal(second.status, 200, second.text)
+    assert.equal(second.json.session.id, first.json.session.id,
+      'an empty primary session is entered again instead of creating a new session')
+
+    const listed = await request('/sessions/list', { token })
+    assert.deepEqual(listed.json.sessions.map(session => session.id), [first.json.session.id],
+      're-entering the empty session must not add a session')
+    const returned = await request('/sessions/primary', { token })
+    assert.equal(returned.json.session.id, first.json.session.id)
+
+    // The session was created and never opened by chat, so only its header is
+    // on disk. A restart must read that header-only log as empty and reuse it.
+    stopBackend()
+    startBackend()
+    const afterRestart = await request('/sessions/create', { token })
+    assert.equal(afterRestart.status, 200, afterRestart.text)
+    assert.equal(afterRestart.json.session.id, first.json.session.id,
+      'a header-only session is empty after a restart and is reused')
+    const relisted = await request('/sessions/list', { token })
+    assert.deepEqual(relisted.json.sessions.map(session => session.id), [first.json.session.id])
+  })
+
+  test('create makes a new session once the reusable one has content', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const agent = await register(await createInvite(phaethon.token), 'agent-content-boundary')
+    assert.equal(agent.status, 200, agent.text)
+    const token = agent.json.token
+
+    const primary = await request('/sessions/create', { token })
+    await say(token, primary.json.session.id)
+    const ordinary = await request('/sessions/create', { token })
+    assert.equal(ordinary.status, 200, ordinary.text)
+    assert.notEqual(ordinary.json.session.id, primary.json.session.id,
+      'a session with a message is not reused')
+    assert.equal(ordinary.json.session.primary, false)
+
+    const again = await request('/sessions/create', { token })
+    assert.equal(again.json.session.id, ordinary.json.session.id,
+      'the empty ordinary session is reused instead of creating another')
+    const listed = await request('/sessions/list', { token })
+    assert.deepEqual(listed.json.sessions.map(session => session.id).sort(),
+      [primary.json.session.id, ordinary.json.session.id].sort())
+    assert.equal(listed.json.primarySessionId, primary.json.session.id)
+
+    await say(token, ordinary.json.session.id)
+    const third = await request('/sessions/create', { token })
+    assert.notEqual(third.json.session.id, ordinary.json.session.id,
+      'content in the ordinary session makes the next create a new session')
+    assert.notEqual(third.json.session.id, primary.json.session.id)
+    assert.equal(third.json.session.primary, false)
+    const settled = await request('/sessions/primary', { token })
+    assert.equal(settled.json.session.id, primary.json.session.id,
+      'creating a session must never move the primary binding')
+  })
+
+  test('concurrent creates leave one empty ordinary session', async () => {
+    const phaethon = await signIn('phaethon', PHAETHON_PASSWORD)
+    const agent = await register(await createInvite(phaethon.token), 'agent-concurrent-empty')
+    assert.equal(agent.status, 200, agent.text)
+    const token = agent.json.token
+
+    const primary = await request('/sessions/create', { token })
+    await say(token, primary.json.session.id)
+    const created = await Promise.all(Array.from({ length: 3 }, () => request('/sessions/create', { token })))
+    for (const response of created) assert.equal(response.status, 200, response.text)
+    const ids = new Set(created.map(response => response.json.session.id))
+    assert.equal(ids.size, 1, 'concurrent creates must answer the same empty ordinary session')
+    assert.notEqual([...ids][0], primary.json.session.id)
+
+    const listed = await request('/sessions/list', { token })
+    assert.equal(listed.json.sessions.length, 2,
+      'the racing creates must leave exactly the primary and one ordinary session')
+    assert.equal(listed.json.sessions.filter(session => session.primary).length, 1)
+    assert.equal(listed.json.primarySessionId, primary.json.session.id)
+
+    const again = await request('/sessions/create', { token })
+    assert.equal(again.json.session.id, [...ids][0],
+      'the empty ordinary session stays the reusable one after the race')
   })
 
   test('a missing or foreign session is refused, and no request is ever served as an implicit user', async () => {
@@ -256,6 +377,7 @@ describe('OurFairy owned sessions over real HTTP', () => {
     const token = agent.json.token
 
     const primary = await request('/sessions/create', { token })
+    await say(token, primary.json.session.id)
     const ordinary = await request('/sessions/create', { token })
     const before = await request('/sessions/list', { token })
     const artifactsBefore = durableArtifacts()
@@ -309,16 +431,17 @@ describe('OurFairy owned sessions over real HTTP', () => {
     assert.equal(listed.json.sessions.filter(session => session.primary).length, 1,
       'exactly one session is primary')
 
-    // Two concurrent creates may each mint their own ordinary session, but
-    // neither can displace the main or bind it to anything else.
+    // The primary now has content, so the next creates are ordinary. They race
+    // each other, and both must enter the same single empty ordinary session.
+    await say(token, returned.json.session.id)
     const [extra, other] = await Promise.all([
       request('/sessions/create', { token }),
       request('/sessions/create', { token }),
     ])
     assert.equal(extra.status, 200, `the first extra create must succeed: ${extra.text}`)
     assert.equal(other.status, 200, `the second extra create must succeed: ${other.text}`)
-    assert.notEqual(extra.json.session.id, other.json.session.id,
-      'two concurrent creates must each get their own ordinary session')
+    assert.equal(extra.json.session.id, other.json.session.id,
+      'two concurrent creates must reuse the same empty ordinary session')
     for (const created of [extra, other]) {
       assert.equal(created.json.session.primary, false,
         'a racing ordinary create must never answer with the primary session')
@@ -327,6 +450,8 @@ describe('OurFairy owned sessions over real HTTP', () => {
     const settled = await request('/sessions/list', { token })
     assert.equal(settled.json.primarySessionId, returned.json.session.id,
       'concurrent creates must not move the primary binding')
+    assert.equal(settled.json.sessions.length, 2,
+      'the racing creates must leave exactly the primary and one ordinary session')
   })
 
   test('cold ownerless and foreign sessions are refused without changing durable artifacts', async t => {
