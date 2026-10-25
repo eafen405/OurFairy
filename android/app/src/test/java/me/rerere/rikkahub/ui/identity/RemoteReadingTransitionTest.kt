@@ -13,8 +13,11 @@ class RemoteReadingTransitionTest {
         RemoteChatAttempt(attemptId = id, revision = 0, text = text)
 
     /**
-     * Backend facts in, visual rows out. Identity is only ever observed through the returned
-     * [RemoteTranscriptRow.key]; the test never spells an attempt key itself.
+     * Backend facts in, visual rows out. Callers pass generation, a backend attempt and a
+     * backend settlement, never a row key; identity is observed through the returned
+     * [RemoteTranscriptRow.key]. The one literal `attempt:<generation>:<attemptId>` assertion
+     * below is the deliberate format check (Testing Decision 5); every other scenario compares
+     * keys captured from earlier public results.
      */
     private fun RemoteTranscriptPresentation.present(
         messages: List<RemoteChatMessage> = emptyList(),
@@ -180,6 +183,7 @@ class RemoteReadingTransitionTest {
         )
         assertEquals(3, next.size)
         assertEquals("delivery", next[0].key)
+        assertFalse(next[0].deferFormatting)
         assertEquals(first, next[1].key)
         assertEquals(source, next[1].text)
         assertTrue(next[1].deferFormatting)
