@@ -18,8 +18,8 @@
  * test imports on purpose falls to `typecheck`, and the closing ticket runs the
  * full suite.
  *
- * Delivery is unchanged: `CODING_STANDARDS.md` still requires `npm test` and
- * `npm run combo:verify` on the final integration state, and CI runs the same.
+ * Final backend and changed-face Android checks remain mandatory;
+ * `CODING_STANDARDS.md` names the delivery commands and CI runs both product faces.
  *
  * Usage:
  *   node scripts/precommit.ts           # classify the staged change and run the gate
@@ -72,7 +72,7 @@ export const TYPECHECK_COMMANDS = Object.freeze([
   Object.freeze({ command: 'npm', args: Object.freeze(['run', 'combo:verify']) }),
 ])
 
-/** Checks any other commit runs: the full product suite, then the combination. */
+/** Checks any other commit runs: the full backend suite, then the combination. */
 export const FULL_COMMANDS = Object.freeze([
   Object.freeze({ command: 'npm', args: Object.freeze(['test']) }),
   Object.freeze({ command: 'npm', args: Object.freeze(['run', 'combo:verify']) }),

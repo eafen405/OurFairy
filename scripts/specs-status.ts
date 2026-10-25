@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The one view of where every spec stands.
+ * The one view of where every spec and non-spec integration batch stands.
  *
  * A spec finishes in three places that drift apart silently: the integration
  * branch (does it exist, did it leave the machine, did it land), the checkout
@@ -352,7 +352,7 @@ export function render(report: SpecReport): string {
   }
 
   if (report.orphanWorktrees.length > 0) {
-    lines.push('', 'worktrees naming no known spec:')
+    lines.push('', 'worktrees outside known integration branches:')
     for (const path of report.orphanWorktrees) lines.push(`  ${path}`)
   }
 

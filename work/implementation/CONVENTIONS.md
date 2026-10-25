@@ -42,9 +42,9 @@ git -C /home/eafen405/projects/deepseek-harness worktree add \
 
 规则：
 
-- 开工前先跑 `npm run specs:status`：一次给出每张 spec 的分支 tip、是否已推送、是否已落地、遗留的
-  worktree，以及落地分支本身有没有未推送提交。开工与收口都以这份输出为准，不用 `git log --all`
-  逐个分支反推。
+- 开工前先跑 `npm run specs:status`：一次给出每个 spec 与小修 integration 批次的分支 tip、推送、
+  祖先合并、内容落地、遗留 worktree，以及落地分支本身有没有未推送提交。开工与收口都以这份输出为准，
+  不用 `git log --all` 逐个分支反推。
 - 开工前确认 worktree 基线是目标集成分支的最新提交；不是则先 `git merge` 集成分支最新提交再开始。
 - **合并前**再把集成分支 tip 合进自己的票分支，解决冲突后报告，不要等 Lead 替你解冲突。
 - 每张票只写自己声明过的写范围；跨票公共文件由 Lead 协调。
