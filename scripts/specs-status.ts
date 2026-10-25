@@ -40,28 +40,40 @@ export type SpecState = 'planned' | 'unpushed' | 'in-flight' | 'landed' | 'orpha
 /** The tracker half of the report: spec number to issue facts. */
 export type TrackerFacts = Map<number, { state: string; title: string }>
 
+type Worktree = { path: string; branch: string | null }
+
 /** What one spec's facts are read from. */
 export type SpecContext = {
   root: string
   tracker: TrackerFacts | undefined
+  worktrees: Array<string | Worktree>
+}
+
+type BranchRow = {
+  state: SpecState
+  defect: boolean
+  branch: string | null
+  tip: string | null | undefined
+  pushed: boolean
+  merged: boolean
+  contentLanded: boolean
+  landed: boolean
+  ahead: number
   worktrees: string[]
 }
 
 /** One spec's facts, as the report prints them. */
-export type SpecRow = {
+export type SpecRow = BranchRow & {
   spec: number
-  state: SpecState
-  defect: boolean
   title: string | undefined
   issue: string | undefined
-  branch: string | null
-  tip: string | null | undefined
-  pushed: boolean
-  landed: boolean
-  ahead: number
   copies: boolean
-  worktrees: string[]
 }
+
+/** A non-spec integration branch, identified by its real branch name. */
+export type BatchRow = BranchRow & { name: string }
+
+type ReportRow = SpecRow | BatchRow
 
 /** How one branch stands against its origin counterpart. */
 export type BranchDrift = { branch: string; ahead: number | null; behind: number | null }
@@ -71,8 +83,9 @@ export type SpecReport = {
   tracker: 'skipped' | 'unavailable' | 'ok'
   landing: BranchDrift[]
   rows: SpecRow[]
+  batchRows: BatchRow[]
   orphanWorktrees: string[]
-  defects: SpecRow[]
+  defects: ReportRow[]
 }
 
 /** The command's options, as argv carries them. */
@@ -131,6 +144,14 @@ export function readTracker(root: string): TrackerFacts | undefined {
   }
 }
 
+/** All local and fetched integration branches, without duplicate remote names. */
+function integrationBranches(root: string): string[] {
+  const branches = git(root, ['for-each-ref', '--format=%(refname:short)',
+    'refs/heads/integration/', 'refs/remotes/origin/integration/']) ?? ''
+  return [...new Set(branches.split('\n').map(branch => branch.trim().replace(/^origin\//u, ''))
+    .filter(branch => branch.startsWith('integration/')))]
+}
+
 /** The spec numbers the checkout knows: ticket-copy directories and spec branches. */
 export function specsInCheckout(root: string): Set<number> {
   const specs = new Set<number>()
@@ -140,26 +161,35 @@ export function specsInCheckout(root: string): Set<number> {
       if (entry.isDirectory() && /^\d+$/u.test(entry.name)) specs.add(Number(entry.name))
     }
   }
-  const branches = git(root, ['for-each-ref', '--format=%(refname:short)',
-    'refs/heads/integration/', 'refs/remotes/origin/integration/']) ?? ''
-  for (const branch of branches.split('\n')) {
+  for (const branch of integrationBranches(root)) {
     // A spec branch that exists only on origin is still a spec this checkout
     // knows about; without this, a completed-but-unfetched spec disappears from
     // the report and the command still prints "no spec needs attention".
-    const match = /^(?:origin\/)?integration\/spec-(\d+)$/u.exec(branch.trim())
+    const match = /^integration\/spec-(\d+)$/u.exec(branch)
     if (match !== null) specs.add(Number(match[1]))
   }
   return specs
 }
 
+/** Read worktrees and their actual branches, excluding the main checkout. */
+function readWorktrees(root: string): Worktree[] {
+  const out = git(root, ['worktree', 'list', '--porcelain']) ?? ''
+  // Git lists the main checkout first, regardless of the caller's worktree.
+  return out.split('\n\n').slice(1).flatMap(block => {
+    const lines = block.split('\n')
+    const pathLine = lines.find(line => line.startsWith('worktree '))
+    if (pathLine === undefined) return []
+    const branchLine = lines.find(line => line.startsWith('branch refs/heads/'))
+    return [{
+      path: pathLine.slice('worktree '.length),
+      branch: branchLine === undefined ? null : branchLine.slice('branch refs/heads/'.length),
+    }]
+  })
+}
+
 /** Worktree paths, excluding the main checkout itself. */
 export function worktrees(root: string): string[] {
-  const out = git(root, ['worktree', 'list', '--porcelain']) ?? ''
-  const main = git(root, ['rev-parse', '--show-toplevel'])
-  return out.split('\n')
-    .filter(line => line.startsWith('worktree '))
-    .map(line => line.slice('worktree '.length))
-    .filter(path => path !== main)
+  return readWorktrees(root).map(entry => entry.path)
 }
 
 /** Whether a worktree path names this spec, directly or as one of its tickets. */
@@ -168,24 +198,32 @@ export function worktreeNamesSpec(path: string, spec: number): boolean {
   return name === `spec-${spec}` || name.startsWith(`spec-${spec}-`) || name.startsWith(`${spec}-`)
 }
 
+/** Associate real worktrees by branch; retain names for detached or injected entries. */
+function associatedWorktrees(branch: string, spec: number | undefined, entries: Array<string | Worktree>): string[] {
+  return entries.filter(entry => {
+    if (typeof entry === 'string') return spec !== undefined && worktreeNamesSpec(entry, spec)
+    if (entry.branch !== null) return entry.branch === branch
+    return spec !== undefined && worktreeNamesSpec(entry.path, spec)
+  }).map(entry => typeof entry === 'string' ? entry : entry.path)
+}
+
 /** Whether the branch tip carries the spec's ticket copies. */
 function carriesCopies(root: string, ref: string, spec: number): boolean {
   return git(root, ['cat-file', '-e', `${ref}:work/tickets/${spec}`]) !== undefined
 }
 
-/**
- * One spec's facts.
- *
- * `state` is the single answer a reader needs: `unpushed` (local-only work),
- * `stale-worktree` (landed but the worktree remains), `in-flight` (pushed, not
- * yet landed), `landed` (merged into the landing branch), or `planned` (no
- * branch yet — the spec has ticket copies only).
- * @param spec
- * @param context
- */
-export function specStatus(spec: number, context: SpecContext): SpecRow {
-  const { root, tracker } = context
-  const branch = `integration/spec-${spec}`
+/** Whether merging the ref would leave the landing tree unchanged. */
+function contentLanded(root: string, ref: string | undefined): boolean {
+  if (ref === undefined) return false
+  const mergedTree = git(root, ['merge-tree', '--write-tree', LANDING_BRANCH, ref])
+  const landingTree = git(root, ['rev-parse', `${LANDING_BRANCH}^{tree}`])
+  // merge-tree exits non-zero on conflicts; run() turns that into no result.
+  return mergedTree !== undefined && landingTree !== undefined && mergedTree === landingTree
+}
+
+/** Read the branch facts shared by specs and non-spec integration batches. */
+function branchStatus(branch: string, context: SpecContext, spec?: number): BranchRow {
+  const { root } = context
   const local = git(root, ['rev-parse', '--verify', `refs/heads/${branch}`])
   const hasBranch = local !== undefined
   const remote = git(root, ['rev-parse', '--verify', `refs/remotes/origin/${branch}`])
@@ -194,10 +232,12 @@ export function specStatus(spec: number, context: SpecContext): SpecRow {
   // The landing fact follows whichever ref exists: a remote-only branch can be
   // landed on origin even when this checkout never fetched the local branch.
   const landedRef = hasBranch ? branch : orphan ? `refs/remotes/origin/${branch}` : undefined
-  const landed = landedRef !== undefined
+  const merged = landedRef !== undefined
     && git(root, ['merge-base', '--is-ancestor', landedRef, LANDING_BRANCH]) !== undefined
-  const leftover = context.worktrees.filter(path => worktreeNamesSpec(path, spec))
-  const tracked = tracker?.get(spec)
+  const content = contentLanded(root, landedRef)
+  // Keep the old overall field while exposing why the branch is landed.
+  const landed = merged || content
+  const leftover = associatedWorktrees(branch, spec, context.worktrees)
 
   let state: SpecState = 'planned'
   if (hasBranch) state = pushed ? (landed ? 'landed' : 'in-flight') : 'unpushed'
@@ -205,24 +245,40 @@ export function specStatus(spec: number, context: SpecContext): SpecRow {
   if (landed && leftover.length > 0) state = 'stale-worktree'
 
   return {
-    spec,
     state,
     defect: DEFECTS.includes(state),
-    title: tracked?.title,
-    issue: tracked?.state,
     branch: hasBranch ? branch : null,
     tip: hasBranch ? git(root, ['rev-parse', '--short', branch]) : null,
     pushed,
+    merged,
+    contentLanded: content,
     landed,
     ahead: hasBranch ? Number(git(root, ['rev-list', '--count', `${LANDING_BRANCH}..${branch}`]) ?? 0) : 0,
-    copies: carriesCopies(root, hasBranch ? branch : LANDING_BRANCH, spec),
     worktrees: leftover,
   }
 }
 
+/** One spec's branch facts plus its ticket copies and tracker facts. */
+export function specStatus(spec: number, context: SpecContext): SpecRow {
+  const branch = `integration/spec-${spec}`
+  const tracked = context.tracker?.get(spec)
+  const status = branchStatus(branch, context, spec)
+  return {
+    ...status,
+    spec,
+    title: tracked?.title,
+    issue: tracked?.state,
+    copies: carriesCopies(context.root, status.branch ?? LANDING_BRANCH, spec),
+  }
+}
+
+function batchStatus(branch: string, context: SpecContext): BatchRow {
+  return { name: branch.slice('integration/'.length), ...branchStatus(branch, context) }
+}
+
 /** Whether a branch carries commits origin does not have, or the reverse. */
-export function branchDrift(root: string, branches: string[] = ['main', LANDING_BRANCH]): BranchDrift[] {
-  return branches.map(branch => {
+export function branchDrift(root: string, branches: string[] = [LANDING_BRANCH]): BranchDrift[] {
+  return [...new Set(branches)].map(branch => {
     const ahead = git(root, ['rev-list', '--count', `origin/${branch}..${branch}`])
     const behind = git(root, ['rev-list', '--count', `${branch}..origin/${branch}`])
     return {
@@ -244,33 +300,46 @@ export function collect({ root = repoRoot, offline = false, specs = [], tracker 
   const resolved = tracker ?? (offline ? undefined : readTracker(root))
   const known = specsInCheckout(root)
   const wanted = specs.length === 0 ? [...known] : specs
-  const paths = worktrees(root)
-  const context = { root, tracker: resolved, worktrees: paths }
+  const entries = readWorktrees(root)
+  const paths = entries.map(entry => entry.path)
+  const context = { root, tracker: resolved, worktrees: entries }
   const rows = wanted.sort((a, b) => a - b).map(number => specStatus(number, context))
-  const orphanWorktrees = paths.filter(path => ![...known].some(spec => worktreeNamesSpec(path, spec)))
+  const batchRows = integrationBranches(root)
+    .filter(branch => !/^integration\/spec-\d+$/u.test(branch))
+    .sort()
+    .map(branch => batchStatus(branch, context))
+  const associated = new Set([...rows, ...batchRows].flatMap(row => row.worktrees))
+  const orphanWorktrees = paths.filter(path => !associated.has(path))
   return {
     tracker: offline ? 'skipped' : resolved === undefined ? 'unavailable' : 'ok',
     landing: branchDrift(root),
     rows,
+    batchRows,
     orphanWorktrees,
-    defects: rows.filter(row => row.defect),
+    defects: [...rows, ...batchRows].filter(row => row.defect),
   }
 }
 
 /** Human-readable table; columns are the facts `state` is derived from. */
 export function render(report: SpecReport): string {
-  const head = ['spec', 'state', 'branch', 'tip', 'push', 'land', 'ahead', 'copies', 'worktree', 'issue']
-  const cells = report.rows.map(row => [
-    String(row.spec),
+  const head = ['spec/batch', 'state', 'branch', 'tip', 'push', 'merged', 'content', 'land', 'ahead', 'copies', 'worktree', 'issue']
+  const tableRows: Array<{ label: string; row: ReportRow }> = [
+    ...report.rows.map(row => ({ label: String(row.spec), row })),
+    ...report.batchRows.map(row => ({ label: row.name, row })),
+  ]
+  const cells = tableRows.map(({ label, row }) => [
+    label,
     row.state,
     row.branch ?? '-',
     row.tip ?? '-',
     row.branch === null ? '-' : row.pushed ? 'ok' : 'MISSING',
+    row.branch === null ? '-' : row.merged ? 'ok' : '-',
+    row.branch === null ? '-' : row.contentLanded ? 'ok' : '-',
     row.branch === null ? '-' : row.landed ? 'ok' : '-',
     String(row.ahead),
-    row.copies ? 'ok' : 'MISSING',
+    'spec' in row ? row.copies ? 'ok' : 'MISSING' : '-',
     String(row.worktrees.length),
-    row.issue ?? '?',
+    'spec' in row ? row.issue ?? '?' : '-',
   ])
   // Every row has one cell per column, so the widths and the cells line up.
   const widths = head.map((title, index) => Math.max(title.length, ...cells.map(row => row[index]!.length)))
@@ -293,7 +362,8 @@ export function render(report: SpecReport): string {
   lines.push(needsAttention === 0
     ? 'specs-status: no spec needs attention'
     : `specs-status: ${needsAttention} need attention — `
-      + [...report.defects.map(row => `#${row.spec} ${row.state}`), ...drifting.map(entry => `${entry.branch} ahead of origin`)].join(', '))
+      + [...report.defects.map(row => 'spec' in row ? `#${row.spec} ${row.state}` : `${row.name} ${row.state}`),
+        ...drifting.map(entry => `${entry.branch} ahead of origin`)].join(', '))
   return lines.join('\n')
 }
 

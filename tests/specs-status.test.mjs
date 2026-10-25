@@ -98,6 +98,67 @@ test('a pushed branch is in flight until it lands, and landed once merged', () =
   assert.equal(landed.defect, false)
 })
 
+test('cherry-picked content is landed without an ancestor merge', () => {
+  const root = fixture()
+  commitOn(root, 'integration/spec-908', 'work/implementation/evidence/908-closeout/README.md')
+  git(root, ['push', '--quiet', 'origin', 'integration/spec-908'])
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  git(root, ['cherry-pick', '--no-commit', 'integration/spec-908'])
+  git(root, ['commit', '--quiet', '-m', 'apply 908'])
+  git(root, ['push', '--quiet', 'origin', LANDING_BRANCH])
+
+  const report = collect({ root, offline: true })
+  const row = report.rows.find(row => row.spec === 908)
+
+  assert.equal(row.merged, false, 'the cherry-pick is not the branch ancestor')
+  assert.equal(row.contentLanded, true, 'the same change is already in main')
+  assert.equal(row.landed, true)
+  assert.equal(row.state, 'landed')
+  assert.equal(row.defect, false)
+  const output = render(report)
+  assert.match(output, /spec\/batch\s+state\s+branch\s+tip\s+push\s+merged\s+content\s+land/u)
+  assert.match(output, /908\s+landed\s+integration\/spec-908\s+\S+\s+ok\s+-\s+ok\s+ok/u)
+})
+
+test('content that has not been applied is not content landed', () => {
+  const root = fixture()
+  commitOn(root, 'integration/spec-909', 'work/implementation/evidence/909-closeout/README.md')
+  git(root, ['push', '--quiet', 'origin', 'integration/spec-909'])
+
+  const row = collect({ root, offline: true }).rows.find(row => row.spec === 909)
+
+  assert.equal(row.merged, false)
+  assert.equal(row.contentLanded, false)
+  assert.equal(row.landed, false)
+  assert.equal(row.state, 'in-flight')
+})
+
+test('a merge conflict never gets a green content landing', () => {
+  const root = fixture()
+  writeFileSync(join(root, 'shared.txt'), 'base\n')
+  git(root, ['add', '.'])
+  git(root, ['commit', '--quiet', '-m', 'shared base'])
+  git(root, ['push', '--quiet', 'origin', LANDING_BRANCH])
+  git(root, ['checkout', '--quiet', '-b', 'integration/spec-910', LANDING_BRANCH])
+  writeFileSync(join(root, 'shared.txt'), 'branch\n')
+  git(root, ['add', '.'])
+  git(root, ['commit', '--quiet', '-m', 'branch change'])
+  git(root, ['push', '--quiet', 'origin', 'integration/spec-910'])
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  writeFileSync(join(root, 'shared.txt'), 'main\n')
+  git(root, ['add', '.'])
+  git(root, ['commit', '--quiet', '-m', 'main change'])
+
+  const report = collect({ root, offline: true })
+  const row = report.rows.find(row => row.spec === 910)
+
+  assert.equal(row.merged, false)
+  assert.equal(row.contentLanded, false)
+  assert.equal(row.landed, false)
+  assert.equal(row.state, 'in-flight')
+  assert.match(render(report), /910\s+in-flight\s+integration\/spec-910\s+\S+\s+ok\s+-\s+-\s+-/u)
+})
+
 test('a landed spec that still holds a worktree is a defect', () => {
   const root = fixture()
   commitOn(root, 'integration/spec-902', 'work/implementation/evidence/902-closeout/README.md')
@@ -144,6 +205,27 @@ test('the report keeps the tracker half injectable and offline mode honest', () 
   assert.equal(online.rows[0].title, 'a spec')
 })
 
+test('a non-spec integration branch is a batch row with actionable status', () => {
+  const root = fixture()
+  commitOn(root, 'integration/fixes-219-221', 'work/implementation/evidence/fixes-219-221/README.md')
+
+  const report = collect({ root, offline: true })
+
+  assert.equal(report.rows.some(row => row.branch === 'integration/fixes-219-221'), false)
+  const batch = report.batchRows.find(row => row.branch === 'integration/fixes-219-221')
+  assert.ok(batch, 'the fixes branch is discovered without inventing a spec number')
+  assert.equal(batch.name, 'fixes-219-221')
+  assert.equal(batch.state, 'unpushed')
+  assert.equal(batch.pushed, false)
+  assert.equal(batch.merged, false)
+  assert.equal(batch.contentLanded, false)
+  assert.equal(batch.landed, false)
+  assert.equal(batch.ahead, 1)
+  assert.deepEqual(batch.worktrees, [])
+  assert.equal(batch.defect, true)
+  assert.match(render(report), /specs-status: 1 need attention — fixes-219-221 unpushed/u)
+})
+
 test('the landing branch having unpushed commits is reported, and rendered', () => {
   const root = fixture()
   git(root, ['checkout', '--quiet', LANDING_BRANCH])
@@ -156,6 +238,40 @@ test('the landing branch having unpushed commits is reported, and rendered', () 
   assert.equal(landing.ahead, 1, 'the landing branch is one commit ahead of origin')
   assert.match(render(report), new RegExp(`${LANDING_BRANCH} is 1 ahead`, 'u'))
   assert.match(render(report), /need attention/u)
+})
+
+test('running from a secondary worktree does not report the main checkout as orphan', () => {
+  const root = fixture()
+  const secondary = join(root, 'spec-906')
+  roots.push(secondary)
+  git(root, ['worktree', 'add', '--quiet', '-b', 'integration/spec-906', secondary])
+
+  const report = collect({ root: secondary, offline: true })
+
+  assert.equal(report.orphanWorktrees.includes(root), false, 'the primary checkout is not an orphan')
+  assert.equal(report.rows.find(row => row.spec === 906).worktrees.includes(secondary), true)
+  assert.doesNotMatch(render(report), new RegExp(root.replaceAll('/', '\\/'), 'u'))
+})
+
+test('worktrees are associated by the branch checked out in porcelain', () => {
+  const root = fixture()
+  commitOn(root, 'integration/spec-907', 'work/implementation/evidence/907-closeout/README.md')
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  const secondary = join(root, 'arbitrary-location')
+  git(root, ['worktree', 'add', '--quiet', secondary, 'integration/spec-907'])
+
+  const report = collect({ root, offline: true })
+
+  assert.deepEqual(report.rows.find(row => row.spec === 907).worktrees, [secondary])
+  assert.deepEqual(report.orphanWorktrees, [])
+})
+
+test('the landing branch drift appears only once', () => {
+  const root = fixture()
+
+  const report = collect({ root, offline: true })
+
+  assert.deepEqual(report.landing.map(entry => entry.branch), [LANDING_BRANCH])
 })
 
 test('a branch that exists only on origin is reported instead of vanishing', () => {
