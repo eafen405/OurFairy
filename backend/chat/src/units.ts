@@ -212,8 +212,14 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   }
 }
 
-/** One row's wire shape at the inclusive cut `cut`, in the old fold's field order. */
-function rowAtCut(row: TranscriptRow, cut: number) {
+/**
+ * One row's wire shape at the inclusive cut `cut`, in the old fold's field order.
+ *
+ * `position` is the row's index in `rows`, the immutable first-appearance order.
+ * It is derived here at read time, not stored: it is the only ordering fact the
+ * client needs, so no fold of the seq history has to agree with it.
+ */
+function rowAtCut(row: TranscriptRow, cut: number, position: number) {
   let transition: z.infer<typeof transitionSchema> | null = null
   for (let offset = row.transitions.length - 1; offset >= 0; offset--) {
     // The loop walks the array backwards from its own length, so the entry is
@@ -223,6 +229,7 @@ function rowAtCut(row: TranscriptRow, cut: number) {
   }
   return {
     messageId: row.messageId,
+    position,
     seq: transition !== null && transition.repositions ? transition.seq : row.first.seq,
     requestId: row.requestId,
     role: row.role,
@@ -383,7 +390,9 @@ function firstAtLeast<T>(items: readonly T[], keyOf: (item: T) => number, target
 /**
  * Every transcript row visible at the inclusive log cut `cut` whose wire `seq`
  * is at least `fromSeq`, in first-appearance order — the order the per-read Map
- * fold returned. `moves` is the narrow index that makes a tail read
+ * fold returned. Each row names that place as its `position`, the row's index in
+ * `rows`, so the array order is a convenience rather than the ordering contract.
+ * `moves` is the narrow index that makes a tail read
  * independent of the transcript's length: rows before `fromSeq` are considered
  * only when a later transition moved them into the window.
  * @param state - the transcript unit state.
@@ -406,11 +415,11 @@ export function transcriptAt(state: TranscriptState, cut = Infinity, fromSeq = 0
     // Rows whose first appearance is already in the window are emitted by the
     // slice below; only an earlier row moved forward needs this path.
     if (row.first.seq >= fromSeq) continue
-    if (rowAtCut(row, cut).seq >= fromSeq) movedIntoWindow.add(move.index)
+    if (rowAtCut(row, cut, move.index).seq >= fromSeq) movedIntoWindow.add(move.index)
   }
   const moved = [...movedIntoWindow].sort((left, right) => left - right)
   const visible = start < end ? Array.from({ length: end - start }, (_, offset) => start + offset) : []
-  return [...moved, ...visible].map(index => rowAtCut(state.rows[index] as TranscriptRow, cut))
+  return [...moved, ...visible].map(index => rowAtCut(state.rows[index] as TranscriptRow, cut, index))
 }
 
 /**

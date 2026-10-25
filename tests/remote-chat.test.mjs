@@ -95,6 +95,32 @@ test('a stable send is durably accepted once across concurrent retries and backe
   assert.equal(model.requests.length, 1)
 })
 
+test('a page names the same position as the live read for the same row', async () => {
+  const sessionId = await session(alice.token)
+  const requestId = 'alice-position-1'
+  const sent = await request('/chat/send', alice.token, { sessionId, requestId, text: 'position me' })
+  assert.equal(sent.status, 200, JSON.stringify(sent))
+  const settled = await eventually(() => request('/chat/read', alice.token, { sessionId }),
+    r => r.body.projection?.replyStatus === 0 && r.body.projection.messages.some(m => m.role === 2))
+  const live = settled.body.projection
+
+  // Presentation order is first appearance, numbered from zero for the session.
+  assert.deepEqual(live.messages.map(m => m.position), live.messages.map((_, index) => index))
+  assert.deepEqual(live.messages.map(m => m.role), [1, 2])
+  const user = live.messages[0]
+  assert.equal(user.requestId, requestId)
+
+  // A page that names only one row still reports that row's place in the
+  // session: a window does not renumber what it carries.
+  for (const row of [user, live.messages[1]]) {
+    const page = await request('/chat/page', alice.token, {
+      sessionId, throughSeq: row.seq, beforeSeq: row.seq + 1, maxEvents: 1,
+    })
+    assert.equal(page.status, 200, JSON.stringify(page))
+    assert.deepEqual(page.body.page.messages, [row])
+  }
+})
+
 function artifacts() {
   const root = join(home, 'dsh-home', 'sessions')
   const files = readdirSync(root, { recursive: true }).filter(name => /\.jsonl(\.zstd)?$/.test(name))
