@@ -68,7 +68,17 @@ function doctor({ root, home, fake }) {
   }, { root })
   const start = run.stdout.indexOf('{')
   assert.ok(start >= 0, `doctor printed no JSON report:\n${run.stdout}\n${run.stderr}`)
-  return JSON.parse(run.stdout.slice(start))
+  const report = JSON.parse(run.stdout.slice(start))
+  // Doctor asks the pinned pnpm version once, before the install check. Every
+  // case asserts it here so the call log stays the authority for the process
+  // seam: an extra version query would be a changed launcher, not this test.
+  const versions = corepackCalls(fake).filter(call => call.kind === 'version')
+  assert.equal(
+    versions.length,
+    1,
+    `doctor must ask the pinned pnpm version exactly once; the log holds ${JSON.stringify(corepackCalls(fake))}`,
+  )
+  return report
 }
 
 /**
