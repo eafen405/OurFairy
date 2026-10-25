@@ -91,4 +91,5 @@ node --test tests/plugin-compatibility.test.mjs tests/owned-sessions.test.mjs te
 - 未跑全量 `npm test`（按约定由 Lead 收口跑）。因此 `backend/sessions/package.json` 与 `android/` 两处
   会触发全量门禁的提交用 `--no-verify` 提交，它们各自的相关测试已按上面的命令单独跑过；`b47220ac23`
   之前的门禁全量运行曾暴露 `tests/spill-read.test.mjs` 的同用户第二会话用例，已在 `9518ef7793` 修复。
+  这两处 `--no-verify` 在集成收口已由全量门禁补跑，见 [219-221-closeout](../219-221-closeout/README.md)。
 - 未连接 Android 真机；本次只有 JVM 单测，没有真机验收结论。

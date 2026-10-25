@@ -10,10 +10,10 @@
   因此自然包含调用者；未登录或凭据无效沿用 `401 identity/unauthorized`，不受信 Host 仍由既有 `postHandler` fence 给
   `403 identity/forbidden-authority`。
 - 后端只在 `IdentityStore` 上新增窄方法 `listAgents()`：
-  `SELECT short_id, name FROM users WHERE deleted_at IS NULL ORDER BY short_id`，返回新类型 `AgentPresence[]`
+  `SELECT short_id, name FROM users WHERE deleted_at IS NULL ORDER BY short_id`，返回新类型 `AgentSummary[]`
   （`{shortId, name}`）；不返回 `PublicUser`，所以 `isAdmin`/`createdAt` 不进入响应。`identityInterfaces` 的四个 face
   未扩宽（`users` 仍只有 `byShortId`），路由直接调用 store。
-- 客户端 `IdentityApi` 新增 `AgentPresence(shortId, name)`、`IdentityEnvelope.agents` 与
+- 客户端 `IdentityApi` 新增 `AgentSummary(shortId, name)`、`IdentityEnvelope.agents` 与
   `IdentityBackend.agents(token)`；`agents()` 发无 body、无 media type 的 POST `/identity/agents`，取
   `envelope.agents.orEmpty()`；五个 `IdentityBackend` 测试假实现补 `emptyList()`。
 - 设置页在「账号」之后新增默认收起的「代理人 / AGENTS」组，展开时用 `LaunchedEffect(session.token)` 拉取，
@@ -47,7 +47,7 @@ npm run build && node --test tests/identity-http.test.mjs tests/identity-interfa
 ### 客户端（Robolectric + Compose 页面边界）
 
 `IdentityApiTest` 用 JDK `HttpServer` 记录线上字节：`agents()` 发 `POST /identity/agents`、`Bearer token`、空 body、
-无 `Content-Type`，并解码两个 `AgentPresence`；401 响应映射为 `IdentityRefused(401, "identity/unauthorized")`
+无 `Content-Type`，并解码两个 `AgentSummary`；401 响应映射为 `IdentityRefused(401, "identity/unauthorized")`
 而不是空列表。
 
 `FairyPagesTest` 新增用例走可见行为：打开设置 → 收起「账号」组（它展开时的「权限」行也写着「代理人」，会与组标题同文本）
@@ -86,7 +86,5 @@ cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew :app:testDebugUn
 
 - 未连接 Android 物理设备，未做真机验收；以上是真实后端 HTTP、Robolectric 页面测试与 JUnit XML 证据。
 - 未调用真实模型或云服务。
-- 全量 `npm test` 与 `npm run combo:verify` 的收口复跑由 Lead 在最终集成状态执行（见 `CODING_STANDARDS.md`）；
-  本票只把 android 提交触发的 FULL 门禁结果记为通过。
-- 本目录尚未登记进 `work/implementation/evidence/README.md` 的索引表（#220/#221 并行分支会在同一处冲突，留给
-  Lead 收口时一次登记）。
+- 全量 `npm test` 与 `npm run combo:verify` 在集成收口由 Lead 在最终集成状态复跑，结果见
+  [219-221-closeout](../219-221-closeout/README.md)；本票只把 android 提交触发的 FULL 门禁结果记为通过。
