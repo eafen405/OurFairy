@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { SessionHistoryGapError, createSessionHistorySeam } from '@deepseek-ai/dsh-agent/session-history'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
-import { attemptText, attemptTools, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.js'
+import { attemptText, attemptTools, taskAt, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.js'
 import { FAIRY_PERSONA } from './persona.js'
 import { SessionQueues } from './queues.js'
 import type { Context } from '@deepseek-ai/cordis'
@@ -480,6 +480,19 @@ export class SessionRuntime {
     const unit = this.ctx.sessionProjections.stateOf(state.session, definition.key)
     if (unit === undefined) throw new Error(`chat projection "${definition.key}" is not registered`)
     return unit
+  }
+
+  /**
+   * One task's wire row and live native identity, read from the work unit and
+   * the jobs registry only. No attempt, transcript, activity or event-window
+   * read: task access never initialises the observed window.
+   * @param state - the opened live session.
+   * @param taskId - the untrusted product task id a request carried.
+   * @returns the task and its native JobId, or null when taskId names no row.
+   */
+  taskOf(state: LiveSession, taskId: unknown) {
+    if (typeof taskId !== 'string') return null
+    return taskAt(this.unitState(state, workDefinition), this.ctx, state.sessionId, taskId)
   }
 
   /**
