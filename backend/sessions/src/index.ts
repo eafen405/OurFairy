@@ -8,18 +8,20 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { OwnedSessionService } from './service.js'
 import { SESSION_PATHS, sessionHandlers } from './http.js'
-// The dsh context's own seams: the session store, the durable store and the
-// carrier. The imports are type-only, so they add no runtime dependency.
+// The dsh context's own seams: the session store, the durable store, the
+// session query and the carrier. The imports are type-only, so they add no
+// runtime dependency.
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
+import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@ourfairy/dsh-identity'
 
 export const name = 'ourfairy-sessions'
 
-/** `identity` is required because the presented credential is what names the owner. */
-export const inject = ['webServer', 'connection', 'identity', 'sessions', 'sessionPersistence']
+/** `identity` names the owner; `sessionQuery` reads whether a log is still empty. */
+export const inject = ['webServer', 'connection', 'identity', 'sessions', 'sessionPersistence', 'sessionQuery']
 
 export function apply(ctx: Context): void {
   const service = new OwnedSessionService(ctx, {

@@ -22,6 +22,10 @@ as `ctx.ourfairySessions` and the `/sessions/*` paths.
   `/create` are serialized per owner so a race cannot observe "no primary" twice.
 - The one-shot event read exported as `./events`: `readSessionEvents` opens an
   observation, returns its events and cursor, and disposes it in `finally`.
+- The empty-session rule on `/sessions/create`: a session whose log carries no
+  message event is entered again instead of duplicated — the primary while it is
+  still empty, otherwise the newest empty ordinary session; only a session that
+  already has a message forces a new ordinary session.
 
 ## Does not own
 
@@ -31,7 +35,8 @@ as `ctx.ourfairySessions` and the `/sessions/*` paths.
 - Users, short numbers or credentials. [`identity`](../identity/README.md)
   resolves the caller; this package only compares the resulting owner.
 - Message content, transcripts or projections; [`chat`](../chat/README.md) owns
-  those.
+  those. Reading events here decides only whether a log already has a message;
+  it never projects or interprets the content.
 
 ## dsh seams
 
@@ -44,7 +49,7 @@ as `ctx.ourfairySessions` and the `/sessions/*` paths.
 | `sessionPersistence.stat(id)` | reading one header snapshot for the ownership check |
 | `sessionPersistence.list()` | reading every stored header to filter by owner |
 | `sessionPersistence.create(header)` | persisting a new owned header, followed by `flush` and `close` |
-| `sessionQuery.observeSession(id, { projectionMode: 'none' })` | the exported one-shot read in `./events` |
+| `sessionQuery.observeSession(id, { projectionMode: 'none' })` | the exported one-shot read in `./events`, used by create to decide whether a session's log already has a message |
 
 It also uses `postHandler` and `ownerOf` from `@ourfairy/dsh-identity` for the
 fence/body/envelope and the owner format.
@@ -53,5 +58,7 @@ fence/body/envelope and the owner format.
 
 `ctx.ourfairySessions`, exposing `authenticate(request)`, `create(owner)`,
 `primary(owner)`, `list(owner)`, `read(owner, sessionId)` and `expose(header,
-shortId)`. It injects `webServer`, `connection`, `identity`, `sessions` and
-`sessionPersistence`.
+shortId)`. `create` returns the caller's empty session when one exists (the
+primary first, then the newest empty ordinary) and only materializes a new
+ordinary session otherwise. It injects `webServer`, `connection`, `identity`,
+`sessions`, `sessionPersistence` and `sessionQuery`.

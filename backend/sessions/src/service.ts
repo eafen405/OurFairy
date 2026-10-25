@@ -15,6 +15,7 @@ import type { IdentityService } from '@ourfairy/dsh-identity'
 import type { SessionHeader, SessionId, SessionStore } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence, SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
 import type { IncomingMessage } from 'node:http'
+import { hasMessages, readSessionEvents } from './events.js'
 
 /** Error carrying the HTTP status one request path answers with. */
 export class SessionScopeError extends Error {
@@ -173,7 +174,41 @@ export class OwnedSessionService extends Service {
     }
   }
 
-  /** An identity that owns nothing gets its deterministic primary; anyone else gets an ordinary session. */
+  /**
+   * Whether one session's log carries no message, so create may enter it again.
+   *
+   * The read is the one-shot `./events` observation; nothing here projects or
+   * interprets the events beyond asking whether a message is present.
+   */
+  async _isEmpty(sessionId: SessionId): Promise<boolean> {
+    return !hasMessages((await readSessionEvents(this.ctx, sessionId)).events)
+  }
+
+  /**
+   * The newest empty ordinary session of one owner, or undefined when every
+   * ordinary session already has content. `list` orders by createdAt ascending,
+   * so the reverse walk answers "newest first" without a second sort.
+   */
+  async _newestEmptyOrdinary(owner: SessionOwner): Promise<SessionHeader | undefined> {
+    const primaryId = primarySessionIdOf(owner.shortId)
+    const { sessions } = await this.list(owner)
+    for (let index = sessions.length - 1; index >= 0; index -= 1) {
+      const header = sessions[index] as SessionHeader
+      if (header.id === primaryId) continue
+      if (await this._isEmpty(header.id)) return header
+    }
+    return undefined
+  }
+
+  /**
+   * Enter the identity's empty session, or create one when there is none.
+   *
+   * An identity that owns nothing gets its deterministic primary. Once the
+   * primary exists and belongs to the caller, an empty log is entered again
+   * rather than duplicated: the primary while it is still empty, otherwise the
+   * newest empty ordinary session. Only a session whose log already carries a
+   * message forces a new ordinary session.
+   */
   async create(owner: SessionOwner): Promise<SessionHeader> {
     return await this._exclusively(owner, async () => {
       const primaryId = primarySessionIdOf(owner.shortId)
@@ -185,6 +220,9 @@ export class OwnedSessionService extends Service {
       if (existing.header.owner !== ownerOf(owner.shortId)) {
         throw new SessionScopeError(409, 'sessions/primary-taken', 'the reserved primary identifier belongs to another identity and is never rebound')
       }
+      if (await this._isEmpty(primaryId)) return existing.header
+      const empty = await this._newestEmptyOrdinary(owner)
+      if (empty !== undefined) return empty
       return await this._materialize(owner, sessionIdOf(owner.shortId))
     })
   }
