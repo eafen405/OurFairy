@@ -152,6 +152,7 @@ class RemoteAppUpdateTest {
         }
 
         compose.onNodeWithText("已安装版本 ${BuildConfig.VERSION_NAME}").assertIsDisplayed()
+        compose.onNodeWithText("检查更新会先下载完整安装包并检查版本，需要更新时由你确认安装。").assertIsDisplayed()
         compose.onNodeWithText("检查更新").performClick()
         assertEquals(1, checks)
     }
@@ -331,7 +332,7 @@ class RemoteAppUpdateTest {
     }
 
     @Test
-    fun `a failed download can be retried`() {
+    fun `failures have actionable messages and can be retried`() {
         var attempts = 0
         compose.setContent {
             FairyAppTheme {
@@ -339,7 +340,20 @@ class RemoteAppUpdateTest {
                     statuses = {
                         flow {
                             attempts++
-                            throw IllegalStateException("更新服务器不可达")
+                            when (attempts) {
+                                1 -> throw me.rerere.rikkahub.data.remote.RemoteAppUpdateException(
+                                    me.rerere.rikkahub.data.remote.AppUpdateFailure.SERVER,
+                                    "Update download returned 500",
+                                )
+
+                                2 -> throw me.rerere.rikkahub.data.remote.RemoteAppUpdateException(
+                                    me.rerere.rikkahub.data.remote.AppUpdateFailure.PACKAGE,
+                                    "Update package has a different application id",
+                                )
+
+                                3 -> throw java.io.IOException("offline")
+                                else -> emit(AppUpdateStatus.Current(192, "2.5.7"))
+                            }
                         }
                     },
                 )
@@ -348,12 +362,21 @@ class RemoteAppUpdateTest {
 
         compose.onNodeWithText("检查更新").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("更新服务器不可达").assertIsDisplayed()
+        compose.onNodeWithText("服务器暂未提供可下载的更新包").assertIsDisplayed()
+        compose.onNodeWithText("Update download returned 500").assertDoesNotExist()
 
         compose.onNodeWithText("重试").performClick()
         compose.waitForIdle()
+        compose.onNodeWithText("下载的安装包无效，请联系发布者").assertIsDisplayed()
 
-        assertEquals(2, attempts)
+        compose.onNodeWithText("重试").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("下载失败，请检查网络后重试").assertIsDisplayed()
+
+        compose.onNodeWithText("重试").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("已是最新版本").assertIsDisplayed()
+        assertEquals(4, attempts)
     }
 
     @Test
@@ -403,6 +426,17 @@ class RemoteAppUpdateTest {
         assertNotNull("必须跳到未知来源授权页", intent)
         assertEquals(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, intent!!.action)
         assertEquals("package:${context.packageName}", intent.data.toString())
+
+        shadowOf(context.packageManager).setCanRequestPackageInstalls(true)
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        compose.waitForIdle()
+
+        compose.onNodeWithText("去授权安装").assertDoesNotExist()
+        compose.onNodeWithText("需要先允许安装未知来源应用，回到这里再点安装。").assertDoesNotExist()
+        compose.onNodeWithText("安装").performClick()
+        compose.waitForIdle()
+        assertEquals(Intent.ACTION_VIEW, shadowOf(compose.activity).nextStartedActivity?.action)
     }
 
     @Test

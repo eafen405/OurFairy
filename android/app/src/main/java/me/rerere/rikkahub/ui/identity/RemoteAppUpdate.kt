@@ -5,8 +5,8 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
+import androidx.core.net.toUri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,16 +29,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.data.remote.AppUpdateFailure
 import me.rerere.rikkahub.data.remote.AppUpdateStatus
-import me.rerere.rikkahub.data.remote.RemoteAppUpdate as AppUpdateSource
+import me.rerere.rikkahub.data.remote.RemoteAppUpdate
+import me.rerere.rikkahub.data.remote.RemoteAppUpdateException
 import me.rerere.rikkahub.ui.fairy.LocalFairyTokens
 import org.koin.compose.koinInject
 import java.io.File
+import java.io.IOException
 
 /**
  * 应用内更新的界面状态。[AppUpdateStatus] 是下载层的事实，这里只把它翻译成
@@ -85,7 +92,7 @@ internal fun appInstallIntent(context: Context, apk: File): Intent {
 
 /** 系统里“允许安装未知来源应用”的页面，带上本应用的包名。 */
 internal fun unknownSourcesIntent(context: Context): Intent =
-    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${context.packageName}".toUri())
 
 /**
  * 把安装包交给系统安装器。系统里没有安装器时返回可展示的错误文案，否则返回 null。
@@ -122,12 +129,12 @@ internal fun launchInstallSettings(
  * 安装始终由用户点按触发，下载完成不会自动拉起安装器。
  */
 @Composable
-fun RemoteAppUpdate(update: AppUpdateSource = koinInject()) {
+fun RemoteAppUpdateEntry(update: RemoteAppUpdate = koinInject()) {
     RemoteAppUpdateContent(statuses = { update.download() })
 }
 
 /**
- * [RemoteAppUpdate] 的可测试形态：状态来源由调用方给出，其余行为与线上一致。
+ * [RemoteAppUpdateEntry] 的可测试形态：状态来源由调用方给出，其余行为与线上一致。
  */
 @Composable
 internal fun RemoteAppUpdateContent(
@@ -136,8 +143,24 @@ internal fun RemoteAppUpdateContent(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     var state by remember { mutableStateOf<AppUpdateUiState>(AppUpdateUiState.Idle) }
     var downloading by remember { mutableStateOf<Job?>(null) }
+
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            val ready = state as? AppUpdateUiState.Ready
+            if (
+                event == Lifecycle.Event.ON_RESUME &&
+                ready?.needsInstallPermission == true &&
+                context.packageManager.canRequestPackageInstalls()
+            ) {
+                state = ready.copy(needsInstallPermission = false)
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
 
     fun start() {
         if (downloading?.isActive == true) return
@@ -159,7 +182,18 @@ internal fun RemoteAppUpdateContent(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                state = AppUpdateUiState.Failed(error.message ?: "更新失败，请重试")
+                val message = when (error) {
+                    is RemoteAppUpdateException -> when (error.failure) {
+                        AppUpdateFailure.CONFIGURATION -> "未配置更新服务器"
+                        AppUpdateFailure.SERVER -> "服务器暂未提供可下载的更新包"
+                        AppUpdateFailure.PACKAGE -> "下载的安装包无效，请联系发布者"
+                        AppUpdateFailure.STORAGE -> "设备存储不可用，请释放空间后重试"
+                    }
+
+                    is IOException -> "下载失败，请检查网络后重试"
+                    else -> "更新失败，请稍后重试"
+                }
+                state = AppUpdateUiState.Failed(message)
             }
         }
     }
@@ -180,7 +214,8 @@ internal fun RemoteAppUpdateContent(
             state = ready.copy(needsInstallPermission = true)
             return
         }
-        launchInstall(context, ready.file)?.let { state = AppUpdateUiState.Failed(it) }
+        val failure = launchInstall(context, ready.file)
+        state = if (failure == null) ready.copy(needsInstallPermission = false) else AppUpdateUiState.Failed(failure)
     }
 
     fun openInstallSettings() {
@@ -224,7 +259,7 @@ internal fun RemoteAppUpdatePanel(
         when (state) {
             AppUpdateUiState.Idle -> {
                 Text(
-                    text = "检查更新会下载服务器上的安装包，下载完成后由你确认安装。",
+                    text = "检查更新会先下载完整安装包并检查版本，需要更新时由你确认安装。",
                     style = MaterialTheme.typography.bodySmall,
                     color = tokens.textMuted,
                 )

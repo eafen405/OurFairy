@@ -6,6 +6,7 @@ import java.io.File
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.file.Files
+import java.util.Collections
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.flow.toList
@@ -22,10 +23,11 @@ import org.junit.Test
 class RemoteAppUpdateTest {
     private lateinit var server: HttpServer
     private lateinit var directory: File
-    private var requestPath: String? = null
+    private val requestPaths = Collections.synchronizedList(mutableListOf<String>())
 
     @Before
     fun start() {
+        requestPaths.clear()
         directory = Files.createTempDirectory("app-update-test").toFile()
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.start()
@@ -41,7 +43,7 @@ class RemoteAppUpdateTest {
     fun `newer package downloads from the origin root and reports progress`() = runTest {
         val bytes = zipBytes()
         server.createContext("/") { exchange ->
-            requestPath = exchange.requestURI.path
+            requestPaths += exchange.requestURI.path
             exchange.sendResponseHeaders(200, bytes.size.toLong())
             exchange.responseBody.use { it.write(bytes) }
         }
@@ -49,7 +51,7 @@ class RemoteAppUpdateTest {
 
         val statuses = update.download().toList()
 
-        assertEquals("/downloads/ourfairy-v1-arm64-release.apk", requestPath)
+        assertEquals(listOf("/downloads/ourfairy-v1-arm64-release.apk"), requestPaths)
         val ready = statuses.filterIsInstance<AppUpdateStatus.Ready>().single()
         assertEquals(192, ready.versionCode)
         assertEquals("2.5.7", ready.versionName)
@@ -131,7 +133,7 @@ class RemoteAppUpdateTest {
 
         assertTrue(error is RemoteAppUpdateException)
         assertEquals("Update server is not configured", error?.message)
-        assertEquals(null, requestPath)
+        assertEquals(emptyList<String>(), requestPaths)
     }
 
     @Test
@@ -163,6 +165,32 @@ class RemoteAppUpdateTest {
         assertTrue("unexpected error: $error", error is RemoteAppUpdateException)
         assertEquals("Update download returned 500", error?.message)
         assertNoDownloadedFiles()
+    }
+
+    @Test
+    fun `a retry starts a new full request without a range`() = runTest {
+        val bytes = zipBytes()
+        val requests = java.util.concurrent.atomic.AtomicInteger()
+        val ranges = Collections.synchronizedList(mutableListOf<String?>())
+        server.createContext("/") { exchange ->
+            ranges += exchange.requestHeaders.getFirst("Range")
+            if (requests.incrementAndGet() == 1) {
+                exchange.sendResponseHeaders(500, -1)
+                exchange.close()
+            } else {
+                exchange.sendResponseHeaders(200, bytes.size.toLong())
+                exchange.responseBody.use { it.write(bytes) }
+            }
+        }
+        val update = update(installedVersion = 191, availableVersion = 192)
+
+        val failure = runCatching { update.download().toList() }.exceptionOrNull()
+        val statuses = update.download().toList()
+
+        assertTrue(failure is RemoteAppUpdateException)
+        assertEquals(2, requests.get())
+        assertEquals(listOf(null, null), ranges)
+        assertArrayEquals(bytes, statuses.filterIsInstance<AppUpdateStatus.Ready>().single().file.readBytes())
     }
 
     @Test

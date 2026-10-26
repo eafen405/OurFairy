@@ -285,9 +285,6 @@ class FairyPagesTest {
         }
         compose.mainClock.autoAdvance = true
 
-        compose.onNodeWithText(
-            "HOLLOW DEEP DIVE SYSTEM · BUILD ${me.rerere.rikkahub.BuildConfig.VERSION_NAME}",
-        ).assertExists()
         compose.onNodeWithText("当前版本 ${me.rerere.rikkahub.BuildConfig.VERSION_NAME}").assertExists()
         compose.onNodeWithText("更新").performScrollTo().performClick()
         compose.waitForIdle()

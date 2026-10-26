@@ -39,7 +39,18 @@ internal data class AppPackageMetadata(
     val versionName: String?,
 )
 
-internal class RemoteAppUpdateException(message: String, cause: Throwable? = null) : IOException(message, cause)
+internal enum class AppUpdateFailure {
+    CONFIGURATION,
+    SERVER,
+    PACKAGE,
+    STORAGE,
+}
+
+internal class RemoteAppUpdateException(
+    val failure: AppUpdateFailure,
+    message: String,
+    cause: Throwable? = null,
+) : IOException(message, cause)
 
 class RemoteAppUpdate internal constructor(
     private val identityEndpoint: String,
@@ -57,14 +68,16 @@ class RemoteAppUpdate internal constructor(
     )
 
     fun download(): Flow<AppUpdateStatus> = callbackFlow {
-        if (identityEndpoint.isBlank()) throw RemoteAppUpdateException("Update server is not configured")
+        if (identityEndpoint.isBlank()) {
+            throw RemoteAppUpdateException(AppUpdateFailure.CONFIGURATION, "Update server is not configured")
+        }
         val baseUrl = try {
             identityEndpoint.toHttpUrl()
         } catch (invalid: IllegalArgumentException) {
-            throw RemoteAppUpdateException("Update server address is invalid", invalid)
+            throw RemoteAppUpdateException(AppUpdateFailure.CONFIGURATION, "Update server address is invalid", invalid)
         }
         if (!directory.isDirectory && !directory.mkdirs()) {
-            throw RemoteAppUpdateException("Update storage is unavailable")
+            throw RemoteAppUpdateException(AppUpdateFailure.STORAGE, "Update storage is unavailable")
         }
         val staged = File(directory, "download.part")
         val target = File(directory, "latest.apk")
@@ -87,10 +100,18 @@ class RemoteAppUpdate internal constructor(
                 launch {
                     try {
                         response.use {
-                            if (!it.isSuccessful) throw RemoteAppUpdateException("Update download returned ${it.code}")
+                            if (!it.isSuccessful) {
+                                throw RemoteAppUpdateException(
+                                    AppUpdateFailure.SERVER,
+                                    "Update download returned ${it.code}",
+                                )
+                            }
                             val total = it.body.contentLength()
                             if (total !in 1..MAX_APK_BYTES) {
-                                throw RemoteAppUpdateException("Update download has invalid length $total")
+                                throw RemoteAppUpdateException(
+                                    AppUpdateFailure.SERVER,
+                                    "Update download has invalid length $total",
+                                )
                             }
                             var downloaded = 0L
                             var reported = 0L
@@ -104,7 +125,10 @@ class RemoteAppUpdate internal constructor(
                                         if (read < 0) break
                                         downloaded += read
                                         if (downloaded > total) {
-                                            throw RemoteAppUpdateException("Update download exceeded $total bytes")
+                                            throw RemoteAppUpdateException(
+                                                AppUpdateFailure.SERVER,
+                                                "Update download exceeded $total bytes",
+                                            )
                                         }
                                         output.write(buffer, 0, read)
                                         if (downloaded - reported >= progressStep || downloaded == total) {
@@ -115,41 +139,48 @@ class RemoteAppUpdate internal constructor(
                                 }
                             }
                             if (downloaded != total) {
-                                throw RemoteAppUpdateException("Update download stopped at $downloaded of $total bytes")
+                                throw RemoteAppUpdateException(
+                                    AppUpdateFailure.SERVER,
+                                    "Update download stopped at $downloaded of $total bytes",
+                                )
                             }
                         }
 
-                        ZipFile(staged).use { }
-                        val available = inspect(staged) ?: throw RemoteAppUpdateException("Update package is unreadable")
+                        try {
+                            ZipFile(staged).use { }
+                        } catch (invalid: java.util.zip.ZipException) {
+                            throw RemoteAppUpdateException(
+                                AppUpdateFailure.PACKAGE,
+                                "Update package is not a valid archive",
+                                invalid,
+                            )
+                        }
+                        val available = inspect(staged) ?: throw RemoteAppUpdateException(
+                            AppUpdateFailure.PACKAGE,
+                            "Update package is unreadable",
+                        )
                         if (available.packageName != installed.packageName) {
-                            throw RemoteAppUpdateException("Update package has a different application id")
+                            throw RemoteAppUpdateException(
+                                AppUpdateFailure.PACKAGE,
+                                "Update package has a different application id",
+                            )
                         }
-                        when {
-                            available.versionCode == installed.versionCode -> {
-                                staged.delete()
-                                if (target.exists() && !target.delete()) {
-                                    throw RemoteAppUpdateException("Update storage is unavailable")
-                                }
-                                send(AppUpdateStatus.Current(available.versionCode, available.versionName))
+                        if (target.exists() && !target.delete()) {
+                            throw RemoteAppUpdateException(AppUpdateFailure.STORAGE, "Update storage is unavailable")
+                        }
+                        if (available.versionCode <= installed.versionCode) {
+                            staged.delete()
+                            val status = if (available.versionCode == installed.versionCode) {
+                                AppUpdateStatus.Current(available.versionCode, available.versionName)
+                            } else {
+                                AppUpdateStatus.ServerOlder(available.versionCode, available.versionName)
                             }
-
-                            available.versionCode < installed.versionCode -> {
-                                staged.delete()
-                                if (target.exists() && !target.delete()) {
-                                    throw RemoteAppUpdateException("Update storage is unavailable")
-                                }
-                                send(AppUpdateStatus.ServerOlder(available.versionCode, available.versionName))
+                            send(status)
+                        } else {
+                            if (!staged.renameTo(target)) {
+                                throw RemoteAppUpdateException(AppUpdateFailure.STORAGE, "Update storage is unavailable")
                             }
-
-                            else -> {
-                                if (target.exists() && !target.delete()) {
-                                    throw RemoteAppUpdateException("Update storage is unavailable")
-                                }
-                                if (!staged.renameTo(target)) {
-                                    throw RemoteAppUpdateException("Update storage is unavailable")
-                                }
-                                send(AppUpdateStatus.Ready(target, available.versionCode, available.versionName))
-                            }
+                            send(AppUpdateStatus.Ready(target, available.versionCode, available.versionName))
                         }
                         close()
                     } catch (cancelled: CancellationException) {

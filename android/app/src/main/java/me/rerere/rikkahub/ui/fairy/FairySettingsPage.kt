@@ -47,7 +47,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.remote.AccountSession
-import me.rerere.rikkahub.ui.identity.RemoteAppUpdate
+import me.rerere.rikkahub.ui.identity.RemoteAppUpdateEntry
 import me.rerere.rikkahub.ui.identity.RemoteDisplayPreferences
 import me.rerere.rikkahub.ui.identity.RemoteReceiveSetup
 import org.koin.compose.koinInject
@@ -66,7 +66,7 @@ fun FairySettingsPage(
     session: AccountSession = koinInject(),
     backend: IdentityBackend = koinInject(),
     onBack: () -> Unit,
-    updateContent: @Composable () -> Unit = { RemoteAppUpdate() },
+    updateContent: @Composable () -> Unit = { RemoteAppUpdateEntry() },
 ) {
     val tokens = LocalFairyTokens.current
     val identity by session.identity.collectAsStateWithLifecycle()
@@ -191,7 +191,7 @@ fun FairySettingsPage(
 
             Spacer(Modifier.height(24.dp))
             Text(
-                text = "HOLLOW DEEP DIVE SYSTEM · BUILD ${BuildConfig.VERSION_NAME}",
+                text = "HOLLOW DEEP DIVE SYSTEM · BUILD 1",
                 fontFamily = tokens.labelFontFamily,
                 fontSize = 9.sp,
                 letterSpacing = 1.5.sp,
