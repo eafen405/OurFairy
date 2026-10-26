@@ -77,10 +77,27 @@ cd android
 ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug assembleDebug :app:compilePerfKotlin --console=plain
 ```
 
-`BUILD SUCCESSFUL in 3m 3s`。JUnit XML 合计 **44 suites / 308 tests / 0 failures / 0 errors / 0 skipped**；lint 为 **31 warnings / 0 errors**；debug APK 完成打包，perf 源集编译通过。上述结果均来自当前 worktree 的最终树，不是真机验收。
+`BUILD SUCCESSFUL in 3m 3s`。JUnit XML 合计 **44 suites / 308 tests / 0 failures / 0 errors / 0 skipped**；lint 为 **31 warnings / 0 errors**；debug APK 完成打包，perf 源集编译通过。上述结果均来自合并前的 worktree 最终树（基线 `d56b928c2e` + 本票改动），不是真机验收；合并 `main` 后重跑的数字见「合并」一节。
 
 ## 未执行 / 边界
 
 - 修复后的 vivo S50 真机复测未执行：实施期间 USB 设备断开。不得把上述 JVM/Robolectric、构建或旧基线测量写成修复后的真机证据。
 - 原始复现探针、视频和测量 JSON 未入库；持久回归为上述公开 Compose 与复制测试。
 - 本证据记录合入 `main` 前的最终树与门禁；合并提交与合并后门禁记录在 `main` 上的后续 docs 提交。
+
+## 合并
+
+- 合入前先把 `main`（`6c9cee351e`）并入 `ticket/237-stream-refresh`（快进，分支无本地领先提交）；随后提交实现 `1d162b2b51`。
+- `main` 以 `--no-ff` 合入该分支，合并提交 `0e31f05f6a`（`Merge branch 'ticket/237-stream-refresh'`）。合并提交的树与 `1d162b2b51` 的树同为 `c19e5a9f20`，所以第 3 节的门禁结果对应的就是现在 `main` 上的树。
+- 合并提交在 `android/` 的改动上重新运行了提交门禁：`npm test` **340 tests / 340 pass / 0 fail / 0 skipped**，`npm run combo:verify` 三行 `ok`，以及 `./gradlew test lintDebug`（`BUILD SUCCESSFUL in 7s`）。
+- 合并后另跑完整 Android 门禁 `./gradlew test lintDebug assembleDebug :app:compilePerfKotlin`：`BUILD SUCCESSFUL in 2m 37s`；JUnit XML 合计 **44 suites / 319 tests / 0 failures / 0 errors / 0 skipped**（app 246 + highlight + ui；比合并前的 308 多出 `main` 新并入的用例），lint **0 errors / 30 warnings**，debug APK 与 perf 源集均成功。
+- 触发命令（在 worktree 根，`main` 并入后）：
+
+```sh
+npm test
+npm run combo:verify
+cd android
+ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug assembleDebug :app:compilePerfKotlin --console=plain
+```
+
+- 真机复测仍未执行；本票不据此关闭 issue，等本人在 vivo S50 上体验确认后自行关闭。
