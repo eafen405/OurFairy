@@ -22,6 +22,20 @@ Debug 的默认后端为 `http://10.0.2.2:3080`；真机使用可访问的后端
 
 CI 的后端地址来自仓库变量 `OURFAIRY_IDENTITY_ENDPOINT`，签名来自现有的 `KEY_BASE64` 和 `SIGNING_CONFIG` secrets。
 
+## 应用内更新
+
+用户在「设置 → 更新」中手动点「检查更新」。客户端从身份端点的 origin 下载 `/downloads/ourfairy-v1-arm64-release.apk`，不继承 `/ourfairy` 等路径前缀；部署其它 origin 时也要在该 origin 的根路径提供这个文件。当前没有独立版本清单，所以每次检查都会先下载完整 APK，再判定版本，不是先查询少量更新元数据。下载跟随更新页面的生命周期，离开页面或主动取消都会中断，重试从头下载。
+
+下载完成后，客户端检查 ZIP 结构、applicationId 和数值 `versionCode`，只把更高版本交给用户确认安装；同版提示已最新，更低版本不安装。Android 的未知来源授权和系统安装器处理后续安装。下载、版本和取消行为分别由 `app/src/test/java/me/rerere/rikkahub/data/remote/RemoteAppUpdateTest.kt` 与 `app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteAppUpdateTest.kt` 固定。
+
+发布仍然是人工操作，客户端不会替操作者上传或发布：
+
+1. 在 `app/build.gradle.kts` 严格递增 `versionCode`，并更新用于展示的 `versionName`。
+2. 用 `local.properties` 的既有签名配置和实际后端地址执行 `./gradlew assembleRelease -Pourfairy.identityEndpoint=https://your-backend.example`。
+3. 将 arm64 产物重命名为 `ourfairy-v1-arm64-release.apk`，替换 fairybox 上 `/var/www/ourfairy-v1/` 的同名文件，保留既有 applicationId 与签名配置。
+
+当前发布通道只提供 arm64 APK；x86_64 设备或模拟器需要另行提供并接入对应包，不能把这个 arm64 入口视为已经覆盖它们。
+
 ## 源码入口
 
 - `app`：Fairy 页面、远程会话和 Android 平台接入。

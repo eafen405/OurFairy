@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.remote.RemoteJobBackend
 import me.rerere.rikkahub.data.remote.RemoteChatState
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.data.remote.RemoteAppUpdate
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.service.AndroidRemoteNotifications
 import me.rerere.rikkahub.service.RemoteReceiveController
@@ -34,7 +35,7 @@ import org.koin.dsl.module
 /** Build-time deployment address; release requires an explicit Gradle property. */
 private val identityEndpoint: String = BuildConfig.IDENTITY_ENDPOINT
 
-/** Account identity, owned sessions and remote reception share one process lifetime. */
+/** Account identity, owned sessions, remote reception and app updates share one process lifetime. */
 val identityModule = module {
     single<CredentialStore> {
         AndroidKeystoreCredentialStore(context = get<Context>())
@@ -61,6 +62,8 @@ val identityModule = module {
     single<RemoteSpeechBackend> { RemoteSpeechApi(identityEndpoint, get<OkHttpClient>()) }
 
     single<RemoteJobBackend> { RemoteJobApi(identityEndpoint, get<OkHttpClient>()) }
+
+    single { RemoteAppUpdate(get<Context>(), get<OkHttpClient>(), identityEndpoint) }
 
     single<ChatSyncStore> { AndroidChatSyncStore(get<Context>()) }
 

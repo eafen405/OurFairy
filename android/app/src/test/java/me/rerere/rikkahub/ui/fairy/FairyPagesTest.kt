@@ -276,6 +276,22 @@ class FairyPagesTest {
         screenshot("settings")
     }
 
+    @Test fun `settings exposes the current version and app update entry`() {
+        show {
+            FairySettingsPage(
+                {}, {}, account, backend = identityBackend, onBack = {},
+                updateContent = { androidx.compose.material3.Text("更新测试内容") },
+            )
+        }
+        compose.mainClock.autoAdvance = true
+
+        compose.onNodeWithText("当前版本 ${me.rerere.rikkahub.BuildConfig.VERSION_NAME}").assertExists()
+        compose.onNodeWithText("更新").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("更新测试内容").assertIsDisplayed()
+    }
+
     @Test fun `settings shows the other agents' names when their group is opened`() {
         show { FairySettingsPage({}, {}, account, backend = identityBackend, onBack = {}) }
         compose.mainClock.autoAdvance = true
