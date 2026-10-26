@@ -116,6 +116,23 @@ class RemoteTranscriptCopyTest {
         assertEquals("第一段。\n第二段。", clipboardText())
     }
 
+    @Test fun `an open streaming menu copies all arrived text during paced reveal`() {
+        val prefix = "流".repeat(4)
+        val body = "流".repeat(80)
+        live = prefix
+        show(emptyList())
+
+        compose.mainClock.autoAdvance = false
+        longPress(prefix)
+        compose.runOnIdle { live = body }
+        compose.mainClock.advanceTimeBy(100)
+        compose.onNodeWithText(body).assertDoesNotExist()
+        compose.onNodeWithText("复制").performClick()
+        compose.waitForIdle()
+
+        assertEquals(body, clipboardText())
+    }
+
     @Test fun `a streaming row with no text yet does not offer copy`() {
         live = ""
         show(emptyList())
