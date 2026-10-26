@@ -230,13 +230,14 @@
 | --- | --- |
 | [230-install-recovery](230-install-recovery/README.md) · [231-template-reuse](231-template-reuse/README.md) · [229-closeout](229-closeout/README.md) | spec #229 证据索引：#230 fake corepack 确定性安装恢复与 linked 校验、#231 真实安装发布模板后跨 home 复制/缓存闭环与损坏模板失败、#232 两轴评审处置与最终全量门禁（318 pass，combo verify 三行 ok） |
 
-## 界面微调（#215/#217/#218）
+## 界面微调（#215/#217/#218/#239）
 
 | 目录 | 内容 |
 | --- | --- |
 | [ui-215](ui-215/README.md) | #215 聊天正文与屏幕左右边缘留出留白（Fairy 正文 34dp、用户正文 32dp；360dp Robolectric 断言；真机未执行） |
 | [ui-217](ui-217/README.md) | #217 启动图标替换为 Fairy 徽记（五档密度、adaptive 前景/单色层与旧版位图；真机未执行） |
 | [ui-218](ui-218/README.md) | #218 长按消息复制正文，含流式进行中的行；保留查看全文与 toast（真机未执行） |
+| [239-idle-caption](239-idle-caption/README.md) | #239 待机台词气泡改在 Fairy 屏幕下方向下展开（411dp Robolectric 断言与前后截图；真机未执行） |
 
 ## Triage 修复
 

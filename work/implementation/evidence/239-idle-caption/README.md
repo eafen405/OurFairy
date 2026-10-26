@@ -51,6 +51,9 @@ cd android && ./gradlew test lintDebug        # pre-commit 门禁实际调用
 
 同一提交的门禁还跑了 `npm test`（340 pass / 0 fail）与 `npm run combo:verify`（三行 ok）。
 
+合入 `main` 后又在 `4e6231461b` 上复跑同一组门禁：`npm test` 340/340、`combo:verify` ok、
+Android `./gradlew test lintDebug` `BUILD SUCCESSFUL`（3m18s）。
+
 ### 截图
 
 Robolectric `captureToImage()`，`zh-rCN-w411dp-h891dp`，经现有 `FAIRY_UI_SCREENSHOTS` 钩子输出，
@@ -66,10 +69,12 @@ Robolectric `captureToImage()`，`zh-rCN-w411dp-h891dp`，经现有 `FAIRY_UI_SC
 ## 提交
 
 - `d2ba3f6ded` `fix(#239): 待机台词改在 Fairy 屏幕下方展开`（代码、测试与门禁）
-- 本证据目录提交在其后；未改证据索引（跨票公共文件由集成方登记）。
+- `72bdb2fdc4` `docs(#239): 记录待机台词布局修复与前后截图`（本目录与截图）
+- `4e6231461b` `Merge branch 'ticket/239-idle-caption'`（合入并推送 `main`；合入后复跑全量门禁）
+- 证据索引已在 [`work/implementation/evidence/README.md`](../README.md) 的「界面微调」登记。
 
 ## 未执行
 
 - 未连接设备或模拟器：真机观感、待机台词出现时的页面位移量、滚动与横屏都未验收。
 - 未新增更大字号、横屏或待机台词下的窄屏断言；同文件现有窄屏用例随本次门禁通过，但其中没有待机台词。
-- 未 push；本票分支未合入 `main`，集成与索引登记由 Lead/merger 处理。
+- 未关闭 issue #239，留待真机/产品确认；票分支远端 `origin/ticket/239-idle-caption` 保留，本地已删除。
