@@ -1,8 +1,8 @@
 # #223/#224 消息呈现顺序恢复
 
-日期：2026-10-25。集成分支 `integration/spec-223`，票分支 `ticket/224-message-position`，worktree
-`.worktrees/224-message-position`。被测代码 tip 为 `09a0cc0a09`（票分支 fast-forward 到
-集成分支后的落地提交）；本目录与证据索引随后由只改文档的提交加入并推送。
+日期：2026-10-25；最终集成复核：2026-10-26。集成分支 `integration/spec-223`，票分支
+`ticket/224-message-position`，实施 worktree `.worktrees/224-message-position`；最终复核 worktree
+`.worktrees/223-message-position`，最终被测代码 tip 为 `69c233e160`。本目录与证据索引由文档提交加入。
 
 票面与最终设计见 [`work/tickets/223/README.md`](../../../tickets/223/README.md) 与
 [`01-position-recovery.md`](../../../tickets/223/01-position-recovery.md)。实现按票面逐项完成，
@@ -12,10 +12,15 @@
 
 | 提交 | 内容 |
 | --- | --- |
+| `ecb275a294` | 定义 #223 规格与 #224 实施票副本 |
+| `4631c38625` | 登记恢复证据目录与索引描述 |
 | `1df6cf8a0f` | 后端 `messages[]` 增加必填数字 `position`，由 transcript `rows` 下标读时派生 |
 | `e16f74cc76` | Android 必填 `position`、按位置恢复顺序、位置冲突校验；提醒/流式测量取最大 seq |
-| `68ce5c06fd` | 两轴评审修正：校验范围措辞、共享 `newestFairyOutput`、解码 cause |
+| `68ce5c06fd` | 首轮两轴评审修正：校验范围措辞、共享 `newestFairyOutput`、解码 cause |
 | `09a0cc0a09` | 同步 `integration/spec-223` 的证据登记（仅文档） |
+| `aa7a665f5e` | 本目录与证据索引的首轮收口记录 |
+| `a8bdc256f8` | 同步 `main` @ `d56b928c2e`；保留 #233 呈现接口与 #223 位置实参，合并双方证据索引 |
+| `69c233e160` | 最终评审修正：保留解码 HTTP 状态与 cause、补 generation 顺序覆盖、澄清合并与证据措辞 |
 
 后端：[`units.ts`](../../../../backend/chat/src/units.ts) 的 `rowAtCut` 接收行下标并输出
 `position`；`transcriptAt` 对 moved 与 visible 行都按 `rows` 下标派生。fold 语义与持久 state 形状
@@ -42,6 +47,8 @@ Android（接缝 `RemoteChatState.bind/snapshot`，[`RemoteChatStateTest.kt`](..
 - `snapshot keeps the backend presentation order even when seq disagrees`：复现 #223 探针的
   `[u-first,u-second,a1]`。旧实现按 `(seq,messageId)` 得 `[u-second,a1,u-first]` 而先失败；改为
   position 排序后通过。
+- `a new generation restores backend presentation order from its own positions`：旧 generation 行
+  不残留，新 generation 的 position 序与 seq 序相反，断言仍按 position 排列且不报位置冲突。
 - `rows sharing one splice seq keep their insert order`：同一次 splice 的两行 seq 相同，旧比较器按
   messageId 颠倒，position 保留 inserted 次序。
 - `a page backfills earlier rows into their own positions`：live 尾部带一个首次出现早、seq 最新的行，
@@ -55,10 +62,12 @@ Android（接缝 `RemoteChatState.bind/snapshot`，[`RemoteChatStateTest.kt`](..
 - `the newest Fairy output is the greatest seq, not the last row`：提醒与 perf 共用的规则直测。
 - `a message without a position is refused instead of guessed`
   （[`RemoteChatApiTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatApiTest.kt)）：
-  缺字段解码失败，并沿 cause 链断言是点名 `position` 的序列化错误，而不是泛化的「文档不可读」。
+  缺字段解码失败，沿 cause 链同时断言 HTTP 200 响应上下文与点名 `position` 的序列化错误；
+  用户可见分类仍为 unreachable。
 
-敏感性核对：把 `orderedMessages` 临时换回旧的 `compareBy(seq).thenBy(messageId)`，三个排序用例
-失败；恢复 position 排序后全部通过。其余顺序与冲突用例在旧实现上同样失败。
+敏感性核对：把 `orderedMessages` 临时换回旧的 `compareBy(seq).thenBy(messageId)`，四个排序用例
+失败（含新增 generation 用例）；恢复 position 排序后 `RemoteChatStateTest` 17/17 通过。其余冲突用例
+在旧实现上同样失败。
 
 后端（投影 fold 与 HTTP）：
 
@@ -125,8 +134,9 @@ home；未向仓库写入文件）：
 
 ## 两轴评审（Standards + Spec）
 
-范围 `ecb275a...68ce5c06fd`，两个轴由独立子代理（MiniMax-M3.1-Flash）并行评审；Standards 依据
-[`AGENTS.md`](../../../../AGENTS.md)、[`CODING_STANDARDS.md`](../../../../CODING_STANDARDS.md) 与
+首轮范围 `ecb275a...68ce5c06fd`，最终集成复核范围见下节；两个轴均由独立子代理
+（MiniMax-M3.1-Flash）并行评审。Standards 依据 [`AGENTS.md`](../../../../AGENTS.md)、
+[`CODING_STANDARDS.md`](../../../../CODING_STANDARDS.md) 与
 [`CONVENTIONS.md`](../../CONVENTIONS.md)，Spec 依据票面副本与父规格。
 
 | 编号 | 轴 | 发现 | 处理 |
@@ -140,13 +150,64 @@ home；未向仓库写入文件）：
 | S-B4 | Standards | `placeOf`/`holderOf` 命名含糊 | 改为 `positionById`/`idByPosition` |
 | P-1 | Spec | 跨 generation 的位置漂移无法由客户端检测 | 不新增状态：generation 切换清空行缓存是现有语义；在 README/KDoc 明示边界，跨 generation 稳定性由服务端冷恢复比较保证 |
 | P-2 | Spec | perf 的 max-seq 没有测试 | 规则抽到共享函数并补直测（perf 源集无单测接缝，perf 只调用该函数） |
-| P-3 | Spec | generation 重置 fixture 中 position 恰等于 seq，无法区分排序依据 | 未改：这些用例的既有断言是内容替换；排序依据由专门用例覆盖，不为同一规则再造 generation 变体 |
+| P-3 | Spec | generation 重置 fixture 中 position 恰等于 seq，无法区分排序依据 | 最终复核补专用 generation 变体；旧比较器下它与三条既有排序用例一起失败，恢复后通过，不再只依赖通用排序覆盖 |
 | P-4 | Spec | 录制的真实 SSE 被手工补了 `position: 0` | 保留并在测试 KDoc 说明：捕获早于本票，唯一行的位置就是当前后端按行下标 0 派生的值，其余字节为原捕获；证据不据此声称原始字节级复现 |
 | P-5 | Spec | 真实日志测试新增了整行 endpoint 等值，超出 position 单字段 | 保留：与该文件既有的 roster endpoint 校验同一形状，同时钉住 wire position 的送达 |
 | P-6 | Spec | 缺 position 的解码失败与普通「不可读文档」不可区分 | 解码失败保留真实 cause，测试沿 cause 链断言点名 `position`；用户可见分类仍是 unreachable，本票不新增错误类型或公开流程 |
 
-结论：硬问题已在所属模块修正（`68ce5c06fd`）；其余为按票面保留的判断项，已写明理由与边界。
-没有在集成分支之外打补丁，也没有遗留未修项。
+结论：首轮代码评审硬问题已在所属模块修正（`68ce5c06fd`）；其余为按票面保留的判断项，
+已写明理由与边界。真实服务未执行项见末节。
+
+## 最终集成复核（2026-10-26）
+
+最终代码评审范围为 `main` @ `d56b928c2e` 到 `69c233e160` 的规格增量。同步 main 时，
+`RemoteReadingTransitionTest.kt` 保留 #233 的公开呈现输入与 11 个场景，并补齐 #223 的必填位置；
+证据索引同时保留双方小节。聚焦后端回归 34/34 通过，Android 交汇/契约套件与 perf 编译通过，
+随后执行下列全量门禁。
+
+| 最终复核发现 | 处置与失效时失败的检查 |
+| --- | --- |
+| 合并后的最终门禁尚未记录 | 在 `69c233e160` 实跑并记录本节命令；任何回归都会使对应命令失败 |
+| generation 用例未区分 position 与 seq | 新增 `a new generation restores backend presentation order from its own positions`；旧比较器下失败，恢复后 `RemoteChatStateTest` 17/17 |
+| 解码 cause 保留后丢失 HTTP 状态 | 恢复带状态的 `IllegalStateException` 并挂原始序列化 cause；`RemoteChatApiTest.a message without a position is refused instead of guessed` 同时断言两者，先红后绿，套件 21/21 |
+| 「整批合并」与 fixture 断言措辞不准确 | KDoc 限定为消息行批次；证据改为按冻结前缀下标断言。合并行为仍由上述冲突/快照测试守护 |
+| #233 与 #223 的测试冲突 | 保留 #233 的 11 条 `RemoteReadingTransitionTest` 与全部调用形状；最终 Android 全量套件覆盖 |
+
+最终复查中 Spec 无未解决代码项；Standards 仅剩本证据的提交清单、用例清单与评审范围同步项，
+本文件已补齐。其它 Fowler 判断项沿用上表按票面保留的理由，没有新增必须处理的硬问题。新增声称
+分别由 `RemoteChatStateTest`、`RemoteChatApiTest`、`RemoteReadingTransitionTest` 和下列命令守护；
+既有可执行声称对照不变。
+
+### 最终门禁（代码 tip `69c233e160`）
+
+```sh
+$ npm test
+ℹ tests 340
+ℹ suites 7
+ℹ pass 340
+ℹ fail 0
+ℹ duration_ms 84607.740122
+
+$ npm run combo:verify
+ourfairy        main                 based on main     69c233e1604d5a1b  ok (worktree is based on the integration tip)
+dsh             product/ourfairy-v1  d1b6099ae716870a  d1b6099ae716870a  ok
+android source  -                    460109d1b89b824a  460109d1b89b824a  ok
+combo: combination verified
+
+$ cd android
+$ ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug
+BUILD SUCCESSFUL in 1m 46s
+# app JUnit XML：37 个套件 / 242 tests / 0 failures / 0 errors / 0 skipped
+# 含 highlight 与 ui 的 debug JVM 合计：43 个套件 / 315 tests；failures/errors/skipped 均为 0
+
+$ ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew assembleDebug :app:compilePerfKotlin
+BUILD SUCCESSFUL in 26s
+# debug APK 完成打包；perf 源集与新 DTO/caller 一起编译成功
+```
+
+上述 Node、combo 与 Android `test lintDebug` 由 `69c233e160` 的提交钩子实际执行；
+`assembleDebug :app:compilePerfKotlin` 随即在同一代码 tip `69c233e160` 执行。这里的构建与
+JVM/Robolectric 结果不替代下述真实服务或设备验收。
 
 ## 未执行项
 
