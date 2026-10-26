@@ -75,7 +75,7 @@ Android（接缝 `RemoteChatState.bind/snapshot`，[`RemoteChatStateTest.kt`](..
 - `the units reproduce the frozen values over a real session log`
   （[`projection-units-real.test.mjs`](../../../../tests/projection-units-real.test.mjs)）：真实日志上
   `/chat/read` 的整行（含 position）等于 fold 的行；冻结 fixture 的既有字段比较在去掉新增
-  position 后逐字段不变，position 另用显式字面量断言。
+  position 后逐字段不变，position 另按冻结前缀的行下标逐行断言。
 - 既有 generation 重置、events 覆盖、durable/consumer、pending、附件、任务与实时 attempt 回归全部
   保留并通过；[`chat-cold-boundary.test.mjs`](../../../../tests/chat-cold-boundary.test.mjs) 的冷恢复
   逐字段比较现在也覆盖 position。

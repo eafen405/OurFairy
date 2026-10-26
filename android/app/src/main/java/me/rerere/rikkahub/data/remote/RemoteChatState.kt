@@ -416,8 +416,8 @@ class RemoteChatState(
     /**
      * Merge one snapshot or page's rows. Content still follows the newer seq, but a position is
      * fixed by the message's first appearance: a copy that moves it, or a second id claiming the
-     * same place, is a protocol failure. The whole batch is checked before anything is merged, so
-     * a refused batch cannot move a row the reader already saw.
+     * same place, is a protocol failure. The whole row batch is checked before any row is merged,
+     * so a refused batch cannot move a row the reader already saw.
      */
     private fun mergeMessages(incoming: List<RemoteChatMessage>) {
         val positionById = mutableMapOf<String, Long>()

@@ -282,8 +282,12 @@ class RemoteChatApiTest {
             // differently from the backend, so neither may stand in for position.
             // Coroutine stack-trace recovery may copy the exception once, so
             // the decode failure is found by walking the cause chain.
-            val naming = generateSequence(unreachable as Throwable?) { it.cause }
-                .filterIsInstance<SerializationException>()
+            val causes = generateSequence(unreachable as Throwable?) { it.cause }.toList()
+            assertTrue(
+                "expected the unreadable response status, got ${causes.map { it.message }}",
+                causes.any { it is IllegalStateException && it.message?.contains("the backend answered 200") == true },
+            )
+            val naming = causes.filterIsInstance<SerializationException>()
                 .any { it.message?.contains("position") == true }
             assertTrue("expected a decode failure naming position, got ${unreachable.cause}", naming)
         }

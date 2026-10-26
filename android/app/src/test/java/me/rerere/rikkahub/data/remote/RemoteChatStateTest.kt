@@ -86,6 +86,34 @@ class RemoteChatStateTest {
         )
     }
 
+    @Test fun `a new generation restores backend presentation order from its own positions`() = runTest {
+        val backend = Backend()
+        val state = RemoteChatState(backend, backgroundScope, MemoryChatSyncStore(), "https://fairy")
+        state.bind("alice", "s1", 1)
+        runCurrent()
+        runCurrent()
+        val flow = backend.events.getValue("alice/s1")
+        flow.emit(projection("s1", 1).copy(
+            generation = "old",
+            messages = listOf(RemoteChatMessage("old", 0, 1, null, 1, 2, "old")),
+        ))
+        runCurrent()
+        flow.emit(projection("s1", 2).copy(
+            generation = "new",
+            messages = listOf(
+                RemoteChatMessage("new-first", 0, 6, null, 1, 2, "first"),
+                RemoteChatMessage("new-second", 1, 2, null, 2, 2, "second"),
+            ),
+        ))
+        runCurrent()
+
+        assertEquals(
+            listOf("new-first", "new-second"),
+            state.snapshot.value.projection?.messages?.map { it.messageId },
+        )
+        assertNull(state.snapshot.value.failure)
+    }
+
     @Test fun `rows sharing one splice seq keep their insert order`() = runTest {
         val backend = Backend()
         val state = RemoteChatState(backend, backgroundScope, MemoryChatSyncStore(), "https://fairy")

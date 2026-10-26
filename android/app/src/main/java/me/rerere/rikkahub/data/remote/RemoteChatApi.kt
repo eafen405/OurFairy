@@ -298,14 +298,15 @@ class RemoteChatApi(
 
             response.use {
                 val text = it.body.string()
-                // A decode failure keeps its own cause: an older backend that
-                // omits a required field is a protocol mismatch, and the
-                // serializer's message names the field instead of saying merely
-                // that some document was unreadable.
+                // A decode failure keeps the response status and its own cause:
+                // an older backend that omits a required field is a protocol
+                // mismatch, and the serializer's message names the field.
                 val envelope = try {
                     json.decodeFromString<ChatEnvelope>(text)
                 } catch (unreadable: Exception) {
-                    throw IdentityUnreachable(unreadable)
+                    throw IdentityUnreachable(IllegalStateException(
+                        "the backend answered ${it.code} with an unreadable document", unreadable,
+                    ))
                 }
                 // A `200`-shaped body does not make a failed status a success:
                 // the body's claim and the transport's verdict must agree before
