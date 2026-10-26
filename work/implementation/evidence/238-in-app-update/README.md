@@ -150,7 +150,10 @@ npm run specs:status -- --offline
 
 ### CI
 
-- `main` tip `a14e8a8193` 的 GitHub Actions 运行（[40312647749](https://github.com/eafen405/OurFairy/actions/runs/40312647749)）两个作业均 `success`：`full-gate` 与 `android`。合并提交 `79f3c18413` 的那次运行被并发取消，不作为通过证据。
+- 包含 #238 的提交在 push 时触发 `.github/workflows/check.yml` 的两个作业：`full-gate` 与 `android`。
+- `a14e8a8193`（本记录的首个 docs 提交）的运行 [40312647749](https://github.com/eafen405/OurFairy/actions/runs/40312647749) 两个作业均 `success`；`65f3773aeb`（补记 CI 的 docs 提交）的运行 [40314022345](https://github.com/eafen405/OurFairy/actions/runs/40314022345) 同样两个作业均 `success`。
+- 合并提交 `79f3c18413` 的运行 [40311889347](https://github.com/eafen405/OurFairy/actions/runs/40311889347) 被随后的 push 并发取消，不作为通过证据。
+- 每次 docs 提交 push 都会重新触发同一工作流；最终 tip 的状态以运行列表为准，不回写进本文。
 
 ### 仍待人工完成
 
