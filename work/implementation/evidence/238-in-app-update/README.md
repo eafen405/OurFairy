@@ -135,10 +135,10 @@ npm run specs:status -- --offline
 
 ### fairybox 后端
 
-- 部署基于 `main@79f3c18413`；全部完成后再把服务器检出同步到当时的最新 `main@a14e8a8193`（只含本文所在 docs 提交，产品包未重建、服务未重启）。
+- 部署基于 `main@79f3c18413`；服务器检出随后跟随 `main` 的文档提交同步（收尾时为 `41a7a06f3d`）。产品包始终是 `79f3c18413` 构建的产物，文档提交不触发重建，服务也未因此重启。
 - `/home/devin/ourfairy/app` 从 `d56b928c2e` 更新到 `main@79f3c18413`；随后用锁定 dsh 的编译器执行 `node scripts/tsc.ts --fresh`，再执行 `node scripts/ourfairy-backend.ts doctor`（`doctor: all checks passed`，组合行 `ourfairy@79f3c18413a2, dsh@d1b6099ae716, android source@460109d1b89b`），最后 `systemctl restart ourfairy-backend.service`。
 - 重启后服务 `active (running)`、`NRestarts=0`，回环口 `127.0.0.1:3080` 与公网 `https://85.137.246.15:38518/ourfairy/` 均响应（未认证请求返回 401/405，属预期）。
-- 以管理员会话经回环口调用 `/chat/read`，投影消息含 `position` 字段——这是 `main` 中 #237 的改动，证明部署后的产物是新代码而不是旧构建。
+- 以管理员会话经回环口与公网 `https://85.137.246.15:38518/ourfairy/` 各调用一次 `/chat/read`，两次投影消息都含 `position` 字段——这是 `main` 中 #237 的改动，证明部署后的产物是新代码而不是旧构建，且公网反代链路正常。
 - 服务器上没有跑 `build:lib:host` 等 dsh 构建；dsh 检出仍是锁定的 `d1b6099ae716`。
 
 ### APK 发布
