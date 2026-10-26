@@ -2,7 +2,7 @@
 
 # 前端 wayfinder 交接与既有结论审核
 
-2026-10-14。审核对象：[交接](../../work/handoff/grilling-10-frontend-boundary.md)、关联研究、GitHub 当前议题与 resolution，以及本轮用户重新提供的功能表。只审核规划，不实施功能或重新代替用户选择。
+2026-10-14。审核对象：[交接](https://github.com/eafen405/OurFairy/blob/902bc11a0f12fe936bde430b1b11ba06719b0d06/work/handoff/grilling-10-frontend-boundary.md)、关联研究、GitHub 当前议题与 resolution，以及本轮用户重新提供的功能表。只审核规划，不实施功能或重新代替用户选择。
 
 ## 总体判断
 

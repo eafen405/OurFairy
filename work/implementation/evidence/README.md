@@ -218,6 +218,18 @@
 | --- | --- |
 | [223-message-position](223-message-position/README.md) | #223/#224：投影消息携带稳定数字 position，Android 按首次出现位置恢复顺序，保留现有内容合并与消费保障 |
 
+## #233 Android 呈现：attempt 行身份由后端事实派生
+
+| 目录 | 内容 |
+| --- | --- |
+| [234-presentation-identity](234-presentation-identity/README.md) · [235-reading-regression](235-reading-regression/README.md) · [233-closeout](233-closeout/README.md) | 234 — T1 呈现接口：attempt 行身份由后端事实派生 · 235 — T2 阅读过渡回归：后端事实驱动行身份 · 233 — T3 收口：attempt 行身份由后端事实派生 |
+
+## Profile 安装恢复与模板复用（规格 #229）
+
+| 目录 | 内容 |
+| --- | --- |
+| [230-install-recovery](230-install-recovery/README.md) · [231-template-reuse](231-template-reuse/README.md) · [229-closeout](229-closeout/README.md) | spec #229 证据索引：#230 fake corepack 确定性安装恢复与 linked 校验、#231 真实安装发布模板后跨 home 复制/缓存闭环与损坏模板失败、#232 两轴评审处置与最终全量门禁（318 pass，combo verify 三行 ok） |
+
 ## 界面微调（#215/#217/#218）
 
 | 目录 | 内容 |

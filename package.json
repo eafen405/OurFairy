@@ -24,6 +24,7 @@
     "backend:stop": "node scripts/ourfairy-backend.ts stop",
     "backend:status": "node scripts/ourfairy-backend.ts status",
     "backend:doctor": "node scripts/ourfairy-backend.ts doctor",
+    "acceptance:real": "node scripts/real-acceptance.ts",
     "hooks:install": "git config core.hooksPath .githooks"
   }
 }

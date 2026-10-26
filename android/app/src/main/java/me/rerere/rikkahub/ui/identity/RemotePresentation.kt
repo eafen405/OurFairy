@@ -4,8 +4,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.transformLatest
-import me.rerere.rikkahub.data.remote.RemoteMessageFormat
+import me.rerere.rikkahub.data.remote.RemoteChatAttempt
 import me.rerere.rikkahub.data.remote.RemoteChatMessage
+import me.rerere.rikkahub.data.remote.RemoteChatSettlement
+import me.rerere.rikkahub.data.remote.RemoteMessageFormat
 import me.rerere.ui.markdown.MarkdownDocument
 
 /** Whole raw snapshots only. Parsing never edits or accumulates source text. */
@@ -44,10 +46,10 @@ internal data class RemoteReadingPosition(
 
 /**
  * The one statement of the attempt row key convention. A live attempt and the settlement that
- * replaces it must spell the same key, or [RemoteTranscriptPresentation] stops recognising the
- * row it is carrying and the deferred formatting silently disappears.
+ * replaces it derive their key here from the same generation and backend attempt id, so they
+ * cannot spell the same row differently.
  */
-internal fun attemptRowKey(generation: String, attemptId: String?): String = "attempt:$generation:$attemptId"
+private fun attemptRowKey(generation: String, attemptId: String): String = "attempt:$generation:$attemptId"
 
 /** A visual row; canonical messages remain in the shared session projection. */
 internal data class RemoteTranscriptRow(
@@ -72,23 +74,29 @@ internal class RemoteTranscriptPresentation {
 
     fun update(
         messages: List<RemoteChatMessage>,
-        text: String?,
-        key: String?,
+        generation: String,
+        attempt: RemoteChatAttempt?,
+        settlement: RemoteChatSettlement?,
         visibleKeys: Set<String>,
         followTail: Boolean,
-        settled: Pair<String, Long>? = null,
     ): List<RemoteTranscriptRow> {
+        val liveRow = attempt?.let {
+            RemoteTranscriptRow(attemptRowKey(generation, it.attemptId), it.text)
+        }
         // Only a live row this view actually observed can be carried into its formal row.
-        settled?.takeIf { it.first == observedLiveKey }?.let { (liveKey, seq) ->
-            messages.singleOrNull { it.seq == seq && it.role == 2 }?.let { final ->
-                if (final.messageId !in rowKeys) {
-                    rowKeys[final.messageId] = liveKey
-                    if (!followTail && liveKey in visibleKeys) deferred += liveKey
+        settlement?.let { endedAttempt ->
+            val settlementKey = attemptRowKey(generation, endedAttempt.attemptId)
+            if (settlementKey == observedLiveKey) {
+                messages.singleOrNull { it.seq == endedAttempt.seq && it.role == 2 }?.let { final ->
+                    if (final.messageId !in rowKeys) {
+                        rowKeys[final.messageId] = settlementKey
+                        if (!followTail && settlementKey in visibleKeys) deferred += settlementKey
+                    }
+                    observedLiveKey = null
                 }
-                observedLiveKey = null
             }
         }
-        if (key != null && text != null && key !in rowKeys.values) observedLiveKey = key
+        if (liveRow != null && liveRow.key !in rowKeys.values) observedLiveKey = liveRow.key
         deferred.removeAll { followTail || it !in visibleKeys }
         val messageIds = messages.mapTo(mutableSetOf()) { it.messageId }
         rowKeys.keys.retainAll(messageIds)
@@ -96,8 +104,6 @@ internal class RemoteTranscriptPresentation {
             val rowKey = rowKeys[message.messageId] ?: message.messageId
             RemoteTranscriptRow(rowKey, message.text, message, rowKey in deferred)
         }
-        return if (key != null && text != null && key !in rowKeys.values) {
-            rows + RemoteTranscriptRow(key, text)
-        } else rows
+        return if (liveRow != null && liveRow.key !in rowKeys.values) rows + liveRow else rows
     }
 }

@@ -18,8 +18,8 @@
  * test imports on purpose falls to `typecheck`, and the closing ticket runs the
  * full suite.
  *
- * Delivery is unchanged: `CODING_STANDARDS.md` still requires `npm test` and
- * `npm run combo:verify` on the final integration state, and CI runs the same.
+ * Final backend and changed-face Android checks remain mandatory;
+ * `CODING_STANDARDS.md` names the delivery commands and CI runs both product faces.
  *
  * Usage:
  *   node scripts/precommit.ts           # classify the staged change and run the gate
@@ -36,8 +36,8 @@ import { packageNameOf } from './package-manifest.ts'
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(scriptDir, '..')
 
-/** One command the gate runs. */
-export type GateCommand = { command: string; args: readonly string[] }
+/** One command the gate runs, relative to the repository root unless cwd says otherwise. */
+export type GateCommand = { command: string; args: readonly string[]; cwd?: string }
 
 /** Which gate a staged change earns. */
 export type GateMode = 'docs' | 'related' | 'typecheck' | 'full'
@@ -72,11 +72,16 @@ export const TYPECHECK_COMMANDS = Object.freeze([
   Object.freeze({ command: 'npm', args: Object.freeze(['run', 'combo:verify']) }),
 ])
 
-/** Checks any other commit runs: the full product suite, then the combination. */
+/** Checks any other commit runs: the full backend suite, then the combination. */
 export const FULL_COMMANDS = Object.freeze([
   Object.freeze({ command: 'npm', args: Object.freeze(['test']) }),
   Object.freeze({ command: 'npm', args: Object.freeze(['run', 'combo:verify']) }),
 ])
+
+/** Android checks run in their own Gradle project, in addition to the root gate. */
+const ANDROID_COMMAND = Object.freeze({
+  command: './gradlew', args: Object.freeze(['test', 'lintDebug']), cwd: 'android',
+})
 
 /**
  * How many related tests may be selected before the gate runs everything.
@@ -222,10 +227,14 @@ function decide(paths: string[], options: GateOptions = {}): GateDecision {
  */
 export function plan(paths: string[], options: GateOptions = {}): GatePlan {
   const { mode, tests } = decide(paths, options)
-  if (mode === 'docs') return { mode, tests, commands: DOCS_COMMANDS }
-  if (mode === 'full') return { mode, tests, commands: FULL_COMMANDS }
-  if (mode === 'typecheck') return { mode, tests, commands: TYPECHECK_COMMANDS }
-  return { mode, tests, commands: relatedCommands(tests) }
+  const commands = mode === 'docs' ? DOCS_COMMANDS
+    : mode === 'full' ? FULL_COMMANDS
+      : mode === 'typecheck' ? TYPECHECK_COMMANDS
+        : relatedCommands(tests)
+  const withAndroid = paths.some(path => /^android\//u.test(path) && !/\.mdx?$/iu.test(path))
+    ? [...commands, ANDROID_COMMAND]
+    : commands
+  return { mode, tests, commands: withAndroid }
 }
 
 /**
@@ -245,9 +254,9 @@ export function stagedPaths(root: string): string[] {
   }).trim()
   let out: string
   try {
-    out = read(['diff', '--cached', '--name-only', 'HEAD'])
+    out = read(['diff', '--cached', '--name-only', '--no-renames', 'HEAD'])
   } catch {
-    out = read(['diff', '--cached', '--name-only'])
+    out = read(['diff', '--cached', '--name-only', '--no-renames'])
   }
   return out.split('\n').filter(Boolean)
 }
@@ -272,7 +281,7 @@ function main(argv: string[]): void {
   const why = paths.length === 0 ? 'message-only amend' : decision.mode === 'docs' ? 'Markdown-only change' : `${paths.length} changed path(s)`
   process.stdout.write(`pre-commit: ${decision.mode} gate (${why})\n`)
   for (const step of decision.commands) {
-    const result = spawnSync(step.command, step.args, { cwd: repoRoot, stdio: 'inherit' })
+    const result = spawnSync(step.command, step.args, { cwd: resolve(repoRoot, step.cwd ?? '.'), stdio: 'inherit' })
     if (result.status !== 0) {
       process.stderr.write(`pre-commit: ${step.command} ${step.args.join(' ')} failed\n`)
       process.exitCode = result.status ?? 1

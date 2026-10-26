@@ -1,0 +1,13 @@
+{
+  "title": "Profile 安装恢复与模板复用（规格 #229）",
+  "entries": [
+    {
+      "dirs": [
+        "230-install-recovery",
+        "231-template-reuse",
+        "229-closeout"
+      ],
+      "note": "spec #229 证据索引：#230 fake corepack 确定性安装恢复与 linked 校验、#231 真实安装发布模板后跨 home 复制/缓存闭环与损坏模板失败、#232 两轴评审处置与最终全量门禁（318 pass，combo verify 三行 ok）"
+    }
+  ]
+}

@@ -20,7 +20,9 @@
  * suite still passes.
  */
 import assert from 'node:assert/strict'
-import { globSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import {
@@ -29,6 +31,7 @@ import {
   TYPECHECK_COMMANDS,
   classify,
   plan,
+  stagedPaths,
   testFiles,
 } from '../scripts/precommit.ts'
 import { repoRoot } from './helpers/backend.mjs'
@@ -42,6 +45,12 @@ test('a Markdown-only change gets the docs gate, not the backend suite', () => {
   ]
   assert.equal(classify(paths), 'docs')
   assert.deepEqual(plan(paths).commands, DOCS_COMMANDS)
+})
+
+test('an Android Markdown-only change stays on the docs gate without Gradle', () => {
+  const decision = plan(['android/README.md', 'android/app/src/main/README.md'])
+  assert.equal(decision.mode, 'docs')
+  assert.deepEqual(decision.commands, DOCS_COMMANDS)
 })
 
 test('a message-only amend has no paths and runs the cheap gate', () => {
@@ -114,6 +123,39 @@ test('the authorities that decide what every package installs run the full suite
   }
 })
 
+test('an Android source change keeps the root gate and adds one Gradle check in android/', () => {
+  const decision = plan(['android/app/build.gradle.kts', 'android/gradle.properties', 'android/README.md'])
+  assert.equal(decision.mode, 'full')
+  assert.deepEqual(decision.commands, [
+    ...FULL_COMMANDS,
+    { command: './gradlew', args: ['test', 'lintDebug'], cwd: 'android' },
+  ])
+})
+
+test('a staged Android rename keeps both paths in the Gradle gate', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ourfairy-precommit-rename-'))
+  try {
+    const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    git(['init', '--quiet', '--initial-branch=main'])
+    git(['config', 'user.email', 'fixture@example.invalid'])
+    git(['config', 'user.name', 'Fixture'])
+    git(['config', 'diff.renames', 'true'])
+    mkdirSync(join(root, 'android'), { recursive: true })
+    writeFileSync(join(root, 'android', 'A.kt'), 'val renamed = 1\n')
+    git(['add', '.'])
+    git(['commit', '--quiet', '-m', 'initial'])
+    mkdirSync(join(root, 'scripts'), { recursive: true })
+    git(['mv', 'android/A.kt', 'scripts/A.ts'])
+
+    const paths = stagedPaths(root)
+
+    assert.deepEqual(paths.sort(), ['android/A.kt', 'scripts/A.ts'])
+    assert.ok(plan(paths).commands.some(step => step.command === './gradlew' && step.cwd === 'android'))
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('a merge and an explicit --full run the full suite whatever changed', () => {
   assert.equal(classify(['docs/README.md'], { merge: true }), 'full', 'a merge must be judged as a whole')
   assert.equal(classify(['docs/README.md'], { forceFull: true }), 'full', '--full must force the full suite')
@@ -153,6 +195,38 @@ test('CI runs the full gate on push and manual dispatch, and builds before it te
   assert.ok(
     workflow.indexOf('npm run build') >= 0 && workflow.indexOf('npm run build') < workflow.indexOf('npm test'),
     'the build must run before the suite, so a build failure and a test failure stay separate',
+  )
+})
+
+test('CI runs Android checks in an independent job with the project JDK and Gradle wrapper', () => {
+  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'check.yml'), 'utf8')
+  const marker = '\n  android:\n'
+  assert.ok(workflow.includes(marker), 'CI must have an Android job separate from the dsh build job')
+  const androidJob = workflow.slice(workflow.indexOf(marker) + marker.length).split(/\n  [a-z][a-z0-9-]*:\n/u)[0]
+  assert.match(androidJob, /runs-on: ubuntu-latest/u)
+  assert.match(androidJob, /uses: actions\/checkout@v4/u)
+  assert.match(androidJob, /uses: actions\/setup-java@v4/u)
+  assert.match(androidJob, /java-version: '17'/u, 'the project compiles Java and Kotlin for JDK 17')
+  assert.match(androidJob, /working-directory: android/u)
+  assert.match(androidJob, /run: \.\/gradlew test lintDebug/u)
+})
+
+test('CI materializes a synthetic Google Services config for the Android variants', () => {
+  const fixture = JSON.parse(readFileSync(join(repoRoot, 'tests', 'fixtures', 'google-services.json'), 'utf8'))
+  assert.equal(fixture.project_info.project_id, 'ourfairy-ci')
+  assert.deepEqual(
+    fixture.client.map(client => client.client_info.android_client_info.package_name).sort(),
+    ['me.rerere.rikkahub', 'me.rerere.rikkahub.debug'],
+  )
+  for (const client of fixture.client) {
+    assert.equal(client.api_key[0].current_key, 'ourfairy-ci-fake-key')
+  }
+  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'check.yml'), 'utf8')
+  const androidJob = workflow.slice(workflow.indexOf('\n  android:\n') + '\n  android:\n'.length)
+  assert.match(
+    androidJob,
+    /run: cp tests\/fixtures\/google-services\.json android\/app\/google-services\.json/u,
+    'CI must copy the fake fixture to the ignored location before Gradle configures the app',
   )
 })
 

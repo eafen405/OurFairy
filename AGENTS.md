@@ -1,5 +1,5 @@
 仓库拓扑、入口及版本来源见根 [`README.md`](README.md)；本地路径、集成分支与锁定提交以 [`combo.json`](combo.json) 为准。
-每张 spec 的分支、是否推送、是否落地与遗留 worktree 用 `npm run specs:status` 一次看全（`--offline` 跳过 tracker）。
+每个 spec 与小修 integration 批次的分支、推送、祖先合并、内容落地及遗留 worktree 用 `npm run specs:status` 一次看全（`--offline` 跳过 tracker）。
 
 ## 研发与审查
 
@@ -22,11 +22,11 @@
 
 ### 编码标准
 
-编写或审查代码时读 `CODING_STANDARDS.md`；实施或交付证据时从 `work/implementation/CONVENTIONS.md` 进入（协作、证据与版本组合协议），按指针读取当前任务所需内容。
+编写或审查代码时读 `CODING_STANDARDS.md`；实施与收尾时从 `work/implementation/CONVENTIONS.md` 进入（协作、证据与版本组合协议），按指针读取当前任务所需内容。
 
 ### 验证节奏
 
-- **按改动面跑测试。** 迁移、重构与普通改动先跑与改动相关的测试文件；全量 `npm test` 与 `npm run combo:verify` 留到收口、合并与交付前，不每步跑。最终集成状态必须跑全量，不能省。
+- **按改动面跑测试。** 迁移、重构与普通改动先跑与改动相关的测试文件；全量 `npm test`、`npm run combo:verify` 与 Android 的 `cd android && ./gradlew test lintDebug` 留到收口、合并与交付前，不每步跑。最终集成状态必须覆盖本次涉及的产品面，不能省。
 - **CI 低频。** 这是个人项目，CI 的必要性低于本地门禁；不为每次小改动触发全量 CI，收口或合并时跑一次即可。
 
 ## Agent skills
@@ -34,10 +34,6 @@
 ### Issue tracker
 
 Issues live as GitHub issues, driven by the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The five canonical roles map to `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

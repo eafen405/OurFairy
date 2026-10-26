@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import me.rerere.rikkahub.data.datastore.DisplayPreferences
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
+import me.rerere.rikkahub.data.remote.RemoteChatAttempt
 import me.rerere.rikkahub.data.remote.RemoteChatMessage
 import me.rerere.rikkahub.ui.fairy.AgoraMotionPolicy
 import me.rerere.rikkahub.ui.fairy.FairyAppTheme
@@ -34,14 +35,19 @@ class RemoteTranscriptToolCallTest {
     private val toolStep = RemoteChatMessage("a1", 1, 4, role = 2, status = 2, text = "",
         tools = listOf("bash", "read"))
 
-    private fun show(messages: List<RemoteChatMessage>, attempt: String? = null,
-        attemptTools: List<String> = emptyList()) {
+    private fun show(messages: List<RemoteChatMessage>, attempt: RemoteChatAttempt? = null) {
         compose.setContent {
             CompositionLocalProvider(LocalDisplayPreferences provides DisplayPreferences()) {
                 FairyAppTheme {
                     CompositionLocalProvider(LocalAgoraMotionPolicy provides AgoraMotionPolicy(true)) {
-                        RemoteTranscript(messages, attempt, attempt?.let { "g" to "a" }, false, { _, _ -> },
-                            attemptTools = attemptTools, modifier = Modifier.fillMaxSize())
+                        RemoteTranscript(
+                            messages = messages,
+                            generation = "g",
+                            attempt = attempt,
+                            downloadEnabled = false,
+                            onDownload = { _, _ -> },
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     }
                 }
             }
@@ -70,14 +76,16 @@ class RemoteTranscriptToolCallTest {
 
     @Test fun `a step still streaming shows the tool it has already requested`() {
         // The live row has no committed message yet; the name comes from the attempt.
-        show(listOf(question), attempt = "正在读取。", attemptTools = listOf("bash"))
+        show(listOf(question), attempt = RemoteChatAttempt(
+            attemptId = "a", revision = 0, text = "正在读取。", tools = listOf("bash")))
 
         compose.onNodeWithText("调用工具 · bash", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("正在读取。").assertExists()
     }
 
     @Test fun `the tool entry stays while the next step streams`() {
-        show(listOf(question, toolStep), attempt = "正在整理结果。")
+        show(listOf(question, toolStep), attempt = RemoteChatAttempt(
+            attemptId = "a", revision = 0, text = "正在整理结果。"))
 
         compose.onNodeWithText("调用工具 · bash", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("调用工具 · read", useUnmergedTree = true).assertExists()
