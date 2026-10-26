@@ -45,7 +45,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.remote.AccountSession
+import me.rerere.rikkahub.ui.identity.RemoteAppUpdate
 import me.rerere.rikkahub.ui.identity.RemoteDisplayPreferences
 import me.rerere.rikkahub.ui.identity.RemoteReceiveSetup
 import org.koin.compose.koinInject
@@ -53,7 +55,7 @@ import org.koin.compose.koinInject
 /**
  * Settings as collapsed groups rather than one flat list: the identity this
  * device is acting as, the other agents on the backend, background reception,
- * display, and the administrator's operations, with sign-out at the bottom.
+ * display, application updates, and the administrator's operations, with sign-out at the bottom.
  * Each group opens on tap and shows a one-line summary while closed, so the
  * page fits on one screen.
  */
@@ -64,6 +66,7 @@ fun FairySettingsPage(
     session: AccountSession = koinInject(),
     backend: IdentityBackend = koinInject(),
     onBack: () -> Unit,
+    updateContent: @Composable () -> Unit = { RemoteAppUpdate() },
 ) {
     val tokens = LocalFairyTokens.current
     val identity by session.identity.collectAsStateWithLifecycle()
@@ -163,6 +166,16 @@ fun FairySettingsPage(
                 RemoteDisplayPreferences()
             }
 
+            FairySettingsGroup(
+                title = "更新",
+                tag = "UPDATE",
+                summary = "当前版本 ${BuildConfig.VERSION_NAME}",
+                open = open == "update",
+                onToggle = { open = if (open == "update") null else "update" },
+            ) {
+                updateContent()
+            }
+
             if (identity?.user?.isAdmin == true) {
                 FairySettingsGroup(
                     title = "管理",
@@ -178,7 +191,7 @@ fun FairySettingsPage(
 
             Spacer(Modifier.height(24.dp))
             Text(
-                text = "HOLLOW DEEP DIVE SYSTEM · BUILD 1",
+                text = "HOLLOW DEEP DIVE SYSTEM · BUILD ${BuildConfig.VERSION_NAME}",
                 fontFamily = tokens.labelFontFamily,
                 fontSize = 9.sp,
                 letterSpacing = 1.5.sp,
