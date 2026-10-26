@@ -230,6 +230,12 @@
 | --- | --- |
 | [230-install-recovery](230-install-recovery/README.md) · [231-template-reuse](231-template-reuse/README.md) · [229-closeout](229-closeout/README.md) | spec #229 证据索引：#230 fake corepack 确定性安装恢复与 linked 校验、#231 真实安装发布模板后跨 home 复制/缓存闭环与损坏模板失败、#232 两轴评审处置与最终全量门禁（318 pass，combo verify 三行 ok） |
 
+## #237 流式正文分帧呈现
+
+| 目录 | 内容 |
+| --- | --- |
+| [237-stream-refresh](237-stream-refresh/README.md) | #237 流式正文分帧呈现 |
+
 ## 界面微调（#215/#217/#218/#239）
 
 | 目录 | 内容 |

@@ -45,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -125,14 +126,16 @@ internal fun RemoteTranscript(
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }.toSet() }
     }
     val presentation = remember { RemoteTranscriptPresentation() }
+    val liveAttempt = rememberStreamingAttempt(generation, attempt)
     val rows = presentation.update(
-        messages, generation, attempt, settledAttempt, visibleKeys, reading.followTail,
+        messages, generation, liveAttempt, settledAttempt, visibleKeys, reading.followTail,
     )
     val keys = rows.map { it.key }
     val currentKeys by rememberUpdatedState(keys)
     // The menu's click reads this when it runs: copying a streaming row takes the text that
     // has arrived by then, not the snapshot from when the menu opened.
     val currentRows by rememberUpdatedState(rows)
+    val currentAttempt by rememberUpdatedState(attempt)
     LaunchedEffect(dragging) {
         if (dragging) reading = reading.copy(followTail = false, userScrolling = true)
     }
@@ -151,7 +154,7 @@ internal fun RemoteTranscript(
         reading.target(keys)?.let { listState.requestScrollToItem(it.index, it.offset) }
     }
     // StateFlow already conflates whole snapshots. Preserve the viewport rather than replaying deltas.
-    LaunchedEffect(messages, generation, attempt?.attemptId, attempt?.text) { preservePosition() }
+    LaunchedEffect(messages, generation, liveAttempt?.attemptId, liveAttempt?.text) { preservePosition() }
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxWidth().testTag("conversation-messages"),
@@ -226,7 +229,11 @@ internal fun RemoteTranscript(
                                 text = { Text("复制") },
                                 onClick = {
                                     menuRowKey = null
-                                    val body = currentRows.firstOrNull { it.key == row.key }?.text ?: row.text
+                                    val body = if (message == null && row.key == currentRows.lastOrNull()?.key) {
+                                        currentAttempt?.text ?: row.text
+                                    } else {
+                                        currentRows.firstOrNull { it.key == row.key }?.text ?: row.text
+                                    }
                                     scope.launch {
                                         clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("message", body)))
                                         Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
@@ -248,6 +255,36 @@ internal fun RemoteTranscript(
             }
         }
     }
+}
+
+private const val STREAMING_MIN_CODEPOINTS_PER_FRAME = 4
+private const val STREAMING_FRAMES_PER_TARGET = 16
+
+@Composable
+private fun rememberStreamingAttempt(generation: String, attempt: RemoteChatAttempt?): RemoteChatAttempt? {
+    val visibleText = remember(generation, attempt?.attemptId) { mutableStateOf("") }
+    LaunchedEffect(generation, attempt?.attemptId, attempt?.text) {
+        val target = attempt?.text.orEmpty()
+        while (visibleText.value != target) {
+            withFrameNanos { }
+            visibleText.value = streamingPrefix(visibleText.value, target)
+        }
+    }
+    return attempt?.copy(text = visibleText.value)
+}
+
+private fun streamingPrefix(current: String, target: String): String {
+    if (!target.startsWith(current)) return target
+    val currentCount = current.codePointCount(0, current.length)
+    val targetCount = target.codePointCount(0, target.length)
+    val remaining = targetCount - currentCount
+    if (remaining <= 0) return target
+    val step = maxOf(
+        STREAMING_MIN_CODEPOINTS_PER_FRAME,
+        (remaining + STREAMING_FRAMES_PER_TARGET - 1) / STREAMING_FRAMES_PER_TARGET,
+    )
+    val nextCount = minOf(targetCount, currentCount + step)
+    return target.substring(0, target.offsetByCodePoints(0, nextCount))
 }
 
 /**
