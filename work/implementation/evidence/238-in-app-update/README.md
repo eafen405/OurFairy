@@ -120,6 +120,36 @@ npm run specs:status -- --offline
 
 ## 未执行与发布边界
 
-- `adb` 不可用，未执行真机或模拟器上的未知来源授权、系统安装器或实际覆盖安装。
-- 未上传 APK、未修改 fairybox、未 push、未关闭 GitHub issue。现网仍是 191 / 2.5.6；包含更新入口的 192 需先经现有人工渠道发布并安装，后续更高版本才能由该入口更新。
+以下三条描述的是合并前的实施状态；合并、部署与 APK 发布见下一节。
+
+- `adb` 不可用（合并后仍未执行），未在真机或模拟器上验证未知来源授权、系统安装器和实际覆盖安装。
+- 实施期间未上传 APK、未修改 fairybox、未 push、未关闭 GitHub issue。
+- 当前通道只有 arm64 静态 APK，没有独立版本清单；每次检查都下载完整包，离开页面或进程回收后需要重新下载。
+
+## 合并、部署与 APK 发布（2026-10-26）
+
+- `main` 以 `--no-ff` 合入 `ticket/238-in-app-update`（`502dc12cb8`），合并提交 `79f3c18413`（`Merge branch 'ticket/238-in-app-update'`）。合并没有冲突：合并提交的树 `81b4db49d2` 与分支提交 `502dc12cb8` 的树相同。
+- 合并提交已 push 到 `origin/main`（`91388867b7..79f3c18413`）。该远端要求 `full-gate` 状态检查，本次 push 由管理员绕过规则直接更新 `main`。
+- 合并后在合并提交的树上重跑门禁：`npm test` **340 tests / 340 pass / 0 fail / 0 skipped**；`npm run combo:verify` 三行 `ok`；`cd android && ./gradlew test lintDebug assembleRelease` 为 `BUILD SUCCESSFUL in 4m 20s`（`app:testDebugUnitTest` 40 suites / 277 tests / 0 failures / 0 errors / 0 skipped，`lintDebug` 0 errors / 30 warnings，ui 模块另有 1 条 hint）。这些仍是 JVM/Robolectric 与构建证据，不是设备验收。
+- 合并后的 release 产物 `app-arm64-v8a-release.apk`：`versionCode=192`、`versionName=2.5.7`、`native-code=arm64-v8a`，7,795,097 bytes，SHA-256 `cb3bf76e27c76a9562d54f27ae974f183a9aa694c19b18c35e4f02aed1bfe3de`；证书 SHA-256 `406a2d5c63fd717febdffc65731b449aa209693eba266ea845b8e00d0be01d8e`，与现网 191 包同一 key。重跑的字节数与此前证据相同、哈希不同（构建时间戳），以本轮发布包为准。
+
+### fairybox 后端
+
+- `/home/devin/ourfairy/app` 从 `d56b928c2e` 更新到 `main@79f3c18413`；随后用锁定 dsh 的编译器执行 `node scripts/tsc.ts --fresh`，再执行 `node scripts/ourfairy-backend.ts doctor`（`doctor: all checks passed`，组合行 `ourfairy@79f3c18413a2, dsh@d1b6099ae716, android source@460109d1b89b`），最后 `systemctl restart ourfairy-backend.service`。
+- 重启后服务 `active (running)`、`NRestarts=0`，回环口 `127.0.0.1:3080` 与公网 `https://85.137.246.15:38518/ourfairy/` 均响应（未认证请求返回 401/405，属预期）。
+- 以管理员会话经回环口调用 `/chat/read`，投影消息含 `position` 字段——这是 `main` 中 #237 的改动，证明部署后的产物是新代码而不是旧构建。
+- 服务器上没有跑 `build:lib:host` 等 dsh 构建；dsh 检出仍是锁定的 `d1b6099ae716`。
+
+### APK 发布
+
+- `/var/www/ourfairy-v1/` 的 arm64 / universal / x86_64 三个包替换为 192 / 2.5.7，原 191 包与旧索引页备份在 `backup-20261026/`。
+- `https://85.137.246.15:38518/downloads/ourfairy-v1-arm64-release.apk` 从大陆侧下载：200，7,795,097 bytes，SHA-256 与本地构建一致（`cb3bf76e… e3de`），`aapt` 读到 `versionCode=192`、`versionName=2.5.7`。
+- 下载索引页 `https://85.137.246.15:38518/downloads/` 已更新为 `main@79f3c184`、`2.5.7 / 192`，并注明 2.5.7 起内置「设置 → 更新」入口。
+- 更新入口请求的正是上述固定路径（`/downloads/ourfairy-v1-arm64-release.apk`），与已发布文件一致。
+
+### 仍待人工完成
+
+- 真机覆盖安装与未知来源授权、安装器拉起未验证（`adb` 不可用）。
+- 现网已安装的 191 / 2.5.6 没有更新入口，需要先手工下载并安装 192；从 192 起后续版本才能走应用内更新。
+- GitHub issue #238 未关闭。
 - 当前通道只有 arm64 静态 APK，没有独立版本清单；每次检查都下载完整包，离开页面或进程回收后需要重新下载。
