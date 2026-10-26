@@ -13,7 +13,12 @@ import java.net.InetSocketAddress
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** Captured real product SSE, through production HTTP decoder and synchronization owner. */
+/**
+ * Captured real product SSE, through production HTTP decoder and synchronization owner.
+ *
+ * The capture predates #224's required `position`: its single row is at the place the current
+ * backend derives for that row (index 0), and every other byte is the capture's.
+ */
 class RemoteNotificationWireTest {
     @Test fun `actual durable recipient SSE is caught up and consumed once through the shipped client`() = runTest {
         val frames = javaClass.getResourceAsStream("/remote-notifications/actual-recipient-observe.sse")!!.readBytes()

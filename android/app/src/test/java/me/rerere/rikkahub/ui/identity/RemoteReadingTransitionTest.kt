@@ -7,7 +7,7 @@ import org.junit.Test
 
 class RemoteReadingTransitionTest {
     private val source = "Reading [the ending][ref].\n\n```kotlin\nval final = 42\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n\$\$x^2\$\$\n\n[ref]: https://example.com/end"
-    private val terminal = RemoteChatMessage("durable", 9, role = 2, status = 3, text = source)
+    private val terminal = RemoteChatMessage("durable", 2, 9, role = 2, status = 3, text = source)
 
     private fun attempt(id: String, text: String) =
         RemoteChatAttempt(attemptId = id, revision = 0, text = text)
@@ -111,12 +111,12 @@ class RemoteReadingTransitionTest {
 
     @Test fun `formal reply before stream end and unrelated delivery retain exactly one settled reading row`() {
         val state = RemoteTranscriptPresentation()
-        val old = RemoteChatMessage("old", 1, role = 2, status = 2, text = "Earlier")
+        val old = RemoteChatMessage("old", 0, 1, role = 2, status = 2, text = "Earlier")
         val live = state.present(
             messages = listOf(old),
             attempt = attempt("live", source),
         ).last()
-        val delivery = RemoteChatMessage("delivery", 8, role = 2, status = 2, text = "Independent delivery")
+        val delivery = RemoteChatMessage("delivery", 1, 8, role = 2, status = 2, text = "Independent delivery")
         val overlap = state.present(
             messages = listOf(old, delivery, terminal),
             attempt = attempt("live", source),
@@ -166,7 +166,7 @@ class RemoteReadingTransitionTest {
         val firstAttempt = attempt("first", "")
         val secondAttempt = attempt("second", "next")
         val first = state.present(attempt = firstAttempt).single().key
-        val delivery = terminal.copy(messageId = "delivery", seq = 8)
+        val delivery = terminal.copy(messageId = "delivery", seq = 8, position = 0)
         val live = state.present(
             messages = listOf(delivery),
             attempt = firstAttempt,
@@ -252,7 +252,7 @@ class RemoteReadingTransitionTest {
         val live = state.present(attempt = attempt("live", source)).single()
         val mismatches = listOf(
             listOf(terminal.copy(seq = terminal.seq + 1)),
-            listOf(RemoteChatMessage("user-same-seq", terminal.seq, role = 1, status = 2, text = source)),
+            listOf(RemoteChatMessage("user-same-seq", terminal.position, terminal.seq, role = 1, status = 2, text = source)),
             listOf(terminal, terminal.copy(messageId = "duplicate-fairy")),
         )
         for (messages in mismatches) {
@@ -295,7 +295,7 @@ class RemoteReadingTransitionTest {
         assertEquals(listOf("durable", second.key), rows.map { it.key })
         assertTrue(rows.none { it.deferFormatting })
 
-        val secondTerminal = RemoteChatMessage("second-durable", 10, role = 2, status = 2, text = "Second answer")
+        val secondTerminal = RemoteChatMessage("second-durable", 3, 10, role = 2, status = 2, text = "Second answer")
         val settled = state.present(
             messages = listOf(terminal, secondTerminal),
             settlement = RemoteChatSettlement("second", secondTerminal.seq),

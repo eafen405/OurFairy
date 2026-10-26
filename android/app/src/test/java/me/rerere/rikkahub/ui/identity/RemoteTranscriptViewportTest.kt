@@ -36,7 +36,7 @@ import org.robolectric.annotation.GraphicsMode
 class RemoteTranscriptViewportTest {
     @get:Rule val compose = createComposeRule()
     private val history = (0..30).map { index ->
-        RemoteChatMessage("message-$index", index.toLong(), role = 1, status = 2,
+        RemoteChatMessage("message-$index", index.toLong(), index.toLong(), role = 1, status = 2,
             text = "历史消息 $index\n这是持续阅读的内容。\n第二行内容。")
     }
     private var live by mutableStateOf("开始回复。")

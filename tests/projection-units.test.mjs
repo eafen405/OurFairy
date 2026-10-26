@@ -20,7 +20,7 @@ import { test } from 'node:test'
 // module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
 import {
-  SESSION, attachment, event, job, toolCallMessage, toolStream, transcriptLog, userMessage, workCases, workLog,
+  SESSION, assistantMessage, attachment, event, job, toolCallMessage, toolStream, transcriptLog, userMessage, workCases, workLog,
 } from './fixtures/projection-logs.mjs'
 
 const units = await import('../backend/chat/dist/units.js')
@@ -46,8 +46,17 @@ function unitProjection(log, { running = false, liveJobs = [] } = {}) {
   return { ...work1, messages }
 }
 
+/**
+ * Strip `position` before comparing wire rows with the frozen fixture.
+ *
+ * The fixture was captured from the folds ticket #90 deleted, before position
+ * existed. The tests that follow name positions as explicit literals of their
+ * own, so this comparison still pins every other field of the same rows.
+ */
+const withoutPositions = messages => messages.map(({ position: _position, ...row }) => row)
+
 test('the transcript unit reproduces the frozen transcript, including ignored shapes', () => {
-  assert.deepEqual(unitProjection(transcriptLog()).messages, expected.transcriptLog.messages)
+  assert.deepEqual(withoutPositions(unitProjection(transcriptLog()).messages), expected.transcriptLog.messages)
 })
 
 test('the work unit reproduces the frozen task and activity values', () => {
@@ -135,7 +144,7 @@ test('every cut of the transcript matches the frozen value for that prefix', () 
   const state = fold(units.transcriptDefinition, log)
   for (const [key, messages] of Object.entries(expected.transcriptCuts)) {
     const cut = Number(key)
-    assert.deepEqual(units.transcriptAt(state, cut), messages, `transcript at cut ${cut} must match the frozen prefix`)
+    assert.deepEqual(withoutPositions(units.transcriptAt(state, cut)), messages, `transcript at cut ${cut} must match the frozen prefix`)
   }
   // Cuts on both sides of the splice/append pair, of an attempt and its turn end, and beyond the end.
   assert.deepEqual(Object.keys(expected.transcriptCuts).map(Number).sort((a, b) => a - b),
@@ -343,7 +352,7 @@ test('both units register on the native registry and serve their state through s
   const workState = restored.checkpoint.ourfairyWork
   assert.equal(transcriptState.ver, units.transcriptDefinition.stateVersion)
   assert.equal(workState.ver, units.workDefinition.stateVersion)
-  assert.deepEqual(units.transcriptAt(transcriptState.val), expected.transcriptLog.messages)
+  assert.deepEqual(withoutPositions(units.transcriptAt(transcriptState.val)), expected.transcriptLog.messages)
 
   // A row from an older stateVersion is discarded and the log is refolded,
   // which is what makes a stateVersion bump safe for a persisted cache.
@@ -381,9 +390,93 @@ test('the transcript read at a cut keeps the frozen first-appearance order, not 
   const state = fold(units.transcriptDefinition, log)
   const rows = units.transcriptAt(state, Infinity)
 
-  assert.deepEqual(rows, expected.firstAppearance.messages)
+  assert.deepEqual(withoutPositions(rows), expected.firstAppearance.messages)
   assert.deepEqual(rows.map(row => row.messageId), ['u-first', 'u-second', 'a1'])
   assert.equal(rows[0].seq, 3, 'the re-appended row keeps its position and takes the later seq')
+})
+
+test('every wire row carries the transcript position that keeps the probe order', () => {
+  // The #223 probe fed the client the backend's own array [u-first,u-second,a1]
+  // and the client showed [u-second,a1,u-first]: the rows' seq order disagrees
+  // with their first-appearance order. Each row therefore names its place, and
+  // that place is the row's index in the durable rows array.
+  const log = [
+    event(0, 'user/message', userMessage('u-first', 'appended first'), { surfaceOp: 'append' }),
+    event(1, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [userMessage('u-second', 'queued later', { rpcId: 'r2' })] }),
+    event(2, 'assistant/message', { turn: 1, step: 1, message: assistantMessage('a1', 'reply'), stream: [] }, { surfaceOp: 'append' }),
+    // Re-appending an existing id keeps its place.
+    event(3, 'user/message', userMessage('u-first', 'appended first'), { surfaceOp: 'append' }),
+  ]
+  const state = fold(units.transcriptDefinition, log)
+  const rows = units.transcriptAt(state)
+
+  assert.deepEqual(rows.map(({ messageId, position, seq }) => ({ messageId, position, seq })), [
+    { messageId: 'u-first', position: 0, seq: 3 },
+    { messageId: 'u-second', position: 1, seq: 1 },
+    { messageId: 'a1', position: 2, seq: 2 },
+  ])
+  assert.equal(new Set(rows.map(row => row.position)).size, rows.length, 'positions are unique within the session')
+  for (const cut of [-1, 0, 1, 2, 3, log.length]) {
+    for (const fromSeq of [0, 1, 2, 3, 4]) {
+      for (const row of units.transcriptAt(state, cut, fromSeq)) {
+        const frozen = rows.find(candidate => candidate.messageId === row.messageId)
+        assert.ok(frozen, `unexpected row ${row.messageId}`)
+        assert.equal(row.position, frozen.position, `${row.messageId} keeps its position at cut ${cut} from ${fromSeq}`)
+        // The wire value is the row's own index in durable state, so a read
+        // that recomputed it from seq fails here.
+        assert.equal(state.rows[row.position].messageId, row.messageId)
+      }
+    }
+  }
+})
+
+test('one splice numbers its rows in inserted order and a later re-splice keeps them', () => {
+  const log = [
+    event(0, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [
+      userMessage('u1', 'one', { rpcId: 'r1' }),
+      userMessage('u2', 'two', { rpcId: 'r2' }),
+    ] }),
+    event(1, 'turn/start', { turn: 1 }),
+    // The re-splice moves u1's page seq to this event; its place does not move.
+    event(2, 'agent/inbox/spliced', { target: 'next-turn', start: 1, removedCount: 1,
+      inserted: [userMessage('u1', 'one again', { rpcId: 'r1' })] }),
+    event(3, 'user/message', userMessage('u1', 'one again', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    event(4, 'assistant/message', { turn: 1, step: 1, message: assistantMessage('a1', 'reply'), stream: [] }, { surfaceOp: 'append' }),
+  ]
+  const state = fold(units.transcriptDefinition, log)
+  const rows = units.transcriptAt(state)
+
+  assert.deepEqual(rows.map(({ messageId, position, seq, text }) => ({ messageId, position, seq, text })), [
+    { messageId: 'u1', position: 0, seq: 3, text: 'one again' },
+    { messageId: 'u2', position: 1, seq: 0, text: 'two' },
+    { messageId: 'a1', position: 2, seq: 4, text: 'reply' },
+  ])
+  // A row a window carries because a later event moved it keeps its place.
+  assert.deepEqual(units.transcriptAt(state, 2, 2).map(({ messageId, position }) => ({ messageId, position })),
+    [{ messageId: 'u1', position: 0 }])
+  assert.deepEqual(units.transcriptAt(state, 4, 4).map(({ messageId, position }) => ({ messageId, position })),
+    [{ messageId: 'a1', position: 2 }])
+})
+
+test('a page window names the same position as the live read', () => {
+  const log = transcriptLog()
+  const state = fold(units.transcriptDefinition, log)
+  const live = units.transcriptAt(state)
+  // The documented page range: read at the fixed cut from the page's fromSeq,
+  // then keep the rows whose authoritative seq is before the exclusive end.
+  const throughSeq = 6
+  const end = 5
+  const fromSeq = 2
+  const page = units.transcriptAt(state, throughSeq, fromSeq).filter(message => message.seq < end)
+
+  assert.deepEqual(page.map(({ messageId, position }) => ({ messageId, position })), [
+    { messageId: 'u1', position: 0 },
+    { messageId: 'a1', position: 1 },
+  ])
+  for (const message of page) {
+    assert.deepEqual(message, live.find(candidate => candidate.messageId === message.messageId),
+      `${message.messageId} reads the same row with the same position in a page and in the live tail`)
+  }
 })
 
 test('a windowed read touches only its window rows, not the whole transcript', () => {

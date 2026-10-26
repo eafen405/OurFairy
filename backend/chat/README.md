@@ -48,12 +48,15 @@
   快照序号，客户端用它丢弃过时快照。
 - `cursor`：最近观察到的原生事件 seq，空会话为 -1。`durableThroughSeq`：writer 屏障已确认
   的前缀，未知为 -1；它不表示客户端已应用该前缀。
-- `messages`：`{messageId,seq,requestId,role,status,text,attachments,tools?}`。`role` 1 用户、
+- `messages`：`{messageId,position,seq,requestId,role,status,text,attachments,tools?}`。`role` 1 用户、
   2 Fairy；`status` 1 待定、2 完成、3 中断、4 失败。文本是原始文本，含空白与 Markdown。
-  `tools` 是该条消息请求的工具名，按 content block 顺序；只在该消息请求过工具时出现，不含
-  参数与工具输出。只有工具调用、没有可见文本的步骤因此不再是一行空文本。没有原生消息的
-  assistant 结算使用确定性身份 `attempt:<sessionId>:<seq>`。`messages` 按首次出现顺序排列，
-  不是 seq 顺序。
+  `position` 是该行在会话呈现顺序中的位置，由服务端按首次出现次序排定：会话内唯一，同一
+  `messageId` 跨分页、重连与 generation 稳定（冷恢复后的逐字段比较见
+  `tests/chat-cold-boundary.test.mjs`）。它只用于排列，不是 seq、不表示连续、也不表示内容新旧。
+  `messages` 按 `position` 升序排列，不是 seq 顺序。`tools` 是该条消息请求的工具名，按 content
+  block 顺序；只在该消息请求过工具时出现，不含参数与工具输出。只有工具调用、没有可见文本的
+  步骤因此不再是一行空文本。没有原生消息的 assistant 结算使用确定性身份
+  `attempt:<sessionId>:<seq>`。
 - `attempt`：`{attemptId,revision,text,tools?}`。`attemptId` 只在同一 generation 内唯一，`text` 是
   累计原始可见文本；`tools` 是这一步到目前为止请求过的工具名，按首次请求顺序，未请求时不出现。
   最终持久消息取代它，终止消息使用完整富文本渲染；被中止的步骤不会有消息，工具名因此也从
@@ -89,7 +92,12 @@
 
 `events` 是原生不可变 Session 事件，身份为 `(sessionId,seq)`，重叠的 seq 必须载荷相同。
 快照只能替换本连接范围内的旧快照，不能抹掉独立回填的更早历史；合并同一 `messageId` 时取
-较新的 seq。
+较新的 seq，但它的 `position` 必须与已收到的副本一致。缺少 `position`、同一 `messageId`
+换了位置、或两个 `messageId` 占同一位置都是协议错误：客户端对其仍持有的行应响亮失败并保留
+最后一个可信快照，不得回退到 seq 或 messageId 猜序。分页、重连、generation 与实时快照配对交付，不承诺
+新旧客户端混跑。客户端的拒绝、保留与不推进消费行为见
+`android/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatStateTest.kt` 与
+`RemoteChatApiTest.kt`。
 
 `/chat/page` 请求 `{sessionId,throughSeq:C,beforeSeq:L,maxEvents?}`，返回
 `{sessionId,throughSeq,fromSeq:K,beforeSeq:K|null,hasMore,events,messages}`；其中
@@ -139,7 +147,10 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 - transcript 行记首次出现位置与后续状态转移（`first` / `transitions`），因此任意 `throughSeq`
   都能还原该行的 `seq` 与 `status`，无需重折前缀。`transitions` 按事件 seq 排序；只有会移动
   行位置的 transition 进入 `moves` 索引。read/page 从 `fromSeq` 开始只取窗口行，不再遍历
-  整份历史。
+  整份历史。传输 `position` 就是该行在 `rows` 中的下标，在读取时派生；`tests/projection-units.test.mjs`
+  断言每个 wire 行的 `position` 指向 `rows` 中同一 `messageId` 的行，且跨 cut 与窗口不变。
+  `position` 只是对既有行序的命名，transcript 的折叠逻辑与 `stateVersion` 不因此改变；折叠值
+  仍与冻结 fixture 逐字段比较，版本号的绑定见上面的「投影单元」。
 - receipt 由 transcript 单元的 `receipts` 回答（`receiptFrom`），`/chat/send` 的幂等与冲突检测
   从该映射取值。
 - `/chat/read` 与 `/chat/observe` 从这两个单元读 durable 值；同一会话的所有观察者共享同一份

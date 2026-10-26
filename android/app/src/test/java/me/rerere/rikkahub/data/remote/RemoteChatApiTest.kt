@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import kotlinx.serialization.SerializationException
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -269,6 +270,30 @@ class RemoteChatApiTest {
     }
 
     @Test
+    fun `a message without a position is refused instead of guessed`() = runTest {
+        reply(200, """{"ok":true,"projection":$UNPLACED_SNAPSHOT}""")
+
+        try {
+            api.read(TOKEN, "s-1")
+            fail("expected a message without a position to be refused")
+        } catch (unreachable: IdentityUnreachable) {
+            // The failure must name the missing field itself, not merely an
+            // unreadable document: seq and messageId order the transcript
+            // differently from the backend, so neither may stand in for position.
+            // Coroutine stack-trace recovery may copy the exception once, so
+            // the decode failure is found by walking the cause chain.
+            val causes = generateSequence(unreachable as Throwable?) { it.cause }.toList()
+            assertTrue(
+                "expected the unreadable response status, got ${causes.map { it.message }}",
+                causes.any { it is IllegalStateException && it.message?.contains("the backend answered 200") == true },
+            )
+            val naming = causes.filterIsInstance<SerializationException>()
+                .any { it.message?.contains("position") == true }
+            assertTrue("expected a decode failure naming position, got ${unreachable.cause}", naming)
+        }
+    }
+
+    @Test
     fun `a committed delivery decodes beside an independent running attempt`() = runTest {
         reply(200, """{"ok":true,"projection":$DELIVERED_SNAPSHOT}""")
 
@@ -386,7 +411,7 @@ class RemoteChatApiTest {
             val raw = " # 完整正文\n\n**bold**  \n"
             val terminal = RemoteChatProjection(
                 sessionId = "s-1", generation = "g", version = 200,
-                messages = listOf(RemoteChatMessage("reply", 7, null, 2, status, raw)),
+                messages = listOf(RemoteChatMessage("reply", 0, 7, null, 2, status, raw)),
                 settledAttempt = RemoteChatSettlement("attempt", 7),
                 error = if (status == 4) "model failed" else null,
             )
@@ -520,28 +545,34 @@ class RemoteChatApiTest {
         /** A reply still being produced, with exact original text, Markdown and one attachment. */
         const val FIRST_SNAPSHOT =
             """{"sessionId":"s-1","generation":"gen-1","version":1,"cursor":1,"durableThroughSeq":-1,""" +
-                """"messages":[{"messageId":"m-1","seq":1,"requestId":"r-1","role":1,"status":2,"text":"  hello\n\tworld  ",""" +
+                """"messages":[{"messageId":"m-1","position":0,"seq":1,"requestId":"r-1","role":1,"status":2,"text":"  hello\n\tworld  ",""" +
                 """"attachments":[{"index":0,"type":1,"name":"photo.png","mime":"image/png","bytes":600000}]}],""" +
                 """"attempt":{"attemptId":"a-1","revision":3,"text":"thinking"},"replyStatus":2,"error":"the model fell over"}"""
 
         /** A later, cumulative snapshot: two messages, no attempt left. */
         const val SECOND_SNAPSHOT =
             """{"sessionId":"s-1","generation":"gen-1","version":2,"cursor":2,"durableThroughSeq":1,""" +
-                """"messages":[{"messageId":"m-1","seq":1,"requestId":"r-1","role":1,"status":2,"text":"  hello\n\tworld  "},""" +
-                """{"messageId":"m-2","seq":2,"requestId":"r-1","role":2,"status":3,"text":"\n  second  \n"}],""" +
+                """"messages":[{"messageId":"m-1","position":0,"seq":1,"requestId":"r-1","role":1,"status":2,"text":"  hello\n\tworld  "},""" +
+                """{"messageId":"m-2","position":1,"seq":2,"requestId":"r-1","role":2,"status":3,"text":"\n  second  \n"}],""" +
+                """"attempt":null,"replyStatus":0,"error":null}"""
+
+        /** The probe's message shape with no position field: nothing may place it. */
+        const val UNPLACED_SNAPSHOT =
+            """{"sessionId":"s-1","generation":"gen-1","version":1,"cursor":1,""" +
+                """"messages":[{"messageId":"m-1","seq":1,"requestId":"r-1","role":1,"status":2,"text":"no place"}],""" +
                 """"attempt":null,"replyStatus":0,"error":null}"""
 
         /** One tool-only assistant step followed by an ordinary user message. */
         const val TOOL_SNAPSHOT =
             """{"sessionId":"s-1","generation":"gen-1","version":2,"cursor":2,"durableThroughSeq":2,""" +
-                """"messages":[{"messageId":"a-1","seq":2,"role":2,"status":2,"text":"","attachments":[],"tools":["bash","read"]},""" +
-                """{"messageId":"u-1","seq":3,"role":1,"status":2,"text":"next"}],""" +
+                """"messages":[{"messageId":"a-1","position":0,"seq":2,"role":2,"status":2,"text":"","attachments":[],"tools":["bash","read"]},""" +
+                """{"messageId":"u-1","position":1,"seq":3,"role":1,"status":2,"text":"next"}],""" +
                 """"attempt":null,"replyStatus":0,"error":null}"""
 
         /** A committed Fairy delivery beside an independent running attempt. */
         const val DELIVERED_SNAPSHOT =
             """{"sessionId":"s-1","generation":"gen-1","version":4,"cursor":2,"durableThroughSeq":2,""" +
-                """"messages":[{"messageId":"d-1","seq":2,"role":2,"status":2,"text":"# Saved\n\n**bold** body  ","attachments":[]}],""" +
+                """"messages":[{"messageId":"d-1","position":0,"seq":2,"role":2,"status":2,"text":"# Saved\n\n**bold** body  ","attachments":[]}],""" +
                 """"attempt":{"attemptId":"a-2","revision":4,"text":"still composing"},"replyStatus":1,"error":null}"""
     }
 }

@@ -161,7 +161,7 @@ class RemoteAttachmentStateTest {
         state.bind("bob","s1",2); runCurrent()
         chat.events.emit(RemoteChatProjection(
             sessionId="s1", generation="g1", version=1, cursor=0, durableThroughSeq=0,
-            messages=listOf(RemoteChatMessage("m1",0,null,2,2,"原件在这里",listOf(attachment))),
+            messages=listOf(RemoteChatMessage("m1",0,0,null,2,2,"原件在这里",listOf(attachment))),
             attempt=RemoteChatAttempt("a1",1,"正在回复"), replyStatus=1,
             throughSeq=0, fromSeq=0, events=listOf(remoteEvent(0)),
         )); runCurrent()

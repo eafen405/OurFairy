@@ -68,7 +68,7 @@ class RemoteTranscriptCopyTest {
 
     @Test fun `settled fairy message copies its raw body`() {
         val body = "Fairy 的完整回复。"
-        show(listOf(RemoteChatMessage("fairy", 1, role = 2, status = 2, text = body)))
+        show(listOf(RemoteChatMessage("fairy", 0, 1, role = 2, status = 2, text = body)))
 
         longPress(body)
         compose.onNodeWithText("复制").performClick()
@@ -80,7 +80,7 @@ class RemoteTranscriptCopyTest {
 
     @Test fun `user message copies its raw body`() {
         val body = "用户的这行话。"
-        show(listOf(RemoteChatMessage("user", 1, role = 1, status = 2, text = body)))
+        show(listOf(RemoteChatMessage("user", 0, 1, role = 1, status = 2, text = body)))
 
         longPress(body)
         compose.onNodeWithText("复制").performClick()
@@ -128,7 +128,7 @@ class RemoteTranscriptCopyTest {
 
     @Test fun `viewing the full settled message keeps the existing dialog`() {
         val body = "需要展开的完整回复。"
-        show(listOf(RemoteChatMessage("fairy", 1, role = 2, status = 2, text = body)))
+        show(listOf(RemoteChatMessage("fairy", 0, 1, role = 2, status = 2, text = body)))
 
         longPress(body)
         compose.onNodeWithText("查看全文").performClick()

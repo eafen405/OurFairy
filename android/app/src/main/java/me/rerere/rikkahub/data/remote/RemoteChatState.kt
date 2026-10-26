@@ -284,7 +284,7 @@ class RemoteChatState(
         // The episode identity only answers "is anything owed"; session ids stay opaque.
         if (record.notificationEpisodeId == null || !record.notificationOwed) return null
         val preview = mutable.value.projection?.messages
-            ?.lastOrNull { it.role == 2 && it.seq <= record.consumedThrough }?.text
+            ?.newestFairyOutput(record.consumedThrough)?.text
             ?.take(160)?.ifBlank { null } ?: "Fairy 已完成本次活动"
         return selected to preview
     }
@@ -413,13 +413,37 @@ class RemoteChatState(
     }
     private fun covered(through: Long): Boolean = through < 0 ||
         (events.isNotEmpty() && events.firstKey() == 0L && events.headMap(through + 1).size.toLong() == through + 1)
+    /**
+     * Merge one snapshot or page's rows. Content still follows the newer seq, but a position is
+     * fixed by the message's first appearance: a copy that moves it, or a second id claiming the
+     * same place, is a protocol failure. The whole row batch is checked before any row is merged,
+     * so a refused batch cannot move a row the reader already saw.
+     */
     private fun mergeMessages(incoming: List<RemoteChatMessage>) {
+        val positionById = mutableMapOf<String, Long>()
+        val idByPosition = mutableMapOf<Long, String>()
+        messages.values.forEach {
+            positionById[it.messageId] = it.position
+            idByPosition[it.position] = it.messageId
+        }
+        incoming.forEach { message ->
+            val known = positionById[message.messageId]
+            require(known == null || known == message.position) { "同一消息的位置发生变化" }
+            val owner = idByPosition[message.position]
+            require(owner == null || owner == message.messageId) { "两条消息占用了同一位置" }
+            positionById[message.messageId] = message.position
+            idByPosition[message.position] = message.messageId
+        }
         incoming.forEach { message ->
             val previous = messages[message.messageId]
             if (previous == null || message.seq >= previous.seq) messages[message.messageId] = message
         }
     }
-    private fun orderedMessages() = messages.values.sortedWith(compareBy<RemoteChatMessage> { it.seq }.thenBy { it.messageId })
+    /**
+     * The transcript in the backend's presentation order. A message's position is its first
+     * appearance, so content freshness (`seq`) never decides where a row is shown.
+     */
+    private fun orderedMessages() = messages.values.sortedBy { it.position }
     private fun current(boundEpoch: Long, opened: Long) = boundEpoch == epoch && opened == connection
 
     /** A picker result belongs to the binding captured before the picker opened. */

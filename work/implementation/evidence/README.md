@@ -212,6 +212,12 @@
 | --- | --- |
 | [219-221-closeout](219-221-closeout/README.md) | #219/#220/#221 集成分支收口：两轴 review 修复（共享过渡常量、overlay 接缝与逐帧断言、AgentSummary 更名、#220 页面用例）、全量门禁、doctor 与 probe；真机未执行 |
 
+## 消息呈现顺序（#223/#224）
+
+| 目录 | 内容 |
+| --- | --- |
+| [223-message-position](223-message-position/README.md) | #223/#224：投影消息携带稳定数字 position，Android 按首次出现位置恢复顺序，保留现有内容合并与消费保障 |
+
 ## #233 Android 呈现：attempt 行身份由后端事实派生
 
 | 目录 | 内容 |
