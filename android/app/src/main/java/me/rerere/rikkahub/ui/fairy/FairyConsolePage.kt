@@ -43,6 +43,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
@@ -59,7 +60,7 @@ import me.rerere.rikkahub.data.remote.IdentityUser
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import org.koin.compose.koinInject
 
-private const val FIRST_LINE_MS = 45_000L
+internal const val FIRST_LINE_MS = 45_000L
 private const val NEXT_LINE_MIN_MS = 60_000L
 private const val NEXT_LINE_MAX_MS = 90_000L
 private const val SLEEP_AT_MS = 180_000L
@@ -174,7 +175,7 @@ fun FairyConsolePage(
                         hud = true,
                         eye = eye,
                         hudStatus = if (asleep) "SLEEP" else null,
-                        modifier = Modifier.fillMaxWidth().height(208.dp),
+                        modifier = Modifier.fillMaxWidth().height(208.dp).testTag("fairy-console-screen"),
                     )
                     if (asleep) {
                         Text(
@@ -186,11 +187,17 @@ fun FairyConsolePage(
                             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp).fairySlant(),
                         )
                     }
-                    caption?.let { line ->
-                        Box(Modifier.align(Alignment.BottomCenter)) {
-                            FairyCaption(line, compact = false, onFinished = { caption = null })
-                        }
-                    }
+                }
+                // The line is a sibling below the screen: its top stays at the
+                // screen's bottom edge, so added height extends downward over
+                // the page, never over the Fairy animation.
+                caption?.let { line ->
+                    FairyCaption(
+                        line,
+                        compact = false,
+                        onFinished = { caption = null },
+                        modifier = Modifier.testTag("fairy-caption"),
+                    )
                 }
                 Spacer(Modifier.height(16.dp))
                 ConsoleInfoCard(

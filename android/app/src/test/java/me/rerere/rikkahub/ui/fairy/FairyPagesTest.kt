@@ -25,6 +25,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.graphics.asAndroidBitmap
 import java.io.File
+import java.time.Duration
 import android.graphics.Bitmap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowSystemClock
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35], qualifiers = "zh-rCN-w411dp-h891dp")
@@ -131,6 +133,23 @@ class FairyPagesTest {
 
     private fun home(onOpen: (Screen) -> Unit) {
         show { FairyConsolePage(onOpen, account, receive) }
+    }
+
+    @Test fun `idle line sits below the fairy screen`() {
+        home {}
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        // The console measures idleness with SystemClock; the Compose test clock does not move it.
+        ShadowSystemClock.advanceBy(Duration.ofMillis(FIRST_LINE_MS + 1_000))
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        val screen = compose.onNodeWithTag("fairy-console-screen").fetchSemanticsNode().boundsInRoot
+        val caption = compose.onNodeWithTag("fairy-caption").fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "待机台词气泡 top ${caption.top}px 应不小于 Fairy 屏幕下沿 ${screen.bottom}px",
+            caption.top >= screen.bottom,
+        )
+        screenshot("home-idle-line")
     }
 
     @Test fun `home displays and opens the recently selected session`() {
