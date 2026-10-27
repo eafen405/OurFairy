@@ -17,7 +17,7 @@ import { ImpressionService, IMPRESSION_PATHS, impressionHandlers, registerImpres
 import { MaintenanceEngine, readMaintenanceSettings, type MaintenanceField } from './maintenance.js'
 import { MemoryService } from './service.js'
 import { MemoryStore } from './store.js'
-import { registerMemoryTools } from './tools.js'
+import { registerMemoryPolicy, registerMemoryTools } from './tools.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 // The dsh seams this row reads: the agent registry and per-agent tool
@@ -113,6 +113,9 @@ export function apply(ctx: Context, config: MemoryConfig): void {
     const names = registrations.get(agent) ?? new Set<string>()
     registrations.set(agent, names)
     registerMemoryTools(agent, service, names)
+    // The owned Fairy gets the write/no-write policy. The maintenance child is
+    // ownerless and carries its own policy instead.
+    registerMemoryPolicy(agent, names)
     // An owned session gets the impression section and tools; an ownerless one
     // (the maintenance child) gets neither, so memory work cannot read or
     // rewrite an impression.

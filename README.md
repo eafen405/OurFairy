@@ -96,6 +96,21 @@ npm run acceptance:real -- --plan --skip-pdf --skip-asr
 不要求 `VOICE_API_KEY`，不调用 TTS/ASR；跳过的项目会记入报告的 `unexecuted`。`--plan` 只预览这些选择，
 不读取凭据、启动后端或调用服务。
 
+```sh
+set -a; . /path/to/MINIMAX_API_KEY.env; set +a
+export MINIMAX_CN_API_KEY="$MINIMAX_API_KEY"
+npm run acceptance:memory
+npm run acceptance:memory -- --plan
+npm run acceptance:memory -- --only supersede,maintenance-skip
+```
+
+`acceptance:memory` 是记忆增量（规格 #240）的真实轻量模型质量样本，同样不属于 `npm test` 或 CI。
+它用真实 MiniMax 路由启动产品后端，拒绝回环模型替身，逐条记录明确要求记住、偏好、无意义寒暄、
+易变观察、事实更新、失效删除、普通/私密切换、跨用户分寸、维护略过与不重复写入、印象读写与注入的
+提示词、模型工具决定和最终数据库行。维护门槛通过真实 `/gateway/maintenance` 路由降到 5 回合 / 3 小时，
+不伪造 15 轮噪声。stdout 是完整 JSON 报告，`--plan` 只列出案例；未执行的案例不会算作通过。
+证据与逐条结果见 [`work/implementation/evidence/248-memory-integration-acceptance/`](work/implementation/evidence/248-memory-integration-acceptance/README.md)。
+
 ## 跑后端
 
 ```sh
