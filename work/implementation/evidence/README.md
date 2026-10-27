@@ -255,6 +255,12 @@
 | [247-maintenance-settings](247-maintenance-settings/README.md) | #247 记忆维护数值成为部署设置：网关读写 `memory` 行的 volatile `maintenanceTurns`/`maintenanceDecayHours`（线协议 `triggerTurns` 5–50、`decayHours` 3–24，含边界；缺失、非整数、越界与多余字段 400 `gateway/invalid-maintenance`，不 clamp）；一次保存写两项、服务端校验、匿名 401/普通代理人 403；真实 profile + Loader 与产品会话证明保存后下一次维护评估用新值（6 回合搁置区间在 15 不触发、保存 5 后触发；10 回合 + 15 小时搁置在 6 小时衰减门槛 13 不触发、保存 3 后门槛 10 触发）、保存不重置持久水位、重启保留并用新 5 回合阈值维护新会话；Android 新增「记忆 → 维护」独立嵌套组，两项复用 #243 的 Material 3 数值控件（各自草稿、共同校验与保存、单位回合/小时、忙态与可见错误），字符串 en/zh 同步、无新依赖；真实模型语义质量仍属 #248 |
 | [248-memory-integration-acceptance](248-memory-integration-acceptance/README.md) | #248 记忆增量集成与真实模型验收：`npm run acceptance:memory` 用真实 v1 profile + 真实 MiniMax-M3.1-Flash（拒绝回环替身，主/子会话都从各自 session log 核对路由）跑 11 条质量样本、67 项检查全过（明确记忆、稳定偏好、寒暄不写、易变观察不写、事实更新、失效删除、普通/私密切换、跨用户层隔离与印象、维护零写入推进/不重复、印象先读后写/注入/超长；复核加强 invalidate 后该例 7/7，当前全量应为 69 项）；维护门槛经真实 `/gateway/maintenance` 从 15/6 降到 5/3；真实运行暴露的会话摘要、用户画像、IP/位置推断、时间限定观察、元记忆与待办写入，以有 owner 的 `ourfairy:memory-policy` 段、`memory_add` 描述与维护子会话策略修复（`memory-policy` 测试固定接线，前后样本在证据目录）；`npm test` 381/381、`combo:verify` 三行 ok、Android 387 tests + lint 0 errors、dsh compaction-basic 158 + config catalog 15；真实 500K 压缩、真机与默认 15/6 真实节奏未执行；复核轮 dsh 另跑 typecheck 5/5 与 check:ci:static 59/64（5 个既有 fork 漂移失败），dsh 全量测试与覆盖率未跑 |
 
+## 2.5.8 发布与 fairybox 部署（#240 交付）
+
+| 目录 | 内容 |
+| --- | --- |
+| [release-2.5.8](release-2.5.8/README.md) | `main` 合并 #240 与 Fairy 视觉令牌重做后发布 2.5.8 / versionCode 193：合并前 `npm test` 381/381、`combo:verify` 三行 ok、Android `test lintDebug` 通过；APK 读取实际产物确认 versionCode 193、arm64、内嵌 `https://85.137.246.15:38518/ourfairy`、与旧包同签名，公网下载 SHA-256 一致；fairybox 用 `ourfairy-backend.service` 更新到 app `02dce245b6` + dsh `d80522d276`（dsh 构建产物本地构建后 rsync，服务器不跑 `tsc -b`），doctor 通过、真实 MiniMax 一轮完成、`/gateway/read` 出现 compaction 500000 与 maintenance 15/6、`/impression/read` 200；真机内更新全流程未复测 |
+
 ## 界面微调（#215/#217/#218/#239）
 
 | 目录 | 内容 |
