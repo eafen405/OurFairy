@@ -69,6 +69,8 @@ test('one real turn reaches the external model double, registers tools, and pers
     'edit',
     'group_create',
     'groups',
+    'impression_edit',
+    'impression_read',
     'job_kill',
     'job_list',
     'job_output',
