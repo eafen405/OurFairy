@@ -83,11 +83,24 @@ the shell's own 64 000-byte stream cap costs 16 004, so ordinary document result
 stay inline while a large shell result spills to a file the model can read or grep.
 [ticket #82's evidence](../../work/implementation/evidence/82-native-rows/README.md)
 records the measurements and the observed retry/spill behaviour. The four native
-capabilities this composition depends on — PDF subprocess, retry, spill and the
+capabilities adopted under spec #71 — PDF subprocess, retry, spill and the
 history seam — are recorded with their compatibility tests in the
 [native capability dependency record](../../docs/decisions/native-capability-dependencies.md).
 That record points at this bundle's patch for the row inventory; it does not
 repeat it.
+
+**Context growth is handled by native automatic compaction.** `token-meter`
+prices the latest routed request and the current surface; `compaction-basic`
+condenses the oldest balanced span at this deployment's absolute 500 000-token
+ceiling and keeps at least 16 000 tokens of recent history verbatim; the native
+`tool-result-pruner` and `image-offload` rows rewrite oversized tool results and
+over-budget images. The ceiling is a deployment budget rather than the route's
+own limit: the 1M-token MiniMax window would otherwise wait for 800 000. Nothing
+mounts `command-compact`: the product has no command registry, so `/compact` has
+no caller and the native pressure check and overflow recovery are the only entry
+points. [ticket #242's evidence](../../work/implementation/evidence/242-native-auto-compaction/README.md)
+drives each behavior through this profile and the real dsh Loader with a model
+double.
 
 **Live configuration rows are mounted deliberately.** `config-editor` and
 `settings` persist the active profile, and `llm-pi-ai` supplies the multi-provider

@@ -27,6 +27,8 @@ import me.rerere.rikkahub.data.remote.GatewayApi
 import me.rerere.rikkahub.data.remote.GatewayBackend
 import me.rerere.rikkahub.data.remote.IdentityApi
 import me.rerere.rikkahub.data.remote.IdentityBackend
+import me.rerere.rikkahub.data.remote.ImpressionApi
+import me.rerere.rikkahub.data.remote.ImpressionBackend
 import me.rerere.rikkahub.data.remote.SessionApi
 import me.rerere.rikkahub.data.remote.SessionBackend
 import okhttp3.OkHttpClient
@@ -55,6 +57,10 @@ val identityModule = module {
 
     single<GatewayBackend> {
         GatewayApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
+    }
+
+    single<ImpressionBackend> {
+        ImpressionApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
     }
 
     single<RemoteAttachmentBackend> { RemoteAttachmentApi(identityEndpoint, get<OkHttpClient>()) }

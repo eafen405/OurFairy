@@ -96,6 +96,42 @@
           name: '@deepseek-ai/dsh-spill-policy'
           config:
             maxInlineTokens: 8000
+        # ── context pressure and native auto compaction ──────────────────────────
+        # Native token measurement prices the latest request envelope and the
+        # current surface; compaction-basic reads it before each step. The
+        # absolute 500 000-token ceiling is the product's context-cost policy
+        # (#240 implementation decision 8, user stories 61-62): this route's own
+        # 1M window would otherwise wait for 800 000. The 16 000-token retained
+        # tail keeps the newest messages verbatim (story 51); the native selector
+        # still keeps tool call/result pairs whole, and a smaller route's own
+        # capacity can lower the trigger below this ceiling.
+        - id: token-meter
+          name: '@deepseek-ai/dsh-token-meter'
+        - id: compaction-basic
+          name: '@deepseek-ai/dsh-compaction-basic'
+          config:
+            thresholdTokens: 500000
+            retainTokens: 16000
+        # Once pressure qualifies, the native pruner rewrites each oversized tool
+        # result to a bounded head and tail before summarization; the complete
+        # original stays in the append-only session log. The three budgets are
+        # the native defaults written out so this deployment's model-visible
+        # result budget is a decision here, not an inherited default.
+        - id: tool-result-pruner
+          name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+          config:
+            thresholdChars: 8192
+            headChars: 4096
+            tailChars: 1024
+        # When an image-capable route rejects a request over its image budget,
+        # the native executor replaces the oldest image occurrences with text
+        # that names each attachment and its read-only copy, then retries. The
+        # selection is durable, so later requests and cold resumes keep it.
+        - id: image-offload
+          name: '@deepseek-ai/dsh-compaction-image-offload'
+        # No `command-compact` row: the product mounts no command registry, so
+        # the only entry points are the native pressure check and overflow
+        # recovery. The command/Typert face stays outside this composition.
         # ── durable session base ──────────────────────────────────────────────────
         # Every durable path derives from DSH_HOME, which the launcher pins to the
         # isolated OURFAIRY_HOME. Nothing here reaches the host's real home.

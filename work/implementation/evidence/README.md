@@ -247,7 +247,9 @@
 | 目录 | 内容 |
 | --- | --- |
 | [241-absolute-compaction-threshold](241-absolute-compaction-threshold/README.md) | #241 dsh `compaction-basic` 接受可选绝对 `thresholdTokens`：与窗口比例阈值、扣除输出预留与余量后的容量取最小值，schema 声明 volatile 故保存即热生效，未配置时既有解析不变（dsh `d80522d276`） |
-| [244-memory-crud](244-memory-crud/README.md) | #244 长期记忆 CRUD 与双层检索（独立 SQLite 与版本化迁移、五个记忆工具、20 条/8000 字符预算与显式截断、按调用会话的查询门禁、编号不复用与物理删除）；#245–#247 的印象、维护与设置未做 |
+| [244-memory-crud](244-memory-crud/README.md) | #244 长期记忆 CRUD 与双层检索（独立 SQLite 与版本化迁移、五个记忆工具、20 条/8000 字符预算与显式截断、按调用会话的查询门禁、编号不复用与物理删除）；印象、维护与设置见后续票 |
+| [245-impression](245-impression/README.md) | #245 每位用户一份印象：按装配求值的系统提示 section 只注入本人、`/impression/read|edit` 以登录凭据定归属且先读后改、Fairy 工具按调用会话门禁、8000 Unicode 字符拒绝而非截断、无定时失效；客户端设置入口与读成功后才可编辑的多行整份编辑页，无长期记忆浏览器 |
+| [242-native-auto-compaction](242-native-auto-compaction/README.md) | #242 真实 v1 profile 挂载 token meter、compaction-basic（500000 绝对阈值 / 16000 保留）、工具结果裁剪与图片 offload，保留 spill 且不挂 command-compact；真实 profile + Loader 与模型替身证明阈值压缩后继续回复（工具配对与近期原文保留）、裁剪、offload、溢出恢复和冷恢复，压缩摘要不写长期记忆；设置入口 #243 未做 |
 
 ## 界面微调（#215/#217/#218/#239）
 
