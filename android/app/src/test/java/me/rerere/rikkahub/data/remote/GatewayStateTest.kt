@@ -31,11 +31,15 @@ private class ScriptedGateway(
     },
     var deleteRoute: suspend (String) -> Unit = {},
     var saveAsr: suspend (GatewayAsrDraft) -> GatewayAsr = { asrConfig(it.model) },
+    var saveCompaction: suspend (GatewayCompactionDraft) -> GatewayCompaction = {
+        GatewayCompaction(it.thresholdTokens)
+    },
 ) : GatewayBackend {
     val selections = mutableListOf<GatewaySelection>()
     val savedRoutes = mutableListOf<GatewayRouteDraft>()
     val deleted = mutableListOf<String>()
     val savedAsr = mutableListOf<GatewayAsrDraft>()
+    val savedCompactions = mutableListOf<GatewayCompactionDraft>()
 
     override suspend fun read(token: String): GatewayConfig = read()
 
@@ -57,6 +61,11 @@ private class ScriptedGateway(
     override suspend fun saveAsr(token: String, asr: GatewayAsrDraft): GatewayAsr {
         savedAsr += asr
         return saveAsr(asr)
+    }
+
+    override suspend fun saveCompaction(token: String, compaction: GatewayCompactionDraft): GatewayCompaction {
+        savedCompactions += compaction
+        return saveCompaction(compaction)
     }
 }
 
@@ -91,12 +100,14 @@ private fun asrConfig(model: String = "FunAudioLLM/SenseVoiceSmall") = GatewayAs
 private fun config(
     selection: GatewaySelection = GatewaySelection("deepseek-official", "deepseek-flash"),
     routes: List<GatewayRoute> = listOf(route()),
-    editable: GatewayEditable = GatewayEditable(selection = true, routes = true, asr = true),
+    compaction: GatewayCompaction? = GatewayCompaction(500_000),
+    editable: GatewayEditable = GatewayEditable(selection = true, routes = true, asr = true, compaction = true),
     saved: GatewaySaved = GatewaySaved(selection = true, routes = true, asr = false),
 ) = GatewayConfig(
     selection = selection,
     routes = routes,
     asr = asrConfig(),
+    compaction = compaction,
     editable = editable,
     saved = saved,
 )
@@ -265,6 +276,66 @@ class GatewayStateTest {
 
         assertEquals(false, closed)
         assertEquals("gateway/route-in-use", state.snapshot.value.failure?.code)
+    }
+
+    @Test
+    fun `a saved compaction threshold is followed by a fresh read`() = runTest {
+        var current = config()
+        val backend = ScriptedGateway(
+            read = { current },
+            saveCompaction = { draft ->
+                current = current.copy(
+                    compaction = GatewayCompaction(draft.thresholdTokens),
+                    saved = current.saved.copy(compaction = true),
+                )
+                // A deliberately stale echo: the page must show the fresh read,
+                // not the write's own answer.
+                GatewayCompaction(111_000)
+            },
+        )
+        val state = GatewayState(backend, this)
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        state.saveCompaction("token-abc", GatewayCompactionDraft(700_000))
+        advanceUntilIdle()
+
+        assertEquals(listOf(GatewayCompactionDraft(700_000)), backend.savedCompactions)
+        assertEquals(700_000, state.snapshot.value.config?.compaction?.thresholdTokens)
+        assertEquals(true, state.snapshot.value.config?.saved?.compaction)
+        assertNull(state.snapshot.value.failure)
+    }
+
+    @Test
+    fun `a refused compaction write keeps the loaded threshold on screen`() = runTest {
+        val backend = ScriptedGateway(
+            saveCompaction = {
+                throw IdentityRefused(
+                    400,
+                    "gateway/invalid-compaction",
+                    "thresholdTokens must be a whole number from 100000 to 900000, inclusive",
+                )
+            },
+        )
+        val state = GatewayState(backend, this)
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        state.saveCompaction("token-abc", GatewayCompactionDraft(700_000))
+        advanceUntilIdle()
+
+        val snapshot = state.snapshot.value
+        assertEquals("gateway/invalid-compaction", snapshot.failure?.code)
+        assertEquals(
+            "thresholdTokens must be a whole number from 100000 to 900000, inclusive",
+            snapshot.failure?.message,
+        )
+        assertEquals(
+            "a refusal must not replace the value that was actually read",
+            500_000,
+            snapshot.config?.compaction?.thresholdTokens,
+        )
+        assertFalse(snapshot.working)
     }
 
     @Test
