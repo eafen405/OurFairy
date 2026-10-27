@@ -36,6 +36,12 @@
         "243-compaction-settings"
       ],
       "note": "#243 自动压缩触发阈值成为部署设置：网关读写 `compaction-basic` 行的 volatile `thresholdTokens`（整 token 100000–900000，含边界；非整数、越界与多余字段 400 `gateway/invalid-compaction`，不截断/不 clamp，保留预算仍由 16000 固定）；真实 profile + Loader 与产品会话证明保存后下一次压力检查生效（900000 不触发、100000 修剪超长工具结果）、重启保留、切模型不改、匿名 401/普通代理人 403；Android 新增「上下文 → 自动压缩 → 阈值」独立嵌套组与可复用 Material 3 数值控件（滑块与直接输入同一 K 草稿、单位、范围、忙态、可见错误、写后重读），控件留给 #247 复用"
+    },
+    {
+      "dirs": [
+        "247-maintenance-settings"
+      ],
+      "note": "#247 记忆维护数值成为部署设置：网关读写 `memory` 行的 volatile `maintenanceTurns`/`maintenanceDecayHours`（线协议 `triggerTurns` 5–50、`decayHours` 3–24，含边界；缺失、非整数、越界与多余字段 400 `gateway/invalid-maintenance`，不 clamp）；一次保存写两项、服务端校验、匿名 401/普通代理人 403；真实 profile + Loader 与产品会话证明保存后下一次维护评估用新值（6 回合搁置区间在 15 不触发、保存 5 后触发；10 回合 + 15 小时搁置在 6 小时衰减门槛 13 不触发、保存 3 后门槛 10 触发）、保存不重置持久水位、重启保留并用新 5 回合阈值维护新会话；Android 新增「记忆 → 维护」独立嵌套组，两项复用 #243 的 Material 3 数值控件（各自草稿、共同校验与保存、单位回合/小时、忙态与可见错误），字符串 en/zh 同步、无新依赖；真实模型语义质量仍属 #248"
     }
   ]
 }
