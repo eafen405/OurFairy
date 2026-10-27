@@ -8,6 +8,7 @@ OurFairy 有多个领域的词汇。根 `GLOSSARY.md` 是产品全局语言；�
 - [产品全局](./GLOSSARY.md)：用户、会话、状态机、文件系统。所有跨端概念的权威在这里。
 - [Android 客户端](./android/GLOSSARY.md)：只在客户端成立的词——存在感、待机、后台接收、提醒、通知定位。
 - [外部感官](./docs/glossary/external-senses.md)：Fairy 主动读取外部平台及其观察与投递判断。
+- [记忆](./docs/glossary/memory.md)：Fairy 跨会话保留的印象与长期记忆。
 
 ## Relationships
 
@@ -16,6 +17,7 @@ OurFairy 有多个领域的词汇。根 `GLOSSARY.md` 是产品全局语言；�
 - **产品全局 → Android 客户端**：产品全局不收录呈现层的词。只在客户端成立的概念一律留在客户端那一份，
   反向不登记。
 - **外部感官 → 产品全局**：外部感官遵守产品全局的用户、会话与权限语义；领域内的观察规则和状态词留在外部感官词汇表。
+- **记忆 → 产品全局**：记忆使用产品全局的用户与会话身份。
 
 ## Adding a context
 
