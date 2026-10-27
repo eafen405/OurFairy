@@ -35,6 +35,7 @@ const OLD_MARKER = 'OLD-TURN-MARKER'
 const MID_MARKER = 'MID-TURN-MARKER'
 const MID2_MARKER = 'RECENT-TURN-MARKER'
 const NEW_MARKER = 'SECOND-TURN-MARKER'
+const FINAL_MARKER = 'TURN-ONE-DONE-MARKER'
 const SMALL_TOOL_OUTPUT = 'SMALL-TOOL-OUTPUT'
 
 /** Generated text with an exact character count, so token sums are deterministic under the native 4-char estimator. */
@@ -45,6 +46,10 @@ function padded(marker, chars) {
 const OLD_TEXT = padded(OLD_MARKER, 48000)
 const MID_TEXT = padded(MID_MARKER, 40000)
 const MID2_TEXT = padded(MID2_MARKER, 30000)
+// The newest assistant text is deliberately just below the 16 000-token
+// budget, so the tool result before it is the node that crosses the retained
+// tail and the selector must back up to the tool call instead of orphaning it.
+const FINAL_TEXT = padded(FINAL_MARKER, 63908)
 const NEW_TEXT = padded(NEW_MARKER, 400)
 
 const homes = []
@@ -259,7 +264,7 @@ test('a session above the absolute ceiling condenses, keeps tool pairing and rec
       }
     }
     if (toolResultText(body).includes(SMALL_TOOL_OUTPUT)) {
-      return { text: 'TURN-ONE-DONE', usage: { input: 500000, output: 0 } }
+      return { text: FINAL_TEXT, usage: { input: 500000, output: 0 } }
     }
     if (current.includes(OLD_MARKER)) return { text: 'ACK-OLD', usage: { input: 900, output: 5 } }
     if (current.includes(MID_MARKER)) return { text: 'ACK-MID', usage: { input: 900, output: 5 } }
@@ -284,11 +289,11 @@ test('a session above the absolute ceiling condenses, keeps tool pairing and rec
     await send(port, token, sessionId, 'core-mid', MID_TEXT)
     await waitReply(port, token, sessionId, 'ACK-MID')
     await send(port, token, sessionId, 'core-recent', MID2_TEXT)
-    await waitReply(port, token, sessionId, 'TURN-ONE-DONE')
+    await waitReply(port, token, sessionId, FINAL_MARKER)
 
-    // The next turn starts above 500 000 measured tokens (the provider reports
-    // 500 000 input tokens; the new user message pushes the surface over the
-    // ceiling). The native threshold would otherwise wait for 800 000.
+    // The next turn starts above 500 000 measured tokens: the last assistant
+    // message reports 500 000 input tokens and its own text extends the surface
+    // past that anchor. The native threshold would otherwise wait for 800 000.
     await send(port, token, sessionId, 'core-new', NEW_TEXT)
     await waitReply(port, token, sessionId, AFTER_TEXT)
 
@@ -296,7 +301,9 @@ test('a session above the absolute ceiling condenses, keeps tool pairing and rec
     assert.equal(compactionRequests.length, 1, 'one summarization call condenses the older span')
     const shadowInput = JSON.stringify(compactionRequests[0].body)
     assert.ok(shadowInput.includes(OLD_MARKER), 'the summary input contains the oldest turn')
-    assert.equal(shadowInput.includes(MID_MARKER), false, 'the retained mid turn is not sent to the summarizer')
+    assert.ok(shadowInput.includes(MID_MARKER), 'the summary input contains the mid turn')
+    assert.ok(shadowInput.includes(MID2_MARKER), 'the summary input contains the last compacted turn')
+    assert.equal(shadowInput.includes(NEW_MARKER), false, 'the current user message is not sent to the summarizer')
 
     const post = double.requests.find(request => currentUserText(request.body).includes(NEW_MARKER)
       && hasCheckpoint(request.body))
@@ -304,8 +311,8 @@ test('a session above the absolute ceiling condenses, keeps tool pairing and rec
     const wire = JSON.stringify(post.body)
     assert.ok(wire.includes(SUMMARY_MARKER), 'the model sees the native <compacted-summary> replacement')
     assert.equal(wire.includes(OLD_MARKER), false, 'the condensed oldest turn is replaced, not repeated')
-    assert.ok(wire.includes(MID_MARKER), 'the retained mid turn stays verbatim')
-    assert.ok(wire.includes(MID2_MARKER), 'the newest long turn stays verbatim')
+    assert.equal(wire.includes(MID_MARKER), false, 'the condensed mid turn is replaced, not repeated')
+    assert.ok(wire.includes(FINAL_MARKER), 'the recent assistant text stays verbatim')
     assert.ok(wire.includes(NEW_MARKER), 'the current user message stays verbatim')
 
     const calls = allBlocks(post.body).filter(block => block.type === 'tool_use')
@@ -324,10 +331,11 @@ test('a session above the absolute ceiling condenses, keeps tool pairing and rec
     assert.equal(types.filter(type => type === 'compaction/end').length, 1, 'the compaction bracket closed')
     assert.equal(types.filter(type => type === 'compaction/prune').length, 0, 'this conversation had no oversized tool result to prune')
     const summary = projection.events.find(event => event.type === 'compaction/summary')
+    assert.ok(summary.data.shadowedSeqs.length > 3, 'the compacted range covers the older turns, not just one message')
     assert.equal(summary.data.provider, 'minimax-cn', 'the native summarizer used the routed product model')
     assert.equal(summary.data.model, 'MiniMax-M3.1-Flash')
-    assert.ok(summary.data.shadowedTokenCount > 12000,
-      `the retained tail budget left the oldest 12k-token turn compactable; shadowed ${summary.data.shadowedTokenCount}`)
+    assert.ok(summary.data.shadowedTokenCount > 29000,
+      `the selector compacted everything above the 16k-token tail; shadowed ${summary.data.shadowedTokenCount}`)
 
     // The summary is session history only: the long-term memory store is a
     // different module and the compaction path wrote nothing to it.
