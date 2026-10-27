@@ -34,12 +34,16 @@ private class ScriptedGateway(
     var saveCompaction: suspend (GatewayCompactionDraft) -> GatewayCompaction = {
         GatewayCompaction(it.thresholdTokens)
     },
+    var saveMaintenance: suspend (GatewayMaintenanceDraft) -> GatewayMaintenance = {
+        GatewayMaintenance(it.triggerTurns, it.decayHours)
+    },
 ) : GatewayBackend {
     val selections = mutableListOf<GatewaySelection>()
     val savedRoutes = mutableListOf<GatewayRouteDraft>()
     val deleted = mutableListOf<String>()
     val savedAsr = mutableListOf<GatewayAsrDraft>()
     val savedCompactions = mutableListOf<GatewayCompactionDraft>()
+    val savedMaintenances = mutableListOf<GatewayMaintenanceDraft>()
 
     override suspend fun read(token: String): GatewayConfig = read()
 
@@ -66,6 +70,11 @@ private class ScriptedGateway(
     override suspend fun saveCompaction(token: String, compaction: GatewayCompactionDraft): GatewayCompaction {
         savedCompactions += compaction
         return saveCompaction(compaction)
+    }
+
+    override suspend fun saveMaintenance(token: String, maintenance: GatewayMaintenanceDraft): GatewayMaintenance {
+        savedMaintenances += maintenance
+        return saveMaintenance(maintenance)
     }
 }
 
@@ -101,13 +110,17 @@ private fun config(
     selection: GatewaySelection = GatewaySelection("deepseek-official", "deepseek-flash"),
     routes: List<GatewayRoute> = listOf(route()),
     compaction: GatewayCompaction? = GatewayCompaction(500_000),
-    editable: GatewayEditable = GatewayEditable(selection = true, routes = true, asr = true, compaction = true),
+    maintenance: GatewayMaintenance? = GatewayMaintenance(15, 6),
+    editable: GatewayEditable = GatewayEditable(
+        selection = true, routes = true, asr = true, compaction = true, maintenance = true,
+    ),
     saved: GatewaySaved = GatewaySaved(selection = true, routes = true, asr = false),
 ) = GatewayConfig(
     selection = selection,
     routes = routes,
     asr = asrConfig(),
     compaction = compaction,
+    maintenance = maintenance,
     editable = editable,
     saved = saved,
 )
@@ -335,6 +348,71 @@ class GatewayStateTest {
             500_000,
             snapshot.config?.compaction?.thresholdTokens,
         )
+        assertFalse(snapshot.working)
+    }
+
+    @Test
+    fun `a saved maintenance setting is followed by a fresh read`() = runTest {
+        var current = config()
+        val backend = ScriptedGateway(
+            read = { current },
+            saveMaintenance = { draft ->
+                current = current.copy(
+                    maintenance = GatewayMaintenance(draft.triggerTurns, draft.decayHours),
+                    saved = current.saved.copy(maintenance = true),
+                )
+                // A deliberately stale echo: the page must show the fresh read,
+                // not the write's own answer.
+                GatewayMaintenance(50, 24)
+            },
+        )
+        val state = GatewayState(backend, this)
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        state.saveMaintenance("token-abc", GatewayMaintenanceDraft(triggerTurns = 5, decayHours = 3))
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(GatewayMaintenanceDraft(triggerTurns = 5, decayHours = 3)),
+            backend.savedMaintenances,
+        )
+        assertEquals(5, state.snapshot.value.config?.maintenance?.triggerTurns)
+        assertEquals(3, state.snapshot.value.config?.maintenance?.decayHours)
+        assertEquals(true, state.snapshot.value.config?.saved?.maintenance)
+        assertNull(state.snapshot.value.failure)
+    }
+
+    @Test
+    fun `a refused maintenance write keeps the loaded numbers on screen`() = runTest {
+        val backend = ScriptedGateway(
+            saveMaintenance = {
+                throw IdentityRefused(
+                    400,
+                    "gateway/invalid-maintenance",
+                    "triggerTurns must be a whole number of closed turns from 5 to 50, inclusive",
+                )
+            },
+        )
+        val state = GatewayState(backend, this)
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        state.saveMaintenance("token-abc", GatewayMaintenanceDraft(triggerTurns = 4, decayHours = 6))
+        advanceUntilIdle()
+
+        val snapshot = state.snapshot.value
+        assertEquals("gateway/invalid-maintenance", snapshot.failure?.code)
+        assertEquals(
+            "triggerTurns must be a whole number of closed turns from 5 to 50, inclusive",
+            snapshot.failure?.message,
+        )
+        assertEquals(
+            "a refusal must not replace the value that was actually read",
+            15,
+            snapshot.config?.maintenance?.triggerTurns,
+        )
+        assertEquals(6, snapshot.config?.maintenance?.decayHours)
         assertFalse(snapshot.working)
     }
 

@@ -183,7 +183,7 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     const admin = await signIn(port)
     const agent = await inviteAndRegister(port, admin, 'agent-one')
 
-    for (const path of ['/gateway/read', '/gateway/selection', '/gateway/route', '/gateway/route/delete', '/gateway/asr', '/gateway/compaction']) {
+    for (const path of ['/gateway/read', '/gateway/selection', '/gateway/route', '/gateway/route/delete', '/gateway/asr', '/gateway/compaction', '/gateway/maintenance']) {
       const anonymous = await httpJson(port, path, { body: {}, expect: false })
       assert.equal(anonymous.status, 401, `${path} must refuse an anonymous caller`)
       assert.equal(anonymous.json.error.code, 'gateway/unauthorized')
@@ -195,10 +195,12 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     const initial = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
     assert.deepEqual(initial.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'max' })
     assert.equal(initial.selectionApplies, 'next-turn')
-    assert.deepEqual(initial.saved, { selection: false, routes: false, asr: false, compaction: false })
-    assert.deepEqual(initial.editable, { selection: true, routes: true, asr: true, compaction: true })
+    assert.deepEqual(initial.saved, { selection: false, routes: false, asr: false, compaction: false, maintenance: false })
+    assert.deepEqual(initial.editable, { selection: true, routes: true, asr: true, compaction: true, maintenance: true })
     assert.deepEqual(initial.compaction, { thresholdTokens: 500000 },
       'the shipped composition declares the 500K default and the gateway reads it')
+    assert.deepEqual(initial.maintenance, { triggerTurns: 15, decayHours: 6 },
+      'the shipped composition declares the 15-turn / 6-hour defaults and the gateway reads them')
     assert.deepEqual(initial.routes.map(route => route.provider), ['deepseek-official', 'minimax-cn'])
     const official = initial.routes.find(route => route.provider === 'deepseek-official')
     assert.equal(official.editable, false, 'the official DeepSeek route is not the gateway\'s to redefine')
@@ -255,7 +257,7 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     const after = (await httpJson(restarted.port, '/gateway/read', { token: admin, body: {} })).gateway
     assert.deepEqual(after.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'low' },
       'the saved selection survives a restart')
-    assert.deepEqual(after.saved, { selection: true, routes: true, asr: true, compaction: false })
+    assert.deepEqual(after.saved, { selection: true, routes: true, asr: true, compaction: false, maintenance: false })
     assert.ok(after.routes.some(route => route.provider === 'minimax-cn'), 'the saved route survives a restart')
     assert.equal(after.asr.maxDurationMs, 30000)
   } finally {
@@ -282,6 +284,7 @@ test('an invalid configuration is refused with the reason, and nothing is persis
       ['/gateway/asr', { model: 'm', endpoint: 'not-a-url' }, 'gateway/invalid-asr'],
       ['/gateway/asr', { model: 'm', endpoint: 'https://asr.example/v1', maxAudioBytes: 0 }, 'gateway/invalid-asr'],
       ['/gateway/compaction', { thresholdTokens: 42 }, 'gateway/invalid-compaction'],
+      ['/gateway/maintenance', { triggerTurns: 4, decayHours: 6 }, 'gateway/invalid-maintenance'],
     ]
     for (const [path, body, code] of cases) {
       const response = await httpJson(port, path, { token: admin, body, expect: false })
@@ -289,7 +292,7 @@ test('an invalid configuration is refused with the reason, and nothing is persis
       assert.equal(response.json.error.code, code, `${path} ${JSON.stringify(body)}: ${response.text}`)
     }
     const state = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
-    assert.deepEqual(state.saved, { selection: false, routes: false, asr: false, compaction: false }, 'a refused write persists nothing')
+    assert.deepEqual(state.saved, { selection: false, routes: false, asr: false, compaction: false, maintenance: false }, 'a refused write persists nothing')
     assert.deepEqual(state.routes.map(route => route.provider), ['deepseek-official', 'minimax-cn'],
       'a refused write leaves the deployment route in place')
   } finally {

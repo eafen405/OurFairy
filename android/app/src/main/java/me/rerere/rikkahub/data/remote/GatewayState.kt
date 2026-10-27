@@ -111,6 +111,10 @@ class GatewayState(
         backend.saveCompaction(token, compaction)
     }
 
+    fun saveMaintenance(token: String, maintenance: GatewayMaintenanceDraft) = write(token) {
+        backend.saveMaintenance(token, maintenance)
+    }
+
     private fun write(
         token: String,
         onSaved: () -> Unit = {},

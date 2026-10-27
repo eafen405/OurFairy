@@ -242,9 +242,9 @@ from `OURFAIRY_MEMORY_MAINTENANCE_TURNS`,
 `OURFAIRY_MEMORY_MAINTENANCE_DECAY_HOURS`,
 `OURFAIRY_MEMORY_MAINTENANCE_MODEL` and
 `OURFAIRY_MEMORY_MAINTENANCE_PROVIDER`; an environment value is only the seed,
-not a second authority. Ticket #247 binds the first two to the gateway's
-“记忆 → 维护” tree under the settings namespace `memory` (the row id), reading
-and writing the same volatile fields.
+not a second authority. The gateway's `/gateway/maintenance` route reads and
+writes the first two through the settings row whose namespace is `memory` (the
+row id); see the gateway README for the wire fields and error code.
 
 ## Errors
 
@@ -297,7 +297,8 @@ deletion ([ADR-0002](../../docs/adr/0002-physical-memory-deletion.md)).
 
 ## What this row does not do
 
-No gateway or Android settings page, and no compaction. The impression page is
+No compaction. The impression page is
 the ordinary user's own surface; there is no long-term-memory browser or editor.
-Those remaining pieces are separate tickets: #247 for the settings surface and
-the compaction tickets for the native context path.
+The maintenance numbers are edited through the gateway's “记忆 → 维护” section,
+not by this row. Those remaining pieces are separate tickets: #247's settings
+surface (delivered) and the compaction tickets for the native context path.
