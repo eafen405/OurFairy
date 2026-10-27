@@ -866,6 +866,19 @@ async function caseInvalidate(runtime: Runtime): Promise<CaseOutcome> {
   mark(checks, 'the delete names the invalidated memory number', number(argumentsOf(deleteCall)?.id) === row.id, JSON.stringify(argumentsOf(deleteCall)))
   mark(checks, 'the row is physically removed', remaining === undefined, JSON.stringify(rowSummary(memoryRows(runtime).filter(entry => entry.id === row.id))))
   mark(checks, 'no row still carries the invalidated number', !memoryRows(runtime).some(entry => entry.content.includes('13800000000')), JSON.stringify(rowSummary(memoryRows(runtime).filter(entry => entry.content.includes('13800000000')))))
+
+  // The row being gone from the database is not the same claim as the product
+  // no longer returning it: the next real search is what the Fairy acts on.
+  const third = await sendTurn(runtime, runtime.alice, session,
+    '再用 memory_search 查一次 13800000000，看看还有没有这条记忆；请原样报告检索结果。')
+  const laterSearches = third.toolCalls.filter(call => call.name === 'memory_search'
+    && (string(argumentsOf(call)?.query) ?? '').includes('13800000000'))
+  const laterSearch = laterSearches.at(-1)
+  const laterReport = searchReport(laterSearch)
+  mark(checks, 'a later search runs against the removed number', laterSearch !== undefined,
+    callSummary(third.toolCalls).map(call => call.name).join(','))
+  mark(checks, 'the later search no longer retrieves the invalidated memory', number(laterReport?.matched) === 0,
+    JSON.stringify(laterReport ?? null))
   return {
     checks,
     evidence: {
@@ -877,6 +890,10 @@ async function caseInvalidate(runtime: Runtime): Promise<CaseOutcome> {
       toolCalls: callSummary(second.toolCalls),
       deletedRow: rowSummary([row]),
       remainingRows: rowSummary(memoryRows(runtime).filter(entry => entry.id === row.id || entry.content.includes('13800000000'))),
+      laterSearchPrompt: third.text,
+      laterSearchReply: third.reply,
+      laterSearchCalls: callSummary(laterSearches),
+      laterSearchReport: laterReport ?? null,
     },
   }
 }

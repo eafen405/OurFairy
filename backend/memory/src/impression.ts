@@ -22,10 +22,10 @@
  */
 import { bearerToken, postHandler } from '@ourfairy/dsh-http/http'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
-import { defineTool, type InferArgs, type InferValue, type ParameterSchemaSpec, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { ImpressionError, toolRegistrar } from './tool-kit.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { MemoryStore } from './store.js'
 // The system prompt seam this row writes one scoped section to. The seam also
 // reads the memory service's context augmentation; both imports are type-only.
@@ -42,25 +42,6 @@ const PROMPT_HEADER = '以下是当前用户的印象，是每次互动都需要
 
 /** The sentence that keeps a model edit deliberate and read-first. */
 const PROMPT_FOOTER = '只有用户明确要求时才修改印象；修改前先用 impression_read 读取，再用 impression_edit 整份替换。'
-
-/**
- * One refusal this module reports.
- *
- * The message is the detail alone: a tool handler prefixes the code when it
- * reports to the model, while an HTTP route answers `{code, message}` in the
- * product envelope without repeating the code inside the message.
- */
-export class ImpressionError extends Error {
-  readonly status: number
-  readonly code: string
-
-  constructor(status: number, code: string, message: string) {
-    super(message)
-    this.name = 'ImpressionError'
-    this.status = status
-    this.code = code
-  }
-}
 
 /** One user's impression, as both the page and the model read it. */
 export type ImpressionView = {
@@ -132,15 +113,6 @@ export class ImpressionService {
   }
 }
 
-/** How every impression tool renders its value to the model. */
-const output = {
-  schema: { type: 'object', additionalProperties: true } as const,
-  render: (_args: unknown, value: unknown): ContentBlock[] => [{ type: 'text', text: JSON.stringify(value) }],
-}
-
-/** The canonical value one impression tool returns, as the output schema declares it. */
-type ToolValue = InferValue<typeof output.schema>
-
 /** The session a tool call speaks for, as the owner derived from its header. */
 type ToolCaller = { shortId: number; readKey: string }
 
@@ -186,15 +158,7 @@ export function registerImpressions(agent: Agent, service: ImpressionService, re
     registered.add(IMPRESSION_SECTION)
   }
 
-  const add = <S extends ParameterSchemaSpec>(name: string, definition: {
-    readonly description: string
-    readonly parameters: S
-    readonly execute: (args: InferArgs<S>, exec: ToolRunContext) => Promise<ToolValue>
-  }): void => {
-    if (registered.has(name)) return
-    agent.ctx.tools.register(defineTool({ name, output, ...definition }))
-    registered.add(name)
-  }
+  const add = toolRegistrar(agent, registered)
   add('impression_read', {
     description: 'Read the current user\'s impression: the persistent overall understanding Fairy keeps for this user and receives at every interaction. Read it before editing; this read opens the edit for this session. A user without an impression reads an empty body.',
     parameters: {},

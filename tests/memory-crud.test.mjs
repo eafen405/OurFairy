@@ -90,6 +90,18 @@ function storedRows() {
   }
 }
 
+/**
+ * The stored number of one memory, located by its exact content.
+ *
+ * A successful add answers only `{ok:true}`, so a case that needs the number
+ * reads the row's own database instead of the tool result.
+ */
+function idOf(content) {
+  const row = storedRows().find(entry => entry.content === content)
+  assert.ok(row !== undefined, `the memory ${JSON.stringify(content.slice(0, 40))} must be stored`)
+  return row.id
+}
+
 before(async () => {
   model = http.createServer(async (request, response) => {
     // Collect the bytes first: decoding each network chunk on its own splits a
@@ -142,13 +154,12 @@ after(async () => {
 test('a new memory is normal by default and only a normal search returns it', async () => {
   const session = await newSession(alice)
   const added = valueOf(await tool(alice, session, 'memory_add', { content: '雨天散步让人放松' }), 'memory_add')
-  assert.deepEqual(Object.keys(added).sort(), ['id', 'ok'], 'add answers a simple confirmation')
-  assert.equal(added.ok, true)
-  assert.ok(Number.isSafeInteger(added.id) && added.id > 0, `a memory needs an integer number; got ${JSON.stringify(added)}`)
+  assert.deepEqual(added, { ok: true }, 'add answers a simple confirmation')
 
   const normal = valueOf(await tool(alice, session, 'memory_search', { query: '雨天散步' }), 'memory_search')
-  assert.deepEqual(normal.memories.map(memory => memory.id), [added.id])
+  assert.deepEqual(normal.memories.map(memory => memory.id), [idOf('雨天散步让人放松')])
   const [memory] = normal.memories
+  assert.ok(Number.isSafeInteger(memory.id) && memory.id > 0, `a memory needs an integer number; got ${JSON.stringify(memory)}`)
   assert.equal(memory.content, '雨天散步让人放松')
   assert.equal(memory.owner_short_id, alice.user.shortId, 'the owner is derived from the source session')
   assert.equal(typeof memory.content_updated_at, 'number')
@@ -164,44 +175,50 @@ test('a new memory is normal by default and only a normal search returns it', as
 test('is_private writes the private layer and memory_switch flips both ways', async () => {
   const session = await newSession(alice)
   const added = valueOf(await tool(alice, session, 'memory_add', { content: '清晨写作效率最高', is_private: true }), 'private memory_add')
+  assert.deepEqual(added, { ok: true }, 'add answers a simple confirmation')
   assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '清晨写作' }), 'normal memory_search').memories, [])
   const deep = valueOf(await tool(alice, session, 'memory_search', { query: '清晨写作', is_private: true }), 'deep memory_search')
-  assert.deepEqual(deep.memories.map(memory => memory.id), [added.id])
+  const addedId = idOf('清晨写作效率最高')
+  assert.deepEqual(deep.memories.map(memory => memory.id), [addedId])
   const updatedAt = deep.memories[0].content_updated_at
 
-  const toNormal = valueOf(await tool(alice, session, 'memory_switch', { id: added.id }), 'memory_switch')
-  assert.deepEqual(toNormal, { ok: true, id: added.id, is_private: false })
+  const toNormal = valueOf(await tool(alice, session, 'memory_switch', { id: addedId }), 'memory_switch')
+  assert.deepEqual(toNormal, { ok: true }, 'switch answers a simple confirmation')
   assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '清晨写作', is_private: true }), 'deep memory_search').memories, [])
   const normal = valueOf(await tool(alice, session, 'memory_search', { query: '清晨写作' }), 'normal memory_search')
-  assert.deepEqual(normal.memories.map(memory => memory.id), [added.id])
+  assert.deepEqual(normal.memories.map(memory => memory.id), [addedId])
   assert.equal(normal.memories[0].content_updated_at, updatedAt, 'a switch never updates the content time')
 
-  const toPrivate = valueOf(await tool(alice, session, 'memory_switch', { id: added.id }), 'memory_switch')
-  assert.deepEqual(toPrivate, { ok: true, id: added.id, is_private: true })
+  const toPrivate = valueOf(await tool(alice, session, 'memory_switch', { id: addedId }), 'memory_switch')
+  assert.deepEqual(toPrivate, { ok: true }, 'switch answers the same confirmation in both directions')
   assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '清晨写作' }), 'normal memory_search').memories, [])
 })
 
 test('memory_edit replaces one uniquely matched fragment and refuses zero or several matches', async () => {
   const session = await newSession(alice)
   const added = valueOf(await tool(alice, session, 'memory_add', { content: '我喜欢喝乌龙茶，也喜欢喝红茶。' }), 'memory_add')
-  assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '乌龙茶' }), 'memory_search').memories.map(memory => memory.id), [added.id])
+  assert.deepEqual(added, { ok: true }, 'add answers a simple confirmation')
+  const addedId = idOf('我喜欢喝乌龙茶，也喜欢喝红茶。')
+  assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '乌龙茶' }), 'memory_search').memories.map(memory => memory.id), [addedId])
 
-  assert.deepEqual(valueOf(await tool(alice, session, 'memory_edit', { id: added.id, old_string: '乌龙茶', new_string: '普洱茶' }), 'memory_edit'), { ok: true, id: added.id })
+  assert.deepEqual(valueOf(await tool(alice, session, 'memory_edit', { id: addedId, old_string: '乌龙茶', new_string: '普洱茶' }), 'memory_edit'), { ok: true })
   const edited = valueOf(await tool(alice, session, 'memory_search', { query: '普洱茶' }), 'memory_search')
   assert.deepEqual(edited.memories.map(memory => memory.content), ['我喜欢喝普洱茶，也喜欢喝红茶。'])
 
-  assert.match(errorOf(await tool(alice, session, 'memory_edit', { id: added.id, old_string: '绿茶', new_string: '白茶' })), /memory\/no-match/,
+  assert.match(errorOf(await tool(alice, session, 'memory_edit', { id: addedId, old_string: '绿茶', new_string: '白茶' })), /memory\/no-match/,
     'an old fragment that does not occur is an error')
 
   const repeated = valueOf(await tool(alice, session, 'memory_add', { content: '重复的记号在这里，重复的记号也在那里' }), 'memory_add')
+  assert.deepEqual(repeated, { ok: true })
+  const repeatedId = idOf('重复的记号在这里，重复的记号也在那里')
   valueOf(await tool(alice, session, 'memory_search', { query: '重复的记号' }), 'memory_search')
-  assert.match(errorOf(await tool(alice, session, 'memory_edit', { id: repeated.id, old_string: '重复的记号', new_string: '唯一记号' })), /memory\/ambiguous-match/,
+  assert.match(errorOf(await tool(alice, session, 'memory_edit', { id: repeatedId, old_string: '重复的记号', new_string: '唯一记号' })), /memory\/ambiguous-match/,
     'an old fragment that occurs twice is refused rather than guessed')
   assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '重复的记号' }), 'memory_search').memories.map(memory => memory.content),
     ['重复的记号在这里，重复的记号也在那里'], 'a refused edit changes nothing')
 
   const whole = valueOf(await tool(alice, session, 'memory_search', { query: '普洱茶' }), 'memory_search').memories[0]
-  assert.deepEqual(valueOf(await tool(alice, session, 'memory_edit', { id: added.id, old_string: whole.content, new_string: '整段替换后的记忆正文' }), 'memory_edit'), { ok: true, id: added.id })
+  assert.deepEqual(valueOf(await tool(alice, session, 'memory_edit', { id: addedId, old_string: whole.content, new_string: '整段替换后的记忆正文' }), 'memory_edit'), { ok: true })
   assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '整段替换' }), 'memory_search').memories.map(memory => memory.content), ['整段替换后的记忆正文'],
     'passing the complete old content is how a whole-memory rewrite is expressed')
 })
@@ -209,63 +226,71 @@ test('memory_edit replaces one uniquely matched fragment and refuses zero or sev
 test('memory_delete removes the row physically and never reuses its number', async () => {
   const session = await newSession(alice)
   const added = valueOf(await tool(alice, session, 'memory_add', { content: '这条记忆稍后会被删除' }), 'memory_add')
+  assert.deepEqual(added, { ok: true })
+  const addedId = idOf('这条记忆稍后会被删除')
   valueOf(await tool(alice, session, 'memory_search', { query: '稍后会被删除' }), 'memory_search')
-  assert.deepEqual(valueOf(await tool(alice, session, 'memory_delete', { id: added.id }), 'memory_delete'), { ok: true })
-  assert.deepEqual(storedRows().filter(row => row.id === added.id), [], 'a deleted memory leaves no row behind')
+  assert.deepEqual(valueOf(await tool(alice, session, 'memory_delete', { id: addedId }), 'memory_delete'), { ok: true })
+  assert.deepEqual(storedRows().filter(row => row.id === addedId), [], 'a deleted memory leaves no row behind')
   const empty = valueOf(await tool(alice, session, 'memory_search', { query: '稍后会被删除' }), 'memory_search')
   assert.deepEqual(empty.memories, [])
-  assert.match(errorOf(await tool(alice, session, 'memory_edit', { id: added.id, old_string: '删除', new_string: '保留' })), /memory\/unknown-memory/,
+  assert.match(errorOf(await tool(alice, session, 'memory_edit', { id: addedId, old_string: '删除', new_string: '保留' })), /memory\/unknown-memory/,
     'a deleted number no longer names a memory')
   const next = valueOf(await tool(alice, session, 'memory_add', { content: '删除之后新增的记忆' }), 'memory_add')
-  assert.ok(next.id > added.id, `a number is never reused; got ${next.id} after deleting ${added.id}`)
+  assert.deepEqual(next, { ok: true })
+  const nextId = idOf('删除之后新增的记忆')
+  assert.ok(nextId > addedId, `a number is never reused; got ${nextId} after deleting ${addedId}`)
 })
 
 test('edit, delete and switch need the number to have been returned in the calling session', async () => {
   const session = await newSession(alice)
   const added = valueOf(await tool(alice, session, 'memory_add', { content: '门禁测试的记忆：一只橘猫' }), 'memory_add')
+  assert.deepEqual(added, { ok: true })
+  const addedId = idOf('门禁测试的记忆：一只橘猫')
   // `/sessions/create` re-enters the newest empty session, so the second
   // session of this identity only becomes distinct once this one has content.
   const secondSession = await newSession(alice)
   const bobSession = await newSession(bob)
   assert.notEqual(secondSession, session, 'the gate has to prove a second session')
 
-  assert.match(errorOf(await tool(alice, session, 'memory_edit', { id: added.id, old_string: '橘猫', new_string: '黑猫' })), /memory\/not-queried/,
+  assert.match(errorOf(await tool(alice, session, 'memory_edit', { id: addedId, old_string: '橘猫', new_string: '黑猫' })), /memory\/not-queried/,
     'adding does not authorize changing the new memory')
-  assert.match(errorOf(await tool(alice, session, 'memory_delete', { id: added.id })), /memory\/not-queried/)
-  assert.match(errorOf(await tool(alice, session, 'memory_switch', { id: added.id })), /memory\/not-queried/)
+  assert.match(errorOf(await tool(alice, session, 'memory_delete', { id: addedId })), /memory\/not-queried/)
+  assert.match(errorOf(await tool(alice, session, 'memory_switch', { id: addedId })), /memory\/not-queried/)
 
-  assert.deepEqual(valueOf(await tool(alice, secondSession, 'memory_search', { query: '橘猫' }), 'memory_search').memories.map(memory => memory.id), [added.id])
-  assert.match(errorOf(await tool(alice, session, 'memory_edit', { id: added.id, old_string: '橘猫', new_string: '黑猫' })), /memory\/not-queried/,
+  assert.deepEqual(valueOf(await tool(alice, secondSession, 'memory_search', { query: '橘猫' }), 'memory_search').memories.map(memory => memory.id), [addedId])
+  assert.match(errorOf(await tool(alice, session, 'memory_edit', { id: addedId, old_string: '橘猫', new_string: '黑猫' })), /memory\/not-queried/,
     'a query in another session never authorizes this one')
 
   // Bob's session has seen nothing yet: a different identity's fresh session is
   // no more authorized than a second session of the same identity.
-  assert.match(errorOf(await tool(bob, bobSession, 'memory_delete', { id: added.id })), /memory\/not-queried/,
+  assert.match(errorOf(await tool(bob, bobSession, 'memory_delete', { id: addedId })), /memory\/not-queried/,
     'another identity\'s session authorizes nothing until it searches itself')
   const bobView = valueOf(await tool(bob, bobSession, 'memory_search', { query: '橘猫' }), 'memory_search')
   assert.equal(bobView.memories[0].owner_short_id, alice.user.shortId, 'the owner is the source session owner, not the searcher')
-  assert.match(errorOf(await tool(alice, session, 'memory_delete', { id: added.id })), /memory\/not-queried/,
+  assert.match(errorOf(await tool(alice, session, 'memory_delete', { id: addedId })), /memory\/not-queried/,
     'the second session\'s query never authorizes this one')
-  assert.match(errorOf(await tool(alice, session, 'memory_switch', { id: added.id })), /memory\/not-queried/)
+  assert.match(errorOf(await tool(alice, session, 'memory_switch', { id: addedId })), /memory\/not-queried/)
 
   valueOf(await tool(alice, session, 'memory_search', { query: '橘猫' }), 'memory_search')
-  assert.deepEqual(valueOf(await tool(alice, session, 'memory_edit', { id: added.id, old_string: '橘猫', new_string: '狸花猫' }), 'memory_edit'), { ok: true, id: added.id })
-  assert.deepEqual(valueOf(await tool(alice, session, 'memory_delete', { id: added.id }), 'memory_delete'), { ok: true })
+  assert.deepEqual(valueOf(await tool(alice, session, 'memory_edit', { id: addedId, old_string: '橘猫', new_string: '狸花猫' }), 'memory_edit'), { ok: true })
+  assert.deepEqual(valueOf(await tool(alice, session, 'memory_delete', { id: addedId }), 'memory_delete'), { ok: true })
 })
 
 test('search dates are one closed interval over the content time, and omitted dates search everything', async () => {
   const session = await newSession(alice)
   const added = valueOf(await tool(alice, session, 'memory_add', { content: '关于日期的记忆：第一次去海边' }), 'memory_add')
+  assert.deepEqual(added, { ok: true })
   const found = valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边' }), 'memory_search')
+  const addedId = found.memories[0].id
   const updatedAt = found.memories[0].content_updated_at
   const idsOf = value => value.memories.map(memory => memory.id)
 
-  assert.deepEqual(idsOf(valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边' }), 'memory_search')), [added.id],
+  assert.deepEqual(idsOf(valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边' }), 'memory_search')), [addedId],
     'omitting both bounds searches every date')
-  assert.deepEqual(idsOf(valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边', start_at: updatedAt, end_at: updatedAt }), 'memory_search')), [added.id],
+  assert.deepEqual(idsOf(valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边', start_at: updatedAt, end_at: updatedAt }), 'memory_search')), [addedId],
     'both bounds are inclusive, so one instant can select the memory it equals')
-  assert.deepEqual(idsOf(valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边', start_at: updatedAt, end_at: updatedAt + 60000 }), 'memory_search')), [added.id])
-  assert.deepEqual(idsOf(valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边', start_at: updatedAt - 60000, end_at: updatedAt }), 'memory_search')), [added.id])
+  assert.deepEqual(idsOf(valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边', start_at: updatedAt, end_at: updatedAt + 60000 }), 'memory_search')), [addedId])
+  assert.deepEqual(idsOf(valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边', start_at: updatedAt - 60000, end_at: updatedAt }), 'memory_search')), [addedId])
   assert.deepEqual(idsOf(valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边', start_at: updatedAt + 1, end_at: updatedAt + 60000 }), 'memory_search')), [])
   assert.deepEqual(idsOf(valueOf(await tool(alice, session, 'memory_search', { query: '第一次去海边', start_at: updatedAt - 60000, end_at: updatedAt - 1 }), 'memory_search')), [])
 
@@ -282,32 +307,35 @@ test('search dates are one closed interval over the content time, and omitted da
 test('the content time moves only on add and content edit, never on search or switch', async () => {
   const session = await newSession(alice)
   const added = valueOf(await tool(alice, session, 'memory_add', { content: '内容时间测试的记忆：海边日落' }), 'memory_add')
+  assert.deepEqual(added, { ok: true })
   const first = valueOf(await tool(alice, session, 'memory_search', { query: '海边日落' }), 'memory_search').memories[0]
+  const addedId = first.id
   const addedAt = first.content_updated_at
 
   await delay(5)
   assert.equal(valueOf(await tool(alice, session, 'memory_search', { query: '海边日落' }), 'memory_search').memories[0].content_updated_at, addedAt,
     'a search never updates the content time')
-  valueOf(await tool(alice, session, 'memory_switch', { id: added.id }), 'memory_switch')
+  valueOf(await tool(alice, session, 'memory_switch', { id: addedId }), 'memory_switch')
   const switched = valueOf(await tool(alice, session, 'memory_search', { query: '海边日落', is_private: true }), 'memory_search')
   assert.equal(switched.memories[0].content_updated_at, addedAt, 'a switch never updates the content time')
 
   await delay(5)
-  valueOf(await tool(alice, session, 'memory_edit', { id: added.id, old_string: '海边日落', new_string: '海边日出', is_private: true }), 'memory_edit')
+  valueOf(await tool(alice, session, 'memory_edit', { id: addedId, old_string: '海边日落', new_string: '海边日出', is_private: true }), 'memory_edit')
   const edited = valueOf(await tool(alice, session, 'memory_search', { query: '海边日出', is_private: true }), 'memory_search').memories[0]
   assert.ok(edited.content_updated_at > addedAt, `an edit moves the content time; ${edited.content_updated_at} <= ${addedAt}`)
   assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '海边日出', is_private: true, start_at: edited.content_updated_at, end_at: edited.content_updated_at }), 'memory_search').memories.map(memory => memory.id),
-    [added.id], 'the date filter follows the edited content time')
+    [addedId], 'the date filter follows the edited content time')
   assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '海边日出', is_private: true, start_at: addedAt, end_at: addedAt }), 'memory_search').memories, [],
     'the old content time no longer selects it')
 })
 
 test('a search returns at most 20 memories and never exposes an omitted number', async () => {
   const session = await newSession(alice)
-  const ids = []
   for (let index = 0; index < 21; index += 1) {
-    ids.push(valueOf(await tool(alice, session, 'memory_add', { content: `批量检索测试第${index}条` }), 'memory_add').id)
+    assert.deepEqual(valueOf(await tool(alice, session, 'memory_add', { content: `批量检索测试第${index}条` }), 'memory_add'), { ok: true })
   }
+  const ids = []
+  for (let index = 0; index < 21; index += 1) ids.push(idOf(`批量检索测试第${index}条`))
   const found = valueOf(await tool(alice, session, 'memory_search', { query: '批量检索测试' }), 'memory_search')
   assert.equal(found.matched, 21)
   assert.equal(found.returned, 20)
@@ -317,12 +345,15 @@ test('a search returns at most 20 memories and never exposes an omitted number',
   assert.equal(found.memories.some(memory => memory.id === ids[0]), false, 'the omitted number is not returned')
 })
 
-test('a search returns at most 8000 Unicode characters, even for one long memory', async () => {
+test('the 8000-character search budget is also the largest memory a write may store', async () => {
   const session = await newSession(alice)
   const keyword = '字符预算测试'
-  const second = valueOf(await tool(alice, session, 'memory_add', { content: `${keyword}${'一'.repeat(2994)}` }), 'memory_add').id
-  const third = valueOf(await tool(alice, session, 'memory_add', { content: `${keyword}${'二'.repeat(2994)}` }), 'memory_add').id
-  const first = valueOf(await tool(alice, session, 'memory_add', { content: `${keyword}${'三'.repeat(2994)}` }), 'memory_add').id
+  for (const body of [`${keyword}${'一'.repeat(2994)}`, `${keyword}${'二'.repeat(2994)}`, `${keyword}${'三'.repeat(2994)}`]) {
+    assert.deepEqual(valueOf(await tool(alice, session, 'memory_add', { content: body }), 'memory_add'), { ok: true })
+  }
+  const second = idOf(`${keyword}${'一'.repeat(2994)}`)
+  const third = idOf(`${keyword}${'二'.repeat(2994)}`)
+  const first = idOf(`${keyword}${'三'.repeat(2994)}`)
 
   const found = valueOf(await tool(alice, session, 'memory_search', { query: keyword }), 'memory_search')
   assert.equal(found.matched, 3)
@@ -333,20 +364,45 @@ test('a search returns at most 8000 Unicode characters, even for one long memory
   assert.equal(found.memories.some(memory => memory.id === second), false, 'the memory that did not fit is not returned')
   assert.equal(found.memories.reduce((total, memory) => total + [...memory.content].length, 0), 6000)
 
-  const huge = valueOf(await tool(alice, session, 'memory_add', { content: `超长记忆测试${'海'.repeat(8001)}` }), 'memory_add').id
-  assert.ok(storedRows().some(row => row.id === huge), 'the over-budget memory is stored, only its result is withheld')
-  const empty = valueOf(await tool(alice, session, 'memory_search', { query: '超长记忆测试' }), 'memory_search')
-  assert.deepEqual(empty.memories, [], 'a memory larger than the whole budget is not returned at all')
-  assert.equal(empty.returned, 0)
-  assert.equal(empty.matched, 1)
-  assert.equal(empty.characters, 0)
-  assert.equal(empty.truncated, true, 'the omitted number is reported as truncation, never as a result')
+  // Exactly 8000 Unicode characters is storable and is returned whole: the
+  // budget is a per-memory write limit as well as a per-search one.
+  const exact = `${keyword}${'界'.repeat(8000 - keyword.length)}`
+  assert.equal([...exact].length, 8000)
+  assert.deepEqual(valueOf(await tool(alice, session, 'memory_add', { content: exact }), 'memory_add'), { ok: true })
+  const exactFound = valueOf(await tool(alice, session, 'memory_search', { query: keyword }), 'memory_search')
+  assert.deepEqual(exactFound.memories.map(memory => memory.id), [idOf(exact)],
+    'the newest memory fills the budget exactly, so the older three are omitted')
+  assert.equal(exactFound.characters, 8000)
+  assert.equal(exactFound.returned, 1)
+  assert.equal(exactFound.truncated, true)
+
+  // One character over the budget is refused at add, before any row exists:
+  // such a row could never be returned by a search and therefore could never
+  // be edited, deleted or switched (User Story 10, ADR-0002).
+  const over = `${keyword}${'海'.repeat(8001)}`
+  const refusedAdd = errorOf(await tool(alice, session, 'memory_add', { content: over }), 'memory_add')
+  assert.match(refusedAdd, /memory\/invalid-content/)
+  assert.match(refusedAdd, /8000/, 'the refusal names the budget')
+  assert.equal(storedRows().some(row => row.content === over), false, 'an over-budget add stores no row')
+
+  // The post-edit content is bounded the same way; a refused edit changes nothing.
+  const target = `${keyword}编辑目标`
+  assert.deepEqual(valueOf(await tool(alice, session, 'memory_add', { content: target }), 'memory_add'), { ok: true })
+  const targetId = idOf(target)
+  valueOf(await tool(alice, session, 'memory_search', { query: target }), 'memory_search')
+  const refusedEdit = errorOf(await tool(alice, session, 'memory_edit', {
+    id: targetId, old_string: '编辑目标', new_string: `${keyword}${'改'.repeat(8001)}`,
+  }), 'memory_edit')
+  assert.match(refusedEdit, /memory\/invalid-content/)
+  assert.equal(storedRows().find(row => row.id === targetId)?.content, target, 'a refused over-budget edit leaves the row unchanged')
 })
 
 test('search matches literal text, not SQL wildcards', async () => {
   const session = await newSession(alice)
-  const percent = valueOf(await tool(alice, session, 'memory_add', { content: '进度 100% 完成' }), 'memory_add').id
-  const plain = valueOf(await tool(alice, session, 'memory_add', { content: '进度 100 完成' }), 'memory_add').id
+  assert.deepEqual(valueOf(await tool(alice, session, 'memory_add', { content: '进度 100% 完成' }), 'memory_add'), { ok: true })
+  assert.deepEqual(valueOf(await tool(alice, session, 'memory_add', { content: '进度 100 完成' }), 'memory_add'), { ok: true })
+  const percent = idOf('进度 100% 完成')
+  const plain = idOf('进度 100 完成')
   assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '%' }), 'memory_search').memories.map(memory => memory.id), [percent],
     'a percent sign is searched as the character it is')
   assert.deepEqual(valueOf(await tool(alice, session, 'memory_search', { query: '100 完成' }), 'memory_search').memories.map(memory => memory.id), [plain])
@@ -354,14 +410,15 @@ test('search matches literal text, not SQL wildcards', async () => {
 
 test('an edit re-attributes the memory to the editing session', async () => {
   const bobSession = await newSession(bob)
-  const added = valueOf(await tool(bob, bobSession, 'memory_add', { content: '归属派生测试：周末爬山' }), 'memory_add')
+  assert.deepEqual(valueOf(await tool(bob, bobSession, 'memory_add', { content: '归属派生测试：周末爬山' }), 'memory_add'), { ok: true })
+  const addedId = idOf('归属派生测试：周末爬山')
   assert.equal(valueOf(await tool(bob, bobSession, 'memory_search', { query: '归属派生测试' }), 'memory_search').memories[0].owner_short_id, bob.user.shortId)
   const aliceSession = await newSession(alice)
   const aliceView = valueOf(await tool(alice, aliceSession, 'memory_search', { query: '归属派生测试' }), 'memory_search')
   assert.equal(aliceView.memories[0].owner_short_id, bob.user.shortId, 'searching never rewrites the owner')
 
-  valueOf(await tool(alice, aliceSession, 'memory_edit', { id: added.id, old_string: '周末爬山', new_string: '周末徒步' }), 'memory_edit')
+  assert.deepEqual(valueOf(await tool(alice, aliceSession, 'memory_edit', { id: addedId, old_string: '周末爬山', new_string: '周末徒步' }), 'memory_edit'), { ok: true })
   const edited = valueOf(await tool(alice, aliceSession, 'memory_search', { query: '周末徒步' }), 'memory_search')
   assert.equal(edited.memories[0].owner_short_id, alice.user.shortId, 'the editing session becomes the source')
-  assert.equal(storedRows().find(row => row.id === added.id)?.source_session, aliceSession)
+  assert.equal(storedRows().find(row => row.id === addedId)?.source_session, aliceSession)
 })

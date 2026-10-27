@@ -8,6 +8,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../http" },
-    { "path": "../identity" }
+    { "path": "../identity" },
+    { "path": "../memory" }
   ]
 }

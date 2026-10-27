@@ -46,13 +46,18 @@ async function newSession(identity) {
 /** One plain turn; the model double acknowledges it, which assembles the prompt. */
 async function note(identity, sessionId, text) {
   await request('/chat/send', identity.token, { sessionId, requestId: `impression-note-${++requestNo}`, text })
+  // The acknowledgement names the note it answers. A bare shared marker would
+  // let a previous turn's reply satisfy this wait, so a note could return while
+  // its own turn was still assembling; matching the unique text removes that
+  // stale-marker race.
+  const marker = `NOTE_SAVED:${text}`
   for (let attempt = 0; attempt < 600; attempt += 1) {
     const { projection } = await request('/chat/read', identity.token, { sessionId })
-    if (projection.messages.some(message => message.text === 'NOTE_SAVED')) return
+    if (projection.messages.some(message => message.text === marker)) return
     if (projection.error) assert.fail(`chat failed before the note finished: ${projection.error}`)
     await delay(25)
   }
-  assert.fail(`the note never finished in session ${sessionId}`)
+  assert.fail(`the note ${text} never finished in session ${sessionId}`)
 }
 
 /**
@@ -89,6 +94,20 @@ function valueOf(raw, label) {
 
 /** The failure text of one failed tool call. */
 function errorOf(raw) { return blocksText(raw) }
+
+/** The latest non-runtime user text in one request: a note turn sends its text verbatim. */
+function latestUserText(body) {
+  const messages = Array.isArray(body.messages) ? body.messages : []
+  const texts = messages.filter(message => message.role === 'user').map(message => {
+    const content = message.content
+    if (typeof content === 'string') return content
+    if (!Array.isArray(content)) return ''
+    return content.map(block => typeof block?.text === 'string' ? block.text : '').join('')
+  })
+  // dsh appends its own runtime-context user message; the note is the one
+  // before it.
+  return texts.filter(text => text !== '' && !text.startsWith('Current runtime context.')).at(-1) ?? ''
+}
 
 /**
  * The system prompt a model request carried, as one string.
@@ -147,7 +166,7 @@ before(async () => {
     emit({ type: 'message_start', message: { id: 'impression-message', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
     if (command === undefined) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'NOTE_SAVED' } })
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `NOTE_SAVED:${latestUserText(body)}` } })
     } else if (result !== undefined) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `RESULT:${JSON.stringify(toolResultBlocks(result))}` } })
@@ -301,9 +320,12 @@ test('the Fairy reads first, then replaces the whole impression, and memory work
 
   // Memory work is a different authority: adding, searching and editing a
   // long-term memory leaves the impression untouched.
-  const memory = valueOf(await tool(alice, secondSession, 'memory_add', { content: '印象之外的长期记忆' }), 'memory_add')
-  valueOf(await tool(alice, secondSession, 'memory_search', { query: '印象之外' }), 'memory_search')
-  valueOf(await tool(alice, secondSession, 'memory_edit', { id: memory.id, old_string: '长期记忆', new_string: '具体事实' }), 'memory_edit')
+  const added = valueOf(await tool(alice, secondSession, 'memory_add', { content: '印象之外的长期记忆' }), 'memory_add')
+  assert.deepEqual(added, { ok: true }, 'memory_add answers a simple confirmation')
+  const search = valueOf(await tool(alice, secondSession, 'memory_search', { query: '印象之外' }), 'memory_search')
+  const memoryId = search.memories.find(memory => memory.content === '印象之外的长期记忆')?.id
+  assert.ok(Number.isSafeInteger(memoryId), `the added memory must be searchable; got ${JSON.stringify(search)}`)
+  assert.deepEqual(valueOf(await tool(alice, secondSession, 'memory_edit', { id: memoryId, old_string: '长期记忆', new_string: '具体事实' }), 'memory_edit'), { ok: true })
   assert.equal(valueOf(await tool(alice, secondSession, 'impression_read', {}), 'impression_read').content, 'ALICE-FAIRY-EDITED',
     'memory maintenance-style work never rewrites the impression')
 

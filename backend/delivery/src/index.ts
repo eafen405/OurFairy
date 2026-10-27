@@ -12,6 +12,7 @@ import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES } from '@ourfairy/dsh-attachments'
+import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
 import { ownerOf, shortIdOf } from '@ourfairy/dsh-identity/owner'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -175,7 +176,7 @@ export function apply(ctx: Context) {
     // The memory maintenance child may use long-term memory tools only; a
     // scope's own registration cannot be hidden by dsh's tool restriction, so
     // every product row skips this preset.
-    if (agent.session.header?.agentPreset === 'ourfairy:memory-maintenance') return undefined
+    if (agent.session.header?.agentPreset === MAINTENANCE_PRESET) return undefined
     agent.ctx.tools.register(defineTool({ name: 'deliver_message',
       description: 'Deliver the specified text and optional files selected by readable path or current-session messageId/index to a user’s fixed primary chat. This does not read their history or start their Fairy. The call authorizes delivery; no extra sharing approval is needed.',
       parameters: { recipientShortId: { type: 'integer', required: true }, text: { type: 'string', required: true },

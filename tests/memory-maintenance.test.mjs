@@ -455,6 +455,47 @@ test('maintenance waits for silence, runs beside the source, freezes its interva
   assert.ok(endings.at(-1).seq > completed.watermark_seq, 'the later turn starts the next interval')
 })
 
+test('saving the maintenance settings never interrupts a running child, which still advances the watermark', async () => {
+  resetChildDouble()
+  const alice = await user('maintenance-save')
+  const session = await newSession(alice)
+  for (let index = 0; index < 14; index += 1) {
+    await sendTurn(alice, session, `TURN:${index}:保存不打断前置第${index}轮`)
+  }
+  await waitFor('the prerequisite observation row', () => maintenanceRow(session))
+
+  holdChildRequest = true
+  await sendTurn(alice, session, 'TURN:14:保存期间维护')
+  await waitFor('the held maintenance child', () => heldChild !== null ? heldChild : undefined)
+  const running = maintenanceRow(session)
+  assert.equal(running.status, 1, 'the child owns the running interval')
+  assert.ok(typeof running.child_session === 'string' && running.child_session.length > 0)
+  const childSession = running.child_session
+
+  // The save lands while the child is mid-turn. It writes configuration only:
+  // the running interval keeps its child, its frozen cut and its watermark.
+  const saved = await request('/gateway/maintenance', admin.token, { triggerTurns: 20, decayHours: 8 })
+  assert.deepEqual(saved.maintenance, { triggerTurns: 20, decayHours: 8 })
+  const afterSave = maintenanceRow(session)
+  assert.equal(afterSave.status, 1, 'the save leaves the running interval running')
+  assert.equal(afterSave.child_session, childSession, 'the save keeps the same child')
+  assert.equal(afterSave.cut_seq, running.cut_seq, 'the save keeps the frozen cut')
+  assert.equal(afterSave.watermark_seq, running.watermark_seq, 'the save does not move the watermark')
+
+  heldChild.release()
+  const completed = await waitFor('the uninterrupted completion', () => {
+    const row = maintenanceRow(session)
+    return row?.status === 0 && row?.watermark_seq >= 0 ? row : undefined
+  })
+  assert.equal(completed.child_session, childSession, 'the running child, not a replacement, completed the interval')
+  assert.equal(completed.watermark_seq, completed.cut_seq, 'the completed child advances the watermark to its frozen cut')
+  assert.equal(childRequests.length, 1, 'no second child was started for the interval')
+
+  // Restore the deployment defaults this file's other cases read.
+  const restored = await request('/gateway/maintenance', admin.token, { triggerTurns: 15, decayHours: 6 })
+  assert.deepEqual(restored.maintenance, { triggerTurns: 15, decayHours: 6 })
+})
+
 test('a failed maintenance run keeps the watermark and resumes the same child', async () => {
   resetChildDouble()
   const alice = await user('maintenance-retry')

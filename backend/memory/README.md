@@ -27,11 +27,11 @@ the `maintenance_state` rows, so a restart recomputes from durable state.
 
 | Tool | Inputs | Success |
 | --- | --- | --- |
-| `memory_add` | `content`; optional `is_private` (default normal) | `{ ok, id }` |
+| `memory_add` | `content`; optional `is_private` (default normal) | `{ ok }` |
 | `memory_search` | `query`; optional `start_at`, `end_at`, optional `is_private` (default normal) | memories plus budget metadata |
-| `memory_edit` | `id`, `old_string`, `new_string`; optional `is_private` (default normal) | `{ ok, id }` |
+| `memory_edit` | `id`, `old_string`, `new_string`; optional `is_private` (default normal) | `{ ok }` |
 | `memory_delete` | `id`; optional `is_private` (default normal) | `{ ok }` |
-| `memory_switch` | `id` only | `{ ok, id, is_private }` |
+| `memory_switch` | `id` only | `{ ok }` |
 | `impression_read` | none | `{ content, updated_at, max_characters }` |
 | `impression_edit` | `content` | `{ ok }` |
 
@@ -95,10 +95,16 @@ Result shape:
 (newest first), then by number. The row returns at most 20 memories and at most
 8000 Unicode characters of content. A memory that does not fit is omitted whole
 — its content is never clipped and its number is never returned — and
-`truncated` reports that something was left out. A single memory whose own
-content exceeds the character budget is omitted like any other, so no
-over-budget body reaches the model. The model therefore cannot act on an id it
-has not seen.
+`truncated` reports that something was left out. The model therefore cannot act
+on an id it has not seen.
+
+The 8000-character budget is also the largest memory a write may store:
+`memory_add` and `memory_edit` refuse longer content with
+`memory/invalid-content`, before any row is written (an edit checks the
+post-edit content). Without that limit a row larger than the whole budget would
+be stored but omitted by every search, so no session could ever see its number
+and edit, delete or switch it. Exactly 8000 Unicode characters is accepted and
+returned whole.
 
 `memory_edit` requires `old_string` to occur exactly once in the target
 content; zero or several occurrences are errors, and there is no `replace_all`.
@@ -201,10 +207,13 @@ The child is a native dsh Agent (`ctx.agents.create`) with:
   source session;
 - no inherited parent history, seed or prompt;
 - a scoped setup that removes every inherited tool (`tools.restrict({ allow: [] })`)
-  and contributes only the maintenance instruction; the memory row registers
-  the five memory tools on it, and every other product row skips this preset
-  (the four tool rows, the spaces prompt context, the attachments stream/refresh
-  hooks, and the spaces working-directory/sandbox-policy prompt providers);
+  and contributes only the maintenance instruction. The memory row registers the
+  five memory tools on it and every other product tool row skips this preset, so
+  the child's whole tool catalog is exactly those five. The spaces prompt context
+  contributes nothing for it either, so the maintenance instruction is the only
+  product instruction the child carries. `tests/memory-maintenance.test.mjs`
+  asserts the tool catalog and `tests/memory-policy.test.mjs` asserts the
+  assembled prompt;
 - the configured light-model route, read again when the child starts, with
   `MiniMax-M3.1-Flash` as the default. The main session's shared model
   selection is never read or written for this child.
@@ -274,7 +283,7 @@ Failures are native tool failures whose message starts with the code:
 
 | Code | Meaning |
 | --- | --- |
-| `memory/invalid-content` | the content to store is empty |
+| `memory/invalid-content` | the content to store is empty, or longer than the 8000-character search budget (also checked on the post-edit content) |
 | `memory/invalid-query` | the search query is empty |
 | `memory/invalid-range` | one date bound is missing, or the bounds are not a valid closed interval |
 | `memory/missing-owner` | the calling session carries no owner (or a maintenance child has no owned source session) |

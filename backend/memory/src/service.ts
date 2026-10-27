@@ -10,7 +10,7 @@
  */
 import { Service } from '@deepseek-ai/cordis'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
-import { MemoryError } from './errors.js'
+import { MemoryError } from './tool-kit.js'
 import { MAINTENANCE_PRESET } from './preset.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -244,10 +244,22 @@ function remember(gate: Map<string, Set<number>>, sessionId: string, ids: readon
   gate.set(sessionId, known)
 }
 
-/** Refuse content that would store nothing. */
+/**
+ * Refuse content that would store nothing or could never be returned.
+ *
+ * The search budget is also a write limit: a memory larger than the whole
+ * budget is omitted by every search, so no session could ever see its number
+ * and therefore could never edit, delete or switch it. Storing it would create
+ * a row the product has no way to reach (User Story 10, ADR-0002).
+ */
 function assertContent(content: string): void {
   if (typeof content !== 'string' || content.trim() === '') {
     throw new MemoryError(400, 'memory/invalid-content', 'provide the text to remember')
+  }
+  const characters = [...content].length
+  if (characters > SEARCH_CHARACTER_BUDGET) {
+    throw new MemoryError(400, 'memory/invalid-content',
+      `the memory is ${String(characters)} Unicode characters; the limit is ${String(SEARCH_CHARACTER_BUDGET)}`)
   }
 }
 
