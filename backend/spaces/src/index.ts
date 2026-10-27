@@ -36,6 +36,9 @@ export function apply(ctx: Context, config: { readonly root: string }): void {
   ctx.inject(['systemPrompt'], context => {
     context.systemPrompt.context({ name: 'ourfairy:spaces', order: 0, text: ({ agent }) => {
       if (!agent) return ''
+      // The memory maintenance child gets only its own narrow material and
+      // instruction; deployment file-space context is not part of that.
+      if (agent.session.header?.agentPreset === 'ourfairy:memory-maintenance') return ''
       return `Authorized file spaces: ${scope.writeRoots(agent.session).map(root => JSON.stringify(root)).join(', ')}. Private space: ${scope.privateRoot(agent.session)}. Public files are shared. Use the shared env directory for dependencies; network access is available. File rights do not change with cwd or escalation.`
     } })
   })

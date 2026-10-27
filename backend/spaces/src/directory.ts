@@ -11,15 +11,23 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import { pathInside } from './scope.js'
 
+/** The preset the memory row creates for a per-source maintenance child. */
+const MAINTENANCE_PRESET = 'ourfairy:memory-maintenance'
+
 /** Mounted by the `scoped-directory` row; the scope itself stays in the spaces row. */
 export default class ScopedDirectory extends WorkingDirectoryService {
   static override inject = [...WorkingDirectoryService.inject, 'ourfairySpaces']
 
   override get(session: Session): string {
+    // A maintenance child has no owner and no file tools. The working-directory
+    // row still asks this provider for prompt context, so answer from the shared
+    // root instead of deriving an owner-bound private directory that cannot exist.
+    if (session.header?.agentPreset === MAINTENANCE_PRESET) return this.ctx.ourfairySpaces.root
     return this.ctx.sessionProjections.stateOf(session, 'workingDirectory') ?? this.ctx.ourfairySpaces.privateRoot(session)
   }
 
   override async ensure(agent: Agent, signal?: AbortSignal): Promise<string> {
+    if (agent.session.header?.agentPreset === MAINTENANCE_PRESET) return this.get(agent.session)
     const scope = this.ctx.ourfairySpaces
     return scope.run(agent.session, async () => {
       const current = this.get(agent.session)

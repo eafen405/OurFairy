@@ -313,3 +313,11 @@
           name: '@ourfairy/dsh-memory'
           config:
             path: !!js dshHomePath('memory/memory.sqlite')
+            # Maintenance settings. Defaults and ranges live on the row's Config
+            # schema; the environment only seeds a deployment, and the next
+            # evaluation reads the live value. #247 binds these two numbers to
+            # the gateway's “记忆 → 维护” tree.
+            maintenanceTurns: !!js Number(process.env.OURFAIRY_MEMORY_MAINTENANCE_TURNS ?? 15)
+            maintenanceDecayHours: !!js Number(process.env.OURFAIRY_MEMORY_MAINTENANCE_DECAY_HOURS ?? 6)
+            maintenanceModel: !!js process.env.OURFAIRY_MEMORY_MAINTENANCE_MODEL ?? 'MiniMax-M3.1-Flash'
+            maintenanceProvider: !!js process.env.OURFAIRY_MEMORY_MAINTENANCE_PROVIDER ?? 'minimax-cn'

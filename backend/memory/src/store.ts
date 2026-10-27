@@ -9,9 +9,11 @@
  * an old search result cannot point at a new memory
  * ([ADR-0002](../../../docs/adr/0002-physical-memory-deletion.md)).
  *
- * The impression and maintenance tables are created here, once, so the later
- * tickets add behaviour rather than a second migration; nothing in this module
- * reads or writes them yet.
+ * The impression table is created here, once, so its ticket adds behaviour
+ * rather than a second migration. The maintenance state is driven by this row:
+ * one row per source session records the completed watermark, the frozen cut of
+ * the interval now being maintained, and the child session that owns that
+ * interval.
  *
  * @module @ourfairy/dsh-memory/src/store
  */
@@ -20,7 +22,7 @@ import { dirname } from 'node:path'
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite'
 import { MemoryError } from './errors.js'
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -46,8 +48,9 @@ CREATE TABLE IF NOT EXISTS impressions (
 CREATE TABLE IF NOT EXISTS maintenance_state (
   source_session TEXT PRIMARY KEY,
   watermark_seq INTEGER NOT NULL DEFAULT -1,     -- last event position a completed cut covered
+  cut_seq INTEGER,                               -- frozen cut of the active interval / latest observed closed turn
   last_closed_at INTEGER,                        -- the newest closed user turn's time
-  child_session TEXT,                            -- the maintenance child session, while one exists
+  child_session TEXT,                            -- the maintenance child session of the active or last interval
   status INTEGER NOT NULL DEFAULT 0,             -- 0 idle, 1 running, 2 failed
   updated_at INTEGER NOT NULL
 );
@@ -62,6 +65,18 @@ export type MemoryRow = {
   source_session: string
   created_at: number
   content_updated_at: number
+}
+
+/** One row of the `maintenance_state` table, as the engine reads it. */
+export type MaintenanceRow = {
+  source_session: string
+  watermark_seq: number
+  cut_seq: number | null
+  last_closed_at: number | null
+  child_session: string | null
+  /** 0 idle, 1 running, 2 failed. */
+  status: number
+  updated_at: number
 }
 
 /** One search in one layer, with this search's own limits. */
@@ -218,6 +233,109 @@ export class MemoryStore {
     })
   }
 
+  /** One source session's maintenance state, or undefined before its first observation. */
+  maintenance(sourceSession: string): MaintenanceRow | undefined {
+    return rowOf<MaintenanceRow>(this.#db.prepare('SELECT * FROM maintenance_state WHERE source_session = ?').get(sourceSession))
+  }
+
+  /** Every source session the memory row has observed, for the restart scan. */
+  maintenanceRows(): MaintenanceRow[] {
+    return rowsOf<MaintenanceRow>(this.#db.prepare('SELECT * FROM maintenance_state').all())
+  }
+
+  /**
+   * Record the latest closed user turn an idle source session has shown.
+   *
+   * The frozen cut doubles as the latest observed position while no interval is
+   * active: a newer closed turn moves it and its time, while an older or equal
+   * position leaves the stored time alone. That second rule is what lets an
+   * operator-visible time adjustment stand instead of being overwritten by the
+   * next evaluation.
+   */
+  observeMaintenance({ sourceSession, lastClosedSeq, lastClosedAt }: {
+    readonly sourceSession: string
+    readonly lastClosedSeq: number
+    readonly lastClosedAt: number
+  }): void {
+    const now = Date.now()
+    const row = this.maintenance(sourceSession)
+    if (row === undefined) {
+      this.#db.prepare(`INSERT INTO maintenance_state
+        (source_session, watermark_seq, cut_seq, last_closed_at, child_session, status, updated_at)
+        VALUES (?, -1, ?, ?, NULL, 0, ?)`).run(sourceSession, lastClosedSeq, lastClosedAt, now)
+      return
+    }
+    if (row.status !== 0) return
+    if (row.cut_seq !== null && lastClosedSeq <= row.cut_seq && row.last_closed_at !== null) return
+    this.#db.prepare('UPDATE maintenance_state SET cut_seq = ?, last_closed_at = ?, updated_at = ? WHERE source_session = ?')
+      .run(lastClosedSeq, lastClosedAt, now, sourceSession)
+  }
+
+  /**
+   * Freeze one interval and take it for one child, in one immediate transaction.
+   *
+   * A running or failed interval is never claimed again: the same child owns
+   * it until it completes, and a failed child is resumed rather than replaced.
+   * @returns whether this call froze the interval.
+   */
+  claimMaintenance({ sourceSession, cutSeq, lastClosedAt, childSession }: {
+    readonly sourceSession: string
+    readonly cutSeq: number
+    readonly lastClosedAt: number
+    readonly childSession: string
+  }): boolean {
+    return this.#transaction(() => {
+      const row = this.maintenance(sourceSession)
+      if (row !== undefined && row.status !== 0) return false
+      const now = Date.now()
+      if (row === undefined) {
+        this.#db.prepare(`INSERT INTO maintenance_state
+          (source_session, watermark_seq, cut_seq, last_closed_at, child_session, status, updated_at)
+          VALUES (?, -1, ?, ?, ?, 1, ?)`).run(sourceSession, cutSeq, lastClosedAt, childSession, now)
+        return true
+      }
+      this.#db.prepare(`UPDATE maintenance_state
+        SET cut_seq = ?, last_closed_at = ?, child_session = ?, status = 1, updated_at = ?
+        WHERE source_session = ?`).run(cutSeq, lastClosedAt, childSession, now, sourceSession)
+      return true
+    })
+  }
+
+  /** Keep the failed interval and its child for a resume; the watermark stays put. */
+  failMaintenance({ sourceSession, childSession }: {
+    readonly sourceSession: string
+    readonly childSession: string
+  }): void {
+    this.#db.prepare(`UPDATE maintenance_state
+      SET child_session = ?, status = 2, updated_at = ?
+      WHERE source_session = ?`).run(childSession, Date.now(), sourceSession)
+  }
+
+  /**
+   * Mark the frozen interval complete. Zero writes complete just like any
+   * other run: the watermark is the frozen cut, so the next interval begins
+   * after it.
+   */
+  completeMaintenance({ sourceSession, cutSeq, childSession }: {
+    readonly sourceSession: string
+    readonly cutSeq: number
+    readonly childSession: string
+  }): void {
+    this.#db.prepare(`UPDATE maintenance_state
+      SET watermark_seq = ?, child_session = ?, status = 0, updated_at = ?
+      WHERE source_session = ?`).run(cutSeq, childSession, Date.now(), sourceSession)
+  }
+
+  /**
+   * Drop the frozen cut and child without advancing the watermark, so a child
+   * that never came into existence can be replaced by a fresh one.
+   */
+  resetMaintenance(sourceSession: string): void {
+    this.#db.prepare(`UPDATE maintenance_state
+      SET cut_seq = NULL, child_session = NULL, status = 0, updated_at = ?
+      WHERE source_session = ?`).run(Date.now(), sourceSession)
+  }
+
   #migrate(): void {
     this.#transaction(() => {
       const version = this.#storedVersion()
@@ -230,9 +348,15 @@ export class MemoryStore {
         throw new MemoryError(500, 'memory/schema-too-new', `the database file was written by schema version ${String(version)}`)
       }
       if (version === SCHEMA_VERSION) return
-      // Every shipped step so far is part of the same schema: `IF NOT EXISTS`
-      // makes the whole block idempotent, and a newer column is added below as
-      // the file exists to be upgraded.
+      if (version < 2) {
+        // Version 1 shipped the maintenance table without the frozen cut.
+        // SQLite cannot express `ADD COLUMN IF NOT EXISTS`, so the column list
+        // decides; a file already carrying the column is left alone.
+        const columns = rowsOf<{ name: string }>(this.#db.prepare('PRAGMA table_info(maintenance_state)').all())
+        if (!columns.some(column => column.name === 'cut_seq')) {
+          this.#db.exec('ALTER TABLE maintenance_state ADD COLUMN cut_seq INTEGER')
+        }
+      }
       this.#db.exec(SCHEMA)
       this.#setVersion()
     })
