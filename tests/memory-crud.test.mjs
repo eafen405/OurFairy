@@ -326,17 +326,18 @@ test('a search returns at most 8000 Unicode characters, even for one long memory
   assert.equal(found.characters, 6000)
   assert.equal(found.truncated, true)
   assert.deepEqual(found.memories.map(memory => memory.id), [first, third])
+  assert.equal(found.memories.some(memory => memory.id === second), false, 'the memory that did not fit is not returned')
   assert.equal(found.memories.reduce((total, memory) => total + [...memory.content].length, 0), 6000)
 
   const huge = valueOf(await tool(alice, session, 'memory_add', { content: `超长记忆测试${'海'.repeat(8001)}` }), 'memory_add').id
+  assert.ok(storedRows().some(row => row.id === huge), 'the over-budget memory is stored, only its result is withheld')
   const empty = valueOf(await tool(alice, session, 'memory_search', { query: '超长记忆测试' }), 'memory_search')
   assert.deepEqual(empty.memories, [], 'a memory larger than the whole budget is not returned at all')
   assert.equal(empty.returned, 0)
   assert.equal(empty.matched, 1)
   assert.equal(empty.characters, 0)
   assert.equal(empty.truncated, true, 'the omitted number is reported as truncation, never as a result')
-  void huge
-}) 
+})
 
 test('search matches literal text, not SQL wildcards', async () => {
   const session = await newSession(alice)
