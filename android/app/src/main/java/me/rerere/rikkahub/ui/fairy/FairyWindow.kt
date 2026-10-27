@@ -256,7 +256,7 @@ fun FairyScreen(
                 val eyeGlow = FairyEyeGlow(unit, tokens.fairyGlow)
                 val paint = FairyScreenPaint(size, center, eyePx, tokens.fairyGlow)
                 val hudLayout = measurer?.let {
-                    FairyHudLayout(it, this, tokens.labelFontFamily, hudWord, tokens.fairyLink, tokens.textMuted)
+                    FairyHudLayout(it, this, tokens.telemetryFontFamily, hudWord, tokens.fairyLink, tokens.textMuted)
                 }
                 val scanStep = 2.dp.toPx()
                 val border = 1.dp.toPx()

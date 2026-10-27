@@ -56,6 +56,7 @@ import me.rerere.rikkahub.service.RemoteReceiveController
 import me.rerere.rikkahub.ui.fairy.FairyAppTheme
 import me.rerere.rikkahub.ui.fairy.FairyConsolePage
 import me.rerere.rikkahub.ui.fairy.FairyConversationPage
+import me.rerere.rikkahub.ui.fairy.FairyCrtPowerDown
 import me.rerere.rikkahub.ui.fairy.FairyLastLocation
 import me.rerere.rikkahub.ui.fairy.FairySettingsPage
 import me.rerere.rikkahub.ui.identity.GatewayPage
@@ -133,6 +134,9 @@ class RouteActivity : ComponentActivity() {
         val currentIdentity by session.identity.collectAsStateWithLifecycle()
         val user = currentIdentity?.user
         var identitySettled by remember { mutableStateOf(false) }
+        // Sign-in hands control here so the CRT collapse can play after the session
+        // is live but before the gate swaps the page out from under it.
+        var poweringDown by remember { mutableStateOf(false) }
         val identityScope = IdentityScope(signedIn = user != null, isAdmin = user?.isAdmin == true)
         val backStack = rememberNavBackStack(Screen.SignIn)
         val lastLocation = remember { FairyLastLocation(this@RouteActivity) }
@@ -158,98 +162,103 @@ class RouteActivity : ComponentActivity() {
                 val destination = (backStack.lastOrNull() as? Screen)?.toIdentityDestination()
                 when {
                     !identitySettled -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                    IdentityAccessPolicy.mayCompose(destination, identityScope) -> NavDisplay(
-                        backStack = backStack,
-                        entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator()),
-                        modifier = Modifier.fillMaxSize(),
-                        onBack = { backStack.removeLastOrNull() },
-                        transitionSpec = {
-                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
-                            else slideInHorizontally { it } togetherWith
-                                slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+                    poweringDown || IdentityAccessPolicy.mayCompose(destination, identityScope) -> FairyCrtPowerDown(
+                        active = poweringDown,
+                        onCollapsed = {
+                            backStack.clear()
+                            backStack.add(Screen.Home)
+                            poweringDown = false
                         },
-                        popTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith slideOutHorizontally { it }
-                        },
-                        predictivePopTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith slideOutHorizontally { it }
-                        },
-                        entryProvider = entryProvider {
-                            entry<Screen.SignIn> {
-                                IdentitySignInPage(
-                                    onSignedIn = {
-                                        backStack.clear()
-                                        backStack.add(Screen.Home)
-                                    },
-                                    onRegister = {
-                                        backStack.clear()
-                                        backStack.add(Screen.Register)
-                                    },
-                                )
-                            }
+                    ) {
+                        NavDisplay(
+                            backStack = backStack,
+                            entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator()),
+                            modifier = Modifier.fillMaxSize(),
+                            onBack = { backStack.removeLastOrNull() },
+                            transitionSpec = {
+                                if (backStack.size == 1) fadeIn() togetherWith fadeOut()
+                                else slideInHorizontally { it } togetherWith
+                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+                            },
+                            popTransitionSpec = {
+                                slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith slideOutHorizontally { it }
+                            },
+                            predictivePopTransitionSpec = {
+                                slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith slideOutHorizontally { it }
+                            },
+                            entryProvider = entryProvider {
+                                entry<Screen.SignIn> {
+                                    IdentitySignInPage(
+                                        onSignedIn = { poweringDown = true },
+                                        onRegister = {
+                                            backStack.clear()
+                                            backStack.add(Screen.Register)
+                                        },
+                                    )
+                                }
 
-                            entry<Screen.Register> {
-                                IdentityRegisterPage(
-                                    onRegistered = {
-                                        backStack.clear()
-                                        backStack.add(Screen.Home)
-                                    },
-                                    onBackToSignIn = {
-                                        backStack.clear()
-                                        backStack.add(Screen.SignIn)
-                                    },
-                                )
-                            }
+                                entry<Screen.Register> {
+                                    IdentityRegisterPage(
+                                        // Same power-down bookend as sign-in: both leave
+                                        // the identity shell for the console.
+                                        onRegistered = { poweringDown = true },
+                                        onBackToSignIn = {
+                                            backStack.clear()
+                                            backStack.add(Screen.SignIn)
+                                        },
+                                    )
+                                }
 
-                            entry<Screen.Home> {
-                                FairyConsolePage(
-                                    onOpen = { backStack.add(it) },
-                                )
-                            }
+                                entry<Screen.Home> {
+                                    FairyConsolePage(
+                                        onOpen = { backStack.add(it) },
+                                    )
+                                }
 
-                            entry<Screen.Settings> {
-                                FairySettingsPage(
-                                    onOpenGateway = { backStack.add(Screen.Gateway) },
-                                    onSignedOut = {
-                                        backStack.clear()
-                                        backStack.add(Screen.SignIn)
-                                    },
-                                    onBack = { backStack.removeLastOrNull() },
-                                )
-                            }
+                                entry<Screen.Settings> {
+                                    FairySettingsPage(
+                                        onOpenGateway = { backStack.add(Screen.Gateway) },
+                                        onSignedOut = {
+                                            backStack.clear()
+                                            backStack.add(Screen.SignIn)
+                                        },
+                                        onBack = { backStack.removeLastOrNull() },
+                                    )
+                                }
 
-                            entry<Screen.Conversation> { key ->
-                                FairyConversationPage(
-                                    sessionId = key.sessionId,
-                                    onBack = {
-                                        backStack.clear()
-                                        backStack.add(Screen.Home)
-                                    },
-                                    onOpenConversation = { id -> backStack[backStack.lastIndex] = Screen.Conversation(id) },
-                                    onSettings = { backStack.add(Screen.Settings) },
-                                )
-                            }
+                                entry<Screen.Conversation> { key ->
+                                    FairyConversationPage(
+                                        sessionId = key.sessionId,
+                                        onBack = {
+                                            backStack.clear()
+                                            backStack.add(Screen.Home)
+                                        },
+                                        onOpenConversation = { id -> backStack[backStack.lastIndex] = Screen.Conversation(id) },
+                                        onSettings = { backStack.add(Screen.Settings) },
+                                    )
+                                }
 
-                            entry<Screen.Sessions> {
-                                FairyConversationPage(
-                                    sessionId = null,
-                                    onBack = {
-                                        backStack.clear()
-                                        backStack.add(Screen.Home)
-                                    },
-                                    onOpenConversation = { id -> backStack[backStack.lastIndex] = Screen.Conversation(id) },
-                                    onSettings = { backStack.add(Screen.Settings) },
-                                )
-                            }
+                                entry<Screen.Sessions> {
+                                    FairyConversationPage(
+                                        sessionId = null,
+                                        onBack = {
+                                            backStack.clear()
+                                            backStack.add(Screen.Home)
+                                        },
+                                        onOpenConversation = { id -> backStack[backStack.lastIndex] = Screen.Conversation(id) },
+                                        onSettings = { backStack.add(Screen.Settings) },
+                                    )
+                                }
 
-                            entry<Screen.Gateway> {
-                                GatewayPage(
-                                    onBack = { backStack.removeLastOrNull() },
-                                )
-                            }
+                                entry<Screen.Gateway> {
+                                    GatewayPage(
+                                        onBack = { backStack.removeLastOrNull() },
+                                    )
+                                }
 
-                        },
-                    )
+                            },
+                        )
+                    }
                     else -> IdentityNotReadyPage(identity = identityScope, onSignIn = {
                         backStack.clear()
                         backStack.add(Screen.SignIn)

@@ -15,6 +15,7 @@
     <string name="identity_not_ready_body">This area is not part of the first version and cannot be opened here.</string>
     <string name="identity_not_ready_signed_out">Sign in to continue.</string>
     <string name="identity_working">Working…</string>
+    <string name="identity_signing_in">Signing in…</string>
     <string name="identity_unreachable">The backend could not be reached.</string>
     <string name="gateway_title">Shared gateway</string>
     <string name="gateway_explain">These settings are shared by every conversation on the backend. A saved model selection applies from each conversation\'s next reply; a reply already running finishes on the model it started with.</string>

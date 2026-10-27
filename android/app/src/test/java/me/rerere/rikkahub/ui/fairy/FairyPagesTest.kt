@@ -37,6 +37,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DisplayPreferences
 import me.rerere.rikkahub.data.remote.*
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
+import me.rerere.rikkahub.ui.identity.IdentitySignInPage
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -549,5 +550,15 @@ class FairyPagesTest {
             "Fairy 正文左右留白 $fairyLeft / $fairyRight dp 应对称",
             abs(fairyLeft - fairyRight) <= 1f,
         )
+    }
+
+    @Test fun `sign in uses the instrument surface`() {
+        show { IdentitySignInPage(onSignedIn = {}, onRegister = {}, session = account) }
+        compose.mainClock.advanceTimeBy(5_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithText("空洞深潜系统").assertIsDisplayed()
+        compose.onAllNodesWithText("登录").onFirst().assertIsDisplayed()
+        screenshot("sign-in")
     }
 }

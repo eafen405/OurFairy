@@ -104,14 +104,14 @@ fun FairyCaption(
         Row(
             modifier
                 .fillMaxWidth()
-                .fairyPanel(RoundedCornerShape(10.dp), tokens.panelOpaque.copy(alpha = 0.94f))
+                .fairyPanel(tokens.panelShape, tokens.panelOpaque.copy(alpha = 0.94f))
                 .then(tap)
                 .animateContentSize(tween(200))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Text(
                 "FAIRY",
-                fontFamily = tokens.labelFontFamily,
+                fontFamily = tokens.telemetryFontFamily,
                 fontSize = 10.sp,
                 lineHeight = 18.sp,
                 letterSpacing = 1.5.sp,
@@ -127,7 +127,7 @@ fun FairyCaption(
         Box(
             Modifier
                 .fillMaxWidth()
-                .background(tokens.panelOpaque, RoundedCornerShape(14.dp))
+                .background(tokens.panelOpaque, FairyDialogShape)
                 .fairyDialogPanel(active = segment >= 0 && shown < full.length)
                 .then(tap)
                 .animateContentSize(tween(200))

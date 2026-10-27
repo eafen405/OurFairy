@@ -5,6 +5,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,8 +63,9 @@ import me.rerere.rikkahub.data.remote.RemoteAttachmentDraft
 import me.rerere.rikkahub.data.remote.RemoteChatAttachment
 import me.rerere.rikkahub.data.remote.RemoteChatState
 import me.rerere.rikkahub.data.remote.SessionsSnapshot
+import me.rerere.rikkahub.ui.fairy.InstrumentLevel
+import me.rerere.rikkahub.ui.fairy.InstrumentPanel
 import me.rerere.rikkahub.ui.fairy.LocalFairyTokens
-import me.rerere.rikkahub.ui.fairy.fairyPanel
 
 /**
  * A save target carries no usable media type of its own, so the download is written as opaque
@@ -380,7 +382,11 @@ private fun Composer(
     val running = replyStatus == 1 || replyStatus == 2
     val tokens = LocalFairyTokens.current
     var menuOpen by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).fairyPanel(tokens.panelShape).padding(4.dp)) {
+    InstrumentPanel(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        level = InstrumentLevel.RECESSED,
+        contentPadding = PaddingValues(4.dp),
+    ) {
         if (attachments.isNotEmpty()) {
             Column(Modifier.heightIn(max = 140.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {

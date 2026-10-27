@@ -198,8 +198,8 @@ fun FairyWindowTopBar(
                                 subtitleLeading?.invoke()
                                 Text(
                                     text = subtitle,
-                                    fontFamily = tokens.titleFontFamily,
-                                    fontWeight = FontWeight.Black,
+                                    fontFamily = tokens.functionFontFamily,
+                                    fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
                                     lineHeight = 14.sp,
                                     color = tokens.textMuted,
@@ -211,7 +211,7 @@ fun FairyWindowTopBar(
                                 if (subtitleTag != null && subtitle.any { it.code > 0x7F }) {
                                     Text(
                                         text = subtitleTag,
-                                        fontFamily = tokens.labelFontFamily,
+                                        fontFamily = tokens.telemetryFontFamily,
                                         fontSize = 9.sp,
                                         lineHeight = 14.sp,
                                         letterSpacing = 1.sp,

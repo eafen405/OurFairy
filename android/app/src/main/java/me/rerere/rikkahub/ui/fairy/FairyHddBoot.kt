@@ -82,12 +82,14 @@ private object HddBootLog {
  * over it, typing [HddBootHeader] once per cold start (tap to skip; Reduced
  * Motion shows the finished frame), then folding into the status lines.
  *
- * [onBooted] reports that the form below may appear.
+ * [onBooted] reports that the form below may appear. [onProgress] reports the
+ * typed fraction (0..1) as it advances, so the boot rail can follow the log.
  */
 @Composable
 fun FairyHddBoot(
     modifier: Modifier = Modifier,
     onBooted: () -> Unit,
+    onProgress: (Float) -> Unit = {},
 ) {
     val tokens = LocalFairyTokens.current
     val still = !LocalAgoraMotionPolicy.current.allowContinuousMotion
@@ -97,12 +99,14 @@ fun FairyHddBoot(
     LaunchedEffect(booted) {
         if (booted) {
             if (!still) HddBootLog.played = true
+            onProgress(1f)
             onBooted()
             return@LaunchedEffect
         }
         val start = withFrameMillis { it } - (typed / TYPE_CHARS_PER_MS).toLong()
         while (typed < total) {
             typed = withFrameMillis { now -> ((now - start) * TYPE_CHARS_PER_MS).toInt().coerceAtMost(total) }
+            onProgress(typed.toFloat() / total)
         }
     }
     val comment = tokens.textMuted

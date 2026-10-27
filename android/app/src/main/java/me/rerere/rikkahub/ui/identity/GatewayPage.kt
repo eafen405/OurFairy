@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import me.rerere.rikkahub.ui.fairy.FairyBackground
 import me.rerere.rikkahub.ui.fairy.FairySettingsGroup
+import me.rerere.rikkahub.ui.fairy.SignalButton
 import me.rerere.rikkahub.ui.fairy.FairyWindowTopBar
 import me.rerere.rikkahub.ui.fairy.FairyWindowState
 import me.rerere.rikkahub.ui.fairy.FairyPresence
@@ -186,13 +187,13 @@ fun GatewayPage(
             }
 
             Spacer(Modifier.height(24.dp))
-            OutlinedButton(
+            SignalButton(
+                text = stringResource(R.string.gateway_refresh_action),
+                tag = "REFRESH",
                 onClick = { token?.let(state::load) },
                 enabled = token != null && !snapshot.loading && !snapshot.working,
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.gateway_refresh_action))
-            }
+            )
 
             Spacer(Modifier.height(24.dp))
         }

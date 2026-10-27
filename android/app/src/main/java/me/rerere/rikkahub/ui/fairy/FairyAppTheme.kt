@@ -19,25 +19,27 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.SideEffect
 import androidx.core.view.WindowCompat
 
-private val FairyBgTop = Color(0xFF0B1733)
-private val FairyBgBottom = Color(0xFF04070F)
-private val FairyPanel = Color(0xFF0E1A36)
-private val FairyPill = Color(0xFF16244A)
-private val FairyIce = Color(0xFFEAF0FF)
-private val FairyNavy = Color(0xFF0A1633)
-private val FairyBlue = Color(0xFF1F55E0)
-private val FairyGlow = Color(0xFF3D8BFF)
-private val FairyLink = Color(0xFF8FB8FF)
-private val FairyDanger = Color(0xFFFF5A4E)
-private val FairyMuted = Color(0xFF8C9AB8)
+private val DefaultFairyTokens = FairyTokens()
+private val FairyBgTop = DefaultFairyTokens.bgTop
+private val FairyBgBottom = DefaultFairyTokens.bgBottom
+private val FairyPanel = DefaultFairyTokens.panel
+private val FairyPill = DefaultFairyTokens.pill
+private val FairyIce = DefaultFairyTokens.textPrimary
+private val FairyNavy = DefaultFairyTokens.onPrimary
+private val FairyBlue = DefaultFairyTokens.fairyBlue
+private val FairyGlow = DefaultFairyTokens.fairyGlow
+private val FairyLink = DefaultFairyTokens.fairyLink
+private val FairySignal = DefaultFairyTokens.signal
+private val FairyDanger = DefaultFairyTokens.danger
+private val FairyMuted = DefaultFairyTokens.textMuted
 
 /**
  * The fixed Fairy dark palette. Product surfaces always use this scheme: it
  * never follows the wallpaper, the system light/dark setting or a user preset.
- * Surfaces step panel -> pill; generic interaction is ice white on navy.
+ * Surfaces step panel -> pill; primary interaction uses signal cyan on navy.
  */
 val FairyColorScheme: ColorScheme = ColorScheme(
-    primary = FairyIce, onPrimary = FairyNavy,
+    primary = FairySignal, onPrimary = FairyNavy,
     primaryContainer = FairyPill, onPrimaryContainer = FairyIce,
     secondary = FairyLink, onSecondary = FairyNavy,
     secondaryContainer = FairyPill, onSecondaryContainer = FairyIce,
@@ -75,18 +77,18 @@ private fun fairyTypography(): Typography {
     fun TextStyle.withFamily(f: androidx.compose.ui.text.font.FontFamily) = copy(fontFamily = f)
     fun TextStyle.tier(size: Float, line: Float) = copy(fontSize = size.sp, lineHeight = line.sp)
     return Typography(
-        displayLarge = Typography().displayLarge.withFamily(TitleFamily),
-        displayMedium = Typography().displayMedium.withFamily(TitleFamily),
-        displaySmall = Typography().displaySmall.withFamily(TitleFamily),
-        headlineLarge = Typography().headlineLarge.withFamily(TitleFamily),
-        headlineMedium = Typography().headlineMedium.withFamily(TitleFamily),
-        headlineSmall = Typography().headlineSmall.withFamily(TitleFamily),
-        titleLarge = Typography().titleLarge.withFamily(TitleFamily),
+        displayLarge = Typography().displayLarge.withFamily(DisplayFamily),
+        displayMedium = Typography().displayMedium.withFamily(DisplayFamily),
+        displaySmall = Typography().displaySmall.withFamily(DisplayFamily),
+        headlineLarge = Typography().headlineLarge.withFamily(DisplayFamily),
+        headlineMedium = Typography().headlineMedium.withFamily(DisplayFamily),
+        headlineSmall = Typography().headlineSmall.withFamily(DisplayFamily),
+        titleLarge = Typography().titleLarge.withFamily(DisplayFamily),
         titleMedium = Typography().titleMedium.withFamily(TitleFamily),
         titleSmall = Typography().titleSmall.withFamily(TitleFamily),
         labelLarge = Typography().labelLarge.withFamily(TitleFamily),
-        labelMedium = Typography().labelMedium.withFamily(TitleFamily),
-        labelSmall = Typography().labelSmall.withFamily(TitleFamily).tier(11f, 15f),
+        labelMedium = Typography().labelMedium.withFamily(TelemetryFamily),
+        labelSmall = Typography().labelSmall.withFamily(TelemetryFamily).tier(11f, 15f),
     )
 }
 
@@ -114,11 +116,11 @@ fun FairyAppTheme(content: @Composable () -> Unit) {
             colorScheme = FairyColorScheme,
             typography = typography,
             shapes = Shapes(
-                extraSmall = RoundedCornerShape(8.dp),
-                small = RoundedCornerShape(12.dp),
-                medium = RoundedCornerShape(16.dp),
-                large = RoundedCornerShape(20.dp),
-                extraLarge = RoundedCornerShape(20.dp),
+                extraSmall = RoundedCornerShape(2.dp),
+                small = RoundedCornerShape(4.dp),
+                medium = RoundedCornerShape(6.dp),
+                large = RoundedCornerShape(6.dp),
+                extraLarge = RoundedCornerShape(6.dp),
             ),
             content = { ProvideAgoraMotionPolicy(appReduceMotion = false, content = content) },
         )

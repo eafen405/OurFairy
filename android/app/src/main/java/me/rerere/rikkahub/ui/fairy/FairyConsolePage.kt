@@ -2,9 +2,6 @@ package me.rerere.rikkahub.ui.fairy
 
 import android.os.SystemClock
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -66,9 +61,6 @@ private const val NEXT_LINE_MAX_MS = 90_000L
 private const val SLEEP_AT_MS = 180_000L
 private const val TICK_MS = 500L
 
-private val ConsoleSurface = Color(0xFF121824)
-private val ConsoleSurfaceRaised = Color(0xFF182131)
-
 /**
  * The console: Fairy's large live screen over a quiet HDD background, one
  * grouped account/current-session card, and clear ways on to that session,
@@ -96,13 +88,7 @@ fun FairyConsolePage(
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val speaks = LocalConfiguration.current.locales[0].language == "zh"
     val running = lifecycle.isAtLeast(Lifecycle.State.STARTED)
-    val tokens = remember(baseTokens) {
-        baseTokens.copy(
-            bgTop = Color(0xFF0C111C),
-            bgBottom = Color(0xFF05070C),
-            scanline = Color.White.copy(alpha = 0.009f),
-        )
-    }
+    val tokens = baseTokens
 
     LaunchedEffect(running, speaks, asleep) {
         if (!running || !speaks || asleep) {
@@ -180,7 +166,7 @@ fun FairyConsolePage(
                     if (asleep) {
                         Text(
                             "TAP TO WAKE",
-                            fontFamily = tokens.labelFontFamily,
+                            fontFamily = tokens.telemetryFontFamily,
                             fontSize = 11.sp,
                             letterSpacing = 1.5.sp,
                             color = tokens.fairyLink.copy(alpha = 0.85f),
@@ -206,9 +192,10 @@ fun FairyConsolePage(
                     sessionCount = owned.sessions.size,
                 )
                 Spacer(Modifier.height(20.dp))
-                ConsolePrimaryKey(
+                SignalButton(
                     text = "进入会话",
                     tag = "SESSIONS",
+                    variant = SignalButtonVariant.PRIMARY,
                     onClick = {
                         onOpen(currentSessionId?.let(Screen::Conversation) ?: Screen.Sessions)
                     },
@@ -216,13 +203,13 @@ fun FairyConsolePage(
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ConsoleDockKey(
+                    SignalButton(
                         text = "全部会话",
                         tag = "${owned.sessions.size} SESSIONS",
                         onClick = { onOpen(Screen.Sessions) },
                         modifier = Modifier.weight(1f).heightIn(min = 50.dp),
                     )
-                    ConsoleDockKey(
+                    SignalButton(
                         text = "设置",
                         tag = "SETTINGS",
                         onClick = { onOpen(Screen.Settings) },
@@ -238,13 +225,10 @@ fun FairyConsolePage(
 @Composable
 private fun ConsoleInfoCard(user: IdentityUser?, currentSessionId: String?, sessionCount: Int) {
     val tokens = LocalFairyTokens.current
-    val shape = RoundedCornerShape(18.dp)
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(ConsoleSurface, shape)
-            .border(1.dp, tokens.hairline, shape)
-            .padding(18.dp),
+    InstrumentPanel(
+        modifier = Modifier.fillMaxWidth(),
+        level = InstrumentLevel.RAISED,
+        chamfered = true,
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -254,6 +238,7 @@ private fun ConsoleInfoCard(user: IdentityUser?, currentSessionId: String?, sess
                     Text(
                         text = user?.name ?: "—",
                         color = tokens.textPrimary,
+                        fontFamily = tokens.functionFontFamily,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -265,12 +250,13 @@ private fun ConsoleInfoCard(user: IdentityUser?, currentSessionId: String?, sess
                 }
             }
             Spacer(Modifier.width(12.dp))
-            ConsoleRoleBadge(
-                when (user?.isAdmin) {
+            StatusChip(
+                text = when (user?.isAdmin) {
                     true -> "ADMIN"
                     false -> "AGENT"
                     null -> "—"
                 },
+                tone = if (user?.isAdmin == true) StatusTone.SIGNAL else StatusTone.NEUTRAL,
             )
         }
         Spacer(Modifier.height(16.dp))
@@ -293,27 +279,11 @@ private fun ConsoleInfoCard(user: IdentityUser?, currentSessionId: String?, sess
 }
 
 @Composable
-private fun ConsoleRoleBadge(text: String) {
-    val tokens = LocalFairyTokens.current
-    Text(
-        text = text,
-        fontFamily = tokens.labelFontFamily,
-        fontSize = 10.sp,
-        letterSpacing = 0.8.sp,
-        color = tokens.fairyLink,
-        maxLines = 1,
-        modifier = Modifier
-            .background(tokens.fairyLink.copy(alpha = 0.09f), RoundedCornerShape(6.dp))
-            .padding(horizontal = 9.dp, vertical = 5.dp),
-    )
-}
-
-@Composable
 private fun ConsoleLabel(text: String, color: Color? = null, fontSize: TextUnit = 10.sp) {
     val tokens = LocalFairyTokens.current
     Text(
         text = text,
-        fontFamily = tokens.labelFontFamily,
+        fontFamily = tokens.telemetryFontFamily,
         fontSize = fontSize,
         letterSpacing = 0.8.sp,
         color = color ?: tokens.textMuted,
@@ -327,88 +297,9 @@ private fun ConsoleValue(text: String) {
     Text(
         text = text,
         color = LocalFairyTokens.current.textPrimary,
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Medium,
+        fontFamily = LocalFairyTokens.current.telemetryFontFamily,
+        fontSize = 12.sp,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
-}
-
-@Composable
-private fun ConsolePrimaryKey(text: String, tag: String, onClick: () -> Unit, modifier: Modifier) {
-    val tokens = LocalFairyTokens.current
-    val shape = FairySlantShape(slant = 8.dp, corner = 9.dp)
-    Box(
-        modifier
-            .clip(shape)
-            .background(tokens.primary)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(text, color = tokens.onPrimary, fontSize = 17.sp, fontWeight = FontWeight.Black)
-            ConsoleLabel(tag, color = tokens.onPrimary.copy(alpha = 0.55f))
-        }
-    }
-}
-
-@Composable
-private fun ConsoleDockKey(text: String, tag: String, onClick: () -> Unit, modifier: Modifier) {
-    val tokens = LocalFairyTokens.current
-    val shape = RoundedCornerShape(14.dp)
-    Column(
-        modifier
-            .clip(shape)
-            .background(ConsoleSurfaceRaised)
-            .border(1.dp, tokens.hairline, shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(text, color = tokens.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(3.dp))
-        ConsoleLabel(tag, fontSize = 9.sp)
-    }
-}
-
-/** A slanted console key: the label, a small English tag, and a press-tinted fill. */
-@Composable
-fun SlantKey(
-    text: String,
-    tag: String,
-    primary: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val tokens = LocalFairyTokens.current
-    val shape = FairySlantShape(slant = 12.dp, corner = 8.dp)
-    val interaction = remember { MutableInteractionSource() }
-    val label = if (primary) tokens.onPrimary else tokens.textPrimary
-    Box(
-        modifier
-            .fairyKey(shape, primary)
-            .clickable(interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 20.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                text = text,
-                fontFamily = tokens.titleFontFamily,
-                fontWeight = FontWeight.Black,
-                fontSize = 16.sp,
-                color = label,
-            )
-            Text(
-                text = tag,
-                fontFamily = tokens.labelFontFamily,
-                fontSize = 9.sp,
-                letterSpacing = 1.2.sp,
-                color = label.copy(alpha = 0.6f),
-                modifier = Modifier.fairySlant(),
-            )
-        }
-    }
 }

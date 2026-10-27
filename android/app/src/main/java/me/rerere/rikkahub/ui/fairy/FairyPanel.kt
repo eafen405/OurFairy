@@ -42,6 +42,7 @@ fun Modifier.fairyPanel(
     shape: Shape,
     color: Color? = null,
     deep: Boolean = false,
+    muted: Boolean = false,
 ): Modifier {
     val tokens = LocalFairyTokens.current
     return drawWithCache {
@@ -49,9 +50,9 @@ fun Modifier.fairyPanel(
         val path = outline.asPath()
         val fill = color?.let { Brush.linearGradient(listOf(it, it)) }
             ?: Brush.verticalGradient(
-                0f to tokens.panelTop,
+                0f to if (muted) tokens.panel else tokens.panelTop,
                 0.62f to tokens.panelBottom,
-                1f to Color(0xFF091022),
+                1f to tokens.bgBottom,
             )
         val bevel = panelBevel()
         val lip = 1.dp.toPx()
@@ -76,7 +77,7 @@ fun Modifier.fairyPanel(
 /**
  * A console key with thickness: lit gradient face, bright top lip, and a
  * short darker band at the bottom edge that reads as the key's side wall.
- * [primary] is the ice key; the secondary key is a dim navy face.
+ * [primary] is the restrained signal key; the secondary key is a dim glass face.
  */
 @Composable
 fun Modifier.fairyKey(shape: Shape, primary: Boolean): Modifier {
@@ -84,9 +85,9 @@ fun Modifier.fairyKey(shape: Shape, primary: Boolean): Modifier {
     return drawWithCache {
         val path = shape.createOutline(size, layoutDirection, this).asPath()
         val face = if (primary) {
-            Brush.verticalGradient(0f to Color(0xFFF7FAFF), 0.55f to Color(0xFFE2EAFF), 1f to Color(0xFFC2D4F2))
+            Brush.verticalGradient(0f to Color(0xFFA5E7FF), 0.55f to tokens.signal, 1f to Color(0xFF49A9C9))
         } else {
-            Brush.verticalGradient(0f to Color(0xFF1E3059), 0.6f to Color(0xFF141F3E), 1f to Color(0xFF0D1730))
+            Brush.verticalGradient(0f to tokens.panelTop, 0.6f to tokens.panel, 1f to tokens.panelBottom)
         }
         val lip = Brush.verticalGradient(
             0f to Color.White.copy(alpha = if (primary) 0.95f else 0.16f),
@@ -98,8 +99,8 @@ fun Modifier.fairyKey(shape: Shape, primary: Boolean): Modifier {
         val stroke = 1.dp.toPx()
         onDrawBehind {
             if (primary) {
-                // A faint bleed outside the edge so the ice key sits above the page.
-                drawPath(path, tokens.fairyLink.copy(alpha = 0.10f), style = Stroke(width = stroke * 6f))
+                // A faint bleed outside the edge so the signal key sits above the page.
+                drawPath(path, tokens.signal.copy(alpha = 0.10f), style = Stroke(width = stroke * 6f))
             }
             drawPath(path, face)
             clipPath(path) {
@@ -113,7 +114,7 @@ fun Modifier.fairyKey(shape: Shape, primary: Boolean): Modifier {
 /**
  * HUD corner brackets: four L-shaped [arm]-long, [stroke]-thick marks at the
  * corners of the bounds, drawn over the content in [color] (default a faint
- * fairyLink).
+ * instrument signal).
  */
 @Composable
 fun Modifier.fairyHudCorners(
@@ -121,7 +122,7 @@ fun Modifier.fairyHudCorners(
     arm: Dp = 9.dp,
     stroke: Dp = 1.5.dp,
 ): Modifier {
-    val tint = color ?: LocalFairyTokens.current.fairyLink.copy(alpha = 0.45f)
+    val tint = color ?: LocalFairyTokens.current.signal.copy(alpha = 0.45f)
     return drawWithContent {
         drawContent()
         val a = arm.toPx()

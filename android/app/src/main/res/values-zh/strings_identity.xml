@@ -15,6 +15,7 @@
     <string name="identity_not_ready_body">该区域不属于首版范围，在这里无法打开。</string>
     <string name="identity_not_ready_signed_out">请先登录。</string>
     <string name="identity_working">处理中…</string>
+    <string name="identity_signing_in">正在登录…</string>
     <string name="identity_unreachable">无法连接后端。</string>
     <string name="gateway_title">共用网关</string>
     <string name="gateway_explain">这些配置由后端所有会话共用。保存的模型选择从每个会话的下一轮回复生效；已在执行的回复会用原模型完成。</string>

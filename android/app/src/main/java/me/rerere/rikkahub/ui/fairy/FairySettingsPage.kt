@@ -101,7 +101,7 @@ fun FairySettingsPage(
             }
             Text(
                 text = "SYSTEM CONFIGURATION",
-                fontFamily = tokens.labelFontFamily,
+                fontFamily = tokens.telemetryFontFamily,
                 fontSize = 10.sp,
                 letterSpacing = 2.sp,
                 color = tokens.fairyLink.copy(alpha = 0.7f),
@@ -122,10 +122,10 @@ fun FairySettingsPage(
                     GroupRow("权限", if (who.user.isAdmin) "管理员" else "代理人")
                 }
                 Spacer(Modifier.height(12.dp))
-                SlantKey(
+                SignalButton(
                     text = "退出登录",
                     tag = "SIGN OUT",
-                    primary = false,
+                    variant = SignalButtonVariant.DANGER,
                     onClick = {
                         scope.launch {
                             session.signOut()
@@ -192,7 +192,7 @@ fun FairySettingsPage(
             Spacer(Modifier.height(24.dp))
             Text(
                 text = "HOLLOW DEEP DIVE SYSTEM · BUILD 1",
-                fontFamily = tokens.labelFontFamily,
+                fontFamily = tokens.telemetryFontFamily,
                 fontSize = 9.sp,
                 letterSpacing = 1.5.sp,
                 color = tokens.textMuted.copy(alpha = 0.6f),
@@ -213,14 +213,12 @@ internal fun FairySettingsGroup(
     content: @Composable () -> Unit,
 ) {
     val tokens = LocalFairyTokens.current
-    Column(
-        Modifier
+    InstrumentPanel(
+        modifier = Modifier
             .padding(bottom = 12.dp)
             .fillMaxWidth()
-            .fairyPanel(tokens.panelShape)
-            .fairyHudCorners(arm = 7.dp)
-            .animateContentSize(tween(200))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .animateContentSize(tween(200)),
+        level = InstrumentLevel.RAISED,
     ) {
         Row(
             Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, indication = null, onClick = onToggle),
@@ -228,24 +226,23 @@ internal fun FairySettingsGroup(
         ) {
             Text(
                 text = title,
-                fontFamily = tokens.titleFontFamily,
-                fontWeight = FontWeight.Black,
+                fontFamily = tokens.functionFontFamily,
+                fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 color = tokens.textPrimary,
             )
             Spacer(Modifier.width(10.dp))
             Text(
                 text = tag,
-                fontFamily = tokens.labelFontFamily,
+                fontFamily = tokens.telemetryFontFamily,
                 fontSize = 9.sp,
-                letterSpacing = 1.2.sp,
+                letterSpacing = 1.sp,
                 color = tokens.textMuted.copy(alpha = 0.65f),
-                modifier = Modifier.fairySlant(),
             )
             Spacer(Modifier.weight(1f))
             Text(
                 text = if (open) "−" else "+",
-                fontFamily = tokens.labelFontFamily,
+                fontFamily = tokens.telemetryFontFamily,
                 fontSize = 18.sp,
                 color = tokens.fairyLink,
             )
