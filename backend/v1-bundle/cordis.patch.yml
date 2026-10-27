@@ -306,3 +306,10 @@
         # disabled alone without taking the private/public spaces away.
         - id: groups
           name: '@ourfairy/dsh-groups'
+        # The memory row: long-term memories in their own SQLite file, with the
+        # memory tools the Fairy and, later, the maintenance child use. The
+        # store belongs to this row; no other product module reads it.
+        - id: memory
+          name: '@ourfairy/dsh-memory'
+          config:
+            path: !!js dshHomePath('memory/memory.sqlite')
