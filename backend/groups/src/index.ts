@@ -60,6 +60,10 @@ export function apply(ctx: Context) {
   type ToolValue = InferValue<typeof output.schema>
   const registrations = new Map<Agent, Set<string>>()
   function register(agent: Agent): undefined {
+    // The memory maintenance child may use long-term memory tools only; a
+    // scope's own registration cannot be hidden by dsh's tool restriction, so
+    // every product row skips this preset.
+    if (agent.session.header?.agentPreset === 'ourfairy:memory-maintenance') return undefined
     const user = userOf(agent)
     const names = registrations.get(agent) ?? new Set<string>()
     registrations.set(agent, names)

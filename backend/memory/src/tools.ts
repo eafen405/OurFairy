@@ -23,12 +23,18 @@ const output = {
 /** The canonical value a memory tool returns, as the output schema declares it. */
 type ToolValue = InferValue<typeof output.schema>
 
-/** The calling session, as every handler needs it. */
+/** The calling session, as read-only and layer-changing handlers need it. */
 function callerOf(exec: ToolRunContext): { sessionId: string; ownerShortId: number | undefined } {
   // The native tool contract types the agent as optional; a tool that is
   // registered on an agent context is only executed inside one.
   const agent = exec.agent as Agent
   return { sessionId: agent.session.id, ownerShortId: shortIdOf(agent.session.header.owner) }
+}
+
+/** The session a content write is attributed to, resolved by the service from persistent headers. */
+async function writerOf(exec: ToolRunContext, service: MemoryService): Promise<{ sessionId: string; ownerShortId: number; sourceSession: string }> {
+  const agent = exec.agent as Agent
+  return { sessionId: agent.session.id, ...await service.sourceOf(agent) }
 }
 
 /**
@@ -51,8 +57,8 @@ export function registerMemoryTools(agent: Agent, service: MemoryService, regist
     description: 'Remember one durable fact or shared experience as a long-term memory. Store the exact text; the source session and its owner are filled in for you. The memory is normal unless is_private is true.',
     parameters: { content: { type: 'string', required: true }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
-      const { sessionId, ownerShortId } = callerOf(exec)
-      const id = service.add({ sessionId, ownerShortId, content: args.content, isPrivate: args.is_private === true })
+      const writer = await writerOf(exec, service)
+      const id = service.add({ ...writer, content: args.content, isPrivate: args.is_private === true })
       return { ok: true, id }
     },
   })
@@ -68,8 +74,8 @@ export function registerMemoryTools(agent: Agent, service: MemoryService, regist
     description: 'Edit one memory you have just found with memory_search in this session. old_string must occur exactly once in its content; pass the complete old content to rewrite the whole memory. The content time moves with the edit; the number and layer stay.',
     parameters: { id: { type: 'integer', required: true }, old_string: { type: 'string', required: true }, new_string: { type: 'string', required: true }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
-      const { sessionId } = callerOf(exec)
-      service.edit({ sessionId, id: args.id, isPrivate: args.is_private === true, oldString: args.old_string, newString: args.new_string })
+      const writer = await writerOf(exec, service)
+      service.edit({ ...writer, id: args.id, isPrivate: args.is_private === true, oldString: args.old_string, newString: args.new_string })
       return { ok: true, id: args.id }
     },
   })
