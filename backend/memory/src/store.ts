@@ -1,0 +1,270 @@
+/**
+ * The memory store: long-term memories in their own SQLite file.
+ *
+ * The file is separate from the identity store so memory growth never reshapes
+ * the identity schema. One synchronous `node:sqlite` connection, WAL, a
+ * versioned `meta.schema_version` and `BEGIN IMMEDIATE` transactions follow the
+ * repository's business-store pattern; the difference is deletion. An invalid
+ * memory is removed with a physical `DELETE` and its number is never reused, so
+ * an old search result cannot point at a new memory
+ * ([ADR-0002](../../../docs/adr/0002-physical-memory-deletion.md)).
+ *
+ * The impression and maintenance tables are created here, once, so the later
+ * tickets add behaviour rather than a second migration; nothing in this module
+ * reads or writes them yet.
+ *
+ * @module @ourfairy/dsh-memory/src/store
+ */
+import { mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite'
+import { MemoryError } from './errors.js'
+
+const SCHEMA_VERSION = 1
+
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  content TEXT NOT NULL,
+  is_private INTEGER NOT NULL DEFAULT 0,         -- 0 normal, 1 private
+  source_session TEXT NOT NULL,                  -- the owner is derived from this session's header
+  created_at INTEGER NOT NULL,
+  content_updated_at INTEGER NOT NULL            -- last add or content edit; search dates use it
+);
+CREATE INDEX IF NOT EXISTS memories_by_layer_time ON memories(is_private, content_updated_at);
+CREATE TABLE IF NOT EXISTS impressions (
+  short_id INTEGER PRIMARY KEY,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS maintenance_state (
+  source_session TEXT PRIMARY KEY,
+  watermark_seq INTEGER NOT NULL DEFAULT -1,     -- last event position a completed cut covered
+  last_closed_at INTEGER,                        -- the newest closed user turn's time
+  child_session TEXT,                            -- the maintenance child session, while one exists
+  status INTEGER NOT NULL DEFAULT 0,             -- 0 idle, 1 running, 2 failed
+  updated_at INTEGER NOT NULL
+);
+`
+
+/** One row of the `memories` table, as every read site sees it. */
+export type MemoryRow = {
+  id: number
+  content: string
+  /** 0 normal, 1 private; the tool surface passes it as a boolean. */
+  is_private: number
+  source_session: string
+  created_at: number
+  content_updated_at: number
+}
+
+/** One search in one layer, with this search's own limits. */
+export type MemorySearchQuery = {
+  readonly query: string
+  readonly isPrivate: boolean
+  readonly startAt?: number
+  readonly endAt?: number
+  readonly limit: number
+  readonly characterBudget: number
+}
+
+/** What one search found and what it had to leave out. */
+export type MemorySearchResult = {
+  readonly rows: MemoryRow[]
+  readonly matched: number
+  readonly characters: number
+  readonly truncated: boolean
+}
+
+/** The primary key SQLite assigned to one inserted row. */
+type InsertResult = { readonly lastInsertRowid: number | bigint }
+
+/** The row count and change count one statement reports. */
+type ChangeResult = { readonly changes: number | bigint }
+
+/**
+ * The SQLite driver types every column as `SQLOutputValue`; the schema is the
+ * authority on which columns are numbers, which are text and which may be
+ * NULL. The assertion is confined to this one boundary so every read site keeps
+ * a typed row.
+ */
+function rowOf<T extends Record<string, SQLOutputValue>>(row: Record<string, SQLOutputValue> | undefined): T | undefined {
+  return row as T | undefined
+}
+
+/** Every row of one query, read as the row shape its table declares. */
+function rowsOf<T extends Record<string, SQLOutputValue>>(rows: Record<string, SQLOutputValue>[]): T[] {
+  return rows as T[]
+}
+
+/** The single number one `COUNT(*)` statement reports. */
+function countOf(row: Record<string, SQLOutputValue> | undefined): number {
+  const total = rowOf<{ total: number }>(row)?.total
+  return typeof total === 'number' ? total : 0
+}
+
+export class MemoryStore {
+  #db: DatabaseSync
+
+  constructor({ path }: { path: string }) {
+    if (typeof path !== 'string' || path === '') {
+      throw new MemoryError(500, 'memory/misconfigured', 'the memory store needs a database path')
+    }
+    mkdirSync(dirname(path), { recursive: true })
+    this.#db = new DatabaseSync(path)
+    try {
+      this.#db.exec('PRAGMA journal_mode = WAL')
+      this.#db.exec('PRAGMA foreign_keys = OFF')
+      this.#migrate()
+    } catch (error) {
+      this.#db.close()
+      throw error
+    }
+  }
+
+  close(): void {
+    this.#db.close()
+  }
+
+  /**
+   * Store one memory and answer the number SQLite assigned. `AUTOINCREMENT`
+   * makes that number monotone for the life of the file, so a deleted number is
+   * not handed out again.
+   */
+  add({ content, isPrivate, sourceSession }: { readonly content: string; readonly isPrivate: boolean; readonly sourceSession: string }): number {
+    const now = Date.now()
+    const result = this.#db.prepare('INSERT INTO memories (content, is_private, source_session, created_at, content_updated_at) VALUES (?, ?, ?, ?, ?)')
+      .run(content, isPrivate ? 1 : 0, sourceSession, now, now) as InsertResult
+    return Number(result.lastInsertRowid)
+  }
+
+  /**
+   * Search one layer by literal substring, optionally between two content-update
+   * instants (both bounds inclusive).
+   *
+   * Results come newest content first, then by number, which is the order the
+   * budget cuts. A memory is included whole or omitted whole: content is never
+   * clipped, and one memory whose own content exceeds the character budget is
+   * omitted like any other, so no over-budget body reaches the model.
+   */
+  search({ query, isPrivate, startAt, endAt, limit, characterBudget }: MemorySearchQuery): MemorySearchResult {
+    const conditions = ['is_private = ?', 'instr(content, ?) > 0']
+    const parameters: SQLInputValue[] = [isPrivate ? 1 : 0, query]
+    if (startAt !== undefined && endAt !== undefined) {
+      conditions.push('content_updated_at BETWEEN ? AND ?')
+      parameters.push(startAt, endAt)
+    }
+    const where = conditions.join(' AND ')
+    const matched = countOf(this.#db.prepare(`SELECT COUNT(*) AS total FROM memories WHERE ${where}`).get(...parameters))
+    const rows = rowsOf<MemoryRow>(this.#db.prepare(`SELECT * FROM memories WHERE ${where} ORDER BY content_updated_at DESC, id DESC`).all(...parameters))
+    const selected: MemoryRow[] = []
+    let characters = 0
+    for (const row of rows) {
+      if (selected.length >= limit) break
+      const size = [...row.content].length
+      if (characters + size > characterBudget) break
+      selected.push(row)
+      characters += size
+    }
+    return { rows: selected, matched, characters, truncated: selected.length < matched }
+  }
+
+  /** One memory of one layer, or undefined when the number does not name one there. */
+  find({ id, isPrivate }: { readonly id: number; readonly isPrivate: boolean }): MemoryRow | undefined {
+    return rowOf<MemoryRow>(this.#db.prepare('SELECT * FROM memories WHERE id = ? AND is_private = ?').get(id, isPrivate ? 1 : 0))
+  }
+
+  /**
+   * Replace one memory's content. The source session is the session that
+   * supports the new content, so an edit re-attributes the memory; the content
+   * time moves with it, while the number and layer stay.
+   */
+  edit({ id, isPrivate, content, sourceSession }: {
+    readonly id: number
+    readonly isPrivate: boolean
+    readonly content: string
+    readonly sourceSession: string
+  }): boolean {
+    const result = this.#db.prepare('UPDATE memories SET content = ?, source_session = ?, content_updated_at = ? WHERE id = ? AND is_private = ?')
+      .run(content, sourceSession, Date.now(), id, isPrivate ? 1 : 0) as ChangeResult
+    return Number(result.changes) > 0
+  }
+
+  /** Remove one memory physically; no tombstone row survives. */
+  remove({ id, isPrivate }: { readonly id: number; readonly isPrivate: boolean }): boolean {
+    const result = this.#db.prepare('DELETE FROM memories WHERE id = ? AND is_private = ?')
+      .run(id, isPrivate ? 1 : 0) as ChangeResult
+    return Number(result.changes) > 0
+  }
+
+  /**
+   * Flip one memory's layer, inside one transaction so the read decides the
+   * write. Nothing else about the row changes — no content, no source, no
+   * content time.
+   */
+  flip({ id }: { readonly id: number }): MemoryRow | undefined {
+    return this.#transaction(() => {
+      const row = rowOf<MemoryRow>(this.#db.prepare('SELECT * FROM memories WHERE id = ?').get(id))
+      if (row === undefined) return undefined
+      const next = row.is_private === 1 ? 0 : 1
+      this.#db.prepare('UPDATE memories SET is_private = ? WHERE id = ?').run(next, id)
+      return { ...row, is_private: next }
+    })
+  }
+
+  #migrate(): void {
+    this.#transaction(() => {
+      const version = this.#storedVersion()
+      if (version === undefined) {
+        this.#db.exec(SCHEMA)
+        this.#setVersion()
+        return
+      }
+      if (version > SCHEMA_VERSION) {
+        throw new MemoryError(500, 'memory/schema-too-new', `the database file was written by schema version ${String(version)}`)
+      }
+      if (version === SCHEMA_VERSION) return
+      // Every shipped step so far is part of the same schema: `IF NOT EXISTS`
+      // makes the whole block idempotent, and a newer column is added below as
+      // the file exists to be upgraded.
+      this.#db.exec(SCHEMA)
+      this.#setVersion()
+    })
+  }
+
+  #storedVersion(): number | undefined {
+    // A fresh file has no `meta` table at all; asking SQLite first keeps the
+    // version read from turning that into a missing-table error.
+    const hasMeta = this.#db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get() !== undefined
+    if (!hasMeta) return undefined
+    const row = rowOf<{ value: string }>(this.#db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get())
+    if (row === undefined) return undefined
+    const version = Number(row.value)
+    if (!Number.isSafeInteger(version)) {
+      throw new MemoryError(500, 'memory/schema-too-new', `the database file declares an unreadable schema version ${row.value}`)
+    }
+    return version
+  }
+
+  #setVersion(): void {
+    this.#db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)').run('schema_version', String(SCHEMA_VERSION))
+  }
+
+  #transaction<T>(work: () => T): T {
+    this.#db.exec('BEGIN IMMEDIATE')
+    try {
+      const result = work()
+      this.#db.exec('COMMIT')
+      return result
+    } catch (error) {
+      this.#db.exec('ROLLBACK')
+      throw error
+    }
+  }
+}
