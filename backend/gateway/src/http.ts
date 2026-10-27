@@ -31,6 +31,7 @@ export const GATEWAY_PATHS = Object.freeze([
   '/gateway/route',
   '/gateway/route/delete',
   '/gateway/asr',
+  '/gateway/compaction',
 ])
 
 /** Build one handler per path in {@link GATEWAY_PATHS}. */
@@ -54,5 +55,6 @@ export function gatewayHandlers({ service, authenticate, fence }: GatewayHandler
     ['/gateway/route', asAdmin(body => service.saveRoute(body))],
     ['/gateway/route/delete', asAdmin(body => service.deleteRoute(body))],
     ['/gateway/asr', asAdmin(body => service.saveAsr(body))],
+    ['/gateway/compaction', asAdmin(body => service.saveCompaction(body))],
   ])
 }

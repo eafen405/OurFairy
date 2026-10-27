@@ -101,6 +101,21 @@ export const PHONE_EDITABLE_MODEL_FIELDS = new Set(['id', 'name', 'contextWindow
 const ROUTE_WIDE_FIELDS = ['api', 'baseURL', 'apiKeyEnv'] as const
 
 /**
+ * The automatic-compaction threshold's owning row and product policy range.
+ *
+ * The row is the native `compaction-basic` entry the shipped bundle mounts; its
+ * `thresholdTokens` field is volatile, so a save applies to the next pressure
+ * check without remounting the row. The range is the product decision from
+ * `docs/specs/fairy-memory.md` §6, enforced here because the native row only
+ * declares a positive integer.
+ */
+const COMPACTION_ROW = 'compaction-basic'
+const COMPACTION_FIELD = 'thresholdTokens'
+const COMPACTION_MIN_TOKENS = 100_000
+const COMPACTION_MAX_TOKENS = 900_000
+const COMPACTION_DEFAULT_TOKENS = 500_000
+
+/**
  * One model entry of a provider route, as the settings row and the phone draft
  * carry it.
  *
@@ -145,6 +160,7 @@ interface GatewayRowValue {
   timeoutMs?: number
   maxGlobalInFlight?: number
   maxUserInFlight?: number
+  thresholdTokens?: number
   [field: string]: unknown
 }
 
@@ -432,12 +448,19 @@ export class GatewayService extends Service {
     }
   }
 
+  /** The live automatic-compaction threshold the native pressure check reads. */
+  compactionView() {
+    const value = this.row(COMPACTION_ROW)?.value?.[COMPACTION_FIELD]
+    return { [COMPACTION_FIELD]: isSafeInteger(value) ? value : COMPACTION_DEFAULT_TOKENS }
+  }
+
   /** Read the shared configuration, live usage and the editability facts behind them. */
   async read() {
     // A deployment without the editor answers 503 from requireConfigurationEditor(); reaching here
     // means the editor is mounted, so only per-row presence can differ.
     const capability = { selection: this.row('agent-default-model') !== undefined,
-      routes: this.row('llm-pi-ai') !== undefined, asr: this.row('speech') !== undefined }
+      routes: this.row('llm-pi-ai') !== undefined, asr: this.row('speech') !== undefined,
+      compaction: this.row(COMPACTION_ROW) !== undefined }
     const selection = this.ctx.agentDefaultModel.currentSelection()
     const inUse = this.ctx.ourfairyChat.activeReplies()
     const profiles = this.row('llm-pi-ai')?.value?.providers ?? {}
@@ -455,18 +478,21 @@ export class GatewayService extends Service {
     const routesRow = this.row('llm-pi-ai')
     const selectionRow = this.row('agent-default-model')
     const asrRow = this.row('speech')
+    const compactionRow = this.row(COMPACTION_ROW)
     return {
       gateway: {
       selection,
       selectionApplies: 'next-turn',
       routes,
       asr: await this.asrView(),
+      compaction: this.compactionView(),
       inUse,
       editable: capability,
       saved: {
         selection: Object.keys(selectionRow?.user ?? {}).length > 0,
         routes: Object.keys(routesRow?.user?.providers ?? {}).length > 0,
         asr: Object.keys(asrRow?.user ?? {}).length > 0,
+        compaction: isSafeInteger(compactionRow?.user?.[COMPACTION_FIELD]),
       },
       },
     }
@@ -595,5 +621,34 @@ export class GatewayService extends Service {
     }
     await this.edit(() => this.requireConfigurationEditor().update('speech', fields))
     return { asr: await this.asrView() }
+  }
+
+  /**
+   * Save the automatic-compaction threshold. The native `compaction-basic` row
+   * carries it as a volatile field, so the next pressure check reads the new
+   * value and a running reply is not interrupted.
+   */
+  async saveCompaction(body: Record<string, unknown>) {
+    const input = body ?? ({} as Record<string, unknown>)
+    for (const key of Object.keys(input)) {
+      if (key !== COMPACTION_FIELD) {
+        throw new GatewayError(400, 'gateway/invalid-compaction',
+          `the compaction threshold does not accept field "${key}"`)
+      }
+    }
+    const thresholdTokens = input[COMPACTION_FIELD]
+    if (!isSafeInteger(thresholdTokens)
+      || thresholdTokens < COMPACTION_MIN_TOKENS || thresholdTokens > COMPACTION_MAX_TOKENS) {
+      const got = thresholdTokens === undefined ? 'no value' : JSON.stringify(thresholdTokens)
+      throw new GatewayError(400, 'gateway/invalid-compaction',
+        `${COMPACTION_FIELD} must be a whole number of tokens from ${COMPACTION_MIN_TOKENS} to ${COMPACTION_MAX_TOKENS},`
+        + ` inclusive; got ${got}`)
+    }
+    if (this.row(COMPACTION_ROW) === undefined) {
+      throw new GatewayError(503, 'gateway/configuration-unavailable',
+        `this deployment mounts no "${COMPACTION_ROW}" row; the compaction threshold cannot be saved here`)
+    }
+    await this.edit(() => this.requireConfigurationEditor().update(COMPACTION_ROW, { thresholdTokens }))
+    return { compaction: this.compactionView() }
   }
 }

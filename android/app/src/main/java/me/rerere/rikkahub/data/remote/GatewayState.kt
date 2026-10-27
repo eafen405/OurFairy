@@ -107,6 +107,10 @@ class GatewayState(
         backend.saveAsr(token, asr)
     }
 
+    fun saveCompaction(token: String, compaction: GatewayCompactionDraft) = write(token) {
+        backend.saveCompaction(token, compaction)
+    }
+
     private fun write(
         token: String,
         onSaved: () -> Unit = {},
