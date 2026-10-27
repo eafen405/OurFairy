@@ -54,6 +54,10 @@ const FORBIDDEN_ROW_IDS = [
   // Hard exclusion (Remote seam): its only factory answer path is a Typert/Remote
   // method, and the product deliberately does not take that seam.
   'user-questions',
+  // The product mounts no command registry, so `/compact` has no caller; the
+  // native pressure check and overflow recovery are the only compaction entry
+  // points (#242).
+  'command-compact',
 
   // Product decision: not wanted, or replaced by the scoped adapters.
   'fs-sandbox',
