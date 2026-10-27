@@ -5,7 +5,8 @@
 403 `gateway/forbidden`（后端判定，不依赖客户端隐藏入口）。
 
 配置的唯一持久化权威是 dsh 的活动 profile：`agent-default-model` 行保存共用选模，
-`llm-pi-ai` 行的 `providers` 保存自定义供应商路由，`speech` 行保存 ASR 连接。网关不建
+`llm-pi-ai` 行的 `providers` 保存自定义供应商路由，`speech` 行保存 ASR 连接，
+`compaction-basic` 行的 `thresholdTokens` 保存自动压缩触发阈值。网关不建
 自己的配置表，也不接受密钥值——路由只携带凭据**引用**（环境变量名），由原生凭据 seam
 每次请求解析；读取只报告该引用是否已配置。
 
@@ -13,11 +14,12 @@
 
 | 路由 | 请求体 | 响应 |
 | --- | --- | --- |
-| `/gateway/read` | `{}` | `{ok:true,gateway:{selection,selectionApplies,routes,asr,inUse,editable,saved}}` |
+| `/gateway/read` | `{}` | `{ok:true,gateway:{selection,selectionApplies,routes,asr,compaction,inUse,editable,saved}}` |
 | `/gateway/selection` | `{provider,model,reasoningEffort?}` | `{ok:true,selection,applies:"next-turn"}` |
 | `/gateway/route` | `{provider,displayName?,api?,baseURL?,apiKeyEnv?,models?}` | `{ok:true,route}` |
 | `/gateway/route/delete` | `{provider}` | `{ok:true,provider}` |
 | `/gateway/asr` | `{model,endpoint,apiKeyEnv?,maxDurationMs?,maxAudioBytes?,timeoutMs?,maxGlobalInFlight?,maxUserInFlight?}` | `{ok:true,asr}` |
+| `/gateway/compaction` | `{thresholdTokens}` | `{ok:true,compaction:{thresholdTokens}}` |
 
 ### 读取
 
@@ -29,9 +31,11 @@
   官方路由的 `models` 来自适配器当前目录。`credential` 为
   `{ref,configured,writable,source?}`，永远不含密钥值。`inUse` 表示有正在运行的回复使用该路由。
 - `asr`：`speech` 行的连接设置、`available`（引用的凭据能否解析）与凭据状态。
-- `editable`：`{selection,routes,asr}`，表示相应行是否挂载。缺少整个配置编辑器时读取返回
+- `compaction`：`compaction-basic` 行的 `{thresholdTokens}`，即自动压缩的绝对 token 阈值；
+  未挂载该行时读取报告组合默认值 500000，而 `editable.compaction` 为 `false`。
+- `editable`：`{selection,routes,asr,compaction}`，表示相应行是否挂载。缺少整个配置编辑器时读取返回
   503 `gateway/configuration-unavailable` 并说明原因，而不是假装只读。
-- `saved`：`{selection,routes,asr}`，表示 profile 用户层是否已有覆盖；`false` 表示仍在使用
+- `saved`：`{selection,routes,asr,compaction}`，表示 profile 用户层是否已有覆盖；`false` 表示仍在使用
   组合声明的初始值。
 
 ### 共用选模
@@ -86,6 +90,18 @@ HTTP 测试的断言——`consecutive selection saves commit in submission orde
 `/gateway/asr` 写入 `speech` 行：`model`、`endpoint` 必填，其余为可选正整数限制；
 `apiKeyEnv` 是凭据引用名（默认 `VOICE_API_KEY`），不是密钥。下一次录音使用新设置；
 正在进行的转写保留自己的请求。
+
+### 自动压缩触发阈值
+
+`/gateway/compaction` 写入原生 `compaction-basic` 行的 `thresholdTokens`。只接受
+100000–900000（含边界）的完整整数；非整数、越界、缺失或多余字段都返回 400
+`gateway/invalid-compaction` 并说明范围，不截断、不取整、不落到边界值。该行默认
+500000，`retainTokens: 16000` 仍由部署拥有，不是本接口的第二个可编辑设置。
+
+该字段在原生 schema 中声明为 volatile，因此保存后**下一次压力判断**读取新值：不需要重启，
+也不会中断正在运行的回复。实际触发点仍取绝对阈值、路由比例阈值与扣除输出预留后的模型容量
+三者最小值，所以较小窗口模型可能早于这个绝对上限压缩。该设置不属于模型配置，切换共用模型
+或供应商路由不会改变它。保存写入 profile 用户层，重启后保留。
 
 ## 生效与重启
 

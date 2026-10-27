@@ -47,6 +47,8 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.GatewayAsrDraft
 import me.rerere.rikkahub.data.remote.GatewayBackend
+import me.rerere.rikkahub.data.remote.GatewayCompaction
+import me.rerere.rikkahub.data.remote.GatewayCompactionDraft
 import me.rerere.rikkahub.data.remote.GatewayConfig
 import me.rerere.rikkahub.data.remote.GatewayEditable
 import me.rerere.rikkahub.data.remote.GatewayRoute
@@ -56,6 +58,11 @@ import me.rerere.rikkahub.data.remote.GatewaySelection
 import me.rerere.rikkahub.data.remote.GatewaySnapshot
 import me.rerere.rikkahub.data.remote.GatewayState
 import me.rerere.rikkahub.data.remote.lock
+import me.rerere.rikkahub.ui.fairy.FairyNumericField
+import me.rerere.rikkahub.ui.fairy.FairyNumericSpec
+import me.rerere.rikkahub.ui.fairy.formatFairyNumeric
+import me.rerere.rikkahub.ui.fairy.rememberFairyNumericDraftState
+import androidx.compose.ui.platform.testTag
 import org.koin.compose.koinInject
 
 /**
@@ -90,7 +97,11 @@ fun GatewayPage(
     }
     val snapshot by state.snapshot.collectAsStateWithLifecycle()
 
-    var open by remember { mutableStateOf<String?>(null) }
+    // Every group has its own key, so the model group and the context group can
+    // be open at the same time and the nested compaction group opens on its own
+    // instead of replacing its parent.
+    var open by remember { mutableStateOf(emptySet<String>()) }
+    val toggle = { key: String -> open = if (key in open) open - key else open + key }
     Box(Modifier.fillMaxSize()) {
         FairyBackground(watermark = false)
         Column(
@@ -141,11 +152,51 @@ fun GatewayPage(
                     )
                 }
 
+                val compaction = config.compaction
+                if (compaction != null) {
+                    val spec = FairyNumericSpec(
+                        label = stringResource(R.string.gateway_compaction_threshold),
+                        unit = stringResource(R.string.gateway_compaction_unit),
+                        min = 100,
+                        max = 900,
+                        scale = 1000,
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    FairySettingsGroup(
+                        title = stringResource(R.string.gateway_context_title),
+                        tag = "CONTEXT",
+                        summary = stringResource(R.string.gateway_context_summary),
+                        open = "context" in open,
+                        onToggle = { toggle("context") },
+                    ) {
+                        FairySettingsGroup(
+                            title = stringResource(R.string.gateway_compaction_title),
+                            tag = "COMPACTION",
+                            summary = stringResource(
+                                R.string.gateway_compaction_summary,
+                                "${formatFairyNumeric(compaction.thresholdTokens, spec)}K",
+                            ),
+                            open = "context/compaction" in open,
+                            onToggle = { toggle("context/compaction") },
+                        ) {
+                            CompactionSection(
+                                compaction = compaction,
+                                spec = spec,
+                                editable = config.editable.compaction,
+                                saved = config.saved.compaction,
+                                busy = snapshot.working,
+                                canWrite = token != null,
+                                onSave = { draft -> token?.let { state.saveCompaction(it, draft) } },
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(20.dp))
                 FairySettingsGroup(
                     title = "共用模型", tag = "MODEL", summary = "${config.selection.provider} / ${config.selection.model}",
-                    open = open == "selection",
-                    onToggle = { open = if (open == "selection") null else "selection" },
+                    open = "model" in open,
+                    onToggle = { toggle("model") },
                 ) {
                     SelectionSection(
                         config = config,
@@ -158,8 +209,8 @@ fun GatewayPage(
                 Spacer(Modifier.height(20.dp))
                 FairySettingsGroup(
                     title = "供应商", tag = "PROVIDERS", summary = "${config.routes.size} 个供应商",
-                    open = open == "routes",
-                    onToggle = { open = if (open == "routes") null else "routes" },
+                    open = "routes" in open,
+                    onToggle = { toggle("routes") },
                 ) {
                     RoutesSection(
                         config = config,
@@ -173,8 +224,8 @@ fun GatewayPage(
                 Spacer(Modifier.height(20.dp))
                 FairySettingsGroup(
                     title = "语音识别", tag = "SPEECH", summary = "录音转写连接配置",
-                    open = open == "asr",
-                    onToggle = { open = if (open == "asr") null else "asr" },
+                    open = "asr" in open,
+                    onToggle = { toggle("asr") },
                 ) {
                     AsrSection(
                         config = config,
@@ -664,6 +715,65 @@ private fun RouteEditorForm(
         }
         TextButton(onClick = onCancel, enabled = !busy) {
             Text(stringResource(R.string.gateway_route_cancel))
+        }
+    }
+}
+
+/**
+ * The automatic-compaction threshold inside the nested compaction group.
+ *
+ * The draft lives in K tokens (100K–900K, 1K steps) while the saved value is
+ * always a complete token count: the shared numeric control owns the draft,
+ * keeps an out-of-range text verbatim, and blocks submission until it parses.
+ * A fresh read after a save re-seeds the draft from what the backend stored.
+ */
+@Composable
+private fun CompactionSection(
+    compaction: GatewayCompaction,
+    spec: FairyNumericSpec,
+    editable: Boolean,
+    saved: Boolean,
+    busy: Boolean,
+    canWrite: Boolean,
+    onSave: (GatewayCompactionDraft) -> Unit,
+) {
+    val draft = rememberFairyNumericDraftState(spec, compaction.thresholdTokens)
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            SavedLine(saved = saved)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.gateway_compaction_explain),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (!editable) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.gateway_read_only),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                return@Column
+            }
+
+            Spacer(Modifier.height(12.dp))
+            FairyNumericField(
+                state = draft,
+                busy = busy,
+                enabled = canWrite,
+                tagPrefix = "gateway_compaction",
+            )
+            Spacer(Modifier.height(8.dp))
+            val value = draft.parsed.stored
+            Button(
+                onClick = { value?.let { onSave(GatewayCompactionDraft(it)) } },
+                enabled = canWrite && !busy && value != null,
+                modifier = Modifier.testTag("gateway_compaction_save"),
+            ) {
+                Text(stringResource(R.string.gateway_compaction_save))
+            }
         }
     }
 }
