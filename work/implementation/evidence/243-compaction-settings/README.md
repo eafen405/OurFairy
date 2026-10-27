@@ -52,6 +52,13 @@ Android：
   产品策略，因此在网关校验，非法值返回 400 `gateway/invalid-compaction` 并带上下界，不取整、
   不 clamp。引擎仍按规格取「绝对阈值、路由比例阈值、扣除输出预留后的容量」最小值，较小窗口模型
   可以更早压缩；#242 与 #241 的测试固定了这条原生语义。
+- **规格偏差：压缩范围只有网关一处校验。** 规格 §6 写「后端与各自拥有者的 schema 都校验范围」；
+  对维护两项成立（`memory` 行 Config 声明 5–50 / 3–24，越界持久值在加载时由 Loader 拒绝），
+  对压缩阈值不成立：`compaction-basic` 归 dsh 所有，schema 只约束正整数，100000–900000 只在
+  `/gateway/compaction` 校验。本票有意不改 dsh 的通用 schema——那会把一个产品数字写进上游
+  通用插件，且下次更新 dsh 会被覆盖；网关因此是这条范围唯一有文档的校验入口。绕过网关直接改
+  profile 用户层仍会被原生 schema 接受，这是已知且接受的残余风险；偏差同时记录在 #248 证据与
+  `backend/v1-bundle/cordis.patch.yml` 的压缩配置注释中。
 - **热生效靠 volatile 字段，不靠重启。** `settings.update('compaction-basic', { thresholdTokens })`
   写入 profile 用户层后，原生 `compaction-basic` 在每次压力判断读取该引用。行为用例把阈值从
   900000 改到 100000 后，**同一进程的下一次压力检查**就修剪了超长工具结果；900000 时同样的
