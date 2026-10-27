@@ -1,9 +1,11 @@
-# Long-term memory
+# Long-term memory and impressions
 
-The memory row owns the product's long-term memories: one SQLite file, the
-`memory_*` tools the Fairy uses, and the query gate those tools enforce. It
-stores memories, not impressions and not session logs; session search keeps
-answering "what was said", this row answers "what should be remembered".
+The memory row owns the product's long-term memories and every user's
+impression: one SQLite file, the `memory_*` tools the Fairy uses, the query gate
+those tools enforce, the user's own impression endpoints, and the impression
+section injected into that user's system prompt. It stores memories and
+impressions, not session logs; session search keeps answering "what was said",
+this row answers "what should be remembered" and "who is this user".
 
 ## What the row contributes
 
@@ -20,6 +22,13 @@ row then clears that agent's bookkeeping on `agent/disposed`.
 | `memory_edit` | `id`, `old_string`, `new_string`; optional `is_private` (default normal) | `{ ok, id }` |
 | `memory_delete` | `id`; optional `is_private` (default normal) | `{ ok }` |
 | `memory_switch` | `id` only | `{ ok, id, is_private }` |
+| `impression_read` | none | `{ content, updated_at, max_characters }` |
+| `impression_edit` | `content` | `{ ok }` |
+
+The impression tools and the `ourfairy:impression` prompt section exist only on
+an owned Agent. A session without an owner receives neither, so the later
+maintenance child — which has no user owner — cannot read or rewrite an
+impression as part of memory work.
 
 `memory_add` takes no owner or source: the source session is the calling
 session, and the owner is derived from that session's immutable
@@ -68,6 +77,51 @@ no source, no content time. `memory_delete` removes the row physically — no
 tombstone — and the number is never reused, so an old result cannot point at a
 new memory. Session logs are not touched.
 
+## Impressions
+
+An impression is one body per user: the overall understanding needed at every
+interaction, distinct from the long-term memories that are recalled on demand.
+The row owns it; nothing in the memory tools, the maintenance material or the
+session log can rewrite it.
+
+The system prompt assembly reads the body through a provider evaluated on every
+assembly, so an edit applies to the next turn without restarting the Agent, and
+an empty impression contributes no section. The section is registered on the
+user's own Agent only, so no other user's prompt — and not the administrator's —
+sees it. There is no time-based expiry and no periodic rewrite: a stored body
+is the current body until someone edits it.
+
+`impression_read` returns the current body (an empty body for a user without
+one) and opens the edit for that calling session. `impression_edit` replaces the
+whole body; it refuses with `impression/not-read` before the read, and with
+`impression/too-long` when the body exceeds 8000 Unicode characters. A refused
+write changes nothing; accepted text is stored exactly, never clipped. A
+session's read authorization is cleared on `agent/disposed`, so a restarted
+Agent must read again.
+
+### The user's own endpoints
+
+The ordinary client reads and edits the impression through two authenticated
+POST routes on the same carrier as the identity paths; it never goes through the
+administrator gateway.
+
+| Route | Body | Success |
+| --- | --- | --- |
+| `/impression/read` | `{}` | `{ ok, impression: { content, updatedAt, maxCharacters } }` |
+| `/impression/edit` | `{ content }` | `{ ok }` |
+
+Both derive `short_id` from the presented Bearer credential. The body has no
+owner or short-number field; a value put there is not a selector, so no caller
+can name another user's impression. The administrator is subject to the same
+rule and reads and writes only its own row.
+
+A read opens the edit for that *credential*, and an edit without a successful
+read answers `409 impression/not-read`. A second live credential of the same
+user must read for itself. Over-length answers `400 impression/too-long` with
+both the actual count and the limit in the message. A missing credential answers
+`401 impression/unauthorized`. The routes use the product's JSON envelope:
+`{ ok: true, ... }` or `{ ok: false, error: { code, message } }`.
+
 ## The query gate
 
 Every search that returns a memory records its number against the session that
@@ -97,6 +151,11 @@ Failures are native tool failures whose message starts with the code:
 | `memory/invalid-patch` | `old_string` is empty |
 | `memory/misconfigured` | the row has no database path |
 | `memory/schema-too-new` | the database file was written by a newer schema |
+| `impression/unauthorized` | the route request carries no live credential |
+| `impression/not-read` | no successful read has opened this credential's or session's edit |
+| `impression/too-long` | the body exceeds 8000 Unicode characters |
+| `impression/invalid-content` | the edit body is not a string |
+| `impression/missing-owner` | a tool call came from a session with no owner |
 
 A deleted number answers `memory/unknown-memory` even to a session that had
 queried it, because the row no longer exists.
@@ -113,8 +172,10 @@ rather than migrations:
 - `memories` — `id` (`INTEGER PRIMARY KEY AUTOINCREMENT`, never reused),
   `content`, `is_private` (0 normal, 1 private), `source_session`,
   `created_at`, `content_updated_at`.
-- `impressions` — one row per user (`short_id`), content and timestamps, with
-  the repository's logical-delete column. No read or write path exists yet.
+- `impressions` — one current body per user (`short_id`), content, creation and
+  update times, with the repository's logical-delete column. The first write
+  creates the row, a later write replaces the body and moves only `updated_at`;
+  reads ignore a logically deleted row.
 - `maintenance_state` — one row per source session: watermark, last closed
   time, maintenance child session, status. Nothing drives it yet.
 
@@ -123,6 +184,7 @@ deletion ([ADR-0002](../../docs/adr/0002-physical-memory-deletion.md)).
 
 ## What this row does not do
 
-No impression tools or endpoints, no maintenance state machine or child
-session, no maintenance/compaction settings, and no client or gateway surface.
-Those are separate tickets; only their tables are reserved here.
+No maintenance state machine or child session, no maintenance/compaction
+settings, and no client or gateway surface for them. The impression page is the
+ordinary user's own surface; there is no long-term-memory browser or editor.
+Those remaining pieces are separate tickets.

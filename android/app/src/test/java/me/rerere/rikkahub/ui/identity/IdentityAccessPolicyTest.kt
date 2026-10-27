@@ -39,4 +39,16 @@ class IdentityAccessPolicyTest {
         assertFalse(IdentityAccessPolicy.mayCompose(destination, IdentityScope.SignedOut))
         assertFalse(IdentityAccessPolicy.mayCompose(destination, IdentityScope(false, true)))
     }
+
+    @Test
+    fun `every signed in user opens their own impression, and nobody else does`() {
+        val destination = Screen.Impression.toIdentityDestination()
+        assertTrue("an ordinary agent edits their own impression", IdentityAccessPolicy.mayCompose(destination, agent))
+        assertTrue("Phaethon also owns exactly one impression", IdentityAccessPolicy.mayCompose(destination, phaethon))
+        assertFalse(IdentityAccessPolicy.mayCompose(destination, IdentityScope.SignedOut))
+        assertFalse(
+            "signing out withdraws the page even if a stale admin flag remains",
+            IdentityAccessPolicy.mayCompose(destination, IdentityScope(false, true)),
+        )
+    }
 }
