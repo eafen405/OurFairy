@@ -120,8 +120,12 @@ before(async () => {
   model.listen(0, '127.0.0.1')
   await once(model, 'listening')
   modelPort = model.address().port
+  // These cases drive up to 21 closed turns through one session; keep them
+  // below the maintenance threshold so this file tests CRUD, not maintenance.
+  // The maintenance engine's own suite sets the threshold it needs.
   const run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    MINIMAX_CN_API_KEY: 'mock-memory-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}` })
+    MINIMAX_CN_API_KEY: 'mock-memory-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}`,
+    OURFAIRY_MEMORY_MAINTENANCE_TURNS: '50', OURFAIRY_MEMORY_MAINTENANCE_DECAY_HOURS: '24' })
   port = startedPort(run)
   admin = await request('/identity/sign-in', undefined, { name: 'phaethon', password })
   alice = await user('memory-alice')

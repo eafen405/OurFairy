@@ -38,8 +38,11 @@ async function tool(user, name, args, sessionId, callId = `delivery-call-${reque
   assert.fail(`tool ${name} reply was not returned to original chat ${sessionId}`)
 }
 async function startBackend(overlays = []) {
+  // This suite drives many tool turns through one source session; keep them
+  // below the maintenance threshold so it tests delivery, not maintenance.
   const run = await runBackendAsync(startArgs(overlays), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    MINIMAX_CN_API_KEY: 'mock-group-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}` })
+    MINIMAX_CN_API_KEY: 'mock-group-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}`,
+    OURFAIRY_MEMORY_MAINTENANCE_TURNS: '50' })
   port = startedPort(run)
 }
 async function stopBackend() {
