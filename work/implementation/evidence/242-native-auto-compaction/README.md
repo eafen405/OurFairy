@@ -1,7 +1,7 @@
 # #242 真实 profile 启用 dsh 原生自动压缩
 
 日期：2026-10-27。票面：[`work/tickets/fairy-memory/02-native-auto-compaction.md`](../../../tickets/fairy-memory/02-native-auto-compaction.md)。
-分支：`ticket/242-native-auto-compaction`；实现提交：`54181d04fc`（测试提交 `cd94ba54f9`）。
+分支：`ticket/242-native-auto-compaction`；实现提交：`54181d04fc`；测试提交：`cd94ba54f9`、`f05d5534cb`。
 规格：[`docs/specs/fairy-memory.md`](../../../../docs/specs/fairy-memory.md) Implementation Decisions §1「模块与原生接缝」、§8「压缩行为」，User Stories 61–65。
 依赖：dsh `product/ourfairy-v1` 的 `d80522d276`（#241 的绝对阈值）。
 
@@ -74,7 +74,9 @@ $ node --test --test-name-pattern='above the absolute ceiling' tests/native-comp
   AssertionError [ERR_ASSERTION]: kernel must mount compaction-basic; it mounts ["agent","session","llm",…]
 ```
 
-挂载四行后的绿色（完整文件）：
+挂载四行后的绿色（完整文件）；随后用 `f05d5534cb` 把核心用例的保留边界
+移到工具结果上，确认范围选择会回退到工具调用，断言随之改为「摘要输入覆盖
+最老与中段回合」，绿色保持不变：
 
 ```text
 $ node --test tests/native-compaction.test.mjs
@@ -112,11 +114,13 @@ node --test \
 - 组合：四行在 `kernel`，`compaction-basic` 的配置正好是 500000/16000，裁剪是
   8192/4096/1024，且整个组合没有 `@deepseek-ai/dsh-command-compact`。
 - 阈值压缩：provider 报告 500,000 输入 token 后，下一回合发起一次摘要调用；
-  摘要输入含被压缩的最老回合、不含保留的中段；压缩后的请求带
-  `<compacted-summary>`、保留中段与最新长回合原文、当前用户消息，工具调用与
-  工具结果仍一一配对；回合继续回复；事件里有且仅有一组
-  `compaction/start`/`compaction/summary`/`compaction/end`，摘要走
-  `minimax-cn/MiniMax-M3.1-Flash`，压缩掉的 token 数 > 12000。
+  摘要输入覆盖最老与中段回合、不含当前用户消息；压缩后的请求带
+  `<compacted-summary>`、最新长回合原文与当前用户消息，工具调用与工具结果仍
+  一一配对。最新 assistant 原文被刻意放在 16,000 token 保留预算之下，使工具
+  结果成为跨过预算的节点——范围选择回退到工具调用，因此这条断言同时证明了
+  配对边界，而不是只在远离边界处看到一对工具。回合继续回复；事件里有且
+  仅有一组 `compaction/start`/`compaction/summary`/`compaction/end`，摘要走
+  `minimax-cn/MiniMax-M3.1-Flash`，压缩掉的 token 数 > 29000。
 - 裁剪：压力合格后 `compaction/prune` 恰好一次，后续请求保留头尾、丢掉中段并带
   原生裁剪标记；因为没有剩余压力，没有摘要调用，也没有额外模型请求。
 - 图片 offload：重试请求无 image block，模型看到原生占位文本；`image/offload`
