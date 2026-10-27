@@ -65,6 +65,7 @@ import me.rerere.rikkahub.ui.identity.IdentityNotReadyPage
 import me.rerere.rikkahub.ui.identity.IdentityRegisterPage
 import me.rerere.rikkahub.ui.identity.IdentityScope
 import me.rerere.rikkahub.ui.identity.IdentitySignInPage
+import me.rerere.rikkahub.ui.identity.ImpressionPage
 import me.rerere.rikkahub.ui.identity.openRemoteNotification
 import me.rerere.rikkahub.ui.identity.restoreIdentitySession
 import okhttp3.OkHttpClient
@@ -215,6 +216,7 @@ class RouteActivity : ComponentActivity() {
                                         backStack.add(Screen.SignIn)
                                     },
                                     onBack = { backStack.removeLastOrNull() },
+                                    onOpenImpression = { backStack.add(Screen.Impression) },
                                 )
                             }
 
@@ -248,6 +250,12 @@ class RouteActivity : ComponentActivity() {
                                 )
                             }
 
+                            entry<Screen.Impression> {
+                                ImpressionPage(
+                                    onBack = { backStack.removeLastOrNull() },
+                                )
+                            }
+
                         },
                     )
                     else -> IdentityNotReadyPage(identity = identityScope, onSignIn = {
@@ -267,6 +275,7 @@ internal fun Screen.toIdentityDestination(): IdentityDestination = when (this) {
     Screen.Sessions -> IdentityDestination.SESSIONS
     is Screen.Conversation -> IdentityDestination.CONVERSATION
     Screen.Gateway -> IdentityDestination.GATEWAY
+    Screen.Impression -> IdentityDestination.IMPRESSION
 }
 
 sealed interface Screen : NavKey {
@@ -277,4 +286,5 @@ sealed interface Screen : NavKey {
     @Serializable data class Conversation(val sessionId: String) : Screen
     @Serializable data object Settings : Screen
     @Serializable data object Gateway : Screen
+    @Serializable data object Impression : Screen
 }
