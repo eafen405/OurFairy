@@ -40,6 +40,28 @@ an owned Agent. A session without an owner receives neither, so the later
 maintenance child — which has no user owner — cannot read or rewrite an
 impression as part of memory work.
 
+## What the Fairy writes
+
+Long-term memory is not a transcript summary. An owned Agent's prompt carries the
+`ourfairy:memory-policy` section, and the maintenance child carries the same rule
+in its own instruction: only a user's explicit request to remember, or a stable
+long-term attribute, repeated habit or shared experience the user stated, is
+stored. Session summaries, user profiles, personality guesses,
+location/IP/device/weather/time inferences, one-off moods, time-bound
+observations, todos, and memories about memory operations or maintenance results
+are excluded. When nothing qualifies, the default is to write nothing. The same
+rule is in `memory_add`'s description. It is model guidance, not a semantic
+filter; the real-model sample in [ticket #248's evidence](../../work/implementation/evidence/248-memory-integration-acceptance/README.md)
+is what checks the resulting quality.
+
+The maintenance child receives this rule through its own
+`ourfairy:memory-maintenance` section, not through the owned prompt's policy, so
+an ownerless child does not inherit the main session's prompt.
+
+The query gate still decides what a session may change: the policy explains when
+a write is appropriate, while the gate proves the number was returned to this
+session. Neither replaces the other.
+
 `memory_add` takes no owner or source: the source session is the calling
 session, and the owner is derived from that session's immutable
 `SessionHeader.owner`. A maintenance child has no owner; its durable

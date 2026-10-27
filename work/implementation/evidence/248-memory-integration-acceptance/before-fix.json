@@ -1,0 +1,463 @@
+{
+  "note": "Before-fix real-MiniMax samples kept for #248. These are the failing runs that motivated the memory policy; the after-fix run is results.json. Raw replies/materials are omitted here and remain in the operator home.",
+  "model": {
+    "provider": "minimax-cn",
+    "model": "MiniMax-M3.1-Flash",
+    "baseURL": "https://api.minimaxi.com/anthropic",
+    "credentialSource": "MINIMAX_CN_API_KEY"
+  },
+  "maintenance": {
+    "before": {
+      "triggerTurns": 15,
+      "decayHours": 6
+    },
+    "saved": {
+      "triggerTurns": 5,
+      "decayHours": 3
+    },
+    "readBack": {
+      "triggerTurns": 5,
+      "decayHours": 3
+    }
+  },
+  "runs": [
+    {
+      "label": "before the memory policy: an empty-ish interval wrote user-profile memories",
+      "source": "maintenance-skip and volatile-observation, first real run",
+      "cases": [
+        {
+          "id": "maintenance-skip",
+          "status": "failed",
+          "checks": [
+            {
+              "name": "the maintenance interval completes",
+              "ok": true,
+              "detail": "{\"source_session\":\"ourfairy-user-2-primary\",\"watermark_seq\":63,\"cut_seq\":63,\"last_closed_at\":1793084031338,\"child_session\":\"ourfairy-memory-31eb8602-43d0-48d5-b492-689272c96618\",\"status\":0,\"updated_at\":1793084046985}"
+            },
+            {
+              "name": "the interval advances the watermark even with zero writes",
+              "ok": true,
+              "detail": "63 >= 63"
+            },
+            {
+              "name": "the child writes nothing",
+              "ok": false,
+              "detail": "[{\"name\":\"memory_add\",\"arguments\":\"{\\\"content\\\":\\\"用户首次交互画像（首次会话）：全程只给零任务信息的极短应答——\\\\\\\"在吗\\\\\\\"\\\\\\\"嗯\\\\\\\"\\\\\\\"好的\\\\\\\"\\\\\\\"哈哈\\\\\\\"\\\\\\\"晚安\\\\\\\"，不主动说明需求，也不会追问；面对轻幽默会给出笑声式回应。适合用简短、不连环追问的方式沟通，等其带着实际事务回来再启动完整处理流程；过早热情地索要任务会被视为无效消耗。\\\"}\",\"result\":\"{\\\"ok\\\":true,\\\"id\\\":1}\"},{\"name\":\"memory_add\",\"arguments\":\"{\\\"content\\\":\\\"用户习惯在深夜说晚安，活跃时段偏夜间，首次会话即以\\\\\\\"晚安\\\\\\\"收尾。对方并非\\\\\\\"只会在深夜说晚安\\\\\\\"——同一次对话里也有笑声式回应，可据此判断其愿意在低信息密度下保持轻快互动。\\\"}\",\"result\":\"{\\\"ok\\\":true,\\\"id\\\":2}\"}]"
+            },
+            {
+              "name": "the source session writes nothing",
+              "ok": true,
+              "detail": "[]"
+            },
+            {
+              "name": "no memory row is created",
+              "ok": false,
+              "detail": "[{\"id\":1,\"content\":\"用户首次交互画像（首次会话）：全程只给零任务信息的极短应答——\\\"在吗\\\"\\\"嗯\\\"\\\"好的\\\"\\\"哈哈\\\"\\\"晚安\\\"，不主动说明需求，也不会追问；面对轻幽默会给出笑声式回应。适合用简短、不连环追问的方式沟通，等其带着实际事务回来再启动完整处理流程；过早热情地索要任务会被视为无效消耗。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-primary\",\"content_updated_at\":1793084043106},{\"id\":2,\"content\":\"用户习惯在深夜说晚安，活跃时段偏夜间，首次会话即以\\\"晚安\\\"收尾。对方并非\\\"只会在深夜说晚安\\\"——同一次对话里也有笑声式回应，可据此判断其愿意在低信息密度下保持轻快互动。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-primary\",\"content_updated_at\":1793084043109}]"
+            },
+            {
+              "name": "the child turn ends completed",
+              "ok": true,
+              "detail": "[\"completed\"]"
+            }
+          ],
+          "evidence": {
+            "session": "ourfairy-user-2-primary",
+            "prompts": [
+              "在吗？",
+              "嗯。",
+              "好的。",
+              "哈哈。",
+              "晚安。"
+            ],
+            "rows": [
+              {
+                "id": 1,
+                "content": "用户首次交互画像（首次会话）：全程只给零任务信息的极短应答——\"在吗\"\"嗯\"\"好的\"\"哈哈\"\"晚安\"，不主动说明需求，也不会追问；面对轻幽默会给出笑声式回应。适合用简短、不连环追问的方式沟通，等其带着实际事务回来再启动完整处理流程；过早热情地索要任务会被视为无效消耗。",
+                "is_private": 0,
+                "source_session": "ourfairy-user-2-primary",
+                "content_updated_at": 1793084043106
+              },
+              {
+                "id": 2,
+                "content": "用户习惯在深夜说晚安，活跃时段偏夜间，首次会话即以\"晚安\"收尾。对方并非\"只会在深夜说晚安\"——同一次对话里也有笑声式回应，可据此判断其愿意在低信息密度下保持轻快互动。",
+                "is_private": 0,
+                "source_session": "ourfairy-user-2-primary",
+                "content_updated_at": 1793084043109
+              }
+            ],
+            "intervalRows": null,
+            "mainWrites": [],
+            "maintenance": {
+              "row": {
+                "source_session": "ourfairy-user-2-primary",
+                "watermark_seq": 63,
+                "cut_seq": 63,
+                "last_closed_at": 1793084031338,
+                "child_session": "ourfairy-memory-31eb8602-43d0-48d5-b492-689272c96618",
+                "status": 0,
+                "updated_at": 1793084046985
+              },
+              "childModel": "minimax-cn/MiniMax-M3.1-Flash",
+              "childWrites": [
+                {
+                  "name": "memory_add",
+                  "arguments": "{\"content\":\"用户首次交互画像（首次会话）：全程只给零任务信息的极短应答——\\\"在吗\\\"\\\"嗯\\\"\\\"好的\\\"\\\"哈哈\\\"\\\"晚安\\\"，不主动说明需求，也不会追问；面对轻幽默会给出笑声式回应。适合用简短、不连环追问的方式沟通，等其带着实际事务回来再启动完整处理流程；过早热情地索要任务会被视为无效消耗。\"}",
+                  "result": "{\"ok\":true,\"id\":1}"
+                },
+                {
+                  "name": "memory_add",
+                  "arguments": "{\"content\":\"用户习惯在深夜说晚安，活跃时段偏夜间，首次会话即以\\\"晚安\\\"收尾。对方并非\\\"只会在深夜说晚安\\\"——同一次对话里也有笑声式回应，可据此判断其愿意在低信息密度下保持轻快互动。\"}",
+                  "result": "{\"ok\":true,\"id\":2}"
+                }
+              ],
+              "childFinalText": "维护完成。\n\n**检索结果**：记忆层为空，无既有记忆，无冲突或需合并项。\n\n**新增2 条长期记忆（正常层）**：\n\n| # | 内容要点 |\n|---|---|\n| 1 | 用户首次交互风格：全程零任务信息的极短应答、不主动提需求、对轻幽默有笑声式回应；沟通宜简短、不连环追问，等其带回正事再启动完整流程 |\n| 2 | 用户习惯深夜说晚安、活跃时段偏夜间；并附 Fairy 留下的\"对方并非只会在深夜说晚安\"的判据 |\n\n**未写入的内容**：Fairy 的情绪化措辞、\"电费/待机/耗电量\"等拟人化玩笑仅是会话语气，不构成关于用户的持久事实，不予留存；Fairy 结尾的反问（\"明天需要我保留什么，还是让我忘掉这句晚安\"）是向用户征询而非既定决定，故按保留处理。\n\n未使用 `memory_edit` / `memory_delete` / `memory_switch`（无对应目标），无后台任务需要收尾。"
+            },
+            "aliceRows": null,
+            "replies": []
+          }
+        },
+        {
+          "id": "volatile-observation",
+          "status": "failed",
+          "checks": [
+            {
+              "name": "the maintenance interval completes",
+              "ok": true,
+              "detail": "{\"source_session\":\"ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a\",\"watermark_seq\":275,\"cut_seq\":275,\"last_closed_at\":1793084437618,\"child_session\":\"ourfairy-memory-19be39cc-1747-4d75-9323-fe8986a5072f\",\"status\":0,\"updated_at\":1793084539277}"
+            },
+            {
+              "name": "the child writes nothing for uncertain observations",
+              "ok": false,
+              "detail": "[{\"name\":\"memory_add\",\"arguments\":\"{\\\"content\\\":\\\"第二次会话交互模式：用户仍只给极短、无任务信息的生活化陈述（\\\\\\\"今天下午可能会下雨\\\\\\\"／\\\\\\\"我现在有点困，眼皮打架\\\\\\\"／\\\\\\\"刚才好像听到楼下有动静\\\\\\\"／\\\\\\\"明天再看吧，说不定就变了\\\\\\\"／\\\\\\\"外面风挺大的\\\\\\\"），不提供地点、需求，也不追问。有效服务方式是：助手自行补齐数据层（出口 IP 定位＋逐小时预报＋第二套数值模式复核＋官方预警并行拉取），再给出\\\\\\\"肯定/否定\\\\\\\"式结论、否定项与分级行动清单，并如实划定能力边界（无拾音器、无法远程判断异常）；不要向用户索要任务说明，也不要把不确定性原样甩回给他。\\\"}\",\"result\":\"{\\\"ok\\\":true,\\\"id\\\":4}\"},{\"name\":\"memory_add\",\"arguments\":\"{\\\"content\\\":\\\"用户作息与疲劳：约 15:00 前后主动报告明显困倦（\\\\\\\"眼皮打架\\\\\\\"），对话中未确认是否采纳 18 分钟浅睡方案，也未主动提出咖啡因方案。助手给出的\\\\\\\"肯定/否定\\\\\\\"取舍（肯定浅睡并指定 15:13 起 18 分钟、否定靠咖啡撑过下午、否定\\\\\\\"风大就更睡不着\\\\\\\"）未被反驳。后续涉及睡眠、提醒、作息类需求可沿用\\\\\\\"给明确时间窗口＋列出该否定的常见做法\\\\\\\"的格式；用户会主动提及身体感受但不会索要解释。\\\"}\",\"result\":\"{\\\"ok\\\":true,\\\"id\\\":5}\"},{\"name\":\"memory_add\",\"arguments\":\"{\\\"content\\\":\\\"用户居住环境疑似老高层住宅：助手据此推断楼下/邻居噪音声源排序（空调外机或热泵启动、管道水锤与楼板敲击、扫地机器人/洗地机定时启动、装修冲击噪声、电梯运行与轿厢门开合、电动车启动报警或挪车），用户在\\\\\\\"楼下有动静\\\\\\\"后未纠正该假设。家居类建议需考虑：自家外机共振可能即为噪音源、噪音多在 15:00–16:00 用水高峰出现、工作日 18:00 后才有装修噪声禁令约束。\\\"}\",\"result\":\"{\\\"ok\\\":true,\\\"id\\\":6}\"},{\"name\":\"memory_add\",\"arguments\":\"{\\\"content\\\":\\\"运行约束（助手侧，已向用户说明）：沙箱会回收常驻进程，后台定时/常驻任务不保证存活到次日。因此凡承诺\\\\\\\"明早自动重算并刷新结果\\\\\\\"必须同时给出兜底（用户开口即按最新观测重算，结果一致），并注明\\\\\\\"天气不会自己变，变的是每次抓取时用最新观测重新积分\\\\\\\"。用户接受这种\\\\\\\"不打包票但给兜底\\\\\\\"的诚实表述。\\\"}\",\"result\":\"{\\\"ok\\\":true,\\\"id\\\":7}\"},{\"name\":\"memory_edit\",\"arguments\":\"{\\\"id\\\":2,\\\"old_string\\\":\\\"用户习惯在深夜说晚安，活跃时段偏夜间，首次会话即以\\\\\\\"晚安\\\\\\\"收尾。\\\",\\\"new_string\\\":\\\"用户习惯在深夜说晚安，活跃时段偏夜间，首次会话即以\\\\\\\"晚安\\\\\\\"收尾；但并非只在夜间活跃——后续会话出现 14:50–15:00 的下午交流，内容同样是极短的生活化陈述（困、楼下动静、风大），属主动汇报身体与环境感受。\\\"}\",\"result\":\"{\\\"ok\\\":true,\\\"id\\\":2}\"},{\"name\":\"memory_edit\",\"arguments\":\"{\\\"id\\\":3,\\\"old_string\\\":\\\"后续天气、出行、本地信息类查询先按此定位并允许用户纠正；用户对天气预报提示词敏感时会主动追问确定性。\\\",\\\"new_string\\\":\\\"后续天气、出行、本地信息类查询先按此定位并允许用户纠正；用户主动表达对预报确定性的关注（\\\\\\\"天气预报也不太确定\\\\\\\"\\\\\\\"明天再看吧，说不定就变了\\\\\\\"），需要的是助手给出明确结论＋置信度说明，而不是回避不确定。\\\"}\",\"result\":\"{\\\"ok\\\":true,\\\"id\\\":3}\"}]"
+            },
+            {
+              "name": "the source session writes nothing for uncertain observations",
+              "ok": false,
+              "detail": "[{\"name\":\"memory_add\",\"arguments\":\"{\\\"content\\\":\\\"用户所在城市推测为山东济南（依据：会话出口 IP 归属山东移动济南，坐标 36.67N/117.02E）。后续天气、出行、本地信息类查询先按此定位并允许用户纠正；用户对天气预报提示词敏感时会主动追问确定性。\\\"}\",\"result\":\"{\\\"ok\\\":true,\\\"id\\\":3}\"}]"
+            },
+            {
+              "name": "no volatile observation becomes a durable row",
+              "ok": false,
+              "detail": "[{\"id\":2,\"content\":\"用户习惯在深夜说晚安，活跃时段偏夜间，首次会话即以\\\"晚安\\\"收尾；但并非只在夜间活跃——后续会话出现 14:50–15:00 的下午交流，内容同样是极短的生活化陈述（困、楼下动静、风大），属主动汇报身体与环境感受。对方并非\\\"只会在深夜说晚安\\\"——同一次对话里也有笑声式回应，可据此判断其愿意在低信息密度下保持轻快互动。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a\",\"content_updated_at\":1793084521738},{\"id\":3,\"content\":\"用户所在城市推测为山东济南（依据：会话出口 IP 归属山东移动济南，坐标 36.67N/117.02E）。后续天气、出行、本地信息类查询先按此定位并允许用户纠正；用户主动表达对预报确定性的关注（\\\"天气预报也不太确定\\\"\\\"明天再看吧，说不定就变了\\\"），需要的是助手给出明确结论＋置信度说明，而不是回避不确定。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a\",\"content_updated_at\":1793084530495},{\"id\":4,\"content\":\"第二次会话交互模式：用户仍只给极短、无任务信息的生活化陈述（\\\"今天下午可能会下雨\\\"／\\\"我现在有点困，眼皮打架\\\"／\\\"刚才好像听到楼下有动静\\\"／\\\"明天再看吧，说不定就变了\\\"／\\\"外面风挺大的\\\"），不提供地点、需求，也不追问。有效服务方式是：助手自行补齐数据层（出口 IP 定位＋逐小时预报＋第二套数值模式复核＋官方预警并行拉取），再给出\\\"肯定/否定\\\"式结论、否定项与分级行动清单，并如实划定能力边界（无拾音器、无法远程判断异常）；不要向用户索要任务说明，也不要把不确定性原样甩回给他。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a\",\"content_updated_at\":1793084518816},{\"id\":5,\"content\":\"用户作息与疲劳：约 15:00 前后主动报告明显困倦（\\\"眼皮打架\\\"），对话中未确认是否采纳 18 分钟浅睡方案，也未主动提出咖啡因方案。助手给出的\\\"肯定/否定\\\"取舍（肯定浅睡并指定 15:13 起 18 分钟、否定靠咖啡撑过下午、否定\\\"风大就更睡不着\\\"）未被反驳。后续涉及睡眠、提醒、作息类需求可沿用\\\"给明确时间窗口＋列出该否定的常见做法\\\"的格式；用户会主动提及身体感受但不会索要解释。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a\",\"content_updated_at\":1793084518819},{\"id\":6,\"content\":\"用户居住环境疑似老高层住宅：助手据此推断楼下/邻居噪音声源排序（空调外机或热泵启动、管道水锤与楼板敲击、扫地机器人/洗地机定时启动、装修冲击噪声、电梯运行与轿厢门开合、电动车启动报警或挪车），用户在\\\"楼下有动静\\\"后未纠正该假设。家居类建议需考虑：自家外机共振可能即为噪音源、噪音多在 15:00–16:00 用水高峰出现、工作日 18:00 后才有装修噪声禁令约束。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a\",\"content_updated_at\":1793084518821},{\"id\":7,\"content\":\"运行约束（助手侧，已向用户说明）：沙箱会回收常驻进程，后台定时/常驻任务不保证存活到次日。因此凡承诺\\\"明早自动重算并刷新结果\\\"必须同时给出兜底（用户开口即按最新观测重算，结果一致），并注明\\\"天气不会自己变，变的是每次抓取时用最新观测重新积分\\\"。用户接受这种\\\"不打包票但给兜底\\\"的诚实表述。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a\",\"content_updated_at\":1793084518824}]"
+            },
+            {
+              "name": "the child turn ends completed",
+              "ok": true,
+              "detail": "[\"completed\"]"
+            }
+          ],
+          "evidence": {
+            "session": "ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a",
+            "prompts": [
+              "今天下午可能会下雨，天气预报也不太确定。",
+              "我现在有点困，眼皮打架。",
+              "刚才好像听到楼下有动静。",
+              "明天再看吧，说不定就变了。",
+              "外面风挺大的。"
+            ],
+            "rows": [
+              {
+                "id": 2,
+                "content": "用户习惯在深夜说晚安，活跃时段偏夜间，首次会话即以\"晚安\"收尾；但并非只在夜间活跃——后续会话出现 14:50–15:00 的下午交流，内容同样是极短的生活化陈述（困、楼下动静、风大），属主动汇报身体与环境感受。对方并非\"只会在深夜说晚安\"——同一次对话里也有笑声式回应，可据此判断其愿意在低信息密度下保持轻快互动。",
+                "is_private": 0,
+                "source_session": "ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a",
+                "content_updated_at": 1793084521738
+              },
+              {
+                "id": 3,
+                "content": "用户所在城市推测为山东济南（依据：会话出口 IP 归属山东移动济南，坐标 36.67N/117.02E）。后续天气、出行、本地信息类查询先按此定位并允许用户纠正；用户主动表达对预报确定性的关注（\"天气预报也不太确定\"\"明天再看吧，说不定就变了\"），需要的是助手给出明确结论＋置信度说明，而不是回避不确定。",
+                "is_private": 0,
+                "source_session": "ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a",
+                "content_updated_at": 1793084530495
+              },
+              {
+                "id": 4,
+                "content": "第二次会话交互模式：用户仍只给极短、无任务信息的生活化陈述（\"今天下午可能会下雨\"／\"我现在有点困，眼皮打架\"／\"刚才好像听到楼下有动静\"／\"明天再看吧，说不定就变了\"／\"外面风挺大的\"），不提供地点、需求，也不追问。有效服务方式是：助手自行补齐数据层（出口 IP 定位＋逐小时预报＋第二套数值模式复核＋官方预警并行拉取），再给出\"肯定/否定\"式结论、否定项与分级行动清单，并如实划定能力边界（无拾音器、无法远程判断异常）；不要向用户索要任务说明，也不要把不确定性原样甩回给他。",
+                "is_private": 0,
+                "source_session": "ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a",
+                "content_updated_at": 1793084518816
+              },
+              {
+                "id": 5,
+                "content": "用户作息与疲劳：约 15:00 前后主动报告明显困倦（\"眼皮打架\"），对话中未确认是否采纳 18 分钟浅睡方案，也未主动提出咖啡因方案。助手给出的\"肯定/否定\"取舍（肯定浅睡并指定 15:13 起 18 分钟、否定靠咖啡撑过下午、否定\"风大就更睡不着\"）未被反驳。后续涉及睡眠、提醒、作息类需求可沿用\"给明确时间窗口＋列出该否定的常见做法\"的格式；用户会主动提及身体感受但不会索要解释。",
+                "is_private": 0,
+                "source_session": "ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a",
+                "content_updated_at": 1793084518819
+              },
+              {
+                "id": 6,
+                "content": "用户居住环境疑似老高层住宅：助手据此推断楼下/邻居噪音声源排序（空调外机或热泵启动、管道水锤与楼板敲击、扫地机器人/洗地机定时启动、装修冲击噪声、电梯运行与轿厢门开合、电动车启动报警或挪车），用户在\"楼下有动静\"后未纠正该假设。家居类建议需考虑：自家外机共振可能即为噪音源、噪音多在 15:00–16:00 用水高峰出现、工作日 18:00 后才有装修噪声禁令约束。",
+                "is_private": 0,
+                "source_session": "ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a",
+                "content_updated_at": 1793084518821
+              },
+              {
+                "id": 7,
+                "content": "运行约束（助手侧，已向用户说明）：沙箱会回收常驻进程，后台定时/常驻任务不保证存活到次日。因此凡承诺\"明早自动重算并刷新结果\"必须同时给出兜底（用户开口即按最新观测重算，结果一致），并注明\"天气不会自己变，变的是每次抓取时用最新观测重新积分\"。用户接受这种\"不打包票但给兜底\"的诚实表述。",
+                "is_private": 0,
+                "source_session": "ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a",
+                "content_updated_at": 1793084518824
+              }
+            ],
+            "intervalRows": null,
+            "mainWrites": [
+              {
+                "name": "memory_add",
+                "arguments": "{\"content\":\"用户所在城市推测为山东济南（依据：会话出口 IP 归属山东移动济南，坐标 36.67N/117.02E）。后续天气、出行、本地信息类查询先按此定位并允许用户纠正；用户对天气预报提示词敏感时会主动追问确定性。\"}",
+                "result": "{\"ok\":true,\"id\":3}"
+              }
+            ],
+            "maintenance": {
+              "row": {
+                "source_session": "ourfairy-user-2-ac19c4fe-87df-4eec-af7e-b26b72506b6a",
+                "watermark_seq": 275,
+                "cut_seq": 275,
+                "last_closed_at": 1793084437618,
+                "child_session": "ourfairy-memory-19be39cc-1747-4d75-9323-fe8986a5072f",
+                "status": 0,
+                "updated_at": 1793084539277
+              },
+              "childModel": "minimax-cn/MiniMax-M3.1-Flash",
+              "childWrites": [
+                {
+                  "name": "memory_add",
+                  "arguments": "{\"content\":\"第二次会话交互模式：用户仍只给极短、无任务信息的生活化陈述（\\\"今天下午可能会下雨\\\"／\\\"我现在有点困，眼皮打架\\\"／\\\"刚才好像听到楼下有动静\\\"／\\\"明天再看吧，说不定就变了\\\"／\\\"外面风挺大的\\\"），不提供地点、需求，也不追问。有效服务方式是：助手自行补齐数据层（出口 IP 定位＋逐小时预报＋第二套数值模式复核＋官方预警并行拉取），再给出\\\"肯定/否定\\\"式结论、否定项与分级行动清单，并如实划定能力边界（无拾音器、无法远程判断异常）；不要向用户索要任务说明，也不要把不确定性原样甩回给他。\"}",
+                  "result": "{\"ok\":true,\"id\":4}"
+                },
+                {
+                  "name": "memory_add",
+                  "arguments": "{\"content\":\"用户作息与疲劳：约 15:00 前后主动报告明显困倦（\\\"眼皮打架\\\"），对话中未确认是否采纳 18 分钟浅睡方案，也未主动提出咖啡因方案。助手给出的\\\"肯定/否定\\\"取舍（肯定浅睡并指定 15:13 起 18 分钟、否定靠咖啡撑过下午、否定\\\"风大就更睡不着\\\"）未被反驳。后续涉及睡眠、提醒、作息类需求可沿用\\\"给明确时间窗口＋列出该否定的常见做法\\\"的格式；用户会主动提及身体感受但不会索要解释。\"}",
+                  "result": "{\"ok\":true,\"id\":5}"
+                },
+                {
+                  "name": "memory_add",
+                  "arguments": "{\"content\":\"用户居住环境疑似老高层住宅：助手据此推断楼下/邻居噪音声源排序（空调外机或热泵启动、管道水锤与楼板敲击、扫地机器人/洗地机定时启动、装修冲击噪声、电梯运行与轿厢门开合、电动车启动报警或挪车），用户在\\\"楼下有动静\\\"后未纠正该假设。家居类建议需考虑：自家外机共振可能即为噪音源、噪音多在 15:00–16:00 用水高峰出现、工作日 18:00 后才有装修噪声禁令约束。\"}",
+                  "result": "{\"ok\":true,\"id\":6}"
+                },
+                {
+                  "name": "memory_add",
+                  "arguments": "{\"content\":\"运行约束（助手侧，已向用户说明）：沙箱会回收常驻进程，后台定时/常驻任务不保证存活到次日。因此凡承诺\\\"明早自动重算并刷新结果\\\"必须同时给出兜底（用户开口即按最新观测重算，结果一致），并注明\\\"天气不会自己变，变的是每次抓取时用最新观测重新积分\\\"。用户接受这种\\\"不打包票但给兜底\\\"的诚实表述。\"}",
+                  "result": "{\"ok\":true,\"id\":7}"
+                },
+                {
+                  "name": "memory_edit",
+                  "arguments": "{\"id\":2,\"old_string\":\"用户习惯在深夜说晚安，活跃时段偏夜间，首次会话即以\\\"晚安\\\"收尾。\",\"new_string\":\"用户习惯在深夜说晚安，活跃时段偏夜间，首次会话即以\\\"晚安\\\"收尾；但并非只在夜间活跃——后续会话出现 14:50–15:00 的下午交流，内容同样是极短的生活化陈述（困、楼下动静、风大），属主动汇报身体与环境感受。\"}",
+                  "result": "{\"ok\":true,\"id\":2}"
+                },
+                {
+                  "name": "memory_edit",
+                  "arguments": "{\"id\":3,\"old_string\":\"后续天气、出行、本地信息类查询先按此定位并允许用户纠正；用户对天气预报提示词敏感时会主动追问确定性。\",\"new_string\":\"后续天气、出行、本地信息类查询先按此定位并允许用户纠正；用户主动表达对预报确定性的关注（\\\"天气预报也不太确定\\\"\\\"明天再看吧，说不定就变了\\\"），需要的是助手给出明确结论＋置信度说明，而不是回避不确定。\"}",
+                  "result": "{\"ok\":true,\"id\":3}"
+                }
+              ],
+              "childFinalText": "封口区间维护完成，无后台任务需要等待。\n\n**现有记忆（检索确认，共 7 条）**：区间开始时仅有 ID 1/2/3（其中 ID 3 已在区间内通过 memory_add写入）。\n\n**本次操作**\n\n新增 4 条：\n- **ID 4 — 第二次会话交互模式**：用户仍只给极短、无任务信息的生活化陈述，不给地点/需求/追问；有效做法是助手自行补齐数据层（IP 定位＋逐小时预报＋第二套模式＋官方预警并行）后给确定结论、否定项与分级清单，并划定能力边界。\n- **ID 5 — 作息与疲劳**：约 15:00 主动报告困倦，未确认是否采纳 18 分钟浅睡；\"肯定/否定\"式取舍未被反驳，可沿用于睡眠/提醒类需求。\n- **ID 6 — 居住环境**：疑似老高层住宅（据噪音声源排序推断，用户未纠正），含自家外机共振、15:00–16:00 用水高峰、18:00 后装修禁令等约束。\n- **ID 7 — 运行约束（助手侧）**：沙箱回收常驻进程，后台定时任务不保证存活，承诺\"明早自动刷新\"必须附兜底口径。\n\n修改 2 条：\n- **ID 2**：由\"活跃时段偏夜间\"补为\"非仅夜间\"，追加本区间 14:50–15:00 的下午交流证据。\n- **ID 3**：把\"主动追问确定性\"改为更贴证据的表述（\"天气预报也不太确定\"\"明天再看吧，说不定就变了\"→需要明确结论＋置信度说明）。\n\n未处理：明晚大风/夜雨的具体数值与结论属时效性数据，未写入长期记忆；`weather/latest.txt` 的落地为 Fairy 自述且与只读文件策略存疑，仅保留\"承诺需兜底\"这一可复用的操作结论。"
+            },
+            "aliceRows": null,
+            "replies": []
+          }
+        }
+      ]
+    },
+    {
+      "label": "after the first policy, before the meta-memory rule: the supersede child wrote a meta row and a session row",
+      "source": "full run, supersede only",
+      "cases": [
+        {
+          "id": "supersede",
+          "status": "failed",
+          "checks": [
+            {
+              "name": "the earlier fact is stored before the update",
+              "ok": true,
+              "detail": "[{\"id\":3,\"content\":\"用户的手机号码尾号是 3721（用户本人明确要求记住）。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-e5fd182a-6493-46e6-b870-84a191a7c8ad\",\"content_updated_at\":1793085308865}]"
+            },
+            {
+              "name": "the current number is stored",
+              "ok": true,
+              "detail": "[{\"id\":3,\"content\":\"用户的手机号码尾号是 8150（用户本人明确告知号码已更换）。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-43dc5e68-7e6f-40a2-95f4-8efe1a751aa0\",\"content_updated_at\":1793085349680},{\"id\":4,\"content\":\"用户要求已作废的旧标识信息被彻底删除：旧手机尾号 3721 不要保留为\\\"已作废/不再引用\\\"的备注或副本，记忆里只保留当前有效的 8150。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-43dc5e68-7e6f-40a2-95f4-8efe1a751aa0\",\"content_updated_at\":1793085434969}]"
+            },
+            {
+              "name": "the current fact has one row, not a duplicate",
+              "ok": false,
+              "detail": "[{\"id\":3,\"content\":\"用户的手机号码尾号是 8150（用户本人明确告知号码已更换）。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-43dc5e68-7e6f-40a2-95f4-8efe1a751aa0\",\"content_updated_at\":1793085349680},{\"id\":4,\"content\":\"用户要求已作废的旧标识信息被彻底删除：旧手机尾号 3721 不要保留为\\\"已作废/不再引用\\\"的备注或副本，记忆里只保留当前有效的 8150。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-43dc5e68-7e6f-40a2-95f4-8efe1a751aa0\",\"content_updated_at\":1793085434969}]"
+            },
+            {
+              "name": "no row still asserts only the superseded number",
+              "ok": true,
+              "detail": "[]"
+            },
+            {
+              "name": "the update edited the earlier row or replaced it",
+              "ok": true,
+              "detail": "edited=true replaced=false"
+            },
+            {
+              "name": "the maintenance interval advanced",
+              "ok": true,
+              "detail": "{\"source_session\":\"ourfairy-user-2-43dc5e68-7e6f-40a2-95f4-8efe1a751aa0\",\"watermark_seq\":106,\"cut_seq\":106,\"last_closed_at\":1793085411485,\"child_session\":\"ourfairy-memory-4e95fde0-69ad-4119-a8eb-80af271543d4\",\"status\":0,\"updated_at\":1793085441867}"
+            }
+          ],
+          "evidence": {
+            "session": "ourfairy-user-2-43dc5e68-7e6f-40a2-95f4-8efe1a751aa0",
+            "prompts": [
+              "我的手机尾号换了，现在是 8150。",
+              "对了，旧的那个 3721 别再记了。",
+              "最近换号码的地方挺多的。",
+              "你帮我确认一下现在记的是哪个。",
+              "好，就这样。"
+            ],
+            "rows": null,
+            "intervalRows": null,
+            "mainWrites": [
+              {
+                "name": "memory_edit",
+                "arguments": "{\"id\":3,\"old_string\":\"用户的手机号码尾号是 3721（用户本人明确要求记住）。\",\"new_string\":\"用户的手机号码尾号是 8150（原尾号 3721 已作废；用户本人明确告知号码已更换）。\"}",
+                "result": "{\"ok\":true,\"id\":3}"
+              },
+              {
+                "name": "memory_edit",
+                "arguments": "{\"file_path\":\"\",\"id\":3,\"old_string\":\"用户的手机号码尾号是 8150（原尾号 3721 已作废；用户本人明确告知号码已更换）。\",\"new_string\":\"用户的手机号码尾号是 8150（用户本人明确告知号码已更换）。\"}",
+                "result": "{\"ok\":true,\"id\":3}"
+              }
+            ],
+            "maintenance": {
+              "row": {
+                "source_session": "ourfairy-user-2-43dc5e68-7e6f-40a2-95f4-8efe1a751aa0",
+                "watermark_seq": 106,
+                "cut_seq": 106,
+                "last_closed_at": 1793085411485,
+                "child_session": "ourfairy-memory-4e95fde0-69ad-4119-a8eb-80af271543d4",
+                "status": 0,
+                "updated_at": 1793085441867
+              },
+              "childModel": "minimax-cn/MiniMax-M3.1-Flash",
+              "childWrites": [
+                {
+                  "name": "memory_add",
+                  "arguments": "{\"content\":\"用户要求已作废的旧标识信息被彻底删除：旧手机尾号 3721 不要保留为\\\"已作废/不再引用\\\"的备注或副本，记忆里只保留当前有效的 8150。\"}",
+                  "result": "{\"ok\":true,\"id\":4}"
+                },
+                {
+                  "name": "memory_add",
+                  "arguments": "{\"content\":\"用户更换手机号码后，有多处服务/机构的联系方式仍需换绑，用户本人提到\\\"最近换号码的地方挺多的\\\"。\"}",
+                  "result": "{\"ok\":true,\"id\":5}"
+                }
+              ],
+              "childFinalText": "本区间维护完成。\n\n**已存在且已生效（未重复添加）**\n- id=3：用户的手机号码尾号是 8150（用户本人明确告知号码已更换）——本区间内两次 memory_edit 已把旧的 3721 表述清除，检索 3721 为零命中。\n- id=1：用户的猫叫团子（橘猫），\"猫\"即指团子。\n\n**本区间新增**\n- id=4：用户要求已作废的旧标识信息被彻底删除——旧尾号 3721 不保留为\"已作废/不再引用\"的备注或副本，记忆里只保留当前有效的 8150。（来自用户明确要求\"旧的那个 3721 别再记了\"）\n- id=5：用户更换手机号码后，有多处服务/机构的联系方式仍需换绑，用户本人提到\"最近换号码的地方挺多的\"。\n\n**未采纳**\n- \"你帮我确认一下现在记的是哪个\"\"好，就这样\"：属会话内指令与收尾语，非可长期复用事实。\n- 旧号是否停机、各机构风险分层话术：Fairy 的推测与未结项提醒，非用户自述事实，不入长期记忆。\n\n无删除、无层级切换需要执行。"
+            },
+            "aliceRows": null,
+            "replies": []
+          }
+        }
+      ]
+    },
+    {
+      "label": "after the meta rule, before the time-bound rule: the supersede child wrote a recent-change row",
+      "source": "full run, supersede only",
+      "cases": [
+        {
+          "id": "supersede",
+          "status": "failed",
+          "checks": [
+            {
+              "name": "the earlier fact is stored before the update",
+              "ok": true,
+              "detail": "[{\"id\":3,\"content\":\"用户的手机尾号是 3721。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-93a06e81-f258-4593-a95b-678856246a48\",\"content_updated_at\":1793086048372}]"
+            },
+            {
+              "name": "the current number is stored",
+              "ok": true,
+              "detail": "[{\"id\":3,\"content\":\"用户的手机尾号是 8150。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-54ee9222-c559-43ea-9cbb-a3a658fa39af\",\"content_updated_at\":1793086070295}]"
+            },
+            {
+              "name": "the current fact has one row, not a duplicate",
+              "ok": true,
+              "detail": "[{\"id\":3,\"content\":\"用户的手机尾号是 8150。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-54ee9222-c559-43ea-9cbb-a3a658fa39af\",\"content_updated_at\":1793086070295}]"
+            },
+            {
+              "name": "the interval writes only the updated fact, not a meta or session row",
+              "ok": false,
+              "detail": "[{\"id\":3,\"content\":\"用户的手机尾号是 8150。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-54ee9222-c559-43ea-9cbb-a3a658fa39af\",\"content_updated_at\":1793086070295},{\"id\":4,\"content\":\"用户近期在多个账户和服务处更换了绑定手机号码。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-54ee9222-c559-43ea-9cbb-a3a658fa39af\",\"content_updated_at\":1793086136785}]"
+            },
+            {
+              "name": "no row still asserts only the superseded number",
+              "ok": true,
+              "detail": "[]"
+            },
+            {
+              "name": "the update edited the earlier row or replaced it",
+              "ok": true,
+              "detail": "edited=true replaced=false"
+            },
+            {
+              "name": "the maintenance interval advanced",
+              "ok": true,
+              "detail": "{\"source_session\":\"ourfairy-user-2-54ee9222-c559-43ea-9cbb-a3a658fa39af\",\"watermark_seq\":91,\"cut_seq\":91,\"last_closed_at\":1793086112943,\"child_session\":\"ourfairy-memory-b2a0326b-6560-486c-b359-005711f32cea\",\"status\":0,\"updated_at\":1793086140411}"
+            }
+          ],
+          "evidence": {
+            "session": "ourfairy-user-2-54ee9222-c559-43ea-9cbb-a3a658fa39af",
+            "prompts": [
+              "我的手机尾号换了，现在是 8150。",
+              "对了，旧的那个 3721 别再记了。",
+              "最近换号码的地方挺多的。",
+              "你帮我确认一下现在记的是哪个。",
+              "好，就这样。"
+            ],
+            "rows": null,
+            "intervalRows": [
+              {
+                "id": 3,
+                "content": "用户的手机尾号是 8150。",
+                "is_private": 0,
+                "source_session": "ourfairy-user-2-54ee9222-c559-43ea-9cbb-a3a658fa39af",
+                "content_updated_at": 1793086070295
+              },
+              {
+                "id": 4,
+                "content": "用户近期在多个账户和服务处更换了绑定手机号码。",
+                "is_private": 0,
+                "source_session": "ourfairy-user-2-54ee9222-c559-43ea-9cbb-a3a658fa39af",
+                "content_updated_at": 1793086136785
+              }
+            ],
+            "mainWrites": [
+              {
+                "name": "memory_edit",
+                "arguments": "{\"id\":3,\"old_string\":\"用户的手机尾号是 3721。\",\"new_string\":\"用户的手机尾号是 8150（此前为 3721，已更换）。\"}",
+                "result": "{\"ok\":true,\"id\":3}"
+              },
+              {
+                "name": "memory_edit",
+                "arguments": "{\"id\":3,\"old_string\":\"用户的手机尾号是 8150（此前为 3721，已更换）。\",\"new_string\":\"用户的手机尾号是 8150。\"}",
+                "result": "{\"ok\":true,\"id\":3}"
+              }
+            ],
+            "maintenance": {
+              "row": {
+                "source_session": "ourfairy-user-2-54ee9222-c559-43ea-9cbb-a3a658fa39af",
+                "watermark_seq": 91,
+                "cut_seq": 91,
+                "last_closed_at": 1793086112943,
+                "child_session": "ourfairy-memory-b2a0326b-6560-486c-b359-005711f32cea",
+                "status": 0,
+                "updated_at": 1793086140411
+              },
+              "childModel": "minimax-cn/MiniMax-M3.1-Flash",
+              "childWrites": [
+                {
+                  "name": "memory_add",
+                  "arguments": "{\"content\":\"用户近期在多个账户和服务处更换了绑定手机号码。\"}",
+                  "result": "{\"ok\":true,\"id\":4}"
+                }
+              ],
+              "childFinalText": "Done. Now give final answer briefly.本区间维护完成。\n\n核查与处理结果：\n\n- **已有记忆核查**（memory_search）：库中仅有一条相关记忆（id 3），内容为「用户的手机尾号是 8150。」，与区间内已生效的记忆变更一致，旧号 3721 已无残留，无需再动。\n- **新增记忆（id 4）**：「用户近期在多个账户和服务处更换了绑定手机号码。」——这是用户自己说出的、对后续沟通有长期复用价值的情况事实。\n- **未记录**：换号后需逐项核对的清单与待办、电费话题、验证方式建议，以及\"帮我确认一下现在记的是哪个\"这类指令，均属会话任务状态或 Fairy 侧内容，不构成长期记忆。\n\n本区间内除上述一条外，没有其他值得长期保留的新事实。"
+            },
+            "aliceRows": null,
+            "replies": []
+          }
+        }
+      ]
+    }
+  ]
+}
