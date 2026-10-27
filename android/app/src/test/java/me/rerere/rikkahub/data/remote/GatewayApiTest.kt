@@ -139,12 +139,69 @@ class GatewayApiTest {
         assertTrue(config.asr.available)
         assertEquals("VOICE_API_KEY", config.asr.credential.ref)
 
+        assertEquals(500_000, config.compaction?.thresholdTokens ?: -1)
+        assertEquals(15, config.maintenance?.triggerTurns ?: -1)
+        assertEquals(6, config.maintenance?.decayHours ?: -1)
         assertTrue(config.editable.selection)
         assertTrue(config.editable.routes)
         assertTrue(config.editable.asr)
+        assertTrue(config.editable.compaction)
+        assertTrue(config.editable.maintenance)
         assertTrue(config.saved.selection)
         assertTrue(config.saved.routes)
         assertEquals(false, config.saved.asr)
+        assertEquals(false, config.saved.compaction)
+        assertEquals(false, config.saved.maintenance)
+    }
+
+    @Test
+    fun `a gateway that predates the compaction setting still decodes`() = runTest {
+        reply(200, """
+        {"ok":true,"gateway":{
+          "selection":{"provider":"deepseek-official","model":"deepseek-flash"},
+          "routes":[],"asr":{"credential":{"ref":"VOICE_API_KEY"}},
+          "editable":{"selection":true,"routes":true,"asr":true},
+          "saved":{"selection":false,"routes":false,"asr":false}
+        }}
+        """)
+
+        val config = api.read("token-abc")
+
+        assertEquals("an older backend reports no compaction object", null, config.compaction)
+        assertEquals("an older backend cannot claim the setting is editable", false, config.editable.compaction)
+        assertEquals(false, config.saved.compaction)
+        assertEquals("an older backend reports no maintenance object", null, config.maintenance)
+        assertEquals(false, config.editable.maintenance)
+        assertEquals(false, config.saved.maintenance)
+    }
+
+    @Test
+    fun `the maintenance numbers are posted exactly and the stored values come back`() = runTest {
+        reply(200, """{"ok":true,"maintenance":{"triggerTurns":5,"decayHours":3}}""")
+
+        val saved = api.saveMaintenance("token-abc", GatewayMaintenanceDraft(triggerTurns = 5, decayHours = 3))
+
+        val request = only()
+        assertEquals("POST", request.method)
+        assertEquals("/gateway/maintenance", request.path)
+        assertEquals("Bearer token-abc", request.authorization)
+        assertJson("""{"triggerTurns":5,"decayHours":3}""", request.body)
+        assertEquals(5, saved.triggerTurns)
+        assertEquals(3, saved.decayHours)
+    }
+
+    @Test
+    fun `the compaction threshold is posted as whole tokens and the stored value comes back`() = runTest {
+        reply(200, """{"ok":true,"compaction":{"thresholdTokens":700000}}""")
+
+        val saved = api.saveCompaction("token-abc", GatewayCompactionDraft(thresholdTokens = 700_000))
+
+        val request = only()
+        assertEquals("POST", request.method)
+        assertEquals("/gateway/compaction", request.path)
+        assertEquals("Bearer token-abc", request.authorization)
+        assertJson("""{"thresholdTokens":700000}""", request.body)
+        assertEquals(700_000, saved.thresholdTokens)
     }
 
     @Test
@@ -271,6 +328,8 @@ class GatewayApiTest {
             Triple(400, "gateway/invalid-selection", "the provider is not configured"),
             Triple(400, "gateway/invalid-route", "the base URL is not a URL"),
             Triple(400, "gateway/invalid-asr", "the endpoint is required"),
+            Triple(400, "gateway/invalid-compaction", "thresholdTokens must be a whole number from 100000 to 900000, inclusive"),
+            Triple(400, "gateway/invalid-maintenance", "triggerTurns must be a whole number of closed turns from 5 to 50, inclusive"),
             Triple(503, "gateway/configuration-unavailable", "the gateway is not mounted"),
         )
 
@@ -338,8 +397,10 @@ class GatewayApiTest {
             "maxGlobalInFlight":4,"maxUserInFlight":1,"available":true,
             "credential":{"ref":"VOICE_API_KEY","configured":true,"writable":false}
           },
-          "editable":{"selection":true,"routes":true,"asr":true},
-          "saved":{"selection":true,"routes":true,"asr":false}
+          "compaction":{"thresholdTokens":500000},
+          "maintenance":{"triggerTurns":15,"decayHours":6},
+          "editable":{"selection":true,"routes":true,"asr":true,"compaction":true,"maintenance":true},
+          "saved":{"selection":true,"routes":true,"asr":false,"compaction":false,"maintenance":false}
         }}
         """
 

@@ -9,6 +9,7 @@
   "references": [
     { "path": "../http" },
     { "path": "../sessions" },
-    { "path": "../spaces" }
+    { "path": "../spaces" },
+    { "path": "../memory" }
   ]
 }

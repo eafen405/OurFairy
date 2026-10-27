@@ -26,6 +26,7 @@
     "@deepseek-ai/dsh-tools": "^0.2.1-alpha.2",
     "@ourfairy/dsh-attachments": "^0.1.0",
     "@ourfairy/dsh-identity": "^0.1.0",
+    "@ourfairy/dsh-memory": "^0.1.0",
     "@ourfairy/dsh-sessions": "^0.1.0"
   }
 }

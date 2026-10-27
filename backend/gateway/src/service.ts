@@ -101,6 +101,44 @@ export const PHONE_EDITABLE_MODEL_FIELDS = new Set(['id', 'name', 'contextWindow
 const ROUTE_WIDE_FIELDS = ['api', 'baseURL', 'apiKeyEnv'] as const
 
 /**
+ * The automatic-compaction threshold's owning row and product policy range.
+ *
+ * The row is the native `compaction-basic` entry the shipped bundle mounts; its
+ * `thresholdTokens` field is volatile, so a save applies to the next pressure
+ * check without remounting the row. The range is the product decision from
+ * `docs/specs/fairy-memory.md` §6, enforced here because the native row only
+ * declares a positive integer.
+ */
+const COMPACTION_ROW = 'compaction-basic'
+const COMPACTION_FIELD = 'thresholdTokens'
+const COMPACTION_MIN_TOKENS = 100_000
+const COMPACTION_MAX_TOKENS = 900_000
+const COMPACTION_DEFAULT_TOKENS = 500_000
+
+/**
+ * The memory row's two maintenance numbers and their product policy range.
+ *
+ * The `memory` row is the one the shipped bundle mounts; `maintenanceTurns` and
+ * `maintenanceDecayHours` are volatile fields, so a save applies to the next
+ * maintenance evaluation without remounting the engine. The ranges are the
+ * product decision from `docs/specs/fairy-memory.md` §5/§6, enforced here
+ * because the row's own schema is the same bound but the wire contract names
+ * the error code and spelling the phone sees.
+ *
+ * The gateway view names them `triggerTurns` and `decayHours`; the profile keeps
+ * the row's own field names.
+ */
+const MAINTENANCE_ROW = 'memory'
+const MAINTENANCE_TURNS_FIELD = 'maintenanceTurns'
+const MAINTENANCE_DECAY_FIELD = 'maintenanceDecayHours'
+const MAINTENANCE_MIN_TURNS = 5
+const MAINTENANCE_MAX_TURNS = 50
+const MAINTENANCE_MIN_DECAY_HOURS = 3
+const MAINTENANCE_MAX_DECAY_HOURS = 24
+const MAINTENANCE_DEFAULT_TURNS = 15
+const MAINTENANCE_DEFAULT_DECAY_HOURS = 6
+
+/**
  * One model entry of a provider route, as the settings row and the phone draft
  * carry it.
  *
@@ -432,12 +470,31 @@ export class GatewayService extends Service {
     }
   }
 
+  /** The live automatic-compaction threshold the native pressure check reads. */
+  compactionView() {
+    const value = this.row(COMPACTION_ROW)?.value?.[COMPACTION_FIELD]
+    return { [COMPACTION_FIELD]: isSafeInteger(value) ? value : COMPACTION_DEFAULT_TOKENS }
+  }
+
+  /** The live maintenance numbers the next maintenance evaluation reads. */
+  maintenanceView() {
+    const value = this.row(MAINTENANCE_ROW)?.value
+    const turns = value?.[MAINTENANCE_TURNS_FIELD]
+    const decayHours = value?.[MAINTENANCE_DECAY_FIELD]
+    return {
+      triggerTurns: isSafeInteger(turns) ? turns : MAINTENANCE_DEFAULT_TURNS,
+      decayHours: isSafeInteger(decayHours) ? decayHours : MAINTENANCE_DEFAULT_DECAY_HOURS,
+    }
+  }
+
   /** Read the shared configuration, live usage and the editability facts behind them. */
   async read() {
     // A deployment without the editor answers 503 from requireConfigurationEditor(); reaching here
     // means the editor is mounted, so only per-row presence can differ.
     const capability = { selection: this.row('agent-default-model') !== undefined,
-      routes: this.row('llm-pi-ai') !== undefined, asr: this.row('speech') !== undefined }
+      routes: this.row('llm-pi-ai') !== undefined, asr: this.row('speech') !== undefined,
+      compaction: this.row(COMPACTION_ROW) !== undefined,
+      maintenance: this.row(MAINTENANCE_ROW) !== undefined }
     const selection = this.ctx.agentDefaultModel.currentSelection()
     const inUse = this.ctx.ourfairyChat.activeReplies()
     const profiles = this.row('llm-pi-ai')?.value?.providers ?? {}
@@ -455,18 +512,25 @@ export class GatewayService extends Service {
     const routesRow = this.row('llm-pi-ai')
     const selectionRow = this.row('agent-default-model')
     const asrRow = this.row('speech')
+    const compactionRow = this.row(COMPACTION_ROW)
+    const maintenanceRow = this.row(MAINTENANCE_ROW)
     return {
       gateway: {
       selection,
       selectionApplies: 'next-turn',
       routes,
       asr: await this.asrView(),
+      compaction: this.compactionView(),
+      maintenance: this.maintenanceView(),
       inUse,
       editable: capability,
       saved: {
         selection: Object.keys(selectionRow?.user ?? {}).length > 0,
         routes: Object.keys(routesRow?.user?.providers ?? {}).length > 0,
         asr: Object.keys(asrRow?.user ?? {}).length > 0,
+        compaction: isSafeInteger(compactionRow?.user?.[COMPACTION_FIELD]),
+        maintenance: isSafeInteger(maintenanceRow?.user?.[MAINTENANCE_TURNS_FIELD])
+          || isSafeInteger(maintenanceRow?.user?.[MAINTENANCE_DECAY_FIELD]),
       },
       },
     }
@@ -595,5 +659,75 @@ export class GatewayService extends Service {
     }
     await this.edit(() => this.requireConfigurationEditor().update('speech', fields))
     return { asr: await this.asrView() }
+  }
+
+  /**
+   * Save the automatic-compaction threshold. The native `compaction-basic` row
+   * carries it as a volatile field, so the next pressure check reads the new
+   * value and a running reply is not interrupted.
+   */
+  async saveCompaction(body: Record<string, unknown>) {
+    const input = body ?? ({} as Record<string, unknown>)
+    for (const key of Object.keys(input)) {
+      if (key !== COMPACTION_FIELD) {
+        throw new GatewayError(400, 'gateway/invalid-compaction',
+          `the compaction threshold does not accept field "${key}"`)
+      }
+    }
+    const thresholdTokens = input[COMPACTION_FIELD]
+    if (!isSafeInteger(thresholdTokens)
+      || thresholdTokens < COMPACTION_MIN_TOKENS || thresholdTokens > COMPACTION_MAX_TOKENS) {
+      const got = thresholdTokens === undefined ? 'no value' : JSON.stringify(thresholdTokens)
+      throw new GatewayError(400, 'gateway/invalid-compaction',
+        `${COMPACTION_FIELD} must be a whole number of tokens from ${COMPACTION_MIN_TOKENS} to ${COMPACTION_MAX_TOKENS},`
+        + ` inclusive; got ${got}`)
+    }
+    if (this.row(COMPACTION_ROW) === undefined) {
+      throw new GatewayError(503, 'gateway/configuration-unavailable',
+        `this deployment mounts no "${COMPACTION_ROW}" row; the compaction threshold cannot be saved here`)
+    }
+    await this.edit(() => this.requireConfigurationEditor().update(COMPACTION_ROW, { thresholdTokens }))
+    return { compaction: this.compactionView() }
+  }
+
+  /**
+   * Save the maintenance trigger turn count and decay interval. The memory row
+   * carries both as volatile fields, so the next maintenance evaluation reads
+   * the new values; a parked interval is re-evaluated under them and no
+   * persisted watermark is touched by this write.
+   */
+  async saveMaintenance(body: Record<string, unknown>) {
+    const input = body ?? ({} as Record<string, unknown>)
+    for (const key of Object.keys(input)) {
+      if (key !== 'triggerTurns' && key !== 'decayHours') {
+        throw new GatewayError(400, 'gateway/invalid-maintenance',
+          `the maintenance settings do not accept field "${key}"`)
+      }
+    }
+    const triggerTurns = input.triggerTurns
+    if (!isSafeInteger(triggerTurns)
+      || triggerTurns < MAINTENANCE_MIN_TURNS || triggerTurns > MAINTENANCE_MAX_TURNS) {
+      const got = triggerTurns === undefined ? 'no value' : JSON.stringify(triggerTurns)
+      throw new GatewayError(400, 'gateway/invalid-maintenance',
+        `triggerTurns must be a whole number of closed turns from ${MAINTENANCE_MIN_TURNS} to ${MAINTENANCE_MAX_TURNS},`
+        + ` inclusive; got ${got}`)
+    }
+    const decayHours = input.decayHours
+    if (!isSafeInteger(decayHours)
+      || decayHours < MAINTENANCE_MIN_DECAY_HOURS || decayHours > MAINTENANCE_MAX_DECAY_HOURS) {
+      const got = decayHours === undefined ? 'no value' : JSON.stringify(decayHours)
+      throw new GatewayError(400, 'gateway/invalid-maintenance',
+        `decayHours must be a whole number of hours from ${MAINTENANCE_MIN_DECAY_HOURS} to ${MAINTENANCE_MAX_DECAY_HOURS},`
+        + ` inclusive; got ${got}`)
+    }
+    if (this.row(MAINTENANCE_ROW) === undefined) {
+      throw new GatewayError(503, 'gateway/configuration-unavailable',
+        `this deployment mounts no "${MAINTENANCE_ROW}" row; the maintenance settings cannot be saved here`)
+    }
+    await this.edit(() => this.requireConfigurationEditor().update(MAINTENANCE_ROW, {
+      [MAINTENANCE_TURNS_FIELD]: triggerTurns,
+      [MAINTENANCE_DECAY_FIELD]: decayHours,
+    }))
+    return { maintenance: this.maintenanceView() }
   }
 }

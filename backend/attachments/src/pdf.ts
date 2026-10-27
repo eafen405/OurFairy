@@ -5,6 +5,7 @@
  * @module @ourfairy/dsh-attachments/src/pdf
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
 import { buildBwrapArgv } from '@ourfairy/dsh-spaces/bwrap'
 import { mkdtemp, rm, chmod, readFile } from 'node:fs/promises'
 import { createWriteStream } from 'node:fs'
@@ -187,6 +188,10 @@ export function installPdf(ctx: Context, service: AttachmentService): void {
     }
   }
   const register = (agent: Agent): undefined => {
+    // The memory maintenance child (the memory row's maintenance preset) may
+    // use long-term memory tools only; a scope's own registration cannot be
+    // hidden by dsh's tool restriction, so every product row skips this preset.
+    if (agent.session.header?.agentPreset === MAINTENANCE_PRESET) return undefined
     for (const [name, mode, description] of TOOLS) agent.ctx.tools.register(defineTool({ name, description,
       parameters: { file_path: { type: 'string', required: true }, ...(mode !== 'info' ? { pages: { type: 'array', required: true, items: { type: 'integer' } } } : {}) },
       output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => {

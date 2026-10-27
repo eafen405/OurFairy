@@ -1,0 +1,53 @@
+{
+  "title": "Fairy 记忆与上下文治理（规格 #240）",
+  "entries": [
+    {
+      "dirs": [
+        "241-absolute-compaction-threshold"
+      ],
+      "note": "#241 dsh `compaction-basic` 接受可选绝对 `thresholdTokens`：与窗口比例阈值、扣除输出预留与余量后的容量取最小值，schema 声明 volatile 故保存即热生效，未配置时既有解析不变（dsh `d80522d276`）"
+    },
+    {
+      "dirs": [
+        "244-memory-crud"
+      ],
+      "note": "#244 长期记忆 CRUD 与双层检索（独立 SQLite 与版本化迁移、五个记忆工具、20 条/8000 字符预算与显式截断、按调用会话的查询门禁、编号不复用与物理删除）；印象、维护与设置见后续票；#240 收口复核把同一 8000 字符预算作为 `memory_add`/`memory_edit` 的写入上限，拒绝会被每次检索整条省略、任何会话都无法再改/删/切换的孤儿行"
+    },
+    {
+      "dirs": [
+        "245-impression"
+      ],
+      "note": "#245 每位用户一份印象：按装配求值的系统提示 section 只注入本人、`/impression/read|edit` 以登录凭据定归属且先读后改、Fairy 工具按调用会话门禁、8000 Unicode 字符拒绝而非截断、无定时失效；客户端设置入口与读成功后才可编辑的多行整份编辑页，无长期记忆浏览器"
+    },
+    {
+      "dirs": [
+        "242-native-auto-compaction"
+      ],
+      "note": "#242 真实 v1 profile 挂载 token meter、compaction-basic（500000 绝对阈值 / 16000 保留）、工具结果裁剪与图片 offload，保留 spill 且不挂 command-compact；真实 profile + Loader 与模型替身证明阈值压缩后继续回复（工具配对与近期原文保留）、裁剪、offload、溢出恢复和冷恢复，压缩摘要不写长期记忆；设置入口 #243 未做"
+    },
+    {
+      "dirs": [
+        "246-session-memory-maintenance"
+      ],
+      "note": "#246 每个源会话的动态维护门槛（默认 15、每满 6 小时减 1、最低 1）与静默准入：原生轻量模型子会话零父上下文、parentSession 指向源会话、只注册五个记忆工具；材料只含封口区间用户消息、Fairy 回复、附件名与记忆变更调用；完成按持久 turn/end 判定（零写入也推进），失败恢复同一子会话，重启按持久水位与时间重算；maintenance_state 增加 cut_seq（schema v2）；配置 volatile 读取，设置 UI 属 #247"
+    },
+    {
+      "dirs": [
+        "243-compaction-settings"
+      ],
+      "note": "#243 自动压缩触发阈值成为部署设置：网关读写 `compaction-basic` 行的 volatile `thresholdTokens`（整 token 100000–900000，含边界；非整数、越界与多余字段 400 `gateway/invalid-compaction`，不截断/不 clamp，保留预算仍由 16000 固定）；真实 profile + Loader 与产品会话证明保存后下一次压力检查生效（900000 不触发、100000 修剪超长工具结果）、重启保留、切模型不改、匿名 401/普通代理人 403；Android 新增「上下文 → 自动压缩 → 阈值」独立嵌套组与可复用 Material 3 数值控件（滑块与直接输入同一 K 草稿、单位、范围、忙态、可见错误、写后重读），控件留给 #247 复用；100000–900000 只在网关校验：原生 `compaction-basic` schema 只约束正整数，这是规格 §6「拥有者 schema 也校验范围」的有意偏差，#240 复核记录在证据与 bundle 注释中，未改 dsh"
+    },
+    {
+      "dirs": [
+        "247-maintenance-settings"
+      ],
+      "note": "#247 记忆维护数值成为部署设置：网关读写 `memory` 行的 volatile `maintenanceTurns`/`maintenanceDecayHours`（线协议 `triggerTurns` 5–50、`decayHours` 3–24，含边界；缺失、非整数、越界与多余字段 400 `gateway/invalid-maintenance`，不 clamp）；一次保存写两项、服务端校验、匿名 401/普通代理人 403；真实 profile + Loader 与产品会话证明保存后下一次维护评估用新值（6 回合搁置区间在 15 不触发、保存 5 后触发；10 回合 + 15 小时搁置在 6 小时衰减门槛 13 不触发、保存 3 后门槛 10 触发）、保存不重置持久水位、重启保留并用新 5 回合阈值维护新会话；Android 新增「记忆 → 维护」独立嵌套组，两项复用 #243 的 Material 3 数值控件（各自草稿、共同校验与保存、单位回合/小时、忙态与可见错误），字符串 en/zh 同步、无新依赖；真实模型语义质量仍属 #248"
+    },
+    {
+      "dirs": [
+        "248-memory-integration-acceptance"
+      ],
+      "note": "#248 记忆增量集成与真实模型验收：`npm run acceptance:memory` 用真实 v1 profile + 真实 MiniMax-M3.1-Flash（拒绝回环替身，主/子会话都从各自 session log 核对路由）跑 11 条质量样本、67 项检查全过（明确记忆、稳定偏好、寒暄不写、易变观察不写、事实更新、失效删除、普通/私密切换、跨用户层隔离与印象、维护零写入推进/不重复、印象先读后写/注入/超长；复核加强 invalidate 后该例 7/7，当前全量应为 69 项）；维护门槛经真实 `/gateway/maintenance` 从 15/6 降到 5/3；真实运行暴露的会话摘要、用户画像、IP/位置推断、时间限定观察、元记忆与待办写入，以有 owner 的 `ourfairy:memory-policy` 段、`memory_add` 描述与维护子会话策略修复（`memory-policy` 测试固定接线，前后样本在证据目录）；`npm test` 381/381、`combo:verify` 三行 ok、Android 387 tests + lint 0 errors、dsh compaction-basic 158 + config catalog 15；真实 500K 压缩、真机与默认 15/6 真实节奏未执行；复核轮 dsh 另跑 typecheck 5/5 与 check:ci:static 59/64（5 个既有 fork 漂移失败），dsh 全量测试与覆盖率未跑"
+    }
+  ]
+}

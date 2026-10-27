@@ -67,6 +67,7 @@ fun FairySettingsPage(
     backend: IdentityBackend = koinInject(),
     onBack: () -> Unit,
     updateContent: @Composable () -> Unit = { RemoteAppUpdateEntry() },
+    onOpenImpression: () -> Unit = {},
 ) {
     val tokens = LocalFairyTokens.current
     val identity by session.identity.collectAsStateWithLifecycle()
@@ -133,6 +134,22 @@ fun FairySettingsPage(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(46.dp),
+                )
+            }
+
+            FairySettingsGroup(
+                title = "印象",
+                tag = "IMPRESSION",
+                summary = "Fairy 对你的整体认识",
+                open = open == "impression",
+                onToggle = { open = if (open == "impression") null else "impression" },
+            ) {
+                GroupRow("本人印象", "查看与整段编辑", onClick = onOpenImpression)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "只保存每次互动都需要的整体认识，不包含长期记忆条目。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.textMuted,
                 )
             }
 

@@ -1,0 +1,41 @@
+{
+  "name": "@ourfairy/dsh-memory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OurFairy long-term memory, per-user impressions and per-source-session maintenance over the row's own SQLite store.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./preset": {
+      "types": "./dist/preset.d.ts",
+      "default": "./dist/preset.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "README.md",
+    "locale/*.json"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5-alpha.1",
+    "@deepseek-ai/dsh-agent": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-llm": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-session": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-session-persistence": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-system-prompt": "^0.2.1-alpha.2",
+    "@deepseek-ai/dsh-tools": "^0.2.1-alpha.2",
+    "@deepseek-ai/schemastery": "^3.18.5-alpha.1",
+    "@ourfairy/dsh-http": "^0.1.0",
+    "@ourfairy/dsh-identity": "^0.1.0",
+    "@ourfairy/dsh-sessions": "^0.1.0"
+  }
+}

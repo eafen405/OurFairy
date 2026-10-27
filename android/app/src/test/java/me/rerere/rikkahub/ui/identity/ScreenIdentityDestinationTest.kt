@@ -29,6 +29,11 @@ class ScreenIdentityDestinationTest {
             IdentityDestination.GATEWAY,
             Screen.Gateway.toIdentityDestination(),
         )
+        assertEquals(
+            "the impression page is the signed-in user's own entry",
+            IdentityDestination.IMPRESSION,
+            Screen.Impression.toIdentityDestination(),
+        )
     }
 
 }

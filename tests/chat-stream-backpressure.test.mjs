@@ -15,8 +15,12 @@ test('a backpressured SSE observer catches up without replaying superseded reply
     sequence: [...Array(historyTurns).fill('success'), 'slow_success'],
     // Exceed the shared 32 ms publication window so cadence cannot mask transport backlog.
     successText: reply, chunkSize: 8, chunkDelayMs: 40 })
+  // Forty history turns stay below the maintenance threshold; this file tests
+  // the transport, so no maintenance child may consume the scripted model
+  // sequence.
   const env = { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: 'pressure-password',
-    MINIMAX_CN_API_KEY: 'mock-key', OURFAIRY_MINIMAX_BASE_URL: model.baseURL }
+    MINIMAX_CN_API_KEY: 'mock-key', OURFAIRY_MINIMAX_BASE_URL: model.baseURL,
+    OURFAIRY_MEMORY_MAINTENANCE_TURNS: '50' }
   let call
   async function until(read, predicate) {
     const deadline = Date.now() + 30_000

@@ -9,6 +9,7 @@ import { postHandler, sendJson } from '@ourfairy/dsh-http/http'
 import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.js'
 import { installPdf } from './pdf.js'
 import { createDownloadResponder } from './download.js'
+import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
 import { SessionScopeError, OwnedSessionService } from '@ourfairy/dsh-sessions'
 import type { Context } from '@deepseek-ai/cordis'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -16,13 +17,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 // route registry. The imports are type-only, so they add no runtime dependency.
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-session'
 
 /** The owner facts the owned-session service names a caller by. */
 type SessionOwner = NonNullable<ReturnType<OwnedSessionService['authenticate']>>
 export { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES, uploadIdsOf } from './service.js'
 export { createDownloadResponder } from './download.js'
 export const name = 'ourfairy-attachments'
-export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory', 'agents', 'tools', 'subprocess']
+export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory', 'agents', 'tools', 'subprocess', 'sessions']
 
 /** The loader validates the row config before `apply`; the service only reads the root. */
 export const Config = z.object({
@@ -75,6 +77,14 @@ export function apply(ctx: Context, config: { readonly root: string }): void {
   // Each iterator pull must inherit the session: merely constructing the async
   // generator inside AsyncLocalStorage does not scope provider serialization.
   ctx.on('llm/stream', async function* (options, next) {
+    // A maintenance child is ownerless and has no attachments; the native
+    // stream still reaches this hook for every request, so leave its scoped
+    // refresh out instead of demanding an owner it never has.
+    const child = options.sessionId === undefined ? undefined : ctx.sessions.get(options.sessionId)
+    if (child?.header?.agentPreset === MAINTENANCE_PRESET) {
+      yield* next()
+      return
+    }
     const session = ctx.ourfairySpaces.session(options.sessionId)
     await service.refresh(session)
     const iterator = next()[Symbol.asyncIterator]()
@@ -87,7 +97,7 @@ export function apply(ctx: Context, config: { readonly root: string }): void {
     } finally { await iterator.return?.() }
   })
   ctx.on('tools/execute', async (exec, next) => {
-    if (exec.agent) await service.refresh(exec.agent.session)
+    if (exec.agent && exec.agent.session.header?.agentPreset !== MAINTENANCE_PRESET) await service.refresh(exec.agent.session)
     return next()
   }, { global: true })
 }

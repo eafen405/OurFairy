@@ -10,6 +10,7 @@
 import { mkdirSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { defineTool, type InferArgs, type InferValue, type ParameterSchemaSpec, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
@@ -60,6 +61,10 @@ export function apply(ctx: Context) {
   type ToolValue = InferValue<typeof output.schema>
   const registrations = new Map<Agent, Set<string>>()
   function register(agent: Agent): undefined {
+    // The memory maintenance child may use long-term memory tools only; a
+    // scope's own registration cannot be hidden by dsh's tool restriction, so
+    // every product row skips this preset.
+    if (agent.session.header?.agentPreset === MAINTENANCE_PRESET) return undefined
     const user = userOf(agent)
     const names = registrations.get(agent) ?? new Set<string>()
     registrations.set(agent, names)

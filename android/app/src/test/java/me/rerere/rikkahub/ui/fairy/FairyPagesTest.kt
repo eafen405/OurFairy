@@ -293,6 +293,22 @@ class FairyPagesTest {
         compose.onNodeWithText("更新测试内容").assertIsDisplayed()
     }
 
+    @Test fun `settings opens the user's own impression page`() {
+        var opened = false
+        show {
+            FairySettingsPage(
+                {}, {}, account, backend = identityBackend, onBack = {},
+                onOpenImpression = { opened = true },
+            )
+        }
+        compose.mainClock.autoAdvance = true
+
+        compose.onNodeWithText("印象").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("本人印象").performScrollTo().performClick()
+        compose.runOnIdle { assertTrue("the impression row opens the user's page", opened) }
+    }
+
     @Test fun `settings shows the other agents' names when their group is opened`() {
         show { FairySettingsPage({}, {}, account, backend = identityBackend, onBack = {}) }
         compose.mainClock.autoAdvance = true

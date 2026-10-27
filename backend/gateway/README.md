@@ -5,7 +5,9 @@
 403 `gateway/forbidden`（后端判定，不依赖客户端隐藏入口）。
 
 配置的唯一持久化权威是 dsh 的活动 profile：`agent-default-model` 行保存共用选模，
-`llm-pi-ai` 行的 `providers` 保存自定义供应商路由，`speech` 行保存 ASR 连接。网关不建
+`llm-pi-ai` 行的 `providers` 保存自定义供应商路由，`speech` 行保存 ASR 连接，
+`compaction-basic` 行的 `thresholdTokens` 保存自动压缩触发阈值，`memory` 行的
+`maintenanceTurns` / `maintenanceDecayHours` 保存记忆维护的两个数值。网关不建
 自己的配置表，也不接受密钥值——路由只携带凭据**引用**（环境变量名），由原生凭据 seam
 每次请求解析；读取只报告该引用是否已配置。
 
@@ -13,11 +15,13 @@
 
 | 路由 | 请求体 | 响应 |
 | --- | --- | --- |
-| `/gateway/read` | `{}` | `{ok:true,gateway:{selection,selectionApplies,routes,asr,inUse,editable,saved}}` |
+| `/gateway/read` | `{}` | `{ok:true,gateway:{selection,selectionApplies,routes,asr,compaction,maintenance,inUse,editable,saved}}` |
 | `/gateway/selection` | `{provider,model,reasoningEffort?}` | `{ok:true,selection,applies:"next-turn"}` |
 | `/gateway/route` | `{provider,displayName?,api?,baseURL?,apiKeyEnv?,models?}` | `{ok:true,route}` |
 | `/gateway/route/delete` | `{provider}` | `{ok:true,provider}` |
 | `/gateway/asr` | `{model,endpoint,apiKeyEnv?,maxDurationMs?,maxAudioBytes?,timeoutMs?,maxGlobalInFlight?,maxUserInFlight?}` | `{ok:true,asr}` |
+| `/gateway/compaction` | `{thresholdTokens}` | `{ok:true,compaction:{thresholdTokens}}` |
+| `/gateway/maintenance` | `{triggerTurns,decayHours}` | `{ok:true,maintenance:{triggerTurns,decayHours}}` |
 
 ### 读取
 
@@ -29,10 +33,14 @@
   官方路由的 `models` 来自适配器当前目录。`credential` 为
   `{ref,configured,writable,source?}`，永远不含密钥值。`inUse` 表示有正在运行的回复使用该路由。
 - `asr`：`speech` 行的连接设置、`available`（引用的凭据能否解析）与凭据状态。
-- `editable`：`{selection,routes,asr}`，表示相应行是否挂载。缺少整个配置编辑器时读取返回
+- `compaction`：`compaction-basic` 行的 `{thresholdTokens}`，即自动压缩的绝对 token 阈值；
+  未挂载该行时读取报告组合默认值 500000，而 `editable.compaction` 为 `false`。
+- `maintenance`：`memory` 行的 `{triggerTurns,decayHours}`，即维护触发回合数与门槛衰减
+  间隔；`editable.maintenance` 表示该行是否挂载。
+- `editable`：`{selection,routes,asr,compaction,maintenance}`，表示相应行是否挂载。缺少整个配置编辑器时读取返回
   503 `gateway/configuration-unavailable` 并说明原因，而不是假装只读。
-- `saved`：`{selection,routes,asr}`，表示 profile 用户层是否已有覆盖；`false` 表示仍在使用
-  组合声明的初始值。
+- `saved`：`{selection,routes,asr,compaction,maintenance}`，表示 profile 用户层是否已有覆盖；`false` 表示仍在使用
+  组合声明的初始值。`saved.maintenance` 只看 `memory` 行用户层是否已覆盖这两个数值之一。
 
 ### 共用选模
 
@@ -86,6 +94,38 @@ HTTP 测试的断言——`consecutive selection saves commit in submission orde
 `/gateway/asr` 写入 `speech` 行：`model`、`endpoint` 必填，其余为可选正整数限制；
 `apiKeyEnv` 是凭据引用名（默认 `VOICE_API_KEY`），不是密钥。下一次录音使用新设置；
 正在进行的转写保留自己的请求。
+
+### 自动压缩触发阈值
+
+`/gateway/compaction` 写入原生 `compaction-basic` 行的 `thresholdTokens`。只接受
+100000–900000（含边界）的完整整数；非整数、越界、缺失或多余字段都返回 400
+`gateway/invalid-compaction` 并说明范围，不截断、不取整、不落到边界值。该行默认
+500000，`retainTokens: 16000` 仍由部署拥有，不是本接口的第二个可编辑设置。
+
+该字段在原生 schema 中声明为 volatile，因此保存后**下一次压力判断**读取新值：不需要重启，
+也不会中断正在运行的回复。实际触发点仍取绝对阈值、路由比例阈值与扣除输出预留后的模型容量
+三者最小值，所以较小窗口模型可能早于这个绝对上限压缩。该设置不属于模型配置，切换共用模型
+或供应商路由不会改变它。保存写入 profile 用户层，重启后保留。
+
+### 记忆维护设置
+
+`/gateway/maintenance` 写入原生 `memory` 行的 `maintenanceTurns` 与
+`maintenanceDecayHours`，线协议字段名是 `triggerTurns` 与 `decayHours`。两个字段必须
+同时出现且都是完整整数：`triggerTurns` 5–50、`decayHours` 3–24（均含边界）；缺失、
+非整数、越界或多余字段都返回 400 `gateway/invalid-maintenance` 并说明范围，不截断、
+不取整、不落到边界值。成功响应回显保存后的生效值。
+
+两个字段在原生 schema 中声明为 volatile，`readMaintenanceSettings` 在每次维护评估时
+重新读取：保存后**下一次维护评估**即采用新值，不需要重启，也不中断正在运行的源会话或
+维护子会话。已搁置、没有新回合的区间也会按新配置在下一次定时评估中重新判断触发条件
+（改变初始回合数直接改变门槛；改变衰减间隔改变每满一个间隔减 1 的速度）。保存只写配置：
+不会重置 `maintenance_state` 的持久水位、`cut_seq` 或子会话，因此已维护的区间不会因
+保存而重复维护。两个数值由所有会话共用，会话各自的进度仍独立计算；该设置不属于模型
+配置，也不改变维护子会话的轻量模型路由。保存写入 profile 用户层，重启后保留。
+
+原生 settings 保存 volatile 字段时会将该行其余非编辑字段一并写回用户层（`memory` 行
+包括数据库路径与维护模型/供应商字段）；网关只提交这两个数值，其余字段的部署值按原样
+保留。
 
 ## 生效与重启
 
