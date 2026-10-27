@@ -251,6 +251,7 @@
 | [245-impression](245-impression/README.md) | #245 每位用户一份印象：按装配求值的系统提示 section 只注入本人、`/impression/read|edit` 以登录凭据定归属且先读后改、Fairy 工具按调用会话门禁、8000 Unicode 字符拒绝而非截断、无定时失效；客户端设置入口与读成功后才可编辑的多行整份编辑页，无长期记忆浏览器 |
 | [242-native-auto-compaction](242-native-auto-compaction/README.md) | #242 真实 v1 profile 挂载 token meter、compaction-basic（500000 绝对阈值 / 16000 保留）、工具结果裁剪与图片 offload，保留 spill 且不挂 command-compact；真实 profile + Loader 与模型替身证明阈值压缩后继续回复（工具配对与近期原文保留）、裁剪、offload、溢出恢复和冷恢复，压缩摘要不写长期记忆；设置入口 #243 未做 |
 | [246-session-memory-maintenance](246-session-memory-maintenance/README.md) | #246 每个源会话的动态维护门槛（默认 15、每满 6 小时减 1、最低 1）与静默准入：原生轻量模型子会话零父上下文、parentSession 指向源会话、只注册五个记忆工具；材料只含封口区间用户消息、Fairy 回复、附件名与记忆变更调用；完成按持久 turn/end 判定（零写入也推进），失败恢复同一子会话，重启按持久水位与时间重算；maintenance_state 增加 cut_seq（schema v2）；配置 volatile 读取，设置 UI 属 #247 |
+| [243-compaction-settings](243-compaction-settings/README.md) | #243 自动压缩触发阈值成为部署设置：网关读写 `compaction-basic` 行的 volatile `thresholdTokens`（整 token 100000–900000，含边界；非整数、越界与多余字段 400 `gateway/invalid-compaction`，不截断/不 clamp，保留预算仍由 16000 固定）；真实 profile + Loader 与产品会话证明保存后下一次压力检查生效（900000 不触发、100000 修剪超长工具结果）、重启保留、切模型不改、匿名 401/普通代理人 403；Android 新增「上下文 → 自动压缩 → 阈值」独立嵌套组与可复用 Material 3 数值控件（滑块与直接输入同一 K 草稿、单位、范围、忙态、可见错误、写后重读），控件留给 #247 复用 |
 
 ## 界面微调（#215/#217/#218/#239）
 

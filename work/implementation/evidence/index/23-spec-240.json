@@ -30,6 +30,12 @@
         "246-session-memory-maintenance"
       ],
       "note": "#246 每个源会话的动态维护门槛（默认 15、每满 6 小时减 1、最低 1）与静默准入：原生轻量模型子会话零父上下文、parentSession 指向源会话、只注册五个记忆工具；材料只含封口区间用户消息、Fairy 回复、附件名与记忆变更调用；完成按持久 turn/end 判定（零写入也推进），失败恢复同一子会话，重启按持久水位与时间重算；maintenance_state 增加 cut_seq（schema v2）；配置 volatile 读取，设置 UI 属 #247"
+    },
+    {
+      "dirs": [
+        "243-compaction-settings"
+      ],
+      "note": "#243 自动压缩触发阈值成为部署设置：网关读写 `compaction-basic` 行的 volatile `thresholdTokens`（整 token 100000–900000，含边界；非整数、越界与多余字段 400 `gateway/invalid-compaction`，不截断/不 clamp，保留预算仍由 16000 固定）；真实 profile + Loader 与产品会话证明保存后下一次压力检查生效（900000 不触发、100000 修剪超长工具结果）、重启保留、切模型不改、匿名 401/普通代理人 403；Android 新增「上下文 → 自动压缩 → 阈值」独立嵌套组与可复用 Material 3 数值控件（滑块与直接输入同一 K 草稿、单位、范围、忙态、可见错误、写后重读），控件留给 #247 复用"
     }
   ]
 }
