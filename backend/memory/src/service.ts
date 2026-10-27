@@ -11,7 +11,9 @@
 import { Service } from '@deepseek-ai/cordis'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 import { MemoryError } from './errors.js'
+import { MAINTENANCE_PRESET } from './preset.js'
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { MemoryRow, MemoryStore } from './store.js'
 // The native session persistence handle is how one source session's immutable
@@ -65,17 +67,52 @@ export class MemoryService extends Service {
     this[GATE] = new Map()
   }
 
-  /** Store one memory whose source is the calling session. */
+  /**
+   * Resolve the session a content write is attributed to, from persistent
+   * headers only.
+   *
+   * A normal session is its own source and its header supplies the owner. A
+   * maintenance child has no owner by design; its durable `parentSession` names
+   * the owned source session, which is both the source and the origin of the
+   * owner. The model never supplies either value.
+   */
+  async sourceOf(agent: Agent): Promise<{ ownerShortId: number; sourceSession: string }> {
+    const header = agent.session.header
+    if (header.agentPreset !== MAINTENANCE_PRESET) {
+      const ownerShortId = shortIdOf(header.owner)
+      if (ownerShortId === undefined) {
+        throw new MemoryError(403, 'memory/missing-owner', 'a memory source needs an owned session')
+      }
+      return { ownerShortId, sourceSession: agent.session.id }
+    }
+    const parentSession = header.parentSession
+    const parent = parentSession === undefined
+      ? undefined
+      : await this.ctx.sessionPersistence.stat(parentSession as SessionId)
+    const ownerShortId = shortIdOf(parent?.header.owner)
+    if (parentSession === undefined || ownerShortId === undefined) {
+      throw new MemoryError(403, 'memory/missing-owner', 'the maintenance child needs an owned source session')
+    }
+    return { ownerShortId, sourceSession: parentSession }
+  }
+
+  /**
+   * Store one memory whose source is the calling session, or the owned source
+   * session a maintenance child reports through its persistent header.
+   */
   add(input: Caller & {
     readonly content: string
     readonly isPrivate: boolean
     readonly ownerShortId: number | undefined
+    /** The session that supports the content; defaults to the calling session. */
+    readonly sourceSession?: string
   }): number {
     if (input.ownerShortId === undefined) {
       throw new MemoryError(403, 'memory/missing-owner', 'a memory source needs an owned session')
     }
     assertContent(input.content)
-    return this[STORE].add({ content: input.content, isPrivate: input.isPrivate, sourceSession: input.sessionId })
+    return this[STORE].add({ content: input.content, isPrivate: input.isPrivate,
+      sourceSession: input.sourceSession ?? input.sessionId })
   }
 
   /**
@@ -122,6 +159,8 @@ export class MemoryService extends Service {
     readonly isPrivate: boolean
     readonly oldString: string
     readonly newString: string
+    /** The session that supports the new content; defaults to the calling session. */
+    readonly sourceSession?: string
   }): void {
     requireQueried(this[GATE], input.sessionId, input.id)
     const row = visibleMemory(this[STORE], input.id, input.isPrivate)
@@ -135,7 +174,8 @@ export class MemoryService extends Service {
     }
     const content = row.content.replace(input.oldString, input.newString)
     assertContent(content)
-    this[STORE].edit({ id: input.id, isPrivate: input.isPrivate, content, sourceSession: input.sessionId })
+    this[STORE].edit({ id: input.id, isPrivate: input.isPrivate, content,
+      sourceSession: input.sourceSession ?? input.sessionId })
   }
 
   /** Remove one memory physically; the number is never handed out again. */

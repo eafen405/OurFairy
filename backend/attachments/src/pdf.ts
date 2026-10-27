@@ -187,6 +187,10 @@ export function installPdf(ctx: Context, service: AttachmentService): void {
     }
   }
   const register = (agent: Agent): undefined => {
+    // The memory maintenance child (preset `ourfairy:memory-maintenance`) may
+    // use long-term memory tools only; a scope's own registration cannot be
+    // hidden by dsh's tool restriction, so every product row skips this preset.
+    if (agent.session.header?.agentPreset === 'ourfairy:memory-maintenance') return undefined
     for (const [name, mode, description] of TOOLS) agent.ctx.tools.register(defineTool({ name, description,
       parameters: { file_path: { type: 'string', required: true }, ...(mode !== 'info' ? { pages: { type: 'array', required: true, items: { type: 'integer' } } } : {}) },
       output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => {
