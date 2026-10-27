@@ -34,6 +34,8 @@ import me.rerere.rikkahub.data.remote.GatewayCompactionDraft
 import me.rerere.rikkahub.data.remote.GatewayConfig
 import me.rerere.rikkahub.data.remote.GatewayCredential
 import me.rerere.rikkahub.data.remote.GatewayEditable
+import me.rerere.rikkahub.data.remote.GatewayMaintenance
+import me.rerere.rikkahub.data.remote.GatewayMaintenanceDraft
 import me.rerere.rikkahub.data.remote.GatewayRoute
 import me.rerere.rikkahub.data.remote.GatewayRouteDraft
 import me.rerere.rikkahub.data.remote.GatewayRouteModel
@@ -88,8 +90,12 @@ class GatewayPageTest {
         var saveCompaction: suspend (GatewayCompactionDraft) -> GatewayCompaction = {
             GatewayCompaction(it.thresholdTokens)
         },
+        var saveMaintenance: suspend (GatewayMaintenanceDraft) -> GatewayMaintenance = {
+            GatewayMaintenance(it.triggerTurns, it.decayHours)
+        },
     ) : GatewayBackend {
         val savedCompactions = mutableListOf<GatewayCompactionDraft>()
+        val savedMaintenances = mutableListOf<GatewayMaintenanceDraft>()
 
         override suspend fun read(token: String): GatewayConfig = read()
 
@@ -107,11 +113,21 @@ class GatewayPageTest {
             savedCompactions += compaction
             return saveCompaction(compaction)
         }
+
+        override suspend fun saveMaintenance(
+            token: String,
+            maintenance: GatewayMaintenanceDraft,
+        ): GatewayMaintenance {
+            savedMaintenances += maintenance
+            return saveMaintenance(maintenance)
+        }
     }
 
     private fun gatewayConfig(
         compaction: GatewayCompaction? = GatewayCompaction(500_000),
         savedCompaction: Boolean = false,
+        maintenance: GatewayMaintenance? = GatewayMaintenance(15, 6),
+        savedMaintenance: Boolean = false,
     ) = GatewayConfig(
         selection = GatewaySelection("minimax-cn", "MiniMax-M3.1-Flash", reasoningEffort = "max"),
         routes = listOf(
@@ -124,8 +140,14 @@ class GatewayPageTest {
         ),
         asr = GatewayAsr(credential = GatewayCredential(ref = "VOICE_API_KEY")),
         compaction = compaction,
-        editable = GatewayEditable(selection = true, routes = true, asr = true, compaction = true),
-        saved = GatewaySaved(selection = false, routes = false, asr = false, compaction = savedCompaction),
+        maintenance = maintenance,
+        editable = GatewayEditable(
+            selection = true, routes = true, asr = true, compaction = true, maintenance = true,
+        ),
+        saved = GatewaySaved(
+            selection = false, routes = false, asr = false,
+            compaction = savedCompaction, maintenance = savedMaintenance,
+        ),
     )
 
     private fun show(backend: GatewayBackend) {
@@ -270,5 +292,155 @@ class GatewayPageTest {
             "gateway/invalid-compaction: thresholdTokens must be a whole number from 100000 to 900000, inclusive",
         ).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("gateway_compaction_input").assertTextContains("800")
+    }
+
+    private fun openMaintenance() {
+        click("记忆")
+        click("维护")
+    }
+
+    @Test
+    fun `the maintenance numbers are a nested memory group, not flat and not beside the model`() {
+        show(ScriptedGateway())
+
+        compose.onAllNodesWithTag("gateway_maintenance_turns_input").assertCountEquals(0)
+
+        // The model group opens on its own and never shows the maintenance
+        // numbers; the memory group opens independently while it stays open.
+        click("共用模型")
+        compose.onNodeWithText("共用模型选择").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithTag("gateway_maintenance_turns_input").assertCountEquals(0)
+
+        click("记忆")
+        compose.onNodeWithText("维护").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithTag("gateway_maintenance_turns_input").assertCountEquals(0)
+        compose.onNodeWithText("共用模型选择").performScrollTo().assertIsDisplayed()
+
+        click("维护")
+        compose.onNodeWithTag("gateway_maintenance_turns_input").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("gateway_maintenance_decay_input").assertIsDisplayed()
+        compose.onNodeWithText("维护触发回合数").assertIsDisplayed()
+        compose.onNodeWithText("维护门槛衰减间隔").assertIsDisplayed()
+        compose.onNodeWithText("范围：5–50 回合").assertIsDisplayed()
+        compose.onNodeWithText("范围：3–24 小时").assertIsDisplayed()
+    }
+
+    @Test
+    fun `an out-of-range turn or hour draft is reported and cannot be submitted`() {
+        val backend = ScriptedGateway()
+        show(backend)
+        openMaintenance()
+
+        val turns = compose.onNodeWithTag("gateway_maintenance_turns_input").performScrollTo()
+        turns.performTextClearance()
+        turns.performTextInput("4")
+        compose.waitForIdle()
+
+        compose.onNodeWithText("请输入 5 到 50 回合 之间的值。").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("gateway_maintenance_turns_input").assertTextContains("4")
+        compose.onNodeWithTag("gateway_maintenance_save").assertIsNotEnabled()
+        assertEquals("an invalid draft must never reach the backend", emptyList<GatewayMaintenanceDraft>(), backend.savedMaintenances)
+
+        turns.performTextClearance()
+        turns.performTextInput("15")
+        val decay = compose.onNodeWithTag("gateway_maintenance_decay_input").performScrollTo()
+        decay.performTextClearance()
+        decay.performTextInput("25")
+        compose.waitForIdle()
+
+        compose.onNodeWithText("请输入 3 到 24 小时 之间的值。").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("gateway_maintenance_decay_input").assertTextContains("25")
+        compose.onNodeWithTag("gateway_maintenance_save").assertIsNotEnabled()
+        assertEquals(emptyList<GatewayMaintenanceDraft>(), backend.savedMaintenances)
+    }
+
+    @Test
+    fun `a valid pair of maintenance numbers is saved together and the stored values are re-read`() {
+        var current = gatewayConfig()
+        val backend = ScriptedGateway(
+            read = { current },
+            saveMaintenance = { draft ->
+                current = current.copy(
+                    maintenance = GatewayMaintenance(draft.triggerTurns, draft.decayHours),
+                    saved = current.saved.copy(maintenance = true),
+                )
+                GatewayMaintenance(draft.triggerTurns, draft.decayHours)
+            },
+        )
+        show(backend)
+        openMaintenance()
+
+        val turns = compose.onNodeWithTag("gateway_maintenance_turns_input").performScrollTo()
+        turns.performTextClearance()
+        turns.performTextInput("5")
+        val decay = compose.onNodeWithTag("gateway_maintenance_decay_input").performScrollTo()
+        decay.performTextClearance()
+        decay.performTextInput("3")
+        compose.waitForIdle()
+        compose.onNodeWithTag("gateway_maintenance_save").performScrollTo().assertIsEnabled().performClick()
+        compose.waitForIdle()
+
+        assertEquals(
+            "both numbers are posted in the same serialized write",
+            listOf(GatewayMaintenanceDraft(triggerTurns = 5, decayHours = 3)),
+            backend.savedMaintenances,
+        )
+        compose.onNodeWithTag("gateway_maintenance_turns_input").assertTextContains("5")
+        compose.onNodeWithTag("gateway_maintenance_decay_input").assertTextContains("3")
+        compose.onNodeWithText("已保存").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a pending maintenance save disables both drafts and the save button`() {
+        val pending = CompletableDeferred<GatewayMaintenance>()
+        val backend = ScriptedGateway(saveMaintenance = { pending.await() })
+        show(backend)
+        openMaintenance()
+
+        val turns = compose.onNodeWithTag("gateway_maintenance_turns_input").performScrollTo()
+        turns.performTextClearance()
+        turns.performTextInput("5")
+        val decay = compose.onNodeWithTag("gateway_maintenance_decay_input").performScrollTo()
+        decay.performTextClearance()
+        decay.performTextInput("3")
+        compose.waitForIdle()
+        compose.onNodeWithTag("gateway_maintenance_save").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("gateway_maintenance_turns_input").assertIsNotEnabled()
+        compose.onNodeWithTag("gateway_maintenance_decay_input").assertIsNotEnabled()
+        compose.onNodeWithTag("gateway_maintenance_save").assertIsNotEnabled()
+
+        pending.complete(GatewayMaintenance(5, 3))
+        compose.waitForIdle()
+        compose.onNodeWithTag("gateway_maintenance_turns_input").assertIsEnabled()
+        compose.onNodeWithTag("gateway_maintenance_decay_input").assertIsEnabled()
+    }
+
+    @Test
+    fun `a refused maintenance save keeps the draft and shows the backend's code`() {
+        val backend = ScriptedGateway(
+            saveMaintenance = {
+                throw IdentityRefused(
+                    400,
+                    "gateway/invalid-maintenance",
+                    "triggerTurns must be a whole number of closed turns from 5 to 50, inclusive",
+                )
+            },
+        )
+        show(backend)
+        openMaintenance()
+
+        val turns = compose.onNodeWithTag("gateway_maintenance_turns_input").performScrollTo()
+        turns.performTextClearance()
+        turns.performTextInput("5")
+        compose.waitForIdle()
+        compose.onNodeWithTag("gateway_maintenance_save").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText(
+            "gateway/invalid-maintenance: triggerTurns must be a whole number of closed turns from 5 to 50, inclusive",
+        ).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("gateway_maintenance_turns_input").assertTextContains("5")
     }
 }
