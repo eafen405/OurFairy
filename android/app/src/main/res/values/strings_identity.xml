@@ -75,6 +75,16 @@
     <string name="gateway_compaction_unit">K tokens</string>
     <string name="gateway_compaction_explain">The absolute token ceiling for automatic compaction. A smaller model window can still trigger earlier.</string>
     <string name="gateway_compaction_save">Save the threshold</string>
+    <string name="gateway_memory_title">Memory</string>
+    <string name="gateway_memory_summary">Maintenance policy</string>
+    <string name="gateway_maintenance_title">Maintenance</string>
+    <string name="gateway_maintenance_summary">%1$s turns / %2$s hours</string>
+    <string name="gateway_maintenance_turns">Maintenance trigger turns</string>
+    <string name="gateway_maintenance_turns_unit">turns</string>
+    <string name="gateway_maintenance_decay">Maintenance threshold decay interval</string>
+    <string name="gateway_maintenance_decay_unit">hours</string>
+    <string name="gateway_maintenance_explain">Maintenance starts after enough closed turns. A parked conversation\'s threshold falls by one every decay interval. A saved change applies to the next evaluation and never resets the maintained watermark.</string>
+    <string name="gateway_maintenance_save">Save the maintenance settings</string>
     <string name="fairy_numeric_range">Range: %1$d–%2$d %3$s</string>
     <string name="fairy_numeric_enter_number">Enter a number.</string>
     <string name="fairy_numeric_enter_whole_number">Enter a whole number.</string>

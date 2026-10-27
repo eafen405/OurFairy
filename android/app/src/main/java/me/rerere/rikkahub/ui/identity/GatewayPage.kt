@@ -51,6 +51,8 @@ import me.rerere.rikkahub.data.remote.GatewayCompaction
 import me.rerere.rikkahub.data.remote.GatewayCompactionDraft
 import me.rerere.rikkahub.data.remote.GatewayConfig
 import me.rerere.rikkahub.data.remote.GatewayEditable
+import me.rerere.rikkahub.data.remote.GatewayMaintenance
+import me.rerere.rikkahub.data.remote.GatewayMaintenanceDraft
 import me.rerere.rikkahub.data.remote.GatewayRoute
 import me.rerere.rikkahub.data.remote.GatewayRouteDraft
 import me.rerere.rikkahub.data.remote.GatewayRouteLock
@@ -187,6 +189,53 @@ fun GatewayPage(
                                 busy = snapshot.working,
                                 canWrite = token != null,
                                 onSave = { draft -> token?.let { state.saveCompaction(it, draft) } },
+                            )
+                        }
+                    }
+                }
+
+                val maintenance = config.maintenance
+                if (maintenance != null) {
+                    val turnsSpec = FairyNumericSpec(
+                        label = stringResource(R.string.gateway_maintenance_turns),
+                        unit = stringResource(R.string.gateway_maintenance_turns_unit),
+                        min = 5,
+                        max = 50,
+                    )
+                    val decaySpec = FairyNumericSpec(
+                        label = stringResource(R.string.gateway_maintenance_decay),
+                        unit = stringResource(R.string.gateway_maintenance_decay_unit),
+                        min = 3,
+                        max = 24,
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    FairySettingsGroup(
+                        title = stringResource(R.string.gateway_memory_title),
+                        tag = "MEMORY",
+                        summary = stringResource(R.string.gateway_memory_summary),
+                        open = "memory" in open,
+                        onToggle = { toggle("memory") },
+                    ) {
+                        FairySettingsGroup(
+                            title = stringResource(R.string.gateway_maintenance_title),
+                            tag = "MAINTENANCE",
+                            summary = stringResource(
+                                R.string.gateway_maintenance_summary,
+                                maintenance.triggerTurns.toString(),
+                                maintenance.decayHours.toString(),
+                            ),
+                            open = "memory/maintenance" in open,
+                            onToggle = { toggle("memory/maintenance") },
+                        ) {
+                            MaintenanceSection(
+                                maintenance = maintenance,
+                                turnsSpec = turnsSpec,
+                                decaySpec = decaySpec,
+                                editable = config.editable.maintenance,
+                                saved = config.saved.maintenance,
+                                busy = snapshot.working,
+                                canWrite = token != null,
+                                onSave = { draft -> token?.let { state.saveMaintenance(it, draft) } },
                             )
                         }
                     }
@@ -773,6 +822,79 @@ private fun CompactionSection(
                 modifier = Modifier.testTag("gateway_compaction_save"),
             ) {
                 Text(stringResource(R.string.gateway_compaction_save))
+            }
+        }
+    }
+}
+
+/**
+ * The two maintenance numbers, edited through one instance of the shared
+ * numeric control per value and submitted as one serialized write.
+ *
+ * Both drafts are owned here: neither the save button nor either field can make
+ * the other's invalid text look submittable, and a successful save followed by
+ * the state's fresh read resets both drafts to what the backend stored.
+ */
+@Composable
+private fun MaintenanceSection(
+    maintenance: GatewayMaintenance,
+    turnsSpec: FairyNumericSpec,
+    decaySpec: FairyNumericSpec,
+    editable: Boolean,
+    saved: Boolean,
+    busy: Boolean,
+    canWrite: Boolean,
+    onSave: (GatewayMaintenanceDraft) -> Unit,
+) {
+    val turns = rememberFairyNumericDraftState(turnsSpec, maintenance.triggerTurns)
+    val decay = rememberFairyNumericDraftState(decaySpec, maintenance.decayHours)
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            SavedLine(saved = saved)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.gateway_maintenance_explain),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (!editable) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.gateway_read_only),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                return@Column
+            }
+
+            Spacer(Modifier.height(12.dp))
+            FairyNumericField(
+                state = turns,
+                busy = busy,
+                enabled = canWrite,
+                tagPrefix = "gateway_maintenance_turns",
+            )
+            Spacer(Modifier.height(12.dp))
+            FairyNumericField(
+                state = decay,
+                busy = busy,
+                enabled = canWrite,
+                tagPrefix = "gateway_maintenance_decay",
+            )
+            Spacer(Modifier.height(8.dp))
+            val triggerTurns = turns.parsed.stored
+            val decayHours = decay.parsed.stored
+            Button(
+                onClick = {
+                    if (triggerTurns != null && decayHours != null) {
+                        onSave(GatewayMaintenanceDraft(triggerTurns = triggerTurns, decayHours = decayHours))
+                    }
+                },
+                enabled = canWrite && !busy && triggerTurns != null && decayHours != null,
+                modifier = Modifier.testTag("gateway_maintenance_save"),
+            ) {
+                Text(stringResource(R.string.gateway_maintenance_save))
             }
         }
     }

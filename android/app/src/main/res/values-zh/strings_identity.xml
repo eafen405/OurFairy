@@ -75,6 +75,16 @@
     <string name="gateway_compaction_unit">K token</string>
     <string name="gateway_compaction_explain">自动压缩的绝对 token 上限。模型自身较小的窗口仍可更早触发。</string>
     <string name="gateway_compaction_save">保存触发阈值</string>
+    <string name="gateway_memory_title">记忆</string>
+    <string name="gateway_memory_summary">维护策略</string>
+    <string name="gateway_maintenance_title">维护</string>
+    <string name="gateway_maintenance_summary">%1$s 回合 / %2$s 小时</string>
+    <string name="gateway_maintenance_turns">维护触发回合数</string>
+    <string name="gateway_maintenance_turns_unit">回合</string>
+    <string name="gateway_maintenance_decay">维护门槛衰减间隔</string>
+    <string name="gateway_maintenance_decay_unit">小时</string>
+    <string name="gateway_maintenance_explain">累计足够的闭合回合后开始维护。搁置的会话每满一个衰减间隔，门槛降低 1。保存后下一次评估采用新值，且不会重置既有水位。</string>
+    <string name="gateway_maintenance_save">保存维护设置</string>
     <string name="fairy_numeric_range">范围：%1$d–%2$d %3$s</string>
     <string name="fairy_numeric_enter_number">请输入数字。</string>
     <string name="fairy_numeric_enter_whole_number">请输入整数。</string>

@@ -102,6 +102,22 @@ data class GatewayCompaction(
     val thresholdTokens: Int = 500_000,
 )
 
+/**
+ * The two deployment numbers behind memory maintenance.
+ *
+ * [triggerTurns] is the starting closed-turn threshold (default 15, range 5–50)
+ * and [decayHours] is the interval after which that threshold falls by one
+ * (default 6, range 3–24). Both are plain integers: unlike the compaction
+ * threshold there is no display scaling. A deployment that predates this setting
+ * omits the object; [GatewayConfig] then leaves it null rather than inventing a
+ * value.
+ */
+@Serializable
+data class GatewayMaintenance(
+    val triggerTurns: Int = 15,
+    val decayHours: Int = 6,
+)
+
 /** Which parts of the gateway this deployment lets the phone change. */
 @Serializable
 data class GatewayEditable(
@@ -109,6 +125,7 @@ data class GatewayEditable(
     val routes: Boolean = false,
     val asr: Boolean = false,
     val compaction: Boolean = false,
+    val maintenance: Boolean = false,
 )
 
 /**
@@ -124,6 +141,7 @@ data class GatewaySaved(
     val routes: Boolean = false,
     val asr: Boolean = false,
     val compaction: Boolean = false,
+    val maintenance: Boolean = false,
 )
 
 /** One whole read of the gateway configuration. */
@@ -133,6 +151,7 @@ data class GatewayConfig(
     val routes: List<GatewayRoute> = emptyList(),
     val asr: GatewayAsr,
     val compaction: GatewayCompaction? = null,
+    val maintenance: GatewayMaintenance? = null,
     val editable: GatewayEditable = GatewayEditable(),
     val saved: GatewaySaved = GatewaySaved(),
 )
@@ -172,6 +191,13 @@ data class GatewayCompactionDraft(
     val thresholdTokens: Int,
 )
 
+/** What the phone sends to change the two maintenance numbers. */
+@Serializable
+data class GatewayMaintenanceDraft(
+    val triggerTurns: Int,
+    val decayHours: Int,
+)
+
 /** The gateway operations this app performs. [GatewayApi] is the HTTP implementation. */
 interface GatewayBackend {
     /** The current shared selection, every route, the ASR connection, and what may be changed. */
@@ -191,6 +217,9 @@ interface GatewayBackend {
 
     /** Save the automatic-compaction trigger threshold, in whole tokens. */
     suspend fun saveCompaction(token: String, compaction: GatewayCompactionDraft): GatewayCompaction
+
+    /** Save the maintenance trigger turn count and decay interval. */
+    suspend fun saveMaintenance(token: String, maintenance: GatewayMaintenanceDraft): GatewayMaintenance
 }
 
 @Serializable
@@ -202,6 +231,7 @@ internal data class GatewayEnvelope(
     val route: GatewayRoute? = null,
     val asr: GatewayAsr? = null,
     val compaction: GatewayCompaction? = null,
+    val maintenance: GatewayMaintenance? = null,
     val error: Failure? = null,
 ) {
     @Serializable
@@ -291,6 +321,18 @@ class GatewayApi(
             token = token,
         ).compaction ?: throw IdentityUnreachable(
             IllegalStateException("the backend accepted the compaction threshold without echoing it"),
+        )
+
+    override suspend fun saveMaintenance(
+        token: String,
+        maintenance: GatewayMaintenanceDraft,
+    ): GatewayMaintenance =
+        call(
+            "/gateway/maintenance",
+            document = json.encodeToString(GatewayMaintenanceDraft.serializer(), maintenance),
+            token = token,
+        ).maintenance ?: throw IdentityUnreachable(
+            IllegalStateException("the backend accepted the maintenance settings without echoing them"),
         )
 
     /**
