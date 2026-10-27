@@ -1,12 +1,13 @@
 # OurFairy
 
-面向受邀小群体、以 Android 为首个客户端的 Fairy 产品仓库。后端与客户端在同一个检出里，产品版本由
-本仓库的一个提交表达。
+面向受邀小群体、以 Android 为首个客户端的 Fairy 产品仓库。后端与客户端在同一个检出里，产品版本由本仓库的一个提交表达。
 
 产品由三部分咬合而成：`android/` 是一个前端壳，只做呈现与提交；`backend/` 是产品的业务插件，
 以 dsh 插件（深模块、窄接口）的形式挂进后端；真正执行 agent 的是外部 fork 的 deepseek-harness。
 凡是能靠原生接缝做到的就不自己写，刻意不采用的那几处连同理由与重新评估条件都写在
 [生态边界：并行传输与保留的产品实现](docs/architecture/dsh-ecosystem-boundary.md)。
+
+后端实现由 TypeScript 编写。
 
 ## 目录
 
