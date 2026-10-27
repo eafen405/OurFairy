@@ -64,6 +64,15 @@ export type MemoryRow = {
   content_updated_at: number
 }
 
+/** One row of the `impressions` table: one current body per user. */
+export type ImpressionRow = {
+  short_id: number
+  content: string
+  created_at: number
+  updated_at: number
+  deleted_at: number | null
+}
+
 /** One search in one layer, with this search's own limits. */
 export type MemorySearchQuery = {
   readonly query: string
@@ -201,6 +210,29 @@ export class MemoryStore {
     const result = this.#db.prepare('DELETE FROM memories WHERE id = ? AND is_private = ?')
       .run(id, isPrivate ? 1 : 0) as ChangeResult
     return Number(result.changes) > 0
+  }
+
+  /** One user's current impression, or undefined when they have none (yet). */
+  impression({ shortId }: { readonly shortId: number }): ImpressionRow | undefined {
+    return rowOf<ImpressionRow>(this.#db.prepare('SELECT * FROM impressions WHERE short_id = ? AND deleted_at IS NULL').get(shortId))
+  }
+
+  /**
+   * Replace one user's whole impression. The body is stored exactly as given;
+   * the first write creates the row, later writes keep its creation time and
+   * move only the update time. Nothing about the row expires.
+   */
+  saveImpression({ shortId, content }: { readonly shortId: number; readonly content: string }): ImpressionRow {
+    const now = Date.now()
+    this.#db.prepare(`INSERT INTO impressions (short_id, content, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(short_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at, deleted_at = NULL`)
+      .run(shortId, content, now, now)
+    const row = this.impression({ shortId })
+    if (row === undefined) {
+      throw new MemoryError(500, 'memory/misconfigured', 'the impression row disappeared after its write')
+    }
+    return row
   }
 
   /**
