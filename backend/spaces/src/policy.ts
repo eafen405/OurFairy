@@ -5,6 +5,7 @@
  * @module @ourfairy/dsh-spaces/src/policy
  */
 import { FsError } from '@deepseek-ai/dsh-fs'
+import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
 import { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import type { SandboxPolicyRequest } from '@deepseek-ai/dsh-sandbox-policy'
 
@@ -18,7 +19,7 @@ export default class OwnedSandboxPolicy extends SandboxPolicyService {
     // The native sandbox-policy prompt context still resolves a policy for every
     // session, so answer with a read-only shared root instead of deriving the
     // owner-bound private root that cannot exist.
-    if (request.session?.header?.agentPreset === 'ourfairy:memory-maintenance') {
+    if (request.session?.header?.agentPreset === MAINTENANCE_PRESET) {
       return { ...super.resolve(request), mode: 'read-only' as const, workspaceRoot: scope.root }
     }
     scope.owner(request.session)

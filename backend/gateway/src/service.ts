@@ -183,9 +183,6 @@ interface GatewayRowValue {
   timeoutMs?: number
   maxGlobalInFlight?: number
   maxUserInFlight?: number
-  thresholdTokens?: number
-  maintenanceTurns?: number
-  maintenanceDecayHours?: number
   [field: string]: unknown
 }
 

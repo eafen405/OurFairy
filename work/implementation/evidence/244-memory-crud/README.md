@@ -32,8 +32,12 @@ Implementation Decisions §2–§3；条目 ADR：[`docs/adr/0002-physical-memor
 
 - **检索**：`instr(content, ?) > 0` 字面匹配（不做 LIKE 通配、不做向量/语义扩展）；排序
   `content_updated_at DESC, id DESC`；日期为 `content_updated_at BETWEEN ? AND ?` 闭区间。
-- **预算**：20 条 / 8000 Unicode 码点。逐条整条取舍，正文从不裁剪；单条自身超出预算即整条不返回
-  （`returned: 0`、`truncated: true`），被省略的编号绝不出现在结果里。`matched` 是该层匹配总数。
+- **预算**：20 条 / 8000 Unicode 码点。逐条整条取舍，正文从不裁剪；被省略的编号绝不出现在结果里。
+  `matched` 是该层匹配总数。#240 收口复核把同一预算改成写入上限：`memory_add` 与 `memory_edit`
+  （按编辑后正文）拒绝超过 8000 字符的内容，因为这样的行会被每次检索整条省略，任何会话都无法
+  看到编号、也就无法再编辑/删除/切换；本票原先“存下但永不返回”的行为是功能缺陷。决定与测试见
+  [`backend/memory/README.md`](../../../../backend/memory/README.md) 与
+  `tests/memory-crud.test.mjs`。
 - **门禁**：`Map<sessionId, Set<memoryId>>`，键是实际调用工具的 `agent.session.id`；查询写入、
   edit/delete/switch 读取；`agent/disposed` 清该会话的集合（重启后必须重新查询）。删除后编号仍
   可能在集合里，但行已不存在，统一答 `memory/unknown-memory`。

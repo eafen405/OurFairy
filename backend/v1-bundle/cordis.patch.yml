@@ -104,7 +104,11 @@
         # 1M window would otherwise wait for 800 000. The 16 000-token retained
         # tail keeps the newest messages verbatim (story 51); the native selector
         # still keeps tool call/result pairs whole, and a smaller route's own
-        # capacity can lower the trigger below this ceiling.
+        # capacity can lower the trigger below this ceiling. The 100 000–900 000
+        # product range is enforced by the gateway's /gateway/compaction, not by
+        # this native row's schema (which only bounds a positive integer); that
+        # deliberate deviation from §6's "owner schema validates" wording is
+        # recorded in the #243 and #248 evidence.
         - id: token-meter
           name: '@deepseek-ai/dsh-token-meter'
         - id: compaction-basic
@@ -349,10 +353,12 @@
           name: '@ourfairy/dsh-memory'
           config:
             path: !!js dshHomePath('memory/memory.sqlite')
-            # Maintenance settings. Defaults and ranges live on the row's Config
-            # schema; the environment only seeds a deployment, and the next
-            # evaluation reads the live value. #247 binds these two numbers to
-            # the gateway's “记忆 → 维护” tree.
+            # Maintenance settings: this row's own Config declares both numbers,
+            # their defaults (15 / 6) and their ranges (5–50 / 3–24), so the
+            # loader rejects an out-of-range persisted value. The environment
+            # only seeds a deployment, and the next evaluation reads the live
+            # value. #247 binds these two numbers to the gateway's
+            # “记忆 → 维护” tree.
             maintenanceTurns: !!js Number(process.env.OURFAIRY_MEMORY_MAINTENANCE_TURNS ?? 15)
             maintenanceDecayHours: !!js Number(process.env.OURFAIRY_MEMORY_MAINTENANCE_DECAY_HOURS ?? 6)
             maintenanceModel: !!js process.env.OURFAIRY_MEMORY_MAINTENANCE_MODEL ?? 'MiniMax-M3.1-Flash'

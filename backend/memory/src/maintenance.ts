@@ -24,7 +24,7 @@
 import { randomUUID } from 'node:crypto'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
-import { MemoryError } from './errors.js'
+import { MemoryError } from './tool-kit.js'
 import { assembleMaterial, closedUserTurns, type ClosedTurn } from './material.js'
 import { MAINTENANCE_PRESET } from './preset.js'
 import type { Context } from '@deepseek-ai/cordis'

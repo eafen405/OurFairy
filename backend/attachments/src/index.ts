@@ -9,6 +9,7 @@ import { postHandler, sendJson } from '@ourfairy/dsh-http/http'
 import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.js'
 import { installPdf } from './pdf.js'
 import { createDownloadResponder } from './download.js'
+import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
 import { SessionScopeError, OwnedSessionService } from '@ourfairy/dsh-sessions'
 import type { Context } from '@deepseek-ai/cordis'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -17,9 +18,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-session'
-
-/** The preset the memory row uses for its ownerless maintenance child. */
-const MAINTENANCE_PRESET = 'ourfairy:memory-maintenance'
 
 /** The owner facts the owned-session service names a caller by. */
 type SessionOwner = NonNullable<ReturnType<OwnedSessionService['authenticate']>>

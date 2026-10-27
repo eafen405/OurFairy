@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { after, before, test } from 'node:test'
@@ -270,5 +271,32 @@ test('out-of-range maintenance settings fail the composition at load', async () 
     } finally {
       removeHome(caseHome)
     }
+  }
+})
+
+test('a persisted out-of-range maintenance value fails the load at the owning Config schema', async () => {
+  const caseHome = makeHome('ourfairy-memory-persisted-')
+  try {
+    // A first boot writes the deployment profile. The gateway's settings save
+    // persists the row's whole config into the profile's user layer, so this
+    // case writes that layer exactly as a save would and boots again.
+    const first = await runBackendAsync(['probe', '--report', join(caseHome, 'first.json')], {
+      OURFAIRY_HOME: caseHome, MINIMAX_CN_API_KEY: 'mock-config-key',
+    })
+    assert.equal(first.code, 0, describeRun('the profile-creating probe', first))
+    const profilePatch = join(caseHome, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml')
+    writeFileSync(profilePatch, '- id: memory\n  config:\n'
+      + `    path: ${JSON.stringify(join(caseHome, 'dsh-home', 'memory', 'memory.sqlite'))}\n`
+      + '    maintenanceTurns: 4\n')
+
+    const run = await runBackendAsync(['probe', '--report', join(caseHome, 'second.json')], {
+      OURFAIRY_HOME: caseHome, MINIMAX_CN_API_KEY: 'mock-config-key',
+    })
+    assert.notEqual(run.code, 0, `a persisted out-of-range value must fail the load: ${describeRun('probe', run)}`)
+    const output = `${run.stdout}\n${run.stderr}`
+    assert.match(output, /maintenanceTurns/, 'the failure names the field')
+    assert.match(output, /expected number >= 5/, 'the owning Config schema rejects the persisted value')
+  } finally {
+    removeHome(caseHome)
   }
 })

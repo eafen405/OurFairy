@@ -147,6 +147,9 @@ test('the owned prompt and the maintenance child carry the memory policy at thei
   assert.match(childSystem, /不要把你执行过的记忆增删改/, 'the child forbids meta-memories about memory operations')
   assert.match(childSystem, /不要记录带有「最近」「今天」「现在」「刚才」/, 'the child excludes time-bound observations')
   assert.equal(childSystem.includes(MAIN_ONLY_MARKER), false, 'the owned prompt policy is not inherited by the child')
+  assert.equal(childSystem.includes('Authorized file spaces'), false,
+    'the spaces prompt context contributes nothing to the maintenance preset')
+  assert.match(childSystem, /你是长期记忆维护子代理/, 'the child carries its own maintenance instruction')
   assert.deepEqual([...child.tools.map(tool => tool.name)].sort(), [...MEMORY_TOOLS].sort(),
     'the child still sees only the five memory tools')
 })

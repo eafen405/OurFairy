@@ -8,10 +8,10 @@
  *
  * @module @ourfairy/dsh-memory/src/tools
  */
-import { defineTool, type InferArgs, type InferValue, type ParameterSchemaSpec, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
+import { toolRegistrar } from './tool-kit.js'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { MemoryService } from './service.js'
 // The system-prompt seam this module adds the memory policy section to.
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -33,18 +33,8 @@ export const MEMORY_POLICY = '长期记忆只保存用户明确要求记住的�
   + '只有用户明确要求记住，或长期不变的属性、重复习惯和明确说出的共同经历才写；不要记录带有「最近」「今天」「现在」「刚才」等时间限定的状态、动向、计划或待办，即使用户自己提到了也不写。'
   + '不要写会话摘要、用户画像、性格推测、IP/位置/设备/天气/时间等环境推断、一次性情绪或身体感受，也不要把 Fairy 自己的回复或工具结果当成用户事实。'
   + '不要把你执行过的记忆增删改、用户对记忆的增删改或切换要求、以及维护过程本身写成新记忆；不要记录待办、未结项提醒、会话任务状态或 Fairy 的建议，这些操作或状态已经存在于记忆或会话本身。'
-  + '没有明确、可长期保留的内容时不要写记忆；普通检索只查普通层，只有用户明确询问私密内容时才用深层检索。'
+  + '没有明确、可长期保留的内容时不要写记忆；'
   + '用户明确要求记住时立即用 memory_add 保存；已有记忆过时时先 memory_search 找到，再用 memory_edit 更新或 memory_delete 删除，不要新增副本。'
-
-
-/** How every memory tool renders its value to the model. */
-const output = {
-  schema: { type: 'object', additionalProperties: true } as const,
-  render: (_args: unknown, value: unknown): ContentBlock[] => [{ type: 'text', text: JSON.stringify(value) }],
-}
-
-/** The canonical value a memory tool returns, as the output schema declares it. */
-type ToolValue = InferValue<typeof output.schema>
 
 /** The calling session, as read-only and layer-changing handlers need it. */
 function callerOf(exec: ToolRunContext): { sessionId: string; ownerShortId: number | undefined } {
@@ -67,22 +57,14 @@ async function writerOf(exec: ToolRunContext, service: MemoryService): Promise<{
  * @param registered - the names already registered on this agent.
  */
 export function registerMemoryTools(agent: Agent, service: MemoryService, registered: Set<string>): void {
-  const add = <S extends ParameterSchemaSpec>(name: string, definition: {
-    readonly description: string
-    readonly parameters: S
-    readonly execute: (args: InferArgs<S>, exec: ToolRunContext) => Promise<ToolValue>
-  }): void => {
-    if (registered.has(name)) return
-    agent.ctx.tools.register(defineTool({ name, output, ...definition }))
-    registered.add(name)
-  }
+  const add = toolRegistrar(agent, registered)
   add('memory_add', {
-    description: 'Remember one durable fact or shared experience as a long-term memory. Store the exact text; the source session and its owner are filled in for you. The memory is normal unless is_private is true. Only store what the user explicitly asked to remember, or a stable long-term fact, preference or shared experience the user stated themselves. Never store session summaries, user profiles, personality guesses, location/IP/device/weather/time inferences, one-off moods or body sensations, or anything inferred from your own replies or tool results. Never store time-bound observations ("recently", "today", "right now") even when the user mentions them. Never store a memory about a memory operation the user requested or you performed, a todo/open task state, or a maintenance result. When nothing clearly qualifies, write nothing.',
+    description: 'Remember one durable fact or shared experience as a long-term memory. Store the exact text; the source session and its owner are filled in for you. The memory is normal unless is_private is true. Only store what the user explicitly asked to remember, or a stable long-term fact, preference or shared experience the user stated themselves. Never store session summaries, user profiles, personality guesses, location/IP/device/weather/time inferences, one-off moods or body sensations, or anything inferred from your own replies or tool results. Never store time-bound observations ("recently", "today", "right now") even when the user mentions them. Never store a memory about a memory operation the user requested or you performed, a todo/open task state, or a maintenance result. When nothing clearly qualifies, write nothing. At most 8000 Unicode characters; longer text is refused, never truncated. A successful call answers `{ok:true}`.',
     parameters: { content: { type: 'string', required: true }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
       const writer = await writerOf(exec, service)
-      const id = service.add({ ...writer, content: args.content, isPrivate: args.is_private === true })
-      return { ok: true, id }
+      service.add({ ...writer, content: args.content, isPrivate: args.is_private === true })
+      return { ok: true }
     },
   })
   add('memory_search', {
@@ -94,16 +76,16 @@ export function registerMemoryTools(agent: Agent, service: MemoryService, regist
     },
   })
   add('memory_edit', {
-    description: 'Edit one memory you have just found with memory_search in this session. old_string must occur exactly once in its content; pass the complete old content to rewrite the whole memory. The content time moves with the edit; the number and layer stay.',
+    description: 'Edit one memory you have just found with memory_search in this session. old_string must occur exactly once in its content; pass the complete old content to rewrite the whole memory. The content time moves with the edit; the number and layer stay. The edited content is at most 8000 Unicode characters; longer text is refused, never truncated. A successful call answers `{ok:true}`.',
     parameters: { id: { type: 'integer', required: true }, old_string: { type: 'string', required: true }, new_string: { type: 'string', required: true }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
       const writer = await writerOf(exec, service)
       service.edit({ ...writer, id: args.id, isPrivate: args.is_private === true, oldString: args.old_string, newString: args.new_string })
-      return { ok: true, id: args.id }
+      return { ok: true }
     },
   })
   add('memory_delete', {
-    description: 'Delete one memory you have just found with memory_search in this session. The row is removed physically and its number is never reused.',
+    description: 'Delete one memory you have just found with memory_search in this session. The row is removed physically and its number is never reused. A successful call answers `{ok:true}`.',
     parameters: { id: { type: 'integer', required: true }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
       const { sessionId } = callerOf(exec)
@@ -112,11 +94,12 @@ export function registerMemoryTools(agent: Agent, service: MemoryService, regist
     },
   })
   add('memory_switch', {
-    description: 'Switch one memory you have just found with memory_search in this session between the normal and private layers. The direction follows its current layer; content, source and content time do not change.',
+    description: 'Switch one memory you have just found with memory_search in this session between the normal and private layers. The direction follows its current layer; content, source and content time do not change. A successful call answers `{ok:true}`.',
     parameters: { id: { type: 'integer', required: true } },
     execute: async (args, exec) => {
       const { sessionId } = callerOf(exec)
-      return { ok: true, id: args.id, is_private: service.switchLayer({ sessionId, id: args.id }) }
+      service.switchLayer({ sessionId, id: args.id })
+      return { ok: true }
     },
   })
 }

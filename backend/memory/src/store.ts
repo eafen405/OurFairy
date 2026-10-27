@@ -20,7 +20,7 @@
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite'
-import { MemoryError } from './errors.js'
+import { MemoryError } from './tool-kit.js'
 
 const SCHEMA_VERSION = 2
 

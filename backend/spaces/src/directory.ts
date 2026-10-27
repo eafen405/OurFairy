@@ -4,15 +4,13 @@
  *
  * @module @ourfairy/dsh-spaces/src/directory
  */
+import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
 import { WorkingDirectoryService } from '@deepseek-ai/dsh-working-directory'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
 // The dsh context's own seam: the session projections the cwd is read from.
 import type {} from '@deepseek-ai/dsh-session-projection'
 import { pathInside } from './scope.js'
-
-/** The preset the memory row creates for a per-source maintenance child. */
-const MAINTENANCE_PRESET = 'ourfairy:memory-maintenance'
 
 /** Mounted by the `scoped-directory` row; the scope itself stays in the spaces row. */
 export default class ScopedDirectory extends WorkingDirectoryService {

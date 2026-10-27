@@ -11,7 +11,7 @@
       "dirs": [
         "244-memory-crud"
       ],
-      "note": "#244 长期记忆 CRUD 与双层检索（独立 SQLite 与版本化迁移、五个记忆工具、20 条/8000 字符预算与显式截断、按调用会话的查询门禁、编号不复用与物理删除）；印象、维护与设置见后续票"
+      "note": "#244 长期记忆 CRUD 与双层检索（独立 SQLite 与版本化迁移、五个记忆工具、20 条/8000 字符预算与显式截断、按调用会话的查询门禁、编号不复用与物理删除）；印象、维护与设置见后续票；#240 收口复核把同一 8000 字符预算作为 `memory_add`/`memory_edit` 的写入上限，拒绝会被每次检索整条省略、任何会话都无法再改/删/切换的孤儿行"
     },
     {
       "dirs": [
@@ -35,7 +35,7 @@
       "dirs": [
         "243-compaction-settings"
       ],
-      "note": "#243 自动压缩触发阈值成为部署设置：网关读写 `compaction-basic` 行的 volatile `thresholdTokens`（整 token 100000–900000，含边界；非整数、越界与多余字段 400 `gateway/invalid-compaction`，不截断/不 clamp，保留预算仍由 16000 固定）；真实 profile + Loader 与产品会话证明保存后下一次压力检查生效（900000 不触发、100000 修剪超长工具结果）、重启保留、切模型不改、匿名 401/普通代理人 403；Android 新增「上下文 → 自动压缩 → 阈值」独立嵌套组与可复用 Material 3 数值控件（滑块与直接输入同一 K 草稿、单位、范围、忙态、可见错误、写后重读），控件留给 #247 复用"
+      "note": "#243 自动压缩触发阈值成为部署设置：网关读写 `compaction-basic` 行的 volatile `thresholdTokens`（整 token 100000–900000，含边界；非整数、越界与多余字段 400 `gateway/invalid-compaction`，不截断/不 clamp，保留预算仍由 16000 固定）；真实 profile + Loader 与产品会话证明保存后下一次压力检查生效（900000 不触发、100000 修剪超长工具结果）、重启保留、切模型不改、匿名 401/普通代理人 403；Android 新增「上下文 → 自动压缩 → 阈值」独立嵌套组与可复用 Material 3 数值控件（滑块与直接输入同一 K 草稿、单位、范围、忙态、可见错误、写后重读），控件留给 #247 复用；100000–900000 只在网关校验：原生 `compaction-basic` schema 只约束正整数，这是规格 §6「拥有者 schema 也校验范围」的有意偏差，#240 复核记录在证据与 bundle 注释中，未改 dsh"
     },
     {
       "dirs": [
@@ -47,7 +47,7 @@
       "dirs": [
         "248-memory-integration-acceptance"
       ],
-      "note": "#248 记忆增量集成与真实模型验收：`npm run acceptance:memory` 用真实 v1 profile + 真实 MiniMax-M3.1-Flash（拒绝回环替身，主/子会话都从各自 session log 核对路由）跑 11 条质量样本、67 项检查全过（明确记忆、稳定偏好、寒暄不写、易变观察不写、事实更新、失效删除、普通/私密切换、跨用户层隔离与印象、维护零写入推进/不重复、印象先读后写/注入/超长）；维护门槛经真实 `/gateway/maintenance` 从 15/6 降到 5/3；真实运行暴露的会话摘要、用户画像、IP/位置推断、时间限定观察、元记忆与待办写入，以有 owner 的 `ourfairy:memory-policy` 段、`memory_add` 描述与维护子会话策略修复（`memory-policy` 测试固定接线，前后样本在证据目录）；`npm test` 379/379、`combo:verify` 三行 ok、Android 387 tests + lint 0 errors、dsh compaction-basic 158 + config catalog 15；真实 500K 压缩、真机与默认 15/6 真实节奏未执行"
+      "note": "#248 记忆增量集成与真实模型验收：`npm run acceptance:memory` 用真实 v1 profile + 真实 MiniMax-M3.1-Flash（拒绝回环替身，主/子会话都从各自 session log 核对路由）跑 11 条质量样本、67 项检查全过（明确记忆、稳定偏好、寒暄不写、易变观察不写、事实更新、失效删除、普通/私密切换、跨用户层隔离与印象、维护零写入推进/不重复、印象先读后写/注入/超长；复核加强 invalidate 后该例 7/7，当前全量应为 69 项）；维护门槛经真实 `/gateway/maintenance` 从 15/6 降到 5/3；真实运行暴露的会话摘要、用户画像、IP/位置推断、时间限定观察、元记忆与待办写入，以有 owner 的 `ourfairy:memory-policy` 段、`memory_add` 描述与维护子会话策略修复（`memory-policy` 测试固定接线，前后样本在证据目录）；`npm test` 381/381、`combo:verify` 三行 ok、Android 387 tests + lint 0 errors、dsh compaction-basic 158 + config catalog 15；真实 500K 压缩、真机与默认 15/6 真实节奏未执行；复核轮 dsh 另跑 typecheck 5/5 与 check:ci:static 59/64（5 个既有 fork 漂移失败），dsh 全量测试与覆盖率未跑"
     }
   ]
 }
