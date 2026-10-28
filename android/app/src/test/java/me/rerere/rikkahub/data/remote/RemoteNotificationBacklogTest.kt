@@ -56,6 +56,7 @@ class RemoteNotificationBacklogTest {
             "$token-${ids.first()}",
         )
         override suspend fun read(token: String, sessionId: String) = OwnedSession(sessionId)
+        override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun create(token: String) = error("not used")
         override suspend fun primary(token: String) = OwnedSession("$token-${ids.first()}", primary = true)

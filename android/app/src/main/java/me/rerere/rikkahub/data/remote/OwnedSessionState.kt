@@ -29,6 +29,13 @@ data class SessionsSnapshot(
          * stays a plain value with no dependency on resources.
          */
         const val UNREACHABLE: String = "identity-unreachable"
+
+        /**
+         * The backend refused a title that has no visible characters once
+         * normalized. Recognised by code so the drawer can word it in the
+         * reader's language instead of showing the backend's English message.
+         */
+        const val EMPTY_TITLE: String = "sessions/empty-title"
     }
 }
 
@@ -117,6 +124,19 @@ class OwnedSessionState(
     }
 
     /**
+     * Rename one session.
+     *
+     * The backend answers with the very row the list would return, so that row
+     * is folded here instead of a second list read: the drawer and the
+     * conversation's title bar show the title the list would show, and one tap
+     * costs one request. [stand] is false — renaming a session does not move the
+     * user into it.
+     */
+    fun rename(sessionId: String, title: String) = request { token, current ->
+        current.joined(backend.rename(token, sessionId, title), stand = false)
+    }
+
+    /**
      * Fold one session the backend named into the snapshot.
      *
      * A session the backend has just named is one this account owns, so it joins
@@ -158,7 +178,7 @@ class OwnedSessionState(
                 operation(token, _snapshot.value)
             } catch (refused: IdentityRefused) {
                 if (started != epoch) return@launch
-                _snapshot.value = _snapshot.value.settled(failure = refused.message ?: refused.code)
+                _snapshot.value = _snapshot.value.settled(failure = refused.described())
                 return@launch
             } catch (unreachable: IdentityUnreachable) {
                 if (started != epoch) return@launch
@@ -174,4 +194,12 @@ class OwnedSessionState(
 
     private fun SessionsSnapshot.settled(failure: String? = null) =
         copy(loading = false, failure = failure)
+
+    /**
+     * What the page shows for one refusal: the backend's own message, except the
+     * one it has no reader-facing text for. That code is passed through so the
+     * drawer can word it, exactly as [SessionsSnapshot.UNREACHABLE] is.
+     */
+    private fun IdentityRefused.described(): String =
+        if (code == SessionsSnapshot.EMPTY_TITLE) SessionsSnapshot.EMPTY_TITLE else message ?: code
 }

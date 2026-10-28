@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -123,6 +124,14 @@ internal fun rememberFairyScreenOpen(window: FairyWindowState): Boolean =
 fun FairyWindowTopBar(
     window: FairyWindowState,
     subtitle: String?,
+    /**
+     * The open session's own name. A session with no name yet keeps the product
+     * nameplate as the bar's first line; a named one shows its name there and
+     * keeps the nameplate as the small tag, so the bar names what the reader is
+     * looking at without losing Fairy's identity. The value is the session row
+     * the list shows — one source for both surfaces.
+     */
+    title: String? = null,
     subtitleLeading: (@Composable () -> Unit)? = null,
     subtitleTag: String? = null,
     screenOpen: Boolean = rememberFairyScreenOpen(window),
@@ -133,6 +142,10 @@ fun FairyWindowTopBar(
     val tokens = LocalFairyTokens.current
     val allowSpatial = LocalAgoraMotionPolicy.current.allowSpatialTransitions
     var moreMenuOpen by remember { mutableStateOf(false) }
+    val named = title?.takeIf { it.isNotBlank() }
+    val nameplate = stringResource(R.string.fairy_nameplate)
+    // A named session's tag is the product name the title line displaced.
+    val tag = subtitleTag ?: named?.let { nameplate }
     val windowSpec = tween<IntSize>(FAIRY_SCREEN_TRANSITION_MS, easing = FastOutSlowInEasing)
     val fadeSpec = tween<Float>(FAIRY_SCREEN_TRANSITION_MS, easing = FastOutSlowInEasing)
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -180,15 +193,20 @@ fun FairyWindowTopBar(
                         }
                     }
                     Spacer(Modifier.width(12.dp))
-                    Column(verticalArrangement = Arrangement.Center) {
+                    // The whole leftover width belongs to the name column, so a
+                    // long session title ends in an ellipsis instead of pushing
+                    // the more menu off the bar.
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
                         Text(
-                            text = stringResource(R.string.fairy_nameplate),
+                            text = named ?: nameplate,
                             fontFamily = tokens.titleFontFamily,
                             fontWeight = FontWeight.Black,
                             fontSize = 18.sp,
                             lineHeight = 22.sp,
                             color = tokens.textPrimary,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.testTag("fairy-window-title"),
                         )
                         if (subtitle != null) {
                             Row(
@@ -208,9 +226,9 @@ fun FairyWindowTopBar(
                                 )
                                 // Decorative English tag, only when the subtitle
                                 // itself is not English (it would repeat it).
-                                if (subtitleTag != null && subtitle.any { it.code > 0x7F }) {
+                                if (tag != null && subtitle.any { it.code > 0x7F }) {
                                     Text(
-                                        text = subtitleTag,
+                                        text = tag,
                                         fontFamily = tokens.telemetryFontFamily,
                                         fontSize = 9.sp,
                                         lineHeight = 14.sp,
@@ -222,7 +240,6 @@ fun FairyWindowTopBar(
                             }
                         }
                     }
-                    Spacer(Modifier.weight(1f))
                     if (moreMenuContent != null) {
                         Box {
                             IconButton(onClick = { moreMenuOpen = true }, modifier = Modifier.size(48.dp)) {

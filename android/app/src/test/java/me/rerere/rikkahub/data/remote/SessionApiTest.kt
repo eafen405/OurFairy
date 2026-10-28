@@ -194,6 +194,45 @@ class SessionApiTest {
         assertEquals("s-7", read.id)
     }
 
+    // ---- renaming a session ----
+
+    @Test
+    fun `rename names the session and the title, and answers with the row the list would return`() = runTest {
+        reply(
+            200,
+            """{"ok":true,"session":{"id":"s-2","owner":"user:1","primary":false,"createdAt":1760003600000,"title":"我的会话","titleSource":2}}""",
+        )
+
+        val renamed = api.rename(TOKEN, "s-2", "  我的   会话  ")
+
+        val request = onlyRequest()
+        assertEquals("POST", request.method)
+        // The session family's address; which module answers it is a backend detail.
+        assertEquals("/sessions/rename", request.path)
+        assertEquals("Bearer $TOKEN", request.authorization)
+        // The text goes as the reader wrote it: normalization belongs to the
+        // backend, and a client must not pre-trim what it cannot normalize.
+        assertEquals("""{"sessionId":"s-2","title":"  我的   会话  "}""", request.body)
+        assertEquals("application/json; charset=utf-8", request.contentType)
+
+        assertEquals("s-2", renamed.id)
+        assertEquals("我的会话", renamed.title)
+        assertEquals(OwnedSessionTitleSource.USER, renamed.titleSource)
+    }
+
+    @Test
+    fun `a refused title keeps the backend's own code so the drawer can word it`() = runTest {
+        reply(400, """{"ok":false,"error":{"code":"sessions/empty-title","message":"the title has no visible characters once normalized"}}""")
+
+        try {
+            api.rename(TOKEN, "s-2", "  ")
+            fail("expected the refusal to be raised")
+        } catch (refused: IdentityRefused) {
+            assertEquals(400, refused.status)
+            assertEquals(SessionsSnapshot.EMPTY_TITLE, refused.code)
+        }
+    }
+
     // ---- refusal ----
 
     @Test
