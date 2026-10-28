@@ -27,6 +27,7 @@ class RemoteReceiveStateTest {
             if (!sessionId.startsWith(token)) throw IdentityRefused(403, "session/forbidden", "not yours")
             return OwnedSession(sessionId)
         }
+        override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun create(token: String) = OwnedSession("$token-created")
         override suspend fun primary(token: String) = OwnedSession("$token-main", primary = true)

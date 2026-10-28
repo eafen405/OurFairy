@@ -58,6 +58,16 @@ private class DeferredBackend : SessionBackend {
         return OwnedSession(id = sessionId, owner = "user:$token")
     }
 
+    override suspend fun rename(token: String, sessionId: String, title: String): OwnedSession {
+        await(token)
+        return OwnedSession(
+            id = sessionId,
+            owner = "user:$token",
+            title = title,
+            titleSource = OwnedSessionTitleSource.USER,
+        )
+    }
+
     override suspend fun archive(token: String, sessionId: String): OwnedSession {
         await(token)
         return OwnedSession(id = sessionId, owner = "user:$token")
@@ -259,6 +269,7 @@ class OwnedSessionStateTest {
             override suspend fun select(token: String, sessionId: String) = empty
             override suspend fun primary(token: String) = listed
             override suspend fun read(token: String, sessionId: String) = empty
+            override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
             override suspend fun archive(token: String, sessionId: String) = empty
         }
         val state = OwnedSessionState(backend, this)
@@ -278,6 +289,57 @@ class OwnedSessionStateTest {
     }
 
     @Test
+    fun `a rename shows the row the backend answered without moving the selection`() = runTest {
+        val backend = DeferredBackend()
+        val state = OwnedSessionState(backend, this)
+        backend.gate.complete(Unit)
+
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        val selected = state.snapshot.value.selectedId
+
+        // The answer is the row the list would return; the page adopts it as the
+        // one source, so the drawer and the title bar cannot disagree.
+        state.rename("s-alice", "我的会话")
+        advanceUntilIdle()
+
+        val row = state.snapshot.value.sessions.single()
+        assertEquals("我的会话", row.title)
+        assertEquals(OwnedSessionTitleSource.USER, row.titleSource)
+        assertEquals(selected, state.snapshot.value.selectedId)
+        assertEquals(null, state.snapshot.value.failure)
+    }
+
+    @Test
+    fun `an empty title keeps its own code so the drawer can word it`() = runTest {
+        val backend = object : SessionBackend {
+            override suspend fun list(token: String) = OwnedSessions(emptyList(), null)
+            override suspend fun create(token: String) = error("not used")
+            override suspend fun select(token: String, sessionId: String) = error("not used")
+            override suspend fun primary(token: String) = error("not used")
+            override suspend fun read(token: String, sessionId: String) = error("not used")
+            override suspend fun rename(token: String, sessionId: String, title: String): OwnedSession =
+                throw IdentityRefused(
+                    status = 400,
+                    code = SessionsSnapshot.EMPTY_TITLE,
+                    message = "the title has no visible characters once normalized",
+                )
+            override suspend fun archive(token: String, sessionId: String) = error("not used")
+        }
+        val state = OwnedSessionState(backend, this)
+
+        state.bind("alice")
+        state.rename("s-alice", "  ")
+        advanceUntilIdle()
+
+        // Not the backend's English message: the code is the one refusal the page
+        // words itself, exactly as it words an unreachable backend.
+        assertEquals(SessionsSnapshot.EMPTY_TITLE, state.snapshot.value.failure)
+        assertEquals(false, state.snapshot.value.loading)
+    }
+
+    @Test
     fun `archiving drops the row and moves a selection standing in it to main`() = runTest {
         val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
         val other = OwnedSession(id = "s-other", owner = "user:alice")
@@ -288,6 +350,7 @@ class OwnedSessionStateTest {
             override suspend fun primary(token: String) = main
             override suspend fun read(token: String, sessionId: String) = other
             override suspend fun archive(token: String, sessionId: String) = other
+            override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         }
         val state = OwnedSessionState(backend, this)
         state.bind("alice")
@@ -317,6 +380,7 @@ class OwnedSessionStateTest {
             override suspend fun read(token: String, sessionId: String) = other
             override suspend fun archive(token: String, sessionId: String): OwnedSession =
                 throw IdentityRefused(409, "sessions/primary-not-archivable", "the primary session is never archived")
+            override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         }
         val state = OwnedSessionState(backend, this)
         state.bind("alice")

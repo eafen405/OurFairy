@@ -7,7 +7,7 @@ import { installJobs } from './jobs.js'
 import { registerProjectionUnits } from './units.js'
 import { installSpillRead } from './spill-read.js'
 import { respondToChatObserver } from './observe.js'
-import { SessionScopeError } from '@ourfairy/dsh-sessions'
+import { SESSION_RENAME_PATH, SessionScopeError } from '@ourfairy/dsh-sessions'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ServerResponse } from 'node:http'
 import type { ChatObserver, ChatRequest } from './service.js'
@@ -47,10 +47,13 @@ export function apply(ctx: Context): void {
   const chat = new RemoteChat(ctx, runtime)
   const { jobOutput, jobStop } = installJobs(ctx, runtime)
   installSpillRead(ctx)
-  const register = (path: string, handle: (owner: SessionOwner, body: ChatRequest) => Promise<unknown>, respond?: (response: ServerResponse, result: unknown) => void) => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,
+  // `family` is the code prefix a route answers with. Every chat path answers
+  // as `chat/*`; the one session path served here answers in the session
+  // family's own vocabulary, because that is the family the caller is reading.
+  const register = (path: string, handle: (owner: SessionOwner, body: ChatRequest) => Promise<unknown>, respond?: (response: ServerResponse, result: unknown) => void, family = 'chat') => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,
     handler: postHandler({ fence: request => ctx.connection.fence(request), HttpError: SessionScopeError,
-      codePrefix: 'chat', internalMessage: 'remote chat request failed',
-      handle: async (body, request) => handle(chat.caller(request), body),
+      codePrefix: family, internalMessage: 'remote chat request failed',
+      handle: async (body, request) => handle(chat.caller(request, `${family}/unauthorized`), body),
       ...respond !== undefined ? { respond } : {} }),
   }), `ourfairy-chat: ${path}`)
   register('/chat/send', async (owner, body) => ({ ok: true, receipt: await chat.send(owner, body) }))
@@ -59,6 +62,10 @@ export function apply(ctx: Context): void {
   register('/chat/page', async (owner, body) => ({ ok: true, page: await chat.page(owner, body) }))
   register('/chat/checkpoint', async (owner, body) => ({ ok: true, ...await chat.checkpoint(owner, body) }))
   register('/chat/stop', async (owner, body) => { await chat.stop(owner, body); return { ok: true } })
+  // Serving one address of the session family: a rename is accepted only on a
+  // live session, and opening one is this module's job. The path constant stays
+  // single-sourced in `@ourfairy/dsh-sessions`.
+  register(SESSION_RENAME_PATH, async (owner, body) => ({ ok: true, session: await chat.rename(owner, body) }), undefined, 'sessions')
   register('/chat/jobs/output', async (owner, body) => ({ ok: true, output: await jobOutput(owner, body) }))
   register('/chat/jobs/stop', async (owner, body) => ({ ok: true, outcome: await jobStop(owner, body) }))
   register('/chat/observe', (owner, body) => chat.observe(owner, body), (response, result) => {

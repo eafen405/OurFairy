@@ -26,6 +26,17 @@
 | `/chat/observe` | `{sessionId,maxEvents?}` | `text/event-stream`，见下 |
 | `/chat/jobs/output` | `{sessionId,taskId,from}` | `{ok:true,output}` |
 | `/chat/jobs/stop` | `{sessionId,taskId}` | `{ok:true,outcome}` |
+| `/sessions/rename` | `{sessionId,title}` | `{ok:true,session:<会话行>}` |
+
+`/sessions/rename` 是本模块服务的**会话家族**路由（路径常量仍在 `@ourfairy/dsh-sessions` 的
+`SESSION_RENAME_PATH`）：改名的对象是一个会话，路径按作用对象命名；但它只能由 chat 服务——
+原生 `sessionTitle.rename` 只接受已发布的活会话，而把会话变活（persona、身份段、模型选择）是
+chat 的职责。响应的会话行与 `/sessions/list` 的同一行由同一份代码（`expose` + `titleOf`）产生，
+两者不会漂移。错误码沿用 `sessions/*`：400 `sessions/invalid-request`（标题不是文本）、400
+`sessions/empty-title`（规范化后没有可见字符，此时不写入任何东西）、404
+`sessions/unknown-session`、403 `sessions/unowned-session`、401 `sessions/unauthorized`。
+超长标题不是错误：按 UTF-8 码点边界截断到 `maxTitleBytes`。改名的 open 不补生成标题，因此一次
+改名不花模型请求；用户标题此后不会被自动生成改写。
 
 `requestId` 是客户端生成的稳定非空字符串（≤128 字符），与 `text`、有序 `uploadIds` 一起构成
 请求身份：同一身份重发返回同一 receipt（进程重启后亦然），内容不同则 409

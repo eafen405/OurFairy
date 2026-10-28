@@ -8,7 +8,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -72,6 +75,16 @@ class FairyPagesTest {
         override suspend fun read(token: String, sessionId: String): OwnedSession {
             if (sessionId == "missing") throw IdentityRefused(404, "session/not-found", "会话已不存在")
             return OwnedSession(sessionId, primary = sessionId == listedSessions.primarySessionId)
+        }
+        override suspend fun rename(token: String, sessionId: String, title: String): OwnedSession {
+            // The backend answers with the row the list would return; this fake
+            // keeps its list in step so a later refresh cannot disagree with it.
+            val renamed = listedSessions.sessions.first { it.id == sessionId }
+                .copy(title = title.trim(), titleSource = OwnedSessionTitleSource.USER)
+            listedSessions = listedSessions.copy(
+                sessions = listedSessions.sessions.map { if (it.id == sessionId) renamed else it },
+            )
+            return renamed
         }
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun primary(token: String) = OwnedSession("main", primary = true)
@@ -236,7 +249,9 @@ class FairyPagesTest {
 
         // The named row shows its title; the titled backend row is not the only
         // shape, so the unnamed one shows the placeholder rather than its id.
-        compose.onAllNodesWithText("主会话标题").assertCountEquals(1)
+        // The drawer row and the bar name the open session, so its title is
+        // deliberately on screen twice.
+        compose.onAllNodesWithText("主会话标题").assertCountEquals(2)
         compose.onAllNodesWithText("新会话").assertCountEquals(1)
         compose.onAllNodesWithText("unnamed-7f3a9c1b").assertCountEquals(0)
     }
@@ -370,6 +385,62 @@ class FairyPagesTest {
         }
     }
 
+    @Test fun `the conversation bar names the open session and follows the row it reads`() {
+        show {
+            FairyConversationPage("main", {}, receive, onOpenConversation = {}, onSettings = {})
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        // The bar names the session the reader is in; the drawer row and the bar
+        // read the same OwnedSession, so one value drives both.
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("主会话标题")
+        // Fairy keeps her nameplate as the tag beside the status line.
+        compose.onNodeWithText("Fairy").assertIsDisplayed()
+
+        // A title can change without a rename: the model's title lands after the
+        // first exchange. The row is the one source, so the bar follows it.
+        compose.runOnIdle {
+            listedSessions = listedSessions.copy(
+                sessions = listedSessions.sessions.map {
+                    if (it.id == "main") it.copy(title = "模型起的名字") else it
+                },
+            )
+            receive.owned.refresh()
+        }
+        compose.waitUntil {
+            receive.owned.snapshot.value.sessions.firstOrNull { it.id == "main" }?.title == "模型起的名字"
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("模型起的名字")
+        compose.onNodeWithText("主会话标题").assertDoesNotExist()
+    }
+
+    @Test fun `the drawer offers a rename entry on every session the reader can name`() {
+        show {
+            FairyConversationPage("main", {}, receive, onOpenConversation = {}, onSettings = {})
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithContentDescription("切换会话").performClick()
+        compose.mainClock.advanceTimeBy(500)
+
+        // The entry sits on the row itself: naming a session does not require
+        // visiting it. Main is the account's fixed binding, so its marker takes
+        // that place and it is not renameable from here.
+        compose.onNodeWithText("另一个会话").assertIsDisplayed()
+        compose.onNodeWithContentDescription("重命名会话").assertIsDisplayed()
+
+        // The dialog itself is not driven here: an AlertDialog window never lets
+        // Robolectric's paused clock go idle, and this suite runs paused. The one
+        // tap's behaviour (one request, the answered row folded in) is pinned by
+        // `OwnedSessionStateTest`, and the wire shape by `SessionApiTest`.
+    }
+
     @Test fun `home opens the current conversation with a visible composer`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
@@ -444,7 +515,9 @@ class FairyPagesTest {
         compose.onNodeWithText("会话不可用").assertDoesNotExist()
         compose.onNodeWithContentDescription("切换会话").performClick()
         compose.mainClock.advanceTimeBy(500)
-        compose.onAllNodesWithText("复用会话").assertCountEquals(1)
+        // The reused session's title is on the drawer row and in the bar of the
+        // conversation the create just entered.
+        compose.onAllNodesWithText("复用会话").assertCountEquals(2)
     }
 
     @Test fun `unavailable restored conversation offers another session`() {

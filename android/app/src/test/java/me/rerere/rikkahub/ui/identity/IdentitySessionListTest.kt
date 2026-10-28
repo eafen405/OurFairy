@@ -58,6 +58,7 @@ class IdentitySessionListTest {
             listed = listed.filterNot { it.id == sessionId }
             return other
         }
+        override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
     }
     private val state = OwnedSessionState(backend, scope)
 

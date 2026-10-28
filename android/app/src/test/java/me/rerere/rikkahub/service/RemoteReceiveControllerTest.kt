@@ -103,6 +103,7 @@ class RemoteReceiveControllerTest {
         override suspend fun select(token: String, sessionId: String) = error("not used")
         override suspend fun primary(token: String) = error("not used")
         override suspend fun read(token: String, sessionId: String) = error("not used")
+        override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         override suspend fun archive(token: String, sessionId: String) = error("not used")
     }
 

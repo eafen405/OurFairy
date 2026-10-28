@@ -17,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -39,6 +41,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete02
+import me.rerere.hugeicons.stroke.Edit02
 import me.rerere.hugeicons.stroke.Refresh
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.OwnedSession
@@ -61,6 +64,9 @@ internal fun IdentitySessionList(
     val snapshot by state.snapshot.collectAsStateWithLifecycle()
     val tokens = LocalFairyTokens.current
     val scope = rememberCoroutineScope()
+    // The row whose rename dialog is open, and the refusal that keeps it open.
+    var renaming by remember { mutableStateOf<OwnedSession?>(null) }
+    var renameFailure by remember { mutableStateOf<String?>(null) }
     /** The session the confirmation dialog is asking about; null when closed. */
     var pendingArchive by remember { mutableStateOf<OwnedSession?>(null) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -118,7 +124,7 @@ internal fun IdentitySessionList(
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).testTag("session-row-title"),
                     )
                     if (session.primary) {
                         Text(
@@ -128,6 +134,22 @@ internal fun IdentitySessionList(
                             modifier = Modifier.padding(start = 8.dp),
                         )
                     } else {
+                        // The rename entry sits on the row itself: renaming needs
+                        // no visit to the session, only the row it names.
+                        IconButton(
+                            onClick = {
+                                renameFailure = null
+                                renaming = session
+                            },
+                            enabled = !snapshot.loading,
+                        ) {
+                            Icon(
+                                HugeIcons.Edit02,
+                                contentDescription = "重命名会话",
+                                modifier = Modifier.size(18.dp),
+                                tint = tokens.textMuted,
+                            )
+                        }
                         // Delete is archiving: the row action names it by the
                         // product's word, and the confirmation says what it
                         // keeps and how to get it back. The primary session has
@@ -151,6 +173,32 @@ internal fun IdentitySessionList(
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onSettings) { Text("设置") }
         }
+    }
+    renaming?.let { session ->
+        RenameSessionDialog(
+            initial = session.title,
+            busy = snapshot.loading,
+            failure = renameFailure,
+            onDismiss = { renaming = null },
+            onConfirm = { title ->
+                scope.launch {
+                    state.rename(session.id, title)
+                    // The refusal is answered when the request settles, so the
+                    // dialog keeps the text the reader wrote until then.
+                    val settled = state.snapshot.first { !it.loading }
+                    if (settled.failure == null) {
+                        renaming = null
+                        renameFailure = null
+                    } else {
+                        renameFailure = when (settled.failure) {
+                            SessionsSnapshot.EMPTY_TITLE -> "标题不能只有空白或不可见字符"
+                            SessionsSnapshot.UNREACHABLE -> "无法连接到后端"
+                            else -> settled.failure
+                        }
+                    }
+                }
+            },
+        )
     }
     pendingArchive?.let { session ->
         AlertDialog(
@@ -185,4 +233,51 @@ internal fun IdentitySessionList(
             },
         )
     }
+}
+
+/**
+ * The rename dialog: one text field, the backend's own verdict on it, and the
+ * row left open until the answer lands. The backend normalizes the title
+ * (whitespace collapsed, invisible characters dropped, an over-long one cut on a
+ * UTF-8 boundary), so this dialog means exactly one thing: take the text as
+ * written and let the backend answer.
+ */
+@Composable
+private fun RenameSessionDialog(
+    initial: String,
+    busy: Boolean,
+    failure: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var draft by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("重命名会话") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    label = { Text("会话标题") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (failure != null) {
+                    Text(
+                        failure,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(draft) }, enabled = !busy) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }

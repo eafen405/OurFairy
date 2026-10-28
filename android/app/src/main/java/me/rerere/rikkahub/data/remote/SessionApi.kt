@@ -71,6 +71,15 @@ interface SessionBackend {
     suspend fun read(token: String, sessionId: String): OwnedSession
 
     /**
+     * Pin one session's title to [title].
+     *
+     * The answer is the session row the list would return, so callers adopt it
+     * instead of a list read of their own: the drawer row and the conversation's
+     * title bar then show the same value the backend folded.
+     */
+    suspend fun rename(token: String, sessionId: String, title: String): OwnedSession
+
+    /**
      * Archive one session — this product's delete.
      *
      * The log, the messages and the history stay; what changes is that the
@@ -95,6 +104,9 @@ internal data class SessionEnvelope(
 
 @Serializable
 private data class SessionDocument(val sessionId: String)
+
+@Serializable
+private data class RenameDocument(val sessionId: String, val title: String)
 
 /**
  * The remote session endpoints, over the same HTTP client and the same build-time
@@ -143,6 +155,18 @@ class SessionApi(
 
     override suspend fun read(token: String, sessionId: String): OwnedSession =
         call("/sessions/read", document = json.encodeToString(SessionDocument(sessionId)), token = token)
+            .named()
+
+    /**
+     * `/sessions/rename` is the session family's address, served by the chat
+     * module because a rename needs a live session — which module answers it is
+     * a backend detail this client does not read into the path. The backend
+     * normalizes the title itself (collapsed whitespace, invisible characters
+     * removed, an over-long title cut on a UTF-8 boundary) and refuses one that
+     * leaves nothing visible with `sessions/empty-title`.
+     */
+    override suspend fun rename(token: String, sessionId: String, title: String): OwnedSession =
+        call("/sessions/rename", document = json.encodeToString(RenameDocument(sessionId, title)), token = token)
             .named()
 
     override suspend fun archive(token: String, sessionId: String): OwnedSession =

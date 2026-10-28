@@ -81,6 +81,19 @@ fun FairyConversationPage(
     val settled = !opening && !failed && sessionId != null &&
         sessions.selectedId == sessionId && chat?.sessionId == sessionId
     val snapshot = chat.takeIf { settled }
+    // The open session's row, the same one the drawer renders: its title is what
+    // the bar shows.
+    val session = sessions.sessions.firstOrNull { it.id == sessionId }
+    // A session's title can change without a rename: the first exchange seeds a
+    // fallback title and the model title follows it. The list is the one row
+    // source for the bar and the drawer, so it is re-read when a reply ends —
+    // on the transition only, so merely opening a session costs no request.
+    var wasReplying by remember(sessionId) { mutableStateOf(false) }
+    val replying = snapshot?.projection?.let { it.replyStatus != 0 } ?: false
+    LaunchedEffect(sessionId, replying) {
+        if (wasReplying && !replying) receive.owned.refresh()
+        wasReplying = replying
+    }
     val window = snapshot?.fairyWindow() ?: FairyWindowState(presence = FairyPresence.CONNECTING)
     val screenOpen = rememberFairyScreenOpen(window)
     val tokens = LocalFairyTokens.current
@@ -147,6 +160,7 @@ fun FairyConversationPage(
             }
             FairyWindowTopBar(
                 window = window,
+                title = session?.title,
                 screenOpen = screenOpen,
                 subtitle = when {
                     opening -> "正在打开会话…"

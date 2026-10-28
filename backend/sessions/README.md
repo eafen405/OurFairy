@@ -33,11 +33,17 @@ caller's archive, exposed as `ctx.ourfairySessions` and the `/sessions/*` paths.
   still empty, otherwise the newest empty ordinary session; only a session that
   already has a message forces a new ordinary session. The default view's
   archive filter is what keeps an archived empty session out of that reuse.
+- The address `/sessions/rename`. It belongs to this family, but this package
+  does not serve it: a rename is accepted only on a live session, and opening one
+  is [`chat`](../chat/README.md)'s job. The path constant
+  (`SESSION_RENAME_PATH`) lives here so the family publishes each address once;
+  chat registers the handler.
 
 `list` is the archive's only filter point: it answers active sessions unless the
 caller asks for the archived view, so create's reuse, `conversation_search` and
 every other reader of the service see one consistent set without a per-caller
 filter.
+>>>>>>> integration/spec-250
 
 ## Does not own
 
