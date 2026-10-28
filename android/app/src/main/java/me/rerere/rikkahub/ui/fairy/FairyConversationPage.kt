@@ -110,8 +110,10 @@ fun FairyConversationPage(
     // to the account's main session, so the page follows it there instead of
     // reading the moved selection as "this conversation is unavailable". Only a
     // session that was in the list and has left it does this: an id that was
-    // never ours (a stale deep link) still reports unavailable.
-    val standing = remember(sessionId) { sessionId != null && sessionId in sessions.sessions.map { it.id } }
+    // never ours (a stale deep link) still reports unavailable. The row may
+    // arrive after the page's first composition, so latch it whenever it appears.
+    var standing by remember(sessionId) { mutableStateOf(false) }
+    if (sessionId != null && sessions.sessions.any { it.id == sessionId }) standing = true
     LaunchedEffect(sessionId, sessions.selectedId, sessions.sessions.size) {
         val followed = sessions.selectedId
         if (sessionId != null && followed != null && followed != sessionId && standing &&
