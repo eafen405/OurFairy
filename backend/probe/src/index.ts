@@ -45,6 +45,7 @@ const SERVICE_ROWS = [
   ['jobs', 'jobs-local', '@deepseek-ai/dsh-jobs-local'],
   ['attachments', 'attachment-local', '@deepseek-ai/dsh-attachment-local'],
   ['ourfairyAttachments', 'attachments', '@ourfairy/dsh-attachments'],
+  ['ourfairySessions', 'sessions', '@ourfairy/dsh-sessions'],
   ['ourfairySpaces', 'spaces', '@ourfairy/dsh-spaces'],
   ['fs', 'scoped-fs', '@ourfairy/dsh-spaces'],
   ['shell', 'scoped-bash', '@ourfairy/dsh-spaces'],

@@ -117,6 +117,24 @@ class OwnedSessionState(
     }
 
     /**
+     * Archive one session — the product's delete.
+     *
+     * The backend keeps the log and messages; the session leaves the default
+     * list, so this snapshot drops the row by the same rule the backend applied.
+     * A selection that was standing in the archived session moves to the
+     * account's main session, because the row it named is gone. The primary
+     * session never reaches here: the drawer has no delete entry for it and the
+     * backend refuses it, which this method leaves as the backend answered.
+     */
+    fun archive(sessionId: String) = request { token, current ->
+        val archived = backend.archive(token, sessionId)
+        current.copy(
+            sessions = current.sessions.filterNot { it.id == archived.id },
+            selectedId = current.selectedId?.takeIf { it != archived.id } ?: current.primarySessionId,
+        )
+    }
+
+    /**
      * Fold one session the backend named into the snapshot.
      *
      * A session the backend has just named is one this account owns, so it joins

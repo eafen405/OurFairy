@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -20,7 +21,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -34,8 +38,10 @@ import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.Refresh
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.remote.OwnedSession
 import me.rerere.rikkahub.data.remote.OwnedSessionState
 import me.rerere.rikkahub.data.remote.SessionsSnapshot
 import me.rerere.rikkahub.ui.fairy.LocalFairyTokens
@@ -47,10 +53,16 @@ internal fun IdentitySessionList(
     onClose: () -> Unit,
     onHome: () -> Unit,
     onSettings: () -> Unit,
+    // Stops a session's reply before it is archived, awaited so the two
+    // requests are ordered. The page supplies it; a row never fetches anything
+    // itself, and a session that is idle makes it a no-op.
+    stopReply: suspend (String) -> Unit = {},
 ) {
     val snapshot by state.snapshot.collectAsStateWithLifecycle()
     val tokens = LocalFairyTokens.current
     val scope = rememberCoroutineScope()
+    /** The session the confirmation dialog is asking about; null when closed. */
+    var pendingArchive by remember { mutableStateOf<OwnedSession?>(null) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("会话", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
@@ -115,6 +127,21 @@ internal fun IdentitySessionList(
                             color = tokens.textMuted,
                             modifier = Modifier.padding(start = 8.dp),
                         )
+                    } else {
+                        // Delete is archiving: the row action names it by the
+                        // product's word, and the confirmation says what it
+                        // keeps and how to get it back. The primary session has
+                        // no entry here, and the backend refuses it anyway.
+                        IconButton(
+                            onClick = { pendingArchive = session },
+                            enabled = !snapshot.loading,
+                        ) {
+                            Icon(
+                                HugeIcons.Delete02,
+                                contentDescription = "删除会话",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -124,5 +151,38 @@ internal fun IdentitySessionList(
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onSettings) { Text("设置") }
         }
+    }
+    pendingArchive?.let { session ->
+        AlertDialog(
+            onDismissRequest = { if (!snapshot.loading) pendingArchive = null },
+            title = { Text("删除会话") },
+            text = {
+                Column {
+                    Text("会话「${session.title.ifEmpty { "新会话" }}」将从列表消失。")
+                    Text("这是归档：日志和消息都会保留，之后可以在已归档列表里恢复。")
+                    Text("如果它正在回复，会先停止当前回复，再归档。")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !snapshot.loading,
+                    onClick = {
+                        pendingArchive = null
+                        // Confirming is the only path that changes anything:
+                        // stop the reply (a no-op when idle), then archive.
+                        scope.launch {
+                            stopReply(session.id)
+                            state.archive(session.id)
+                        }
+                    },
+                ) { Text("归档") }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !snapshot.loading,
+                    onClick = { pendingArchive = null },
+                ) { Text("取消") }
+            },
+        )
     }
 }

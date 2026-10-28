@@ -30,6 +30,7 @@ class RemoteReceiveStateTest {
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun create(token: String) = OwnedSession("$token-created")
         override suspend fun primary(token: String) = OwnedSession("$token-main", primary = true)
+        override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
     }
     private class Store : ChatSyncStore {
         val records = mutableMapOf<ChatSyncKey, ChatSyncRecord>()
@@ -49,6 +50,35 @@ class RemoteReceiveStateTest {
         override suspend fun receipt(token: String, sessionId: String, requestId: String): ChatReceipt? = null
         override suspend fun stop(token: String, sessionId: String) = error("receive teardown must not stop backend")
     }
+
+    /** A chat backend that only records stops, so the archive flow's target is visible. */
+    private class StoppingChats : RemoteChatBackend {
+        val stopped = mutableListOf<String>()
+        val updates = mutableMapOf<String, MutableSharedFlow<RemoteChatProjection>>()
+        override fun observe(token: String, sessionId: String) = updates.getOrPut(sessionId) { MutableSharedFlow() }
+        override suspend fun checkpoint(token: String, sessionId: String) = 100L
+        override suspend fun page(token: String, sessionId: String, throughSeq: Long, beforeSeq: Long): ChatHistoryPage = error("not used")
+        override suspend fun read(token: String, sessionId: String): RemoteChatProjection = error("not used")
+        override suspend fun send(token: String, sessionId: String, requestId: String, text: String, uploadIds: List<String>): ChatReceipt = error("not used")
+        override suspend fun receipt(token: String, sessionId: String, requestId: String): ChatReceipt? = null
+        override suspend fun stop(token: String, sessionId: String) { stopped += sessionId }
+    }
+
+    @Test fun `archive-time stop targets the row's own session, not the selected one`() = runTest {
+        val chats = StoppingChats()
+        val state = RemoteReceiveState(Sessions(), backgroundScope, { RemoteChatState(chats, backgroundScope, Store(), "https://fairy") })
+        state.bind("alice", 1); runCurrent()
+        // The page is standing in the main session while the drawer archives another row.
+        state.owned.select("alice-main"); runCurrent()
+
+        state.stopReply("alice-other")
+
+        assertEquals(listOf("alice-other"), chats.stopped)
+        // A row this account does not list has no runtime to stop.
+        state.stopReply("bob-private")
+        assertEquals(listOf("alice-other"), chats.stopped)
+    }
+
     @Test fun `account receiver observes every listed session and selected page shares its runtime`() = runTest {
         val backend = Chats()
         val state = RemoteReceiveState(Sessions(), backgroundScope, { RemoteChatState(backend, backgroundScope, Store(), "https://fairy") })
