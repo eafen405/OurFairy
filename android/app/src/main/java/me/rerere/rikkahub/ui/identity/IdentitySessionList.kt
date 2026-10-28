@@ -93,9 +93,13 @@ internal fun IdentitySessionList(
     var pendingArchive by remember { mutableStateOf<OwnedSession?>(null) }
 
     // Entering the archived view asks for it; leaving changes nothing, because
-    // the two lists are separate flows.
-    LaunchedEffect(view) {
-        if (view == SessionView.Archived) state.refreshArchived()
+    // the two lists are separate flows. The effect re-runs on `busy` so a switch
+    // made while the other list was still loading is asked again once it
+    // settles, instead of leaving an empty "no archived sessions" that was never
+    // requested. `refreshArchived` itself is a no-op while a request is in
+    // flight, so the extra run costs nothing.
+    LaunchedEffect(view, busy) {
+        if (view == SessionView.Archived && !busy) state.refreshArchived()
     }
 
     val failure = if (view == SessionView.Default) snapshot.failure else archived.failure
@@ -107,9 +111,12 @@ internal fun IdentitySessionList(
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = {
-                view = if (view == SessionView.Default) SessionView.Archived else SessionView.Default
-            }) {
+            TextButton(
+                enabled = !busy,
+                onClick = {
+                    view = if (view == SessionView.Default) SessionView.Archived else SessionView.Default
+                },
+            ) {
                 Text(if (view == SessionView.Default) "已归档" else "返回会话")
             }
             IconButton(
@@ -174,27 +181,30 @@ internal fun IdentitySessionList(
                                 color = tokens.textMuted,
                                 modifier = Modifier.padding(start = 8.dp),
                             )
-                        } else {
-                            // The rename entry sits on the row itself: renaming needs
-                            // no visit to the session, only the row it names.
-                            IconButton(
-                                onClick = {
-                                    renameFailure = null
-                                    renaming = session
-                                },
-                                enabled = !busy,
-                            ) {
-                                Icon(
-                                    HugeIcons.Edit02,
-                                    contentDescription = "重命名会话",
-                                    modifier = Modifier.size(18.dp),
-                                    tint = tokens.textMuted,
-                                )
-                            }
-                            // Delete is archiving: the row action names it by the
-                            // product's word, and the confirmation says what it
-                            // keeps and how to get it back. The primary session has
-                            // no entry here, and the backend refuses it anyway.
+                        }
+                        // Renaming is offered on every own session, the primary
+                        // included: the ticket asks for "任意自己的会话", and the
+                        // backend accepts it. Only archiving is refused for the
+                        // primary, so only that entry is absent below.
+                        IconButton(
+                            onClick = {
+                                renameFailure = null
+                                renaming = session
+                            },
+                            enabled = !busy,
+                        ) {
+                            Icon(
+                                HugeIcons.Edit02,
+                                contentDescription = "重命名会话",
+                                modifier = Modifier.size(18.dp),
+                                tint = tokens.textMuted,
+                            )
+                        }
+                        // Delete is archiving: the row action names it by the
+                        // product's word, and the confirmation says what it
+                        // keeps and how to get it back. The primary session has
+                        // no entry here, and the backend refuses it anyway.
+                        if (!session.primary) {
                             IconButton(
                                 onClick = { pendingArchive = session },
                                 enabled = !busy,
@@ -242,6 +252,7 @@ internal fun IdentitySessionList(
             TextButton(onClick = onSettings) { Text("设置") }
         }
     }
+    val unreachable = stringResource(R.string.identity_unreachable)
     renaming?.let { session ->
         RenameSessionDialog(
             initial = session.title,
@@ -260,7 +271,9 @@ internal fun IdentitySessionList(
                     } else {
                         renameFailure = when (settled.failure) {
                             SessionsSnapshot.EMPTY_TITLE -> "标题不能只有空白或不可见字符"
-                            SessionsSnapshot.UNREACHABLE -> "无法连接到后端"
+                            // The same unreachable wording this page already
+                            // renders above, from the one resource that owns it.
+                            SessionsSnapshot.UNREACHABLE -> unreachable
                             else -> settled.failure
                         }
                     }

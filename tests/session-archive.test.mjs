@@ -293,6 +293,27 @@ describe('OurFairy session archive over real HTTP', () => {
     assert.equal(read.status, 200, read.text)
   })
 
+  test('the archived view lists the most recently archived session first', async () => {
+    const { user, ordinaryId } = await identityWithOrdinary('archive-owner-order')
+    const token = user.token
+    // A second session, so the two archives have distinct instants and distinct
+    // creation instants: creation order would answer the reverse of what the
+    // recorded archive instant says. The ordinary session is empty, so it has to
+    // carry a message before create stops reusing it.
+    await say(token, ordinaryId, 'the first session to archive')
+    const second = await request('/sessions/create', { token })
+    assert.equal(second.status, 200, second.text)
+    const secondId = second.json.session.id
+    assert.notEqual(secondId, ordinaryId, 'a session whose log carries a message is not reused')
+
+    assert.equal((await request('/sessions/archive', { token, body: { sessionId: ordinaryId } })).status, 200)
+    assert.equal((await request('/sessions/archive', { token, body: { sessionId: secondId } })).status, 200)
+
+    const archived = idsOf(await request('/sessions/list', { token, body: { archived: true } }))
+    assert.deepEqual(archived, [secondId, ordinaryId],
+      `the archived view reads newest-archived first: ${JSON.stringify(archived)}`)
+  })
+
   test('an archived empty session is never entered again by create', async () => {
     const { user, primaryId, ordinaryId } = await identityWithOrdinary('archive-owner-empty')
     const token = user.token

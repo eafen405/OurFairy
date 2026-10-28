@@ -17,6 +17,7 @@ import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -34,6 +35,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.Screen
@@ -70,8 +72,13 @@ class FairyPagesTest {
         "main",
     )
     private var createdSession = OwnedSession("created")
+    /** How many times the account's list was read, so a re-read is observable. */
+    private var listReads = 0
     private val sessions = object : SessionBackend {
-        override suspend fun list(token: String, archived: Boolean) = listedSessions
+        override suspend fun list(token: String, archived: Boolean): OwnedSessions {
+            listReads += 1
+            return listedSessions
+        }
         override suspend fun read(token: String, sessionId: String): OwnedSession {
             if (sessionId == "missing") throw IdentityRefused(404, "session/not-found", "会话已不存在")
             return OwnedSession(sessionId, primary = sessionId == listedSessions.primarySessionId)
@@ -386,6 +393,35 @@ class FairyPagesTest {
         }
     }
 
+    @Test fun `a reply that ends re-reads the list, so the model title reaches the bar`() {
+        // The bar reads the session row, and the model's title only exists after
+        // the reply. Deleting the running-to-idle re-read in the page must fail
+        // this test: the row never changes here, so a list read is the only way
+        // the bar could ever see a new title.
+        show {
+            FairyConversationPage("main", {}, receive, onOpenConversation = {}, onSettings = {})
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        // The page only shows a live conversation once a chat runtime is selected
+        // for it, and this harness never opens one by itself.
+        compose.runOnIdle { scope.launch { receive.openSession("main") } }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.waitUntil { receive.selectedChat.value?.snapshot?.value?.sessionId == "main" }
+        val opened = listReads
+
+        // A running reply, then the same session idle: that is the edge.
+        updates.getValue("main").value = updates.getValue("main").value.copy(replyStatus = 1, version = 1)
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        assertEquals("a running reply must not re-read the list", opened, listReads)
+
+        updates.getValue("main").value = updates.getValue("main").value.copy(replyStatus = 0, version = 2)
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals("a reply that ended must re-read the list", opened + 1, listReads)
+    }
+
     @Test fun `the conversation bar names the open session and follows the row it reads`() {
         show {
             FairyConversationPage("main", {}, receive, onOpenConversation = {}, onSettings = {})
@@ -431,10 +467,12 @@ class FairyPagesTest {
         compose.mainClock.advanceTimeBy(500)
 
         // The entry sits on the row itself: naming a session does not require
-        // visiting it. Main is the account's fixed binding, so its marker takes
-        // that place and it is not renameable from here.
+        // visiting it. Every own session is nameable — the ticket asks for
+        // "任意自己的会话" and the backend accepts a rename of the primary — so
+        // both rows carry the entry, and only archiving is refused for main.
         compose.onNodeWithText("另一个会话").assertIsDisplayed()
-        compose.onNodeWithContentDescription("重命名会话").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("重命名会话").assertCountEquals(2)
+        compose.onAllNodesWithContentDescription("删除会话").assertCountEquals(1)
 
         // The dialog itself is not driven here: an AlertDialog window never lets
         // Robolectric's paused clock go idle, and this suite runs paused. The one

@@ -89,16 +89,20 @@ export class SessionArchiveStore {
   }
 
   /**
-   * The session ids one caller has archived.
+   * The session ids one caller has archived, most recently archived first.
    *
-   * One read answers the whole list, so `/sessions/list` filters with a set
-   * rather than one query per session.
+   * One read answers the whole list, so `/sessions/list` filters with one set
+   * rather than a query per session; the order is what the archived view shows,
+   * so the instant an archive happened is read here rather than being recorded
+   * and never used.
    */
-  archivedSessionIds(ownerShortId: number): Set<string> {
+  archivedSessionIds(ownerShortId: number): readonly string[] {
     const rows = rowsOf<ArchivedSessionRow>(this.#db.prepare(
-      'SELECT session_id FROM session_archive WHERE owner_short_id = ? AND status = ? AND deleted_at IS NULL',
+      `SELECT session_id FROM session_archive
+       WHERE owner_short_id = ? AND status = ? AND deleted_at IS NULL
+       ORDER BY archived_at DESC, id DESC`,
     ).all(ownerShortId, ARCHIVE_STATUS.archived))
-    return new Set(rows.map(row => row.session_id))
+    return rows.map(row => row.session_id)
   }
 
   /**

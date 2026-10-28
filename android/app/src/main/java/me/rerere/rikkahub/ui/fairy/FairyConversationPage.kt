@@ -84,10 +84,11 @@ fun FairyConversationPage(
     // The open session's row, the same one the drawer renders: its title is what
     // the bar shows.
     val session = sessions.sessions.firstOrNull { it.id == sessionId }
-    // A session's title can change without a rename: the first exchange seeds a
-    // fallback title and the model title follows it. The list is the one row
-    // source for the bar and the drawer, so it is re-read when a reply ends —
-    // on the transition only, so merely opening a session costs no request.
+    // A title can change without a rename: the first exchange seeds a fallback
+    // title and the model's title follows the reply. The list is the one row
+    // source for the bar, so it is re-read on the running-to-idle edge of the
+    // open session — the moment a model title can have landed. Merely opening a
+    // session does not cross that edge, so opening costs no request.
     var wasReplying by remember(sessionId) { mutableStateOf(false) }
     val replying = snapshot?.projection?.let { it.replyStatus != 0 } ?: false
     LaunchedEffect(sessionId, replying) {
@@ -99,6 +100,20 @@ fun FairyConversationPage(
     val tokens = LocalFairyTokens.current
     val failure = sessions.failure?.let {
         if (it == SessionsSnapshot.UNREACHABLE) stringResource(R.string.identity_unreachable) else it
+    }
+    // Archiving the session this page is standing in moves the list's selection
+    // to the account's main session, so the page follows it there instead of
+    // reading the moved selection as "this conversation is unavailable". Only a
+    // session that was in the list and has left it does this: an id that was
+    // never ours (a stale deep link) still reports unavailable.
+    val standing = remember(sessionId) { sessionId != null && sessionId in sessions.sessions.map { it.id } }
+    LaunchedEffect(sessionId, sessions.selectedId, sessions.sessions.size) {
+        val followed = sessions.selectedId
+        if (sessionId != null && followed != null && followed != sessionId && standing &&
+            sessions.sessions.none { it.id == sessionId }
+        ) {
+            onOpenConversation(followed)
+        }
     }
 
     ModalNavigationDrawer(

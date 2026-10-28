@@ -66,7 +66,6 @@ export function apply(ctx: Context, config: SessionsConfig): void {
 }
 
 export { OwnedSessionService, primarySessionIdOf, sessionIdOf, SessionScopeError } from './service.js'
-export { SessionArchiveStore, ARCHIVE_STATUS } from './archive-store.js'
 export { SESSION_PATHS, SESSION_RENAME_PATH, sessionHandlers } from './http.js'
 export {
   FALLBACK_MAX_BYTES, FALLBACK_MAX_WORDS, MAX_TITLE_BYTES, NO_TITLE, TITLE_SOURCE,

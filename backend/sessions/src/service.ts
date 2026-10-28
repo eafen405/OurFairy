@@ -180,11 +180,18 @@ export class OwnedSessionService extends Service {
   }> {
     const snapshots = await this.persistence.list()
     const archivedIds = this.archiveStore.archivedSessionIds(owner.shortId)
-    const sessions = snapshots
-      .map(snapshot => snapshot.header)
-      .filter(header => header.owner === ownerOf(owner.shortId))
-      .filter(header => archivedIds.has(header.id) === archived)
-      .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
+    const archivedRank = new Map(archivedIds.map((id, index) => [id, index]))
+    const owned = snapshots.map(snapshot => snapshot.header).filter(header => header.owner === ownerOf(owner.shortId))
+    const sessions = archived
+      // The archived view keeps the order the store answered: most recently
+      // archived first. Creation order would bury the session just deleted, and
+      // the archive instant is recorded for exactly this.
+      ? owned
+        .filter(header => archivedRank.has(header.id))
+        .sort((left, right) => (archivedRank.get(left.id) as number) - (archivedRank.get(right.id) as number))
+      : owned
+        .filter(header => !archivedRank.has(header.id))
+        .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
     const primaryId = primarySessionIdOf(owner.shortId)
     return {
       sessions,
