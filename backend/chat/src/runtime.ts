@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { SessionHistoryGapError, createSessionHistorySeam } from '@deepseek-ai/dsh-agent/session-history'
-import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
+import { firstHumanMessageText, readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import { attemptText, attemptTools, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.js'
 import { FAIRY_PERSONA } from './persona.js'
 import { SessionQueues } from './queues.js'
@@ -18,6 +18,8 @@ import type { OwnedSessionService } from '@ourfairy/dsh-sessions'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session-persistence'
+// Type-only: the title service this runtime backfills a historical session through.
+import type {} from '@deepseek-ai/dsh-session-title'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionProjectionStateMap } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@ourfairy/dsh-sessions'
@@ -152,6 +154,8 @@ export class SessionRuntime {
   declare ctx: Context
   #live = new Map<SessionId, LiveSession>()
   #opening = new Map<SessionId, Promise<LiveSession>>()
+  /** Sessions whose legacy title backfill was attempted in this process. */
+  #titleBackfilled = new Set<SessionId>()
   #queues = new SessionQueues()
   /** Non-null while one shared-configuration write is in flight (admission barrier). */
   #configWrite: Promise<void> | null = null
@@ -271,7 +275,40 @@ export class SessionRuntime {
       },
     })
     this.#live.set(sessionId, state)
+    this.#backfillTitle(state)
     return state
+  }
+
+  /**
+   * Give a historical session the model title dsh never scheduled for it.
+   *
+   * `session-title` reacts only to a new `user/message` (and its request
+   * header), so a session written before the title rows were mounted has no
+   * `session/title` event and nothing will ever create one. The first open is
+   * that session's one chance: the refresh runs detached from the opening
+   * request, a failure is logged and never retried in this process, and a
+   * fallback-only title is retried by a later process. A provider or user title
+   * is left alone — an explicit refresh re-derives over a user-pinned title,
+   * which the rename capability forbids.
+   */
+  #backfillTitle(state: LiveSession): void {
+    const sessionId = state.sessionId
+    if (this.#titleBackfilled.has(sessionId)) return
+    const titles = this.ctx.get('sessionTitle')
+    if (titles === undefined) return
+    const current = titles.get(state.session)
+    if (current !== undefined && current.source.kind !== 'fallback') return
+    this.#titleBackfilled.add(sessionId)
+    void (async () => {
+      try {
+        // The same eligibility rule the native service uses: a human message
+        // with visible text. A session without one has no title to generate.
+        if (firstHumanMessageText((await readSessionEvents(this.ctx, sessionId)).events) === undefined) return
+        await titles.refresh(state.session)
+      } catch (error) {
+        this.ctx.logger.warn(`chat: session "${sessionId}": title backfill failed: ${String(error)}`)
+      }
+    })()
   }
 
   /** Routes pinned by replies that are running right now; the live sessions are the only roster. */

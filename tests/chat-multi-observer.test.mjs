@@ -18,12 +18,12 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
-import { dshDir, describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 // Registers Node resolution for the pinned dsh checkout before the product
 // modules below are loaded (they are dynamic imports for that reason).
 import './helpers/dsh-peers.mjs'
 
-const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 
 // One fixed reply: 2048 ASCII characters split into 256 fragments of 8.
 const REPLY = 'The same reply reaches every observer of this session. '.repeat(48).slice(0, 2048)
@@ -144,7 +144,7 @@ function assertPublicShape(frame, label) {
 }
 
 before(async () => {
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
     successText: REPLY, chunkSize: CHUNK_SIZE, chunkDelayMs: CHUNK_DELAY_MS })
   const run = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     MINIMAX_CN_API_KEY: 'mock-key', OURFAIRY_MINIMAX_BASE_URL: model.baseURL })

@@ -25,6 +25,7 @@ import './helpers/dsh-peers.mjs'
 import {
   describeRun, httpJson, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const { loadOverlayPatches } = await import('@deepseek-ai/dsh-app-boot')
 
@@ -108,6 +109,9 @@ async function startDouble() {
   const server = http.createServer(async (request, response) => {
     const chunks = []
     for await (const chunk of request) chunks.push(chunk)
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(Buffer.concat(chunks).toString('utf8'), response)) return
     const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
     const tools = Array.isArray(body.tools) ? body.tools.map(tool => tool.name) : []
     const isChild = tools.length === MEMORY_TOOLS.length && MEMORY_TOOLS.every(name => tools.includes(name))

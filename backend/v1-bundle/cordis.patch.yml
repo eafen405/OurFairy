@@ -270,6 +270,33 @@
         # and reuses the identity module's fence and POST helper.
         - id: sessions
           name: '@ourfairy/dsh-sessions'
+        # Native session titles: a log-only `session/title` event, a
+        # deterministic fallback from the first human message, and the
+        # first-message model provider. They are product capabilities, not
+        # kernel: a boot without them still establishes sessions and runs turns.
+        # `provider`/`model` are required here: a historical session opened cold
+        # may carry no request/header, and the provider then needs the
+        # configured route instead of throwing. The three title limits are
+        # exported by @ourfairy/dsh-sessions and asserted against this row.
+        - id: session-title
+          name: '@deepseek-ai/dsh-session-title'
+          config:
+            fallbackMaxWords: 5
+            fallbackMaxBytes: 40
+            maxTitleBytes: 80
+        - id: session-title-llm
+          name: '@deepseek-ai/dsh-session-title-first-prompt-llm'
+          config:
+            targetWords: 5
+            targetCjkCharacters: 10
+            maxInputBytes: 4096
+            # A ceiling against runaway output, not a length target: the prompt
+            # keeps titles short, while reasoning a model cannot switch off also
+            # counts as output.
+            maxOutputTokens: 4096
+            timeoutMs: 60000
+            provider: minimax-cn
+            model: MiniMax-M3.1-Flash
         # Narrow authenticated remote chat; reuses native Agent, inbox and SessionQuery.
         - id: chat
           name: '@ourfairy/dsh-chat'

@@ -4,6 +4,7 @@ import { once } from 'node:events'
 import { join } from 'node:path'
 import { existsSync, rmSync } from 'node:fs'
 import { before, after, test } from 'node:test'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks } from './helpers/backend.mjs'
 
 const home = makeHome('ourfairy-search-')
@@ -57,6 +58,9 @@ async function readRequestBody(source) {
 before(async () => {
   model = http.createServer(async (req, res) => {
     const data = await readRequestBody(req)
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(data, res)) return
     const body = JSON.parse(data); modelRequests.push(body)
     const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
     const commandIndex = blocks.findLastIndex(c => c.type === 'text' && c.text.startsWith('{"name":'))

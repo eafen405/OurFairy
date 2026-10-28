@@ -23,6 +23,12 @@ import java.io.IOException
  * `Date.now()` milliseconds (backend/sessions/src/service.mjs, `expose`), so on
  * the wire it is a number. It is decoded as the number it is rather than
  * accepting a second shape the server never sends.
+ *
+ * [title] is the session's name for display, already derived by the backend
+ * (model title, deterministic fallback, or a user rename). An empty title means
+ * the session has no name yet; the list shows a placeholder rather than the raw
+ * [id]. [titleSource] is [OwnedSessionTitleSource]; its default keeps an older
+ * backend, which sends neither field, decodable.
  */
 @Serializable
 data class OwnedSession(
@@ -30,7 +36,21 @@ data class OwnedSession(
     val owner: String = "",
     val primary: Boolean = false,
     val createdAt: Long = 0L,
+    val title: String = "",
+    val titleSource: Int = OwnedSessionTitleSource.FALLBACK,
 )
+
+/**
+ * Wire codes for [OwnedSession.titleSource], mirroring the backend's numeric
+ * enum (`TITLE_SOURCE` in `backend/sessions/src/events.ts`): 0 fallback,
+ * 1 provider (model), 2 user (rename). The source is meaningful only when the
+ * title is non-empty.
+ */
+object OwnedSessionTitleSource {
+    const val FALLBACK = 0
+    const val PROVIDER = 1
+    const val USER = 2
+}
 
 /** The account's sessions together with the one that is permanently its main. */
 data class OwnedSessions(

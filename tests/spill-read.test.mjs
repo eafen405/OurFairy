@@ -23,6 +23,7 @@ import { after, test } from 'node:test'
 import {
   describeRun, httpJson, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks,
 } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const PASSWORD = 'spill-read-password'
 const homes = []
@@ -44,6 +45,9 @@ async function startModel() {
   const server = http.createServer(async (req, res) => {
     let data = ''
     for await (const chunk of req) data += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(data, res)) return
     const body = JSON.parse(data)
     requests.push(body)
     const blocks = body.messages.flatMap(message => Array.isArray(message.content) ? message.content : [{ type: 'text', text: message.content }])

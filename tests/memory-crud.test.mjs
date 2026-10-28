@@ -16,6 +16,7 @@ import { after, before, test } from 'node:test'
 import {
   describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks,
 } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const home = makeHome('ourfairy-memory-')
 const password = 'memory-test-password'
@@ -108,6 +109,9 @@ before(async () => {
     // multi-byte character that straddles two chunks into replacement marks.
     const chunks = []
     for await (const chunk of request) chunks.push(chunk)
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(Buffer.concat(chunks).toString('utf8'), response)) return
     const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
     const blocks = body.messages.flatMap(message => Array.isArray(message.content) ? message.content : [{ type: 'text', text: message.content }])
     const commandIndex = blocks.findLastIndex(block => block.type === 'text' && typeof block.text === 'string' && block.text.startsWith('{"name":'))

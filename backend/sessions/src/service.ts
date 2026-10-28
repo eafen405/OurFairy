@@ -15,7 +15,7 @@ import type { IdentityService } from '@ourfairy/dsh-identity'
 import type { SessionHeader, SessionId, SessionStore } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence, SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
 import type { IncomingMessage } from 'node:http'
-import { hasMessages, readSessionEvents } from './events.js'
+import { hasMessages, NO_TITLE, readSessionEvents, readSessionTitles, type SessionTitleFact } from './events.js'
 
 /** Error carrying the HTTP status one request path answers with. */
 export class SessionScopeError extends Error {
@@ -88,18 +88,37 @@ export class OwnedSessionService extends Service {
   }
 
   /** One session as the product exposes it. */
-  expose(header: SessionHeader, shortId: number): {
+  expose(header: SessionHeader, shortId: number, title: SessionTitleFact = NO_TITLE): {
     id: string
     owner: string | null
     primary: boolean
     createdAt: number
+    title: string
+    titleSource: number
   } {
     return {
       id: header.id,
       owner: header.owner ?? null,
       primary: header.id === primarySessionIdOf(shortId),
       createdAt: header.createdAt,
+      title: title.title,
+      titleSource: title.source,
     }
+  }
+
+  /**
+   * Fold the titles of a batch of sessions for the wire.
+   *
+   * One batch read is what keeps `/sessions/list` to one pass over the stored
+   * titles; the read is the `./events` authority and never opens an agent.
+   */
+  async titlesOf(sessionIds: readonly SessionId[]): Promise<Map<SessionId, SessionTitleFact>> {
+    return await readSessionTitles(this.ctx, sessionIds)
+  }
+
+  /** The title fact of one session; the single-session form of {@link titlesOf}. */
+  async titleOf(sessionId: SessionId): Promise<SessionTitleFact> {
+    return (await this.titlesOf([sessionId])).get(sessionId) ?? NO_TITLE
   }
 
   /** `persistence.stat` answers a snapshot `{header, revision, ...}`, never a bare header. */

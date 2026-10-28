@@ -19,6 +19,7 @@ import { after, test } from 'node:test'
 import {
   dshDir, describeRun, httpJson, makeHome, removeHome, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const PHAETHON_PASSWORD = 'native-compaction-password'
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
@@ -121,6 +122,9 @@ async function startDouble(responder) {
   const server = http.createServer(async (request, response) => {
     let data = ''
     for await (const chunk of request) data += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(data, response)) return
     const body = JSON.parse(data)
     requests.push({ body })
     const reply = responder(body, requests.length - 1)

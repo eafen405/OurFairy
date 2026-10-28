@@ -28,6 +28,7 @@ import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 import { constants, zstdCompressSync } from 'node:zlib'
 import { describeRun, httpJson, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const home = makeHome('ourfairy-cold-boundary-')
 const password = 'cold-boundary-password'
@@ -110,6 +111,9 @@ before(async () => {
   model = http.createServer(async (request, response) => {
     let data = ''
     for await (const chunk of request) data += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(data, response)) return
     const body = JSON.parse(data)
     const blocks = body.messages.flatMap(message => Array.isArray(message.content)
       ? message.content : [{ type: 'text', text: message.content }])

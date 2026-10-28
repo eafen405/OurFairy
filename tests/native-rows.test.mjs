@@ -16,11 +16,11 @@ import { readFileSync, statSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { after, test } from 'node:test'
 import {
-  dshDir, describeRun, httpJson, makeHome, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay,
+  describeRun, httpJson, makeHome, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay,
 } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'native-rows-password'
-const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 
 const servers = []
 const homes = []
@@ -38,7 +38,7 @@ function freshHome() {
 
 /** Start one loopback Messages double and return it with the env that selects it. */
 async function modelDouble(options = {}) {
-  const server = await startMockLlmServer({ host: '127.0.0.1', port: 0, apiKey: 'mock-key', sequence: ['success'], ...options })
+  const server = await startTitleAwareModel({ host: '127.0.0.1', port: 0, apiKey: 'mock-key', sequence: ['success'], ...options })
   servers.push(server)
   return { server, env: { OURFAIRY_MINIMAX_BASE_URL: `${server.baseURL}`, MINIMAX_CN_API_KEY: 'mock-key' } }
 }

@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url'
 import { readFileSync, readdirSync, statSync, chmodSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { before, after, test } from 'node:test'
-import { dshDir, describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
 
-const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 const home = makeHome('ourfairy-reconnect-')
 const password = 'test-chat-password'
 const answer = '# Fairy\n\n你好，**世界**。\n```js\n1 + 1\n```\n最后。'
@@ -54,7 +54,7 @@ async function eventually(work, check, timeout = 15000) {
   assert.fail(`condition not reached: ${JSON.stringify(value)}`)
 }
 before(async () => {
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['success'], repeatLast: true,
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['success'], repeatLast: true,
     successText: answer })
   await start()
   admin = (await request('/identity/sign-in', undefined, { name: 'phaethon', password })).body
@@ -144,7 +144,7 @@ function observe(token, sessionId, maxEvents = 5) {
 test('a reconnect restores the active cumulative attempt while bounded backfill and live tail proceed independently', async () => {
   await stop()
   await model.close()
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
     successText: answer.repeat(12), chunkSize: 2, chunkDelayMs: 5 })
   await start()
   const sessionId = await session(alice.token)
@@ -292,7 +292,7 @@ test('new history and checkpoint routes keep the cold/live ownership fence and v
 test('a crash-orphaned turn is resumed and writer-saved before its recovery closer is acknowledged', async () => {
   await stop()
   await model.close()
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['stall'], repeatLast: true })
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['stall'], repeatLast: true })
   await start()
   const sessionId = await session(bob.token)
   await request('/chat/send', bob.token, { sessionId, requestId: 'crash-open-turn', text: 'survive process crash' })
@@ -336,7 +336,7 @@ const fixture = name => fileURLToPath(new URL(`../backend/chat/test-support/${na
 test('a lost Assistant frame drops the live attempt instead of publishing text from two attempts as one', async () => {
   await stop()
   await model.close()
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
     successText: answer, chunkSize: 2, chunkDelayMs: 30 })
   await start()
   const sessionId = await session(alice.token)
