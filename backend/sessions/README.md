@@ -26,6 +26,11 @@ as `ctx.ourfairySessions` and the `/sessions/*` paths.
   message event is entered again instead of duplicated — the primary while it is
   still empty, otherwise the newest empty ordinary session; only a session that
   already has a message forces a new ordinary session.
+- The address `/sessions/rename`. It belongs to this family, but this package
+  does not serve it: a rename is accepted only on a live session, and opening one
+  is [`chat`](../chat/README.md)'s job. The path constant
+  (`SESSION_RENAME_PATH`) lives here so the family publishes each address once;
+  chat registers the handler.
 
 ## Does not own
 

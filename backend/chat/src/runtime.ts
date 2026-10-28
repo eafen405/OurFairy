@@ -18,8 +18,10 @@ import type { OwnedSessionService } from '@ourfairy/dsh-sessions'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session-persistence'
-// Type-only: the title service this runtime backfills a historical session through.
-import type {} from '@deepseek-ai/dsh-session-title'
+// The one title authority: this runtime backfills a historical session and
+// accepts a user rename through that service, never by writing the event itself.
+import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
+import type { SessionTitleService, SessionTitleSnapshot } from '@deepseek-ai/dsh-session-title'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionProjectionStateMap } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@ourfairy/dsh-sessions'
@@ -40,6 +42,27 @@ export type SessionOwner = NonNullable<ReturnType<OwnedSessionService['authentic
  */
 export function requestedSessionId(sessionId: unknown): SessionId {
   return sessionId as SessionId
+}
+
+/** How one open treats the historical title backfill. */
+export interface OpenOptions {
+  /**
+   * Whether the one historical title backfill may run. A rename opens a session
+   * to write a title the user chose, so it must not also spend the model request
+   * that generates one; every other caller keeps the backfill.
+   */
+  readonly titleBackfill?: boolean
+}
+
+/**
+ * Whether this session still needs the one historical title backfill: it has no
+ * title at all, or only the deterministic fallback. A provider or user title is
+ * left alone — an explicit refresh re-derives over a user-pinned title, which
+ * the rename capability forbids.
+ */
+function needsBackfill(titles: SessionTitleService, state: LiveSession): boolean {
+  const current = titles.get(state.session)
+  return current === undefined || current.source.kind === 'fallback'
 }
 
 /** The observed event window of one live session. */
@@ -170,7 +193,7 @@ export class SessionRuntime {
   live(sessionId: SessionId): LiveSession | undefined { return this.#live.get(sessionId) }
 
   /** Authorize this owner, then return the one live session for `sessionId`. */
-  async open(owner: SessionOwner, sessionId: unknown): Promise<LiveSession> {
+  async open(owner: SessionOwner, sessionId: unknown, { titleBackfill = true }: OpenOptions = {}): Promise<LiveSession> {
     // The stored owner is checked even for a live Agent and before resume can repair/write.
     await this.ctx.ourfairySessions.read(owner, sessionId)
     // The owned-session service above is the authority that the id is a string;
@@ -180,7 +203,7 @@ export class SessionRuntime {
     if (live !== undefined) return live
     let opening = this.#opening.get(key)
     if (opening === undefined) {
-      opening = this.runSession(key, () => this.#resume(owner, key))
+      opening = this.runSession(key, () => this.#resume(owner, key, titleBackfill))
       this.#opening.set(key, opening)
     }
     try { return await opening } finally {
@@ -193,7 +216,7 @@ export class SessionRuntime {
   /** Serialize one outgoing delivery's preparation, apart from the target session's queue. */
   runDelivery<T>(deliveryId: SessionId, work: () => Promise<T>): Promise<T> { return this.#queues.runDelivery(deliveryId, work) }
 
-  async #resume(owner: SessionOwner, sessionId: SessionId) {
+  async #resume(owner: SessionOwner, sessionId: SessionId, titleBackfill: boolean) {
     const state = new LiveSession()
     await this.ctx.agents.resume({ resumeSessionId: sessionId,
       agentOptions: this.ctx.agentDefaultModel.currentSelection(),
@@ -275,7 +298,7 @@ export class SessionRuntime {
       },
     })
     this.#live.set(sessionId, state)
-    this.#backfillTitle(state)
+    if (titleBackfill) this.backfillTitle(state)
     return state
   }
 
@@ -287,28 +310,58 @@ export class SessionRuntime {
    * `session/title` event and nothing will ever create one. The first open is
    * that session's one chance: the refresh runs detached from the opening
    * request, a failure is logged and never retried in this process, and a
-   * fallback-only title is retried by a later process. A provider or user title
-   * is left alone — an explicit refresh re-derives over a user-pinned title,
-   * which the rename capability forbids.
+   * fallback-only title is retried by a later process.
+   *
+   * The source is read twice on purpose. Schedule time decides whether there is
+   * work at all; the check right before the refresh is what keeps a user title
+   * safe, because the log read between them is asynchronous and a rename can
+   * land while it is in flight. An explicit refresh re-derives over a pinned
+   * title (that is its documented unpin), so backfill — automatic housekeeping —
+   * must never be the caller that reaches it.
    */
-  #backfillTitle(state: LiveSession): void {
+  backfillTitle(state: LiveSession): void {
     const sessionId = state.sessionId
     if (this.#titleBackfilled.has(sessionId)) return
     const titles = this.ctx.get('sessionTitle')
     if (titles === undefined) return
-    const current = titles.get(state.session)
-    if (current !== undefined && current.source.kind !== 'fallback') return
+    if (!needsBackfill(titles, state)) return
     this.#titleBackfilled.add(sessionId)
     void (async () => {
       try {
         // The same eligibility rule the native service uses: a human message
         // with visible text. A session without one has no title to generate.
         if (firstHumanMessageText((await readSessionEvents(this.ctx, sessionId)).events) === undefined) return
+        // A rename may have landed during that read: re-read the source, and
+        // leave a user title alone.
+        if (!needsBackfill(titles, state)) return
         await titles.refresh(state.session)
       } catch (error) {
         this.ctx.logger.warn(`chat: session "${sessionId}": title backfill failed: ${String(error)}`)
       }
     })()
+  }
+
+  /**
+   * Pin one live session's title to the text the caller wrote.
+   *
+   * The title service owns the normalization (collapsed whitespace, removed
+   * control characters, the UTF-8 byte cap) and refuses text that leaves nothing
+   * visible. That one refusal is answered as `undefined` so this module keeps its
+   * own vocabulary; every other failure is a real failure and propagates.
+   *
+   * @param state - the live session to rename.
+   * @param title - the caller's text, untrusted.
+   * @returns the accepted snapshot, or undefined when it has no visible text.
+   */
+  renameTitle(state: LiveSession, title: string): SessionTitleSnapshot | undefined {
+    const titles = this.ctx.get('sessionTitle')
+    if (titles === undefined) throw new Error('chat: the session-title row is not mounted, so no title can be renamed')
+    try {
+      return titles.rename(state.session, title)
+    } catch (error) {
+      if (error instanceof SessionTitleInvalidError) return undefined
+      throw error
+    }
   }
 
   /** Routes pinned by replies that are running right now; the live sessions are the only roster. */

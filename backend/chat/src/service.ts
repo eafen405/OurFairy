@@ -62,9 +62,16 @@ export class RemoteChat extends Service {
     this.runtime = runtime
   }
 
-  caller(request: IncomingMessage): SessionOwner {
+  /**
+   * The caller one request speaks for.
+   *
+   * @param request - the request whose credential names the caller.
+   * @param code - the unauthorized code this route family answers with; the
+   *   session family's own route keeps its family's code.
+   */
+  caller(request: IncomingMessage, code = 'chat/unauthorized'): SessionOwner {
     const caller = this.ctx.ourfairySessions.authenticate(request)
-    if (caller === undefined) throw new ChatError(401, 'chat/unauthorized', 'present a live session credential')
+    if (caller === undefined) throw new ChatError(401, code, 'present a live session credential')
     return caller
   }
   /** The transcript unit state for one live session, through the runtime's one lookup. */
@@ -140,6 +147,39 @@ export class RemoteChat extends Service {
   }
   async stop(owner: SessionOwner, { sessionId }: ChatRequest) {
     this.runtime.stop(await this.runtime.open(owner, requestedSessionId(sessionId)))
+  }
+
+  /**
+   * Pin one session's title to the text the caller wrote.
+   *
+   * The path is the session family's (`/sessions/rename`) and so are the codes
+   * below: the subject is one session, and the caller reads the session family's
+   * vocabulary. Serving it is chat's job all the same, because a rename is
+   * accepted only on a live session: the native title service refuses any other
+   * object, and opening one needs the persona and model selection only this
+   * module installs.
+   *
+   * The answer is the row the list returns, built by the very service the list
+   * uses, so "the list shows what the rename answered" cannot drift.
+   */
+  async rename(owner: SessionOwner, { sessionId, title }: ChatRequest) {
+    const id = requestedSessionId(sessionId)
+    if (typeof title !== 'string') throw new SessionScopeError(400, 'sessions/invalid-request', 'provide the new title as text')
+    // This open exists to write a title, not to generate one: the historical
+    // backfill would spend a model request that the next line makes pointless.
+    const state = await this.runtime.open(owner, id, { titleBackfill: false })
+    return await this.runtime.runSession(id, async () => {
+      const accepted = this.runtime.renameTitle(state, title)
+      if (accepted === undefined) {
+        // Nothing was written, so this open still owes the session the one
+        // backfill every other open would have given it.
+        this.runtime.backfillTitle(state)
+        throw new SessionScopeError(400, 'sessions/empty-title', 'the title has no visible characters once normalized')
+      }
+      await this.runtime.barrier(state)
+      const header = await this.ctx.ourfairySessions.read(owner, id)
+      return this.ctx.ourfairySessions.expose(header, owner.shortId, await this.ctx.ourfairySessions.titleOf(header.id))
+    })
   }
   /** Routes pinned by replies running right now; a configuration write refuses to change them. */
   activeReplies() { return this.runtime.activeReplies() }

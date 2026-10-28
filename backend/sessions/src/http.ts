@@ -19,6 +19,16 @@ export const SESSION_PATHS = Object.freeze([
   '/sessions/read',
 ])
 
+/**
+ * The rename path. Its subject is one session, so it belongs to this family's
+ * addresses — but this module cannot serve it: a rename is accepted only on a
+ * live session, and opening one is the chat module's job (persona, identity
+ * section, model selection), which this module must not depend on. The chat row
+ * registers the handler for this exact path; the string lives here so the
+ * family has one source for the addresses it publishes.
+ */
+export const SESSION_RENAME_PATH = '/sessions/rename'
+
 /** One handler the carrier registers on the web server. */
 export type SessionHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>
 
