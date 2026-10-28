@@ -7,7 +7,7 @@
 ## 实现
 
 - 用户 HTTP 与 Android 印象入口均为只读；Fairy 工具保留按会话先读后改、归属隔离、整份替换和 8000 Unicode 字符限制。
-- 部署人格由游戏主线、连续场景与待机台词提炼，保留完整身份、行为人格、魅力特征、默认长度与风格抗性；部署常量为 1149 Unicode 字符、4 条示例，不注入完整台词库。上限由 `personaBudget` 在 `tests/persona-acceptance.test.mjs` 中检查（2000 字符、8 条示例），是测试对部署常量的约束，不是运行时检查。
+- 部署人格由游戏主线、连续场景与待机台词提炼，保留完整身份、行为人格、魅力特征、默认长度与风格抗性；部署常量为 1139 Unicode 字符、3 条示例，不注入完整台词库。上限由 `personaBudget` 在 `tests/persona-acceptance.test.mjs` 中检查（2000 字符、8 条示例），是测试对部署常量的约束，不是运行时检查。
 - 身份段由 `backend/chat/src/persona.ts` 的 `ownerIdentity` 唯一生成：代理人的昵称 JSON 转义并标记仅用于称呼，无昵称时回退为「用户<短号>」。
 - `scripts/persona-acceptance.ts` 提供真实 MiniMax 语义验收；不接入运行时人格输出审查或过滤。
 
@@ -22,11 +22,12 @@
 - `deployed-final.json`：较早部署文本的完整验收，9 类通过；跨用户印象污染失败并保留原始失败输出。
 - `deployed-final-boundary.json`：统一隐私与印象边界后，跨用户污染、人格改写和角色扮演各三次采样全部通过。
 - `shipped-final.json`：较早交付文本（771 字符，SHA-256 `ea05e0bfc2734099e8c96d0cb08c95b09a8a0c94aaff63deed74d30a4cdb79ec`）完整 10 类、三次采样全部通过，无失败或未执行；响应模型逐项验证为 MiniMax-M3.1-Flash。
-- `shipped-final-playful.json`：加入游戏趣味与主动发言示例后的最终文本（1149 字符，SHA-256 `9bf10f96337144869a04b9ae93d52cfb69eb95927596fa6e0f5401868b28e84d`）完整 10 类、三次采样全部通过，无失败或未执行。
+- `shipped-final-playful.json`：加入游戏趣味与主动发言示例后的文本（1149 字符，SHA-256 `9bf10f96337144869a04b9ae93d52cfb69eb95927596fa6e0f5401868b28e84d`）完整 10 类、三次采样全部通过，无失败或未执行。该文本此后被下面的 1139 字符版本取代。
+- `shipped-1139.json`：删去「用户：我发会儿呆。」一例后的交付文本（1139 字符、3 条示例，SHA-256 `59b822e3bc05773d2d9009f226ecc1038c46c851ef8deca6918b85db1c39a92f`）完整 10 类、每类一次采样全部通过，无失败或未执行；这是一次改动后的冒烟级复验，不是三次采样。
 - `memory-acceptance.json`：印象真实路径通过，包括用户写路由 404、Fairy 先读后改、归属隔离和装配注入；`volatile-observation` 首次超时。
 - `memory-volatile-retry.json`：超时场景独立重跑通过。
 
-每份报告记录当时人格文本 SHA-256；最终交付文本已用同一 SHA 完成完整验收，不以早期候选报告替代。
+每份报告记录当时人格文本 SHA-256；`shipped-1139.json` 与当前 `backend/chat/src/persona.ts` 的 SHA-256 一致。报告本体在 `work/tmp/`，不在树内，因此上述 SHA 只能用于核对「哪份报告对应哪版文本」，无法从仓库重建报告本身。
 
 ## 自动化证据
 
