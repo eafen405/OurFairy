@@ -46,7 +46,7 @@ Android：
 | `data/remote/OwnedSessionState.kt` | `rename(sessionId, title)` 走既有 `request{}` 守卫，用后端返回的行 `joined(stand = false)`；新增哨兵 `EMPTY_TITLE`，让 drawer 用自己的话术说「空标题」 |
 | `ui/identity/IdentitySessionList.kt` | 行内改名入口（非主会话行，与 #253 的删除入口并列）+ 改名对话框；拒绝时对话框不关、把判定写在输入框下 |
 | `ui/fairy/FairyWindowBar.kt` | `FairyWindowTopBar(title = …)`：有名字的会话把会话名放首行，产品名牌退为状态行的小标签；无名字仍显示名牌。标题列占满剩余宽度并省略号截断，状态行行为不变 |
-| `ui/fairy/FairyConversationPage.kt` | 标题栏读 `receive.owned.snapshot` 里**同一个 `OwnedSession` 行**；回复由运行转空闲时刷新这份列表（模型标题就在这一刻落地），只在这一条边沿刷新，进入会话本身不花请求 |
+| `ui/fairy/FairyConversationPage.kt` | 标题栏读 `receive.owned.snapshot` 里**同一个 `OwnedSession` 行**；接收层观察每个会话的 `session/title` 事件并刷新列表，进入会话本身不花额外列表请求 |
 
 ## 关键决定
 
@@ -72,7 +72,7 @@ user 标题，这次模型调用纯属浪费。`open` 因此有显式的 `titleB
 唯一新增的交互失败面。
 
 **标题栏只有一条来源。** 标题栏与抽屉行读同一份 `OwnedSession`（`receive.owned.snapshot`），没有第二条
-客户端标题状态；模型标题到达时靠「回复结束 → 刷新列表」这条既有边沿传播，改名时靠响应行折入。
+客户端标题状态；模型标题到达时由接收层按 `session/title` 事件刷新列表，改名时靠响应行折入。
 
 ## 实际跑过的命令
 

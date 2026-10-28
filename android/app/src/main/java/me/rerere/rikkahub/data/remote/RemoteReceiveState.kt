@@ -49,6 +49,8 @@ class RemoteReceiveState(
     private var epoch = 0L
     private var observing = true
     private var publishing: Job? = null
+    private var titleRefresh: Job? = null
+    private var titleDirty = false
 
     init {
         scope.launch {
@@ -61,6 +63,7 @@ class RemoteReceiveState(
                         val chat = chats.getOrPut(session.id) { chatFactory(notifications != null) }
                         if (observing) chat.bind(token, session.id, userShortId)
                         chat.onSettled(::publishBacklog)
+                        chat.onTitle(::refreshTitles)
                     }
                 }
                 mutableSelected.value = chats[listed.selectedId]
@@ -81,6 +84,9 @@ class RemoteReceiveState(
     fun bind(token: String?, userShortId: Int?) {
         if (token == this.token && userShortId == this.userShortId) return
         epoch++
+        titleRefresh?.cancel()
+        titleRefresh = null
+        titleDirty = false
         chats.values.forEach { it.detach() }
         chats.clear()
         mutableSelected.value = null
@@ -88,6 +94,20 @@ class RemoteReceiveState(
         this.userShortId = userShortId
         owned.bind(token)
         if (token != null && userShortId != null) owned.refresh()
+    }
+
+    private fun refreshTitles() {
+        titleDirty = true
+        if (titleRefresh?.isActive == true) return
+        titleRefresh = scope.launch {
+            while (titleDirty) {
+                titleDirty = false
+                owned.snapshot.first { !it.loading }
+                owned.archived.first { !it.loading }
+                owned.refresh()
+                owned.snapshot.first { !it.loading }
+            }
+        }
     }
 
     fun stateForSession(sessionId: String): RemoteChatState? = chats[sessionId]

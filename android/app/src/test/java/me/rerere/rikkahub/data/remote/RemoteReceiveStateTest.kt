@@ -17,8 +17,10 @@ import org.junit.Test
 class RemoteReceiveStateTest {
     private class Sessions : SessionBackend {
         var gate: CompletableDeferred<Unit>? = null
+        var reads = 0
         val authorized = mutableListOf<Pair<String, String>>()
         override suspend fun list(token: String, archived: Boolean): OwnedSessions {
+            reads += 1
             gate?.let { withContext(NonCancellable) { it.await() } }
             return OwnedSessions(listOf(OwnedSession("$token-main", primary = true), OwnedSession("$token-other")), "$token-main")
         }
@@ -97,6 +99,41 @@ class RemoteReceiveStateTest {
         state.resumeObservation(); runCurrent()
         assertSame(other, state.selectedChat.value)
         assertEquals(4, backend.opens.size)
+    }
+
+    @Test fun `background title events coalesce into a trailing list refresh without an opening read`() = runTest {
+        val sessions = Sessions()
+        val backend = Chats()
+        val state = RemoteReceiveState(sessions, backgroundScope, { RemoteChatState(backend, backgroundScope, Store(), "https://fairy") })
+        state.bind("alice", 1); runCurrent()
+        assertSame(state.stateForSession("alice-main"), state.selectedChat.value)
+        val opened = sessions.reads
+
+        backend.updates.getValue("alice-other").emit(RemoteChatProjection("alice-other", version = 1)); runCurrent()
+        assertEquals("the opening projection must not re-read the list", opened, sessions.reads)
+
+        sessions.gate = CompletableDeferred()
+        backend.updates.getValue("alice-other").emit(RemoteChatProjection("alice-other", version = 2).copy(
+            cursor = 0, durableThroughSeq = 0,
+            events = listOf(kotlinx.serialization.json.Json.parseToJsonElement(
+                """{"seq":0,"type":"session/title","title":"后台兜底标题"}""",
+            ) as kotlinx.serialization.json.JsonObject),
+        )); runCurrent()
+        assertEquals("a background session title must re-read the list", opened + 1, sessions.reads)
+
+        backend.updates.getValue("alice-other").emit(RemoteChatProjection("alice-other", version = 3).copy(
+            cursor = 1, durableThroughSeq = 1,
+            events = listOf(
+                kotlinx.serialization.json.Json.parseToJsonElement(
+                    """{"seq":0,"type":"session/title","title":"后台兜底标题"}""",
+                ) as kotlinx.serialization.json.JsonObject,
+                kotlinx.serialization.json.Json.parseToJsonElement(
+                    """{"seq":1,"type":"session/title","title":"后台模型标题"}""",
+                ) as kotlinx.serialization.json.JsonObject,
+            ),
+        )); runCurrent()
+        sessions.gate!!.complete(Unit); runCurrent()
+        assertEquals("a title landing during a list read needs a trailing read", opened + 2, sessions.reads)
     }
 
     @Test fun `the page drives the very session state reception binds and observes`() = runTest {
