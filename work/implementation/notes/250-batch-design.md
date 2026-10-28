@@ -4,22 +4,30 @@
 [`250-title-and-archive-seams.md`](250-title-and-archive-seams.md)；本文件只记**已经决定**的、
 跨票必须一致的几点，票面仍是需求权威。
 
-## 1. 改名走「活会话」，路由在 chat
+## 1. 改名走「活会话」；路径仍属 sessions，处理器由 chat 供给
 
 `sessionTitle.rename(session, title)` 要求 `ctx.sessions.get(session.id) === session`
 （`dsh-session-title/src/index.ts:407-411`）；detached 重放对象一律拒绝。而把 `session/title`
 事件手写进存档日志会造出**第二个标题写者**（标题服务仍在内存里维护 `supersede` 状态），
 违反「权威唯一」，也绕开 `normalizeSessionTitle` 的长度规范化。
 
+`normalizeSessionTitle` 的行为已核对：**超长按码点边界截断**（`truncateTitleUtf8`），
+只有规范化后为空才会被 `rename` 拒绝（`SessionTitleInvalidError`）。所以「过长」与「空」
+是两种不同的结果，接口要能区分。
+
 因此：
 
 - **改名 = 先让会话变活，再用原生 `rename`。** 「变活」只有一个入口：`SessionRuntime.open`
-  （`backend/chat/src/runtime.ts:173`），因为 resume 需要 persona、身份段与模型选择，
-  那是 chat 的职责，不是 sessions 的。
-- **路由放在 chat 模块**（`/chat/rename`）。`/sessions/*` 保持「只读 header 的授权面」
-  （create/list/select/primary/read 都不写日志）；改名要写日志、要先变活，属于 `/chat/*`
-  这一族。sessions 因此不新增对 chat 的反向依赖——那会与 chat 已有的 `ourfairySessions`
-  注入成环。
+  （`backend/chat/src/runtime.ts:173`）。resume 要装 persona、身份段与模型选择，那是 chat 的
+  职责；在 sessions 里另起一次 `agents.resume` 会造出一个没有 persona 的已发布会话，并和
+  chat 的 `#live` 打架，比多一层依赖更糟。
+- **路径是 `/sessions/rename`，处理器由 chat 注册。** 路径描述的是**作用对象**（一个会话），
+  不是实现模块；改名与「回复」无关，放进 `/chat/*` 会让路径名指向错误的概念。而 chat 已经注入
+  `ourfairySessions`，sessions 反向依赖 chat 会成环，所以处理器只能由 chat 供给。两处各留一行
+  注释：sessions 的 `http.ts` 说明这条路径由 chat 服务、常量仍单源于这里；chat 的 `apply` 说明
+  它替 sessions 家族服务这一条。仓库里没有「模块必须拥有同前缀路径」的可执行规则（探查确认），
+  但路径常量只有一个来源，避免两处各写一遍字符串。
+- 错误码沿用 `sessions/*`（`codePrefix: 'sessions'`），因为调用者看的是会话家族。
 - **改名不该为标题补生成付一次模型调用。** `#backfillTitle` 在 `#resume` 末尾必发一次
   `refresh`（`runtime.ts:295,303-312`）。改名会在其后立刻写入 user 标题，所以 open 需要一条
   「不要补生成」的路径（给 `open` 加可选参数，或让 rename 显式跳过），否则每次改名都白付一次
@@ -29,8 +37,13 @@
   （`session-title/src/index.ts:436-462`，注释明说 explicit refresh 是 unpin）。改名是本票引入的
   第一个「user 标题可能先出现」的路径，所以 `#backfillTitle` 的异步体在 `refresh` 前要**再看一次**
   来源，user 一律跳过。补生成是自动家务，永远不得 unpin 用户标题。
-- Android 侧改名入口在会话抽屉里（不必先进会话），调用 `RemoteChatApi` 家族的 rename；成功后
-  `OwnedSessionState.refresh()`，列表与标题栏都取后端返回的标题。
+- **客户端仍由 `SessionBackend`/`SessionApi` 承载**，与 create/select/read 同族：
+  `OwnedSessionState` 已经是「这份列表和它能做的动作」，改名就是其中一个动作，走同一套
+  epoch 守卫与同一次 `joined()` 折叠，不引入第二套状态机。客户端适配器与「服务它的后端模块」
+  不必同名——那只是 HTTP 细节，注释里说明即可。
+
+Android 侧：抽屉行的溢出菜单 → 改名对话框 → `OwnedSessionState.rename(id, title)`；标题栏
+（`FairyWindowTopBar`）显示同一行的标题，因此改名与模型标题都走同一条显示路径。
 
 ## 2. 归档是 sessions 模块自己的表
 
