@@ -144,7 +144,7 @@ fun FairySettingsPage(
                 open = open == "impression",
                 onToggle = { open = if (open == "impression") null else "impression" },
             ) {
-                GroupRow("本人印象", "查看与整段编辑", onClick = onOpenImpression)
+                GroupRow("本人印象", "只读查看", onClick = onOpenImpression)
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = "只保存每次互动都需要的整体认识，不包含长期记忆条目。",

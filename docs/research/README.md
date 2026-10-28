@@ -27,6 +27,9 @@
 | [2026-10-23-typescript-install-chain.md](2026-10-23-typescript-install-chain.md) | 2026-10-23 | 安装链与构建产物：`files`、`productSourceHash`、模板与 doctor 的事实层与失效路径。（#200） |
 | [2026-10-23-typescript-test-gates.md](2026-10-23-typescript-test-gates.md) | 2026-10-23 | TypeScript 迁移期的测试、构建前置与门禁分流：import 路径、build-before-test 与 CI/precommit 的分流判断。（#202） |
 | [2026-10-26-context-memory-dreaming.md](2026-10-26-context-memory-dreaming.md) | 2026-10-26 | 上下文治理、长期记忆与 DREAMING：Letta、Mem0、Graphiti、LangMem、SillyTavern 的一手资料与复用边界。（#240） |
+| [2026-10-27-fairy-persona-distillation.md](2026-10-27-fairy-persona-distillation.md) | 2026-10-27 | 从权威台词蒸馏人格提示的方法、外部一手资料与评测分类。（#249） |
+| [2026-10-27-fairy-persona-distilled.md](2026-10-27-fairy-persona-distilled.md) | 2026-10-27 | Fairy 主线与待机台词的证据地图、候选提示臂与评测集。（#249） |
+| [2026-10-27-fairy-persona-evaluation.md](2026-10-27-fairy-persona-evaluation.md) | 2026-10-27 | A–L 提示臂的真实 MiniMax 对照、失败模式与后续交付指针。（#249） |
 | [android-notification-audit.md](android-notification-audit.md) | 2026-10-14 | Android / vivo 通知结论审计：纠正 Force Stop、Doze 维护窗口、FGS 超时与 vpush 资格的误述。 |
 | [android-notifications.md](android-notifications.md) | 2026-10-13 | rikkahub 现有通知能力核查：系统通知构建、点击定位与会话入口的源码位置。 |
 | [backend-references.md](backend-references.md) | 2026-10-13 | Koishi、Open WebUI、LibreChat 的后端骨架参考，以及没有可直接照搬的结论。 |

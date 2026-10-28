@@ -2,8 +2,8 @@
  * The long-term memory row.
  *
  * It owns one SQLite file, the `memory_*` tools every live Agent gets on its
- * own tool registry, the per-user impression endpoints and section, and the
- * per-source-session maintenance engine.
+ * own tool registry, the per-user impression read endpoint, section and tools,
+ * and the per-source-session maintenance engine.
  *
  * The maintenance settings are volatile plugin config: the loader hands over a
  * live reference per field, and the engine reads every field again on each
@@ -88,9 +88,11 @@ export function apply(ctx: Context, config: MemoryConfig): void {
     store.close()
   })(), 'ourfairy-memory: store and maintenance engine')
 
-  // The user's own impression endpoints: the authenticated identity names the
-  // row, and the read gate is keyed by the credential that read it. They sit on
-  // the same carrier as the identity paths and never pass through the gateway.
+  // The user's own impression read endpoint: the authenticated identity names
+  // the row, and the body has no owner field. There is no user write route —
+  // only the Fairy's own tools replace an impression, after the calling
+  // session read it. The route sits on the same carrier as the identity paths
+  // and never passes through the gateway.
   const handlers = impressionHandlers({
     service: impressions,
     authenticate: request => ctx.identity.authenticateRequest(request),

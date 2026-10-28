@@ -32,7 +32,7 @@ export const name = 'ourfairy-chat'
  * annotated here; the optional `spillStore` is read with `ctx.get` and its
  * absence semantics are annotated at the read site.
  */
-export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairySpaces', 'agents',
+export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'ourfairySpaces', 'agents',
   // Declared for ordering/side effect, not for a call: `agentLoop` registers
   // the Agent factory that `agents.resume` needs, so this row must not take
   // work before that factory is available. Chat never reads `ctx.agentLoop`.

@@ -92,14 +92,12 @@
     <string name="fairy_numeric_decimal_places">Decimals allowed: at most %1$d.</string>
     <string name="fairy_numeric_out_of_range">Enter a value from %1$d to %2$d %3$s.</string>
     <string name="impression_title">Your impression</string>
-    <string name="impression_explain">This is the overall understanding Fairy keeps of you and uses in every conversation. It is separate from long-term memories. Edit it only from here or by asking Fairy explicitly.</string>
+    <string name="impression_explain">This is the overall understanding Fairy keeps of you and uses in every conversation. It is separate from long-term memories. It is read-only here; it changes only when you ask Fairy explicitly.</string>
     <string name="impression_loading">Reading your impression…</string>
     <string name="impression_unreachable">The backend could not be reached.</string>
-    <string name="impression_read_failed">Your impression could not be read, so editing is not available.</string>
+    <string name="impression_read_failed">Your impression could not be read.</string>
     <string name="impression_retry">Try reading again</string>
-    <string name="impression_field_label">Impression</string>
-    <string name="impression_field_hint">Plain text. Saving replaces the whole impression.</string>
-    <string name="impression_counter">%1$d / %2$d characters</string>
-    <string name="impression_save">Save the whole impression</string>
+    <string name="impression_content_label">Impression content</string>
+    <string name="impression_empty">There is no impression content yet.</string>
     <string name="impression_signed_out">Sign in to read your impression.</string>
 </resources>

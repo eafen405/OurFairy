@@ -100,6 +100,7 @@ function makeWorld() {
       return () => listeners.set(name, list.filter(item => item !== handler))
     },
     effect(execute) { return execute() },
+    identity: { users: { byShortId: () => ({ name: 'test-user' }) } },
     ourfairySessions: { async read() {} },
     agentDefaultModel: { currentSelection: () => ({ provider: 'mock', model: 'mock' }) },
     agents: {

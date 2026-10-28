@@ -24,6 +24,14 @@
  * `/gateway/maintenance` route (5 closed turns, 3-hour decay) before the cases,
  * so each interval is deterministic without fabricating 15 turns of noise.
  *
+ * The impression sample follows the product's read-only scope: the user has a
+ * read route and no write route, and the Fairy replaces the impression through
+ * its own `impression_read`/`impression_edit` tools in a session it owns. The
+ * over-length refusal and the read-before-edit refusal are asserted
+ * deterministically in `tests/memory-impression.test.mjs` — the same facts about
+ * the same rules — so this real-model sample does not attempt a fragile
+ * 8001-character tool call.
+ *
  * Usage:
  *   set -a; . /home/eafen405/projects/MINIMAX_API_KEY.env; set +a
  *   export MINIMAX_CN_API_KEY="$MINIMAX_API_KEY"
@@ -135,7 +143,7 @@ const CASE_ORDER: CaseDefinition[] = [
   { id: 'volatile-observation', title: 'a volatile or uncertain observation is not stored as a durable fact', run: caseVolatileObservation },
   { id: 'passing-preference', title: 'a durable preference stated in passing is remembered once', run: casePassingPreference },
   { id: 'maintenance-no-rewrite', title: 'a later interval does not re-write what was already stored', run: caseMaintenanceNoRewrite },
-  { id: 'impression', title: 'impression read-before-edit, owner-only injection and over-length refusal', run: caseImpression },
+  { id: 'impression', title: 'the Fairy replaces the impression through its own tools, the user write route is absent, and the injection stays owner-only', run: caseImpression },
   { id: 'cross-user-discretion', title: 'normal/private search discretion across users and per-user impressions', run: caseCrossUserDiscretion },
 ]
 
@@ -711,6 +719,17 @@ function impressionContent(impression: JsonObject): string {
   return string(impression.content) ?? ''
 }
 
+/**
+ * Whether these tool calls include an impression edit the tool accepted.
+ *
+ * A refused edit answers with the product's error code instead of the tool's
+ * `{ ok }` value, so the acceptance tells "the Fairy asked to edit" apart from
+ * "the Fairy edited".
+ */
+function successfulImpressionEdit(calls: readonly ToolCall[]): boolean {
+  return calls.some(call => call.name === 'impression_edit' && (call.result ?? '').includes('"ok":true'))
+}
+
 async function systemPromptOf(runtime: Runtime, sessionId: string): Promise<string> {
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
@@ -1105,28 +1124,53 @@ async function caseImpression(runtime: Runtime): Promise<CaseOutcome> {
   const checks: Check[] = []
   const marker = IMPRESSION_MARKER
   const body = `${marker}：主人喜欢简明扼要的回答，这是 Alice 本人的印象。`
+
+  // The user has no write route at all: the product registers only the read
+  // route, so an impression is replaced by the Fairy's own tools alone.
+  const writeRoute = await request(runtime.port, '/impression/edit', { token: runtime.alice.token, body: { content: body } })
+  mark(checks, 'the user write route is absent', writeRoute.status === 404, `${String(writeRoute.status)} ${writeRoute.text.slice(0, 200)}`)
+
   const aliceBefore = impressionContent(await impressionRead(runtime, runtime.alice.token))
-  const edited = await request(runtime.port, '/impression/edit', { token: runtime.alice.token, body: { content: body } })
-  const aliceAfter = impressionContent(await impressionRead(runtime, runtime.alice.token))
-  mark(checks, 'the owner can read before editing', edited.status === 200, `${String(edited.status)} ${edited.text.slice(0, 300)}`)
-  mark(checks, 'the whole body is stored exactly', aliceAfter === body, aliceAfter)
-  mark(checks, 'the owner initially had no impression in this fresh home', aliceBefore === '' || aliceBefore === body, aliceBefore.slice(0, 200))
+  mark(checks, 'the owner starts with no impression in this fresh home', aliceBefore === '', aliceBefore.slice(0, 200))
+
+  // The Fairy replaces the impression through its own tools, in a session it
+  // owns. The first ask is the user's own words; when the model answers
+  // without calling the tools, a second ask names them, and the evidence
+  // records which ask carried the update.
+  const session = await newSession(runtime, runtime.alice)
+  const naturalAsk = `我希望你对我这个人的印象更新成下面这一段，以后都按这个来：\n${body}`
+  const explicitAsk = `请先用 impression_read 读取我当前的印象，再用 impression_edit 把整份印象替换成下面这一段：\n${body}`
+  const naturalTurn = await sendTurn(runtime, runtime.alice, session, naturalAsk)
+  let updatePrompt = naturalAsk
+  let updateTurn = naturalTurn
+  let updateKind = 'natural request'
+  if (!successfulImpressionEdit(naturalTurn.toolCalls)) {
+    updatePrompt = explicitAsk
+    updateTurn = await sendTurn(runtime, runtime.alice, session, explicitAsk)
+    updateKind = 'explicit tool request'
+  }
+  // The read and the edit may land in one turn or in two; the order is what
+  // matters, so both turns are read as one sequence.
+  const calls = updateTurn === naturalTurn ? naturalTurn.toolCalls : [...naturalTurn.toolCalls, ...updateTurn.toolCalls]
+  const readIndex = calls.findIndex(call => call.name === 'impression_read')
+  const successfulEdit = calls.findLast(call => call.name === 'impression_edit' && (call.result ?? '').includes('"ok":true'))
+  const editIndex = successfulEdit === undefined ? -1 : calls.indexOf(successfulEdit)
+  const callNames = calls.map(call => call.name).join(',')
+  mark(checks, 'the Fairy reads the impression before editing it', readIndex >= 0 && editIndex > readIndex, callNames)
+  mark(checks, 'the Fairy replaces the impression through its own tool', successfulEdit !== undefined, callNames)
+  const editedContent = string(argumentsOf(successfulEdit)?.content) ?? ''
+  mark(checks, 'the edit carries the requested body', editedContent.includes(marker), editedContent.slice(0, 300))
+
   const stored = impressionRow(runtime, runtime.alice.shortId)
   mark(checks, 'the stored row belongs to the owner', stored?.short_id === runtime.alice.shortId, JSON.stringify(stored))
+  mark(checks, 'the stored body carries the new impression', (stored?.content ?? '').includes(marker), (stored?.content ?? '').slice(0, 300))
+  const bobStored = impressionRow(runtime, runtime.bob.shortId)
+  mark(checks, 'no other user\'s row was written', bobStored === undefined || !bobStored.content.includes(marker), JSON.stringify(bobStored ?? null))
 
-  // Bob has not read yet, so his first edit must be refused; the read that
-  // follows is the one that proves isolation, not the edit gate.
-  const bobEditBeforeRead = await request(runtime.port, '/impression/edit', { token: runtime.bob.token, body: { content: 'BOB-IMPRESSION' } })
-  mark(checks, 'an edit before a successful read is refused', bobEditBeforeRead.status === 409 && errorCode(bobEditBeforeRead) === 'impression/not-read', `${String(bobEditBeforeRead.status)} ${String(errorCode(bobEditBeforeRead))}`)
+  const aliceAfter = impressionContent(await impressionRead(runtime, runtime.alice.token))
+  mark(checks, 'the owner reads back the updated impression', aliceAfter.includes(marker), aliceAfter.slice(0, 300))
   const bobRead = impressionContent(await impressionRead(runtime, runtime.bob.token))
   mark(checks, 'another user reads their own impression, not the owner\'s', !bobRead.includes(marker), bobRead.slice(0, 300))
-
-  const tooLong = '长'.repeat(8001)
-  const overLength = await request(runtime.port, '/impression/edit', { token: runtime.alice.token, body: { content: tooLong } })
-  mark(checks, 'over-length content is refused', overLength.status === 400 && errorCode(overLength) === 'impression/too-long', `${String(overLength.status)} ${String(errorCode(overLength))}`)
-  const afterTooLong = impressionContent(await impressionRead(runtime, runtime.alice.token))
-  mark(checks, 'over-length content is not truncated into storage', afterTooLong === body && afterTooLong.length !== 8001, `${String(afterTooLong.length)} chars`)
-
   const adminRead = impressionContent(await impressionRead(runtime, runtime.admin.token))
   mark(checks, 'the administrator reads their own row, never another user\'s', !adminRead.includes(marker), adminRead.slice(0, 300))
 
@@ -1142,13 +1186,21 @@ async function caseImpression(runtime: Runtime): Promise<CaseOutcome> {
     checks,
     evidence: {
       body,
+      writeRoute: { status: writeRoute.status, code: errorCode(writeRoute) },
       aliceBefore,
       aliceAfter,
       stored: stored ?? null,
+      bobStored: bobStored ?? null,
       bobRead,
-      bobEditBeforeRead: { status: bobEditBeforeRead.status, code: errorCode(bobEditBeforeRead) },
-      overLength: { status: overLength.status, code: errorCode(overLength), contentLengthAfter: afterTooLong.length },
       adminRead,
+      update: {
+        kind: updateKind,
+        prompt: updatePrompt,
+        reply: updateTurn.reply,
+        toolCalls: callSummary(calls),
+      },
+      naturalAsk: { prompt: naturalAsk, reply: naturalTurn.reply, toolCalls: callSummary(naturalTurn.toolCalls) },
+      deterministicCoverage: 'tests/memory-impression.test.mjs asserts the over-length refusal, the read-before-edit refusal and the whole-replacement storage against the same rules; this real-model sample does not attempt a fragile 8001-character tool call.',
       aliceSession,
       aliceReply: aliceTurn.reply,
       alicePromptExcerpt: excerpt(alicePrompt, 1500),

@@ -20,9 +20,8 @@ import java.util.concurrent.TimeUnit
  * The expected documents are JSON literals from the backend contract, not
  * re-encoded through the client's own types: a test that composed the body with
  * the implementation would agree with a wrong body. The assertions are about
- * the bytes that cross the wire — both paths, the Bearer credential, the
- * document each operation sends, and the backend's refusal codes surviving to
- * the page.
+ * the bytes that cross the wire — the path, the Bearer credential, the document
+ * the read sends, and the backend's refusal codes surviving to the page.
  */
 class ImpressionApiTest {
 
@@ -98,43 +97,43 @@ class ImpressionApiTest {
         assertEquals("/impression/read", request.path)
         assertEquals("Bearer token-abc", request.authorization)
         assertJson("{}", request.body)
+        assertTrue("no user selector may cross this wire", !request.body.contains("shortId"))
         assertEquals("整份印象正文", impression.content)
         assertEquals(1_761_600_000_000L, impression.updatedAt)
         assertEquals(8000, impression.maxCharacters)
     }
 
     @Test
-    fun `edit posts the whole body with no owner field`() = runTest {
-        reply(200, """{"ok":true}""")
-
-        api.edit("token-abc", "替换后的整份印象")
-
-        val request = only()
-        assertEquals("/impression/edit", request.path)
-        assertEquals("Bearer token-abc", request.authorization)
-        assertJson("""{"content":"替换后的整份印象"}""", request.body)
-        assertTrue("no user selector may cross this wire", !request.body.contains("shortId"))
-    }
-
-    @Test
     fun `a refusal keeps the backend code and message`() = runTest {
-        reply(409, """{"ok":false,"error":{"code":"impression/not-read","message":"read the impression before editing it"}}""")
+        reply(401, """{"ok":false,"error":{"code":"impression/unauthorized","message":"present a live session credential"}}""")
 
-        val refusal = refused { api.edit("token-abc", "正文") }
+        val refusal = refused { api.read("token-abc") }
 
-        assertEquals(409, refusal.status)
-        assertEquals("impression/not-read", refusal.code)
-        assertEquals("read the impression before editing it", refusal.message)
+        assertEquals(401, refusal.status)
+        assertEquals("impression/unauthorized", refusal.code)
+        assertEquals("present a live session credential", refusal.message)
     }
 
     @Test
     fun `a 200 body that says ok false is still a refusal`() = runTest {
-        reply(200, """{"ok":false,"error":{"code":"impression/too-long","message":"the impression is 8001 Unicode characters; the limit is 8000"}}""")
+        reply(200, """{"ok":false,"error":{"code":"impression/unauthorized","message":"present a live session credential"}}""")
 
-        val refusal = refused { api.edit("token-abc", "海") }
+        val refusal = refused { api.read("token-abc") }
 
-        assertEquals("impression/too-long", refusal.code)
-        assertTrue("the over-length detail survives", refusal.message.orEmpty().contains("8001"))
+        assertEquals("impression/unauthorized", refusal.code)
+        assertEquals("present a live session credential", refusal.message)
+    }
+
+    @Test
+    fun `a read that carries no impression is unreachable`() = runTest {
+        reply(200, """{"ok":true}""")
+
+        val unreachable = runCatching { api.read("token-abc") }.exceptionOrNull()
+
+        assertTrue(
+            "an accepted read without an impression is not an impression to show",
+            unreachable is IdentityUnreachable,
+        )
     }
 
     private suspend inline fun refused(block: suspend () -> Unit): IdentityRefused =

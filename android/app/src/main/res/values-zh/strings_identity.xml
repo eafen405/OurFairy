@@ -92,14 +92,12 @@
     <string name="fairy_numeric_decimal_places">最多保留 %1$d 位小数。</string>
     <string name="fairy_numeric_out_of_range">请输入 %1$d 到 %2$d %3$s 之间的值。</string>
     <string name="impression_title">本人印象</string>
-    <string name="impression_explain">这是 Fairy 对你的持续整体认识，在每次互动中直接使用；它与长期记忆分开。只能在这里或明确要求 Fairy 时修改。</string>
+    <string name="impression_explain">这是 Fairy 对你的持续整体认识，在每次互动中直接使用；它与长期记忆分开。此处只能查看；只有你明确要求 Fairy 时它才会改变。</string>
     <string name="impression_loading">正在读取本人印象…</string>
     <string name="impression_unreachable">无法连接后端。</string>
-    <string name="impression_read_failed">未能读取本人印象，因此不能编辑。</string>
+    <string name="impression_read_failed">未能读取本人印象。</string>
     <string name="impression_retry">重新读取</string>
-    <string name="impression_field_label">印象</string>
-    <string name="impression_field_hint">纯文本。保存会替换整份印象。</string>
-    <string name="impression_counter">%1$d / %2$d 字符</string>
-    <string name="impression_save">保存整份印象</string>
+    <string name="impression_content_label">印象内容</string>
+    <string name="impression_empty">还没有印象内容。</string>
     <string name="impression_signed_out">请先登录以读取本人印象。</string>
 </resources>

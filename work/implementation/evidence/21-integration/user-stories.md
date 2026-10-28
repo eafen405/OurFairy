@@ -26,7 +26,7 @@
 | 20 | 作为用户，我希望搜索结果带会话标识、原事件位置和命中消息片段，以便继续准确读取上下文。 | #33 [10-conversation-search](../10-conversation-search/README.md) |
 | 21 | 作为用户，我希望 Fairy 按指定事件区间读取本人会话并排除工具结果，以便获取相关对话内容。 | #33 [10-conversation-search](../10-conversation-search/README.md) |
 | 22 | 作为用户，我希望他人即使知道我的会话标识也无法读取、控制或订阅它，以便编号不会成为访问凭据。 | #27 [04-owned-sessions-backend](../04-owned-sessions-backend/README.md)、#33 [10-conversation-search](../10-conversation-search/README.md) |
-| 23 | 作为用户，我希望 Fairy 保持部署提供的人格与回复风格，并与外部材料区分来源，以便聊天中的改写要求、文件或检索内容不会变成系统配置。 | #28 [05-remote-chat-backend](../05-remote-chat-backend/README.md) |
+| 23 | 作为用户，我希望 Fairy 保持部署提供的游戏人格与简洁回复风格，并与外部材料区分来源，以便聊天中的改写要求、文件或检索内容不会变成系统配置。 | #28 [05-remote-chat-backend](../05-remote-chat-backend/README.md) |
 | 24 | 作为用户，我希望 Fairy 能使用我的私有空间、公有空间和我所属的群组空间，以便在获准范围内工作。 | #30 [07-space-execution](../07-space-execution/README.md)、#31 [08-group-spaces](../08-group-spaces/README.md) |
 | 25 | 作为用户，我希望公有空间的文件可以直接共享使用，以便协作时无需逐文件设置权限。 | #30 [07-space-execution](../07-space-execution/README.md) |
 | 26 | 作为用户，我希望通过对话和交付物参与文件工作，以便无需直接管理后端空间目录。 | #30 [07-space-execution](../07-space-execution/README.md) |

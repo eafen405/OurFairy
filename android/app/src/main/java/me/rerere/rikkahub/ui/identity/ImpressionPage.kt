@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.ui.identity
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,20 +13,18 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -37,7 +35,6 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.ImpressionBackend
 import me.rerere.rikkahub.data.remote.ImpressionFailure
-import me.rerere.rikkahub.data.remote.ImpressionSnapshot
 import me.rerere.rikkahub.data.remote.ImpressionState
 import me.rerere.rikkahub.ui.fairy.FairyBackground
 import me.rerere.rikkahub.ui.fairy.FairyPresence
@@ -47,20 +44,15 @@ import me.rerere.rikkahub.ui.fairy.FairyWindowTopBar
 import org.koin.compose.koinInject
 
 /**
- * The user's own impression: one multi-line plain-text field and a whole-body
- * save.
+ * The user's own impression, read-only.
  *
- * The rule that shapes the page is read-before-edit. Until a read actually
- * succeeds ([ImpressionSnapshot.impression] is non-null) the field and the save
- * button are disabled and there is no draft to submit; the backend enforces the
- * same rule independently, so a hand-made request cannot skip it. There is no
- * memory browser here: this page edits only the impression, never a long-term
- * memory row.
+ * The page shows what the backend stores and offers no way to change it: the
+ * client has no write path at all, so the impression changes only when the user
+ * asks Fairy for it explicitly. Until a read actually succeeds
+ * ([me.rerere.rikkahub.data.remote.ImpressionSnapshot.impression] is non-null)
+ * there is nothing to show, and a failed read is reported with a retry.
  *
- * The draft is plain text and is never clipped. The counter shows the Unicode
- * character count against the backend's limit, and an over-limit save is
- * answered with the backend's own `impression/too-long` refusal, which the
- * failure banner shows verbatim.
+ * The body is plain text and is never clipped here.
  */
 @Composable
 fun ImpressionPage(
@@ -77,13 +69,6 @@ fun ImpressionPage(
     }
     val snapshot by state.snapshot.collectAsStateWithLifecycle()
     val read = snapshot.impression
-
-    // A successful read starts (or replaces) the draft. Nothing here writes
-    // before that: the field is not even enabled while `read` is null.
-    var draft by remember { mutableStateOf("") }
-    LaunchedEffect(read) {
-        if (read != null) draft = read.content
-    }
 
     Box(Modifier.fillMaxSize()) {
         FairyBackground(watermark = false)
@@ -145,39 +130,38 @@ fun ImpressionPage(
                 }
 
                 else -> {
-                    if (snapshot.working) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.identity_working),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                     Spacer(Modifier.height(16.dp))
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        label = { Text(stringResource(R.string.impression_field_label)) },
-                        supportingText = { Text(stringResource(R.string.impression_field_hint)) },
-                        minLines = 8,
-                        enabled = !snapshot.working,
-                        modifier = Modifier.fillMaxWidth().testTag("impression_field"),
-                    )
-                    val characters = draft.codePointCount(0, draft.length)
-                    val limit = read.maxCharacters
                     Text(
-                        text = stringResource(R.string.impression_counter, characters, limit),
-                        color = if (characters > limit) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
+                        text = stringResource(R.string.impression_content_label),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = { token?.let { state.save(it, draft) } },
-                        enabled = !snapshot.working && token != null,
-                        modifier = Modifier.fillMaxWidth().testTag("impression_save"),
+                    Spacer(Modifier.height(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                shape = RoundedCornerShape(6.dp),
+                            )
+                            .padding(12.dp)
+                            .testTag("impression_content"),
                     ) {
-                        Text(stringResource(R.string.impression_save))
+                        if (read.content.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.impression_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            SelectionContainer {
+                                Text(
+                                    text = read.content,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                        }
                     }
                 }
             }

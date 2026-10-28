@@ -6,8 +6,8 @@
  * tool registry, and one refusal shape whose status, code and detail both the
  * model and the HTTP envelope need. The two surfaces keep their own read gates
  * — a memory change is authorized by the numbers the calling *session* has
- * searched, an impression edit by the *credential or session* that read it —
- * so those gates are different identity keys and are not merged here.
+ * searched, an impression edit by the *session* that read it — so those gates
+ * are different identity keys and are not merged here.
  *
  * @module @ourfairy/dsh-memory/src/tool-kit
  */

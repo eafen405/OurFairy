@@ -13,10 +13,9 @@ import java.io.IOException
 /**
  * The current user's own impression, as the backend reports it.
  *
- * [content] is the whole body; the page shows it in one multi-line field and
- * replaces it whole. [maxCharacters] is the backend's limit in Unicode
- * characters — the page reports it but never clips the draft to it. [updatedAt]
- * is the last write, or null while the user has no impression yet.
+ * [content] is the whole body as it stands. [maxCharacters] is the backend's
+ * limit in Unicode characters. [updatedAt] is the last write, or null while the
+ * user has no impression yet.
  */
 @Serializable
 data class Impression(
@@ -25,13 +24,10 @@ data class Impression(
     val maxCharacters: Int = 8000,
 )
 
-/** The impression operations this app performs. [ImpressionApi] is the HTTP implementation. */
+/** The impression operation this app performs. [ImpressionApi] is the HTTP implementation. */
 interface ImpressionBackend {
-    /** Read this credential's own impression; a successful read opens the edit. */
+    /** Read this credential's own impression. */
     suspend fun read(token: String): Impression
-
-    /** Replace this credential's own impression whole. */
-    suspend fun edit(token: String, content: String)
 }
 
 @Serializable
@@ -44,21 +40,18 @@ internal data class ImpressionEnvelope(
     internal data class Failure(val code: String, val message: String = "")
 }
 
-@Serializable
-private data class ImpressionDocument(val content: String)
-
 /**
- * The user's own impression endpoints, over the app's existing HTTP client.
+ * The user's own impression endpoint, over the app's existing HTTP client.
  *
- * Each request presents the same Bearer credential that names the account.
+ * The request presents the same Bearer credential that names the account.
  * There is deliberately no short number or other owner field on the wire: the
  * backend derives the row from the credential, so this client cannot ask for
  * somebody else's impression even if it wanted to.
  *
  * Failures reuse [IdentityRefused] and [IdentityUnreachable]: the envelope is
  * the product's `{ok:false, error:{code,message}}` document, so the backend's
- * own code — `impression/not-read`, `impression/too-long` — reaches the page
- * instead of becoming a generic failure.
+ * own code — `impression/unauthorized` — reaches the page instead of becoming
+ * a generic failure.
  */
 class ImpressionApi(
     private val baseUrl: String,
@@ -67,20 +60,16 @@ class ImpressionApi(
 ) : ImpressionBackend {
 
     override suspend fun read(token: String): Impression =
-        call("/impression/read", "{}", token).impression
+        call("/impression/read", token).impression
             ?: throw IdentityUnreachable(
                 IllegalStateException("the backend accepted the impression read without an impression"),
             )
 
-    override suspend fun edit(token: String, content: String) {
-        call("/impression/edit", json.encodeToString(ImpressionDocument.serializer(), ImpressionDocument(content)), token)
-    }
-
-    private suspend fun call(path: String, document: String, token: String): ImpressionEnvelope =
+    private suspend fun call(path: String, token: String): ImpressionEnvelope =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(baseUrl.trimEnd('/') + path)
-                .post(document.toRequestBody(JSON_MEDIA_TYPE))
+                .post("{}".toRequestBody(JSON_MEDIA_TYPE))
                 .header("Authorization", "Bearer $token")
                 .build()
 

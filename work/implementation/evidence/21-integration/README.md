@@ -143,13 +143,14 @@ node scripts/real-acceptance.mjs --home /tmp/ourfairy-real-mm
 
 [user-stories.md](user-stories.md) 由父规格故事列表与票面「用户故事覆盖」生成，覆盖 #1–#75；
 `tests/story-coverage.test.mjs` 断言行数/顺序/所属票与票列表派生一致、每条证据链接可解析。
-规格「验收场景」表的 16 行逐项对应：
+规格「验收场景」表的 17 行逐项对应：
 
 | 验收场景 | 本轮证据 | 状态 |
 | --- | --- | --- |
 | 法厄同配置网关 | `tests/gateway.test.mjs` 的读取/拒绝/无效输入/ASR 用例；[20-gateway](../20-gateway/README.md) | 自动化通过（模型替身、真实配置层） |
 | 共用模型切换 | `tests/gateway.test.mjs` 的替身用例、在用路由与按模型范围用例；第 3 节真实 MiniMax 文字/工具续答 | 自动化与真实 MiniMax 均通过 |
 | 双用户并发创建与恢复 | `tests/owned-sessions.test.mjs`、`tests/identity-http.test.mjs` | 通过 |
+| 人格与回复风格 | [#249](../249-fairy-persona/README.md)；`scripts/persona-acceptance.ts` 真实 MiniMax 场景与 `tests/remote-chat.test.mjs` 装配替身 | 真实模型与替身通过；不宣称注入免疫 |
 | 本人跨会话搜索/区间读取 | `tests/conversation-search.test.mjs` | 通过（中文、越权、管理员不例外） |
 | 群组与文件/脚本 | `tests/groups.test.mjs`、`tests/spaces.test.mjs` | 通过（真实子进程/目录） |
 | 投递 live/cold/生成中 | `tests/text-delivery.test.mjs`、`tests/file-delivery.test.mjs` | 通过 |

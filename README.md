@@ -111,6 +111,16 @@ npm run acceptance:memory -- --only supersede,maintenance-skip
 不伪造 15 轮噪声。stdout 是完整 JSON 报告，`--plan` 只列出案例；未执行的案例不会算作通过。
 证据与逐条结果见 [`work/implementation/evidence/248-memory-integration-acceptance/`](work/implementation/evidence/248-memory-integration-acceptance/README.md)。
 
+```sh
+npm run acceptance:persona -- --plan
+npm run acceptance:persona -- --persona work/tmp/249-persona/candidate.txt
+```
+
+`acceptance:persona` 是部署人格的真实 MiniMax 语义验收，不属于 `npm test` 或 CI。它覆盖日常表达、详细解释、
+英文表格、身份自述、人格与风格注入、外部材料和跨用户污染，默认每类三次采样并保留原始回复；
+`--persona` 可在替换部署常量前验收候选，`--only` 选择场景。确定性检查与人工风格复核分别记录，
+不宣称提示词注入免疫，也不接入运行时输出过滤。
+
 ## 跑后端
 
 ```sh

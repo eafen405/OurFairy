@@ -3,10 +3,11 @@
 The memory row owns the product's long-term memories, every user's impression,
 and the per-source-session maintenance engine: one SQLite file, the `memory_*`
 tools the Fairy uses, the query gate those tools enforce, the user's own
-impression endpoints and injected section, and the native child that distills
-each session's closed turns. It stores memories and impressions, not session
-logs; session search keeps answering "what was said", this row answers "what
-should be remembered" and "who is this user".
+impression read endpoint and the Fairy's impression tools and injected section,
+and the native child that distills each session's closed turns. It stores
+memories and impressions, not session logs; session search keeps answering
+"what was said", this row answers "what should be remembered" and "who is this
+user".
 
 ## What the row contributes
 
@@ -131,36 +132,47 @@ user's own Agent only, so no other user's prompt — and not the administrator's
 sees it. There is no time-based expiry and no periodic rewrite: a stored body
 is the current body until someone edits it.
 
-`impression_read` returns the current body (an empty body for a user without
-one) and opens the edit for that calling session. `impression_edit` replaces the
-whole body; it refuses with `impression/not-read` before the read, and with
-`impression/too-long` when the body exceeds 8000 Unicode characters. A refused
-write changes nothing; accepted text is stored exactly, never clipped. A
+The Fairy's `impression_read` returns the current body (an empty body for a user
+without one) and opens the edit for that calling session. `impression_edit`
+replaces the whole body; it refuses with `impression/not-read` before the read,
+and with `impression/too-long` when the body exceeds 8000 Unicode characters. A
+refused write changes nothing; accepted text is stored exactly, never clipped. A
 session's read authorization is cleared on `agent/disposed`, so a restarted
-Agent must read again.
+Agent must read again; `tests/memory-impression.test.mjs` drives that wiring on
+the row itself, and asserts that an impression tool call from a session with no
+owner is refused with `impression/missing-owner`.
 
-### The user's own endpoints
+What the code enforces is that read-before-edit gate, the length limit and the
+owner scope. "Only when the user explicitly asks for a change" is the
+`impression_edit` tool description's instruction to the model, not a runtime
+authorization proof: nothing at runtime can tell an explicit request from an
+unrequested edit.
 
-The ordinary client reads and edits the impression through two authenticated
-POST routes on the same carrier as the identity paths; it never goes through the
-administrator gateway.
+### The user's own endpoint
+
+The ordinary client reads the impression through one authenticated POST route on
+the same carrier as the identity paths; it never goes through the administrator
+gateway. It has no write route: an impression is replaced only by the Fairy's
+own tools.
 
 | Route | Body | Success |
 | --- | --- | --- |
 | `/impression/read` | `{}` | `{ ok, impression: { content, updatedAt, maxCharacters } }` |
-| `/impression/edit` | `{ content }` | `{ ok }` |
 
-Both derive `short_id` from the presented Bearer credential. The body has no
-owner or short-number field; a value put there is not a selector, so no caller
-can name another user's impression. The administrator is subject to the same
-rule and reads and writes only its own row.
-
-A read opens the edit for that *credential*, and an edit without a successful
-read answers `409 impression/not-read`. A second live credential of the same
-user must read for itself. Over-length answers `400 impression/too-long` with
-both the actual count and the limit in the message. A missing credential answers
-`401 impression/unauthorized`. The routes use the product's JSON envelope:
+The route derives `short_id` from the presented Bearer credential. The body has
+no owner or short-number field; a value put there is not a selector, so no
+caller can name another user's impression. The administrator is subject to the
+same rule and reads only its own row. A missing credential answers
+`401 impression/unauthorized`. The route uses the product's JSON envelope:
 `{ ok: true, ... }` or `{ ok: false, error: { code, message } }`.
+
+`POST /impression/edit` is not registered, so the carrier answers it as an
+unknown path; `tests/memory-impression.test.mjs` asserts that answer, that the
+owner-scoped read is unchanged, that a short number in the read body selects
+nothing, and that the over-length and read-before-edit refusals still hold
+through the Fairy's tools. A user's read therefore opens no edit at all: the
+read-before-edit gate belongs to the Fairy's `impression_read` tool and is keyed
+by the calling session, not by a credential.
 
 ## The query gate
 
@@ -295,9 +307,9 @@ Failures are native tool failures whose message starts with the code:
 | `memory/misconfigured` | the row has no database path or a maintenance setting is out of range |
 | `memory/schema-too-new` | the database file was written by a newer schema |
 | `impression/unauthorized` | the route request carries no live credential |
-| `impression/not-read` | no successful read has opened this credential's or session's edit |
+| `impression/not-read` | no successful read has opened this session's edit |
 | `impression/too-long` | the body exceeds 8000 Unicode characters |
-| `impression/invalid-content` | the edit body is not a string |
+| `impression/invalid-content` | the edit body is not a string (the tool's own schema refuses a non-string body before this guard is reached) |
 | `impression/missing-owner` | a tool call came from a session with no owner |
 
 A deleted number answers `memory/unknown-memory` even to a session that had
@@ -329,7 +341,8 @@ deletion ([ADR-0002](../../docs/adr/0002-physical-memory-deletion.md)).
 ## What this row does not do
 
 No compaction. The impression page is
-the ordinary user's own surface; there is no long-term-memory browser or editor.
+the ordinary user's own read-only surface; there is no long-term-memory browser
+or editor, and the user has no impression write path either.
 The maintenance numbers are edited through the gateway's “记忆 → 维护” section,
 not by this row. Those remaining pieces are separate tickets: #247's settings
 surface (delivered) and the compaction tickets for the native context path.
