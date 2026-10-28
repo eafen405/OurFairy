@@ -97,7 +97,7 @@ class RemoteReceiveControllerTest {
     }
 
     private class Sessions : SessionBackend {
-        override suspend fun list(token: String) =
+        override suspend fun list(token: String, archived: Boolean) =
             OwnedSessions(listOf(OwnedSession("$token-main", primary = true)), "$token-main")
         override suspend fun create(token: String) = error("not used")
         override suspend fun select(token: String, sessionId: String) = error("not used")
@@ -105,6 +105,7 @@ class RemoteReceiveControllerTest {
         override suspend fun read(token: String, sessionId: String) = error("not used")
         override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         override suspend fun archive(token: String, sessionId: String) = error("not used")
+        override suspend fun restore(token: String, sessionId: String) = error("not used")
     }
 
     private class Store : ChatSyncStore {

@@ -60,7 +60,15 @@ data class OwnedSessions(
 
 /** The session operations this app performs. [SessionApi] is the HTTP implementation. */
 interface SessionBackend {
-    suspend fun list(token: String): OwnedSessions
+    /**
+     * List this account's sessions.
+     *
+     * [archived] asks the same path for the archived view instead: the backend
+     * answers the caller's archived sessions and no primary, because the primary
+     * is never archived. One path and one filter point answer both views, so the
+     * two lists cannot drift apart.
+     */
+    suspend fun list(token: String, archived: Boolean = false): OwnedSessions
 
     suspend fun create(token: String): OwnedSession
 
@@ -88,6 +96,17 @@ interface SessionBackend {
      * notifications land.
      */
     suspend fun archive(token: String, sessionId: String): OwnedSession
+
+    /**
+     * Restore one archived session: it goes back into the default list with its
+     * log, its messages and its history untouched.
+     *
+     * The answer is the row the default list would return, so callers adopt it
+     * instead of a list read of their own. The backend refuses a session that is
+     * not in this caller's archive with `sessions/not-archived`; a session the
+     * caller does not own is refused as unknown, like every other route.
+     */
+    suspend fun restore(token: String, sessionId: String): OwnedSession
 }
 
 @Serializable
@@ -104,6 +123,10 @@ internal data class SessionEnvelope(
 
 @Serializable
 private data class SessionDocument(val sessionId: String)
+
+/** The archived view's request: the same list path, asked the other question. */
+@Serializable
+private data class ArchivedDocument(val archived: Boolean)
 
 @Serializable
 private data class RenameDocument(val sessionId: String, val title: String)
@@ -135,8 +158,15 @@ class SessionApi(
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) : SessionBackend {
 
-    override suspend fun list(token: String): OwnedSessions {
-        val envelope = call("/sessions/list", token = token)
+    override suspend fun list(token: String, archived: Boolean): OwnedSessions {
+        // The default view acts purely on the credential, so it stays bodyless
+        // (a media type the backend was never sent is what earns a 415); the
+        // archived view is the one case that asks a question in the body.
+        val envelope = call(
+            "/sessions/list",
+            document = if (archived) json.encodeToString(ArchivedDocument(true)) else null,
+            token = token,
+        )
         return OwnedSessions(
             sessions = envelope.sessions.orEmpty(),
             primarySessionId = envelope.primarySessionId,
@@ -171,6 +201,10 @@ class SessionApi(
 
     override suspend fun archive(token: String, sessionId: String): OwnedSession =
         call("/sessions/archive", document = json.encodeToString(SessionDocument(sessionId)), token = token)
+            .named()
+
+    override suspend fun restore(token: String, sessionId: String): OwnedSession =
+        call("/sessions/restore", document = json.encodeToString(SessionDocument(sessionId)), token = token)
             .named()
 
     private suspend fun call(

@@ -125,6 +125,25 @@ export class SessionArchiveStore {
     )
   }
 
+  /**
+   * Restore one archived session for one caller, answering whether a row moved.
+   *
+   * Restoring is the same row going back to active: `status = 0` and
+   * `archived_at = NULL`, which is what lets a later archive take a new instant.
+   * The update matches only a row this caller holds as archived, so it is the
+   * store itself that refuses a session that is not in the caller's archive:
+   * a foreign, unknown or merely active session changes nothing here.
+   */
+  restore({ sessionId, ownerShortId }: { readonly sessionId: string; readonly ownerShortId: number }): boolean {
+    const now = Date.now()
+    const result = this.#db.prepare(`UPDATE session_archive
+      SET status = ?, archived_at = NULL, updated_by = ?, updated_at = ?
+      WHERE session_id = ? AND owner_short_id = ? AND status = ? AND deleted_at IS NULL`).run(
+      ARCHIVE_STATUS.active, ownerShortId, now, sessionId, ownerShortId, ARCHIVE_STATUS.archived,
+    )
+    return Number(result.changes) > 0
+  }
+
   #migrate(): void {
     this.#transaction(() => {
       const version = this.#storedVersion()

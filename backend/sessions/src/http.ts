@@ -18,6 +18,7 @@ export const SESSION_PATHS = Object.freeze([
   '/sessions/primary',
   '/sessions/read',
   '/sessions/archive',
+  '/sessions/restore',
 ])
 
 /**
@@ -89,5 +90,6 @@ export function sessionHandlers({ service, fence }: {
     })],
     ['/sessions/read', oneSession((caller, sessionId) => service.read(caller, sessionId))],
     ['/sessions/archive', oneSession((caller, sessionId) => service.archive(caller, sessionId))],
+    ['/sessions/restore', oneSession((caller, sessionId) => service.restore(caller, sessionId))],
   ])
 }

@@ -405,3 +405,118 @@ describe('OurFairy session archive over real HTTP', () => {
       'an archived empty session stays out of the create reuse set after a restart')
   })
 })
+
+describe('OurFairy session restore over real HTTP', () => {
+  test('restoring returns a session to the default list and drops it from the archived view', async () => {
+    const { user, primaryId, ordinaryId } = await identityWithOrdinary('restore-owner-one')
+    const token = user.token
+    await say(token, ordinaryId, '恢复后要保留的内容')
+    const archived = await request('/sessions/archive', { token, body: { sessionId: ordinaryId } })
+    assert.equal(archived.status, 200, archived.text)
+
+    const [archivedRow] = (await request('/sessions/list', { token, body: { archived: true } })).json.sessions
+    assert.equal(archivedRow.id, ordinaryId)
+    assert.notEqual(archivedRow.title, '', 'the archived view names an archived session')
+    assert.notEqual(archivedRow.title, ordinaryId, 'an archived row never shows its raw id')
+    const digestBefore = logDigest(ordinaryId)
+
+    const restored = await request('/sessions/restore', { token, body: { sessionId: ordinaryId } })
+    assert.equal(restored.status, 200, restored.text)
+    assert.equal(restored.json.ok, true, restored.text)
+    assert.equal(restored.json.session.id, ordinaryId)
+    assert.equal(restored.json.session.title, archivedRow.title, 'restoring answers the same row, with the same title')
+    assert.equal(restored.json.session.titleSource, archivedRow.titleSource)
+    assert.equal(logDigest(ordinaryId), digestBefore, 'restoring writes the archive row, never the session log')
+
+    // There is no physical delete anywhere on this family: the product's word
+    // for it is the archive, and its only exits are the archive and the restore.
+    const physical = await request('/sessions/delete', { token, body: { sessionId: ordinaryId } })
+    assert.equal(physical.status, 404, 'no physical delete route exists')
+    assert.equal(logDigest(ordinaryId), digestBefore, 'no request deletes a log')
+
+    assert.deepEqual(idsOf(await request('/sessions/list', { token })).sort(), [primaryId, ordinaryId].sort(),
+      'a restored session is back in the default list')
+    assert.deepEqual(idsOf(await request('/sessions/list', { token, body: { archived: true } })), [],
+      'a restored session is no longer an archived one')
+  })
+
+  test('restoring a foreign, unknown or active session changes nothing and says why', async () => {
+    const { user, primaryId, ordinaryId } = await identityWithOrdinary('restore-owner-scope')
+    const token = user.token
+    const stranger = await register('restore-stranger')
+    const archived = await request('/sessions/archive', { token, body: { sessionId: ordinaryId } })
+    assert.equal(archived.status, 200, archived.text)
+
+    // Someone else's archived session: the same 404 as an unknown one, and the
+    // owner's archive still holds it.
+    const foreign = await request('/sessions/restore', { token: stranger.token, body: { sessionId: ordinaryId } })
+    assert.equal(foreign.status, 404, foreign.text)
+    assert.equal(foreign.json.error.code, 'sessions/unknown-session')
+    assert.equal(foreign.json.session, undefined, 'a refused restore names no session')
+
+    // A session that exists and is this caller's, but is not archived: its own
+    // code, because the session does exist.
+    const active = await request('/sessions/restore', { token, body: { sessionId: primaryId } })
+    assert.equal(active.status, 409, active.text)
+    assert.equal(active.json.error.code, 'sessions/not-archived')
+    assert.equal(active.json.session, undefined, 'a refused restore names no session')
+
+    // A session nobody has: the ownership check refuses it before the archive.
+    const unknown = await request('/sessions/restore', { token, body: { sessionId: 'not-a-session' } })
+    assert.equal(unknown.status, 404, unknown.text)
+    assert.equal(unknown.json.error.code, 'sessions/unknown-session')
+
+    // Restoring twice is the same refusal: the second answer changes nothing.
+    const again = await request('/sessions/restore', { token, body: { sessionId: ordinaryId } })
+    assert.equal(again.status, 200, again.text)
+    const twice = await request('/sessions/restore', { token, body: { sessionId: ordinaryId } })
+    assert.equal(twice.status, 409, twice.text)
+    assert.equal(twice.json.error.code, 'sessions/not-archived')
+
+    // Every refusal above left both views exactly as they were.
+    assert.deepEqual(idsOf(await request('/sessions/list', { token })), [primaryId, ordinaryId],
+      'a refused restore changed nothing in the default list')
+    assert.deepEqual(idsOf(await request('/sessions/list', { token, body: { archived: true } })), [],
+      'a refused restore changed nothing in the archived view')
+    assert.deepEqual(idsOf(await request('/sessions/list', { token: stranger.token })), [])
+    assert.deepEqual(idsOf(await request('/sessions/list', { token: stranger.token, body: { archived: true } })), [])
+  })
+
+  test('a restore survives a restart, and the restored session continues its history', async () => {
+    const { user, primaryId, ordinaryId } = await identityWithOrdinary('restore-owner-restart')
+    const token = user.token
+    await say(token, ordinaryId, '恢复前的第一句话')
+    assert.equal((await request('/sessions/archive', { token, body: { sessionId: ordinaryId } })).status, 200)
+    const restored = await request('/sessions/restore', { token, body: { sessionId: ordinaryId } })
+    assert.equal(restored.status, 200, restored.text)
+
+    await stopBackend()
+    await startBackend()
+
+    assert.deepEqual(idsOf(await request('/sessions/list', { token })).sort(), [primaryId, ordinaryId].sort(),
+      'the restore is durable: the session is in the default list after a restart')
+    assert.deepEqual(idsOf(await request('/sessions/list', { token, body: { archived: true } })), [],
+      'the restored session is not archived again by the restart')
+
+    // The history is intact, and the conversation can go on from it.
+    const transcript = await request('/chat/read', { token, body: { sessionId: ordinaryId } })
+    assert.equal(transcript.status, 200, transcript.text)
+    assert.ok(transcript.json.projection.messages.some(message => message.text.includes('恢复前的第一句话')),
+      `the restored session still holds its messages: ${transcript.text}`)
+    await say(token, ordinaryId, '恢复后的第二句话')
+    const continued = await request('/chat/read', { token, body: { sessionId: ordinaryId } })
+    assert.equal(continued.status, 200, continued.text)
+    assert.ok(continued.json.projection.messages.some(message => message.text.includes('恢复前的第一句话')),
+      'continuing after a restore does not lose the earlier message')
+    assert.ok(continued.json.projection.messages.some(message => message.text.includes('恢复后的第二句话')),
+      'the restored session answers and keeps the new message')
+
+    // A restored row can be archived again, and that archive is a new fact.
+    const again = await request('/sessions/archive', { token, body: { sessionId: ordinaryId } })
+    assert.equal(again.status, 200, again.text)
+    assert.deepEqual(idsOf(await request('/sessions/list', { token, body: { archived: true } })), [ordinaryId],
+      'a restored session can be archived again')
+    assert.equal((await request('/sessions/restore', { token, body: { sessionId: ordinaryId } })).status, 200,
+      'the re-archived session restores again')
+  })
+})

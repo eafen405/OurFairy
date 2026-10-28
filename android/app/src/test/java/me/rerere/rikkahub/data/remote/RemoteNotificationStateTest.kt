@@ -73,7 +73,7 @@ class RemoteNotificationStateTest {
     private class Sessions(
         private val ids: Map<String, String> = mapOf("alice" to "s", "bob" to "bob-session"),
     ) : SessionBackend {
-        override suspend fun list(token: String) = OwnedSessions(
+        override suspend fun list(token: String, archived: Boolean) = OwnedSessions(
             listOf(OwnedSession(ids.getValue(token), primary = true)), ids.getValue(token),
         )
         override suspend fun read(token: String, sessionId: String) = OwnedSession(sessionId)
@@ -82,6 +82,7 @@ class RemoteNotificationStateTest {
         override suspend fun create(token: String) = error("not used")
         override suspend fun primary(token: String) = OwnedSession(ids.getValue(token), primary = true)
         override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
+        override suspend fun restore(token: String, sessionId: String) = error("not used")
     }
 
     private fun TestScope.received(

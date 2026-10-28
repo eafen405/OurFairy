@@ -25,7 +25,11 @@ caller's archive, exposed as `ctx.ourfairySessions` and the `/sessions/*` paths.
   the caller has archived, with numeric `status` (0 active, 1 archived), the
   archive instant, actor and timestamps, and the mandatory logical-delete column.
   `owner_short_id` scopes the row to the caller; it is not a second ownership
-  authority — every write authorizes against the header first.
+  authority — every write authorizes against the header first. `/sessions/restore`
+  moves that row back to `status = 0, archived_at = NULL`; it matches only a row
+  this caller holds as archived, so a foreign, unknown or merely active session
+  changes nothing, and a session that is not archived answers
+  `sessions/not-archived` (409) rather than pretending it does not exist.
 - The one-shot event read exported as `./events`: `readSessionEvents` opens an
   observation, returns its events and cursor, and disposes it in `finally`.
 - The empty-session rule on `/sessions/create`: a session whose log carries no
@@ -43,7 +47,6 @@ caller's archive, exposed as `ctx.ourfairySessions` and the `/sessions/*` paths.
 caller asks for the archived view, so create's reuse, `conversation_search` and
 every other reader of the service see one consistent set without a per-caller
 filter.
->>>>>>> integration/spec-250
 
 ## Does not own
 
@@ -55,8 +58,9 @@ filter.
 - Message content, transcripts or projections; [`chat`](../chat/README.md) owns
   those. Reading events here decides only whether a log already has a message;
   it never projects or interprets the content.
-- The restore route and the client's archived view. The store's `active` status
-  exists for the restore half, which is its own ticket.
+- The client's archived view. The backend answers it through `list(owner,
+  { archived: true })`; how the phone renders and switches to it is the client's
+  business.
 
 ## dsh seams
 
@@ -79,10 +83,12 @@ store for the archive.
 
 `ctx.ourfairySessions`, exposing `authenticate(request)`, `create(owner)`,
 `primary(owner)`, `list(owner, { archived })`, `archive(owner, sessionId)`,
-`read(owner, sessionId)` and `expose(header, shortId)`. `create` returns the
-caller's empty session when one exists (the primary first, then the newest empty
-ordinary) and only materializes a new ordinary session otherwise. `archive`
-refuses the primary session with `sessions/primary-not-archivable`; a foreign or
-unknown session is refused by the same ownership check every route uses. It
-injects `webServer`, `connection`, `identity`, `sessions`, `sessionPersistence`
-and `sessionQuery`, and takes its archive file as the row's `path`.
+`restore(owner, sessionId)`, `read(owner, sessionId)` and
+`expose(header, shortId)`. `create` returns the caller's empty session when one
+exists (the primary first, then the newest empty ordinary) and only materializes
+a new ordinary session otherwise. `archive` refuses the primary session with
+`sessions/primary-not-archivable`; `restore` refuses a session that is not in the
+caller's archive with `sessions/not-archived`; a foreign or unknown session is
+refused by the same ownership check every route uses. It injects `webServer`,
+`connection`, `identity`, `sessions`, `sessionPersistence` and `sessionQuery`,
+and takes its archive file as the row's `path`.

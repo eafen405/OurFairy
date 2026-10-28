@@ -263,6 +263,61 @@ class SessionApiTest {
         }
     }
 
+    // ---- the archived view and restoring ----
+
+    @Test
+    fun `the archived view asks the same list path with the archived flag`() = runTest {
+        reply(
+            200,
+            """{"ok":true,"sessions":[{"id":"s-old","owner":"user:1","primary":false,"createdAt":1760000000000,"title":"旧会话"}],"primarySessionId":null}""",
+        )
+
+        val listed = api.list(TOKEN, archived = true)
+
+        val request = onlyRequest()
+        assertEquals("POST", request.method)
+        // One path answers both views; only the question changes.
+        assertEquals("/sessions/list", request.path)
+        assertEquals("Bearer $TOKEN", request.authorization)
+        assertEquals("""{"archived":true}""", request.body)
+        assertEquals("application/json; charset=utf-8", request.contentType)
+        assertEquals(listOf("s-old"), listed.sessions.map { it.id })
+        // The archived view never stands in a main session.
+        assertNull(listed.primarySessionId)
+    }
+
+    @Test
+    fun `restore names the session it wants and answers with the row the list would return`() = runTest {
+        reply(
+            200,
+            """{"ok":true,"session":{"id":"s-old","owner":"user:1","primary":false,"createdAt":1760000000000,"title":"旧会话","titleSource":0}}""",
+        )
+
+        val restored = api.restore(TOKEN, "s-old")
+
+        val request = onlyRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/sessions/restore", request.path)
+        assertEquals("Bearer $TOKEN", request.authorization)
+        assertEquals("""{"sessionId":"s-old"}""", request.body)
+        assertEquals("application/json; charset=utf-8", request.contentType)
+        assertEquals("s-old", restored.id)
+        assertEquals("旧会话", restored.title)
+    }
+
+    @Test
+    fun `a restore the backend refuses keeps its own code`() = runTest {
+        reply(409, """{"ok":false,"error":{"code":"sessions/not-archived","message":"that session is not in your archive"}}""")
+
+        try {
+            api.restore(TOKEN, "s-1")
+            fail("expected the refusal to be raised")
+        } catch (refused: IdentityRefused) {
+            assertEquals(409, refused.status)
+            assertEquals("sessions/not-archived", refused.code)
+        }
+    }
+
     // ---- refusal ----
 
     @Test
