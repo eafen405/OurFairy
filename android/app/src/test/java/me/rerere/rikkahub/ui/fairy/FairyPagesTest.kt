@@ -569,6 +569,21 @@ class FairyPagesTest {
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
     }
 
+    @Test fun `archiving a session opened before its list row arrives follows main`() {
+        listedSessions = OwnedSessions(emptyList(), "main")
+        var target by mutableStateOf("other")
+        show {
+            FairyConversationPage(target, {}, receive,
+                onOpenConversation = { target = it }, onSettings = {})
+        }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
+        compose.runOnIdle { receive.owned.archive("other") }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "main" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("main", target) }
+    }
+
     @Test fun `conversation observes thinking changes without moving the composer`() {
         updates["main"] = MutableStateFlow(RemoteChatProjection(
             sessionId = "main", cursor = 0, durableThroughSeq = 0,

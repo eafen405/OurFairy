@@ -245,8 +245,11 @@ describe('OurFairy session archive over real HTTP', () => {
 
     assert.deepEqual(idsOf(await request('/sessions/list', { token })), [primaryId],
       'an archived session leaves the default list')
-    assert.deepEqual(idsOf(await request('/sessions/list', { token, body: { archived: true } })), [ordinaryId],
+    const archivedView = await request('/sessions/list', { token, body: { archived: true } })
+    assert.deepEqual(idsOf(archivedView), [ordinaryId],
       'the archived view names exactly the archived session')
+    assert.equal(archivedView.json.primarySessionId, null,
+      'the archived view has no standing primary session')
 
     // The header read still answers, and archiving rewrote no log.
     const read = await request('/sessions/read', { token, body: { sessionId: ordinaryId } })
