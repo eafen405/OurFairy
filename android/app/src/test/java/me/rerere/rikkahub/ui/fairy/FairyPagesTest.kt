@@ -71,7 +71,7 @@ class FairyPagesTest {
     )
     private var createdSession = OwnedSession("created")
     private val sessions = object : SessionBackend {
-        override suspend fun list(token: String) = listedSessions
+        override suspend fun list(token: String, archived: Boolean) = listedSessions
         override suspend fun read(token: String, sessionId: String): OwnedSession {
             if (sessionId == "missing") throw IdentityRefused(404, "session/not-found", "会话已不存在")
             return OwnedSession(sessionId, primary = sessionId == listedSessions.primarySessionId)
@@ -90,6 +90,7 @@ class FairyPagesTest {
         override suspend fun primary(token: String) = OwnedSession("main", primary = true)
         override suspend fun create(token: String) = createdSession
         override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
+        override suspend fun restore(token: String, sessionId: String) = error("not used")
     }
     private val updates = mutableMapOf<String, MutableStateFlow<RemoteChatProjection>>()
     private val backend = object : RemoteChatBackend {

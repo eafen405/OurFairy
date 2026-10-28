@@ -18,7 +18,7 @@ class RemoteReceiveStateTest {
     private class Sessions : SessionBackend {
         var gate: CompletableDeferred<Unit>? = null
         val authorized = mutableListOf<Pair<String, String>>()
-        override suspend fun list(token: String): OwnedSessions {
+        override suspend fun list(token: String, archived: Boolean): OwnedSessions {
             gate?.let { withContext(NonCancellable) { it.await() } }
             return OwnedSessions(listOf(OwnedSession("$token-main", primary = true), OwnedSession("$token-other")), "$token-main")
         }
@@ -32,6 +32,7 @@ class RemoteReceiveStateTest {
         override suspend fun create(token: String) = OwnedSession("$token-created")
         override suspend fun primary(token: String) = OwnedSession("$token-main", primary = true)
         override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
+        override suspend fun restore(token: String, sessionId: String) = error("not used")
     }
     private class Store : ChatSyncStore {
         val records = mutableMapOf<ChatSyncKey, ChatSyncRecord>()

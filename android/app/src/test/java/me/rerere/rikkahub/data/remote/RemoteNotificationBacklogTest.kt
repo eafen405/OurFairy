@@ -51,7 +51,7 @@ class RemoteNotificationBacklogTest {
     }
 
     private class Sessions(private val ids: List<String> = listOf("main")) : SessionBackend {
-        override suspend fun list(token: String) = OwnedSessions(
+        override suspend fun list(token: String, archived: Boolean) = OwnedSessions(
             ids.map { OwnedSession("$token-$it", primary = it == ids.first()) },
             "$token-${ids.first()}",
         )
@@ -61,6 +61,7 @@ class RemoteNotificationBacklogTest {
         override suspend fun create(token: String) = error("not used")
         override suspend fun primary(token: String) = OwnedSession("$token-${ids.first()}", primary = true)
         override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
+        override suspend fun restore(token: String, sessionId: String) = error("not used")
     }
 
     private class Chats : RemoteChatBackend {

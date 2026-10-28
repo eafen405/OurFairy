@@ -28,7 +28,7 @@ private class DeferredBackend : SessionBackend {
     val gate = CompletableDeferred<Unit>()
     val seenTokens = mutableListOf<String>()
 
-    override suspend fun list(token: String): OwnedSessions {
+    override suspend fun list(token: String, archived: Boolean): OwnedSessions {
         await(token)
         return OwnedSessions(
             sessions = listOf(OwnedSession(id = "s-$token", owner = "user:$token", primary = true)),
@@ -69,6 +69,11 @@ private class DeferredBackend : SessionBackend {
     }
 
     override suspend fun archive(token: String, sessionId: String): OwnedSession {
+        await(token)
+        return OwnedSession(id = sessionId, owner = "user:$token")
+    }
+
+    override suspend fun restore(token: String, sessionId: String): OwnedSession {
         await(token)
         return OwnedSession(id = sessionId, owner = "user:$token")
     }
@@ -264,13 +269,14 @@ class OwnedSessionStateTest {
         val listed = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
         val empty = OwnedSession(id = "s-empty", owner = "user:alice")
         val backend = object : SessionBackend {
-            override suspend fun list(token: String) = OwnedSessions(listOf(listed, empty), "s-alice")
+            override suspend fun list(token: String, archived: Boolean) = OwnedSessions(listOf(listed, empty), "s-alice")
             override suspend fun create(token: String) = empty
             override suspend fun select(token: String, sessionId: String) = empty
             override suspend fun primary(token: String) = listed
             override suspend fun read(token: String, sessionId: String) = empty
             override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
             override suspend fun archive(token: String, sessionId: String) = empty
+            override suspend fun restore(token: String, sessionId: String) = error("not used")
         }
         val state = OwnedSessionState(backend, this)
 
@@ -314,7 +320,7 @@ class OwnedSessionStateTest {
     @Test
     fun `an empty title keeps its own code so the drawer can word it`() = runTest {
         val backend = object : SessionBackend {
-            override suspend fun list(token: String) = OwnedSessions(emptyList(), null)
+            override suspend fun list(token: String, archived: Boolean) = OwnedSessions(emptyList(), null)
             override suspend fun create(token: String) = error("not used")
             override suspend fun select(token: String, sessionId: String) = error("not used")
             override suspend fun primary(token: String) = error("not used")
@@ -326,6 +332,7 @@ class OwnedSessionStateTest {
                     message = "the title has no visible characters once normalized",
                 )
             override suspend fun archive(token: String, sessionId: String) = error("not used")
+            override suspend fun restore(token: String, sessionId: String) = error("not used")
         }
         val state = OwnedSessionState(backend, this)
 
@@ -344,12 +351,13 @@ class OwnedSessionStateTest {
         val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
         val other = OwnedSession(id = "s-other", owner = "user:alice")
         val backend = object : SessionBackend {
-            override suspend fun list(token: String) = OwnedSessions(listOf(main, other), main.id)
+            override suspend fun list(token: String, archived: Boolean) = OwnedSessions(listOf(main, other), main.id)
             override suspend fun create(token: String) = error("not used")
             override suspend fun select(token: String, sessionId: String) = other
             override suspend fun primary(token: String) = main
             override suspend fun read(token: String, sessionId: String) = other
             override suspend fun archive(token: String, sessionId: String) = other
+            override suspend fun restore(token: String, sessionId: String) = error("not used")
             override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         }
         val state = OwnedSessionState(backend, this)
@@ -373,13 +381,14 @@ class OwnedSessionStateTest {
         val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
         val other = OwnedSession(id = "s-other", owner = "user:alice")
         val backend = object : SessionBackend {
-            override suspend fun list(token: String) = OwnedSessions(listOf(main, other), main.id)
+            override suspend fun list(token: String, archived: Boolean) = OwnedSessions(listOf(main, other), main.id)
             override suspend fun create(token: String) = error("not used")
             override suspend fun select(token: String, sessionId: String) = other
             override suspend fun primary(token: String) = main
             override suspend fun read(token: String, sessionId: String) = other
             override suspend fun archive(token: String, sessionId: String): OwnedSession =
                 throw IdentityRefused(409, "sessions/primary-not-archivable", "the primary session is never archived")
+            override suspend fun restore(token: String, sessionId: String) = error("not used")
             override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         }
         val state = OwnedSessionState(backend, this)
@@ -395,5 +404,153 @@ class OwnedSessionStateTest {
         assertEquals(listOf("s-alice", "s-other"), state.snapshot.value.sessions.map { it.id })
         assertEquals("s-other", state.snapshot.value.selectedId)
         assertEquals("the primary session is never archived", state.snapshot.value.failure)
+    }
+
+    /** A backend whose two views answer different rows, as the real one does. */
+    private class TwoViewBackend(
+        private val main: OwnedSession,
+        private val active: List<OwnedSession>,
+        private val archivedRows: List<OwnedSession>,
+    ) : SessionBackend {
+        var restores = 0
+        var archivedRefused: IdentityRefused? = null
+        var restoreRefused: IdentityRefused? = null
+        val archivedQuestions = mutableListOf<Boolean>()
+
+        override suspend fun list(token: String, archived: Boolean): OwnedSessions {
+            archivedQuestions += archived
+            return if (archived) {
+                OwnedSessions(archivedRows, null)
+            } else {
+                OwnedSessions(active, main.id)
+            }
+        }
+
+        override suspend fun create(token: String) = error("not used")
+        override suspend fun select(token: String, sessionId: String) = error("not used")
+        override suspend fun primary(token: String) = main
+        override suspend fun read(token: String, sessionId: String) = archivedRows.first { it.id == sessionId }
+        override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
+        override suspend fun archive(token: String, sessionId: String) = error("not used")
+
+        override suspend fun restore(token: String, sessionId: String): OwnedSession {
+            restores += 1
+            restoreRefused?.let { throw it }
+            return archivedRows.first { it.id == sessionId }
+        }
+    }
+
+    @Test
+    fun `the archived view is a list of its own and leaves the default list alone`() = runTest {
+        val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
+        val other = OwnedSession(id = "s-other", owner = "user:alice")
+        val old = OwnedSession(id = "s-old", owner = "user:alice", title = "旧会话")
+        val backend = TwoViewBackend(main, listOf(main, other), listOf(old))
+        val state = OwnedSessionState(backend, this)
+
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        state.refreshArchived()
+        advanceUntilIdle()
+
+        // Browsing the archive is one more list read, and the default list — the
+        // set the receiver treats as the chats allowed to exist — is untouched.
+        assertEquals(listOf("s-alice", "s-other"), state.snapshot.value.sessions.map { it.id })
+        assertEquals("s-alice", state.snapshot.value.selectedId)
+        assertEquals(listOf("s-old"), state.archived.value.sessions.map { it.id })
+        assertEquals(listOf(false, true), backend.archivedQuestions)
+        assertEquals(false, state.archived.value.loading)
+    }
+
+    @Test
+    fun `restoring takes the row out of the archived view and back into the default list`() = runTest {
+        val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
+        val other = OwnedSession(id = "s-other", owner = "user:alice")
+        val old = OwnedSession(id = "s-old", owner = "user:alice", title = "旧会话")
+        val backend = TwoViewBackend(main, listOf(main, other), listOf(old))
+        val state = OwnedSessionState(backend, this)
+
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        state.refreshArchived()
+        advanceUntilIdle()
+        assertEquals(listOf("s-old"), state.archived.value.sessions.map { it.id })
+
+        state.restore("s-old")
+        advanceUntilIdle()
+
+        // One request, and the answer is the row the list would return: it is
+        // folded into the default list instead of a second list read.
+        assertEquals(1, backend.restores)
+        assertEquals(emptyList<String>(), state.archived.value.sessions.map { it.id })
+        assertEquals(listOf("s-alice", "s-other", "s-old"), state.snapshot.value.sessions.map { it.id })
+        assertEquals("旧会话", state.snapshot.value.sessions.last().title)
+        // Restoring does not move the user into the session they restored.
+        assertEquals("s-alice", state.snapshot.value.selectedId)
+        assertEquals(false, state.archived.value.loading)
+    }
+
+    @Test
+    fun `a refused restore leaves both views untouched and keeps the backend's code`() = runTest {
+        val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
+        val other = OwnedSession(id = "s-other", owner = "user:alice")
+        val old = OwnedSession(id = "s-old", owner = "user:alice", title = "旧会话")
+        val backend = TwoViewBackend(main, listOf(main, other), listOf(old))
+        backend.restoreRefused = IdentityRefused(409, "sessions/not-archived", "that session is not in your archive")
+        val state = OwnedSessionState(backend, this)
+
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        state.refreshArchived()
+        advanceUntilIdle()
+
+        state.restore("s-old")
+        advanceUntilIdle()
+
+        assertEquals(listOf("s-old"), state.archived.value.sessions.map { it.id })
+        assertEquals(listOf("s-alice", "s-other"), state.snapshot.value.sessions.map { it.id })
+        // The refusal is said where the action was taken, not on the other list.
+        // A refusal reads as the backend's own message, exactly as the archive
+        // refusal above does; the code is only the fallback when none was sent.
+        assertEquals("that session is not in your archive", state.archived.value.failure)
+        assertNull(state.snapshot.value.failure)
+        assertEquals(false, state.archived.value.loading)
+    }
+
+    @Test
+    fun `an archived view asked for as one account is never shown to the next`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val backend = object : SessionBackend {
+            override suspend fun list(token: String, archived: Boolean): OwnedSessions {
+                withContext(NonCancellable) { gate.await() }
+                return OwnedSessions(
+                    listOf(OwnedSession(id = "old-$token", owner = "user:$token", title = "旧会话")),
+                    null,
+                )
+            }
+            override suspend fun create(token: String) = error("not used")
+            override suspend fun select(token: String, sessionId: String) = error("not used")
+            override suspend fun primary(token: String) = error("not used")
+            override suspend fun read(token: String, sessionId: String) = error("not used")
+            override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
+            override suspend fun archive(token: String, sessionId: String) = error("not used")
+            override suspend fun restore(token: String, sessionId: String) = error("not used")
+        }
+        val state = OwnedSessionState(backend, this)
+
+        state.bind("alice")
+        state.refreshArchived()
+        advanceUntilIdle()
+
+        // Bob signs in while Alice's archived list is still on its way.
+        state.bind("bob")
+        assertEquals(emptyList<OwnedSession>(), state.archived.value.sessions)
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(emptyList<OwnedSession>(), state.archived.value.sessions)
     }
 }

@@ -317,4 +317,24 @@ export class OwnedSessionService extends Service {
     this.archiveStore.archive({ sessionId: header.id, ownerShortId: owner.shortId })
     return header
   }
+
+  /**
+   * Restore one session the caller archived: it goes back into the default
+   * views with its log, its messages and its history untouched — restoring
+   * writes the archive row, never a session log.
+   *
+   * Authorization is the header's, like every other route, so a session the
+   * caller does not own is refused before the archive is looked at. Then the
+   * row itself must be this caller's and archived: a session that is not
+   * archived — including the primary, which can never be — answers its own code
+   * rather than "unknown session", because the session does exist and saying
+   * otherwise would hide the real reason. Nothing is written in that case.
+   */
+  async restore(owner: SessionOwner, sessionId: unknown): Promise<SessionHeader> {
+    const header = await this._ownedHeader(owner, sessionId)
+    if (!this.archiveStore.restore({ sessionId: header.id, ownerShortId: owner.shortId })) {
+      throw new SessionScopeError(409, 'sessions/not-archived', 'that session is not in your archive')
+    }
+    return header
+  }
 }
