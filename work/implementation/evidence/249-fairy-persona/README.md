@@ -7,8 +7,8 @@
 ## 实现
 
 - 用户 HTTP 与 Android 印象入口均为只读；Fairy 工具保留按会话先读后改、归属隔离、整份替换和 8000 Unicode 字符限制。
-- 部署人格由游戏主线、连续场景与待机台词提炼，保留完整身份、行为人格、魅力特征、默认长度与风格抗性；运行时文本限制为 2000 Unicode 字符和 8 个短示例，不注入完整台词库。
-- 身份段为代理人提供身份库昵称，JSON 转义并标记仅用于称呼。
+- 部署人格由游戏主线、连续场景与待机台词提炼，保留完整身份、行为人格、魅力特征、默认长度与风格抗性；部署常量为 1149 Unicode 字符、4 条示例，不注入完整台词库。上限由 `personaBudget` 在 `tests/persona-acceptance.test.mjs` 中检查（2000 字符、8 条示例），是测试对部署常量的约束，不是运行时检查。
+- 身份段由 `backend/chat/src/persona.ts` 的 `ownerIdentity` 唯一生成：代理人的昵称 JSON 转义并标记仅用于称呼，无昵称时回退为「用户<短号>」。
 - `scripts/persona-acceptance.ts` 提供真实 MiniMax 语义验收；不接入运行时人格输出审查或过滤。
 
 ## 真实模型证据
@@ -41,3 +41,16 @@
 - 不宣称提示词注入免疫或人格绝对不可漂移；语义验收是采样证据，不是数学保证。
 - 真实验收不属于 `npm test` 或 CI；原始回复需要人工风格复核。
 - 未做真机页面验收，未做生产部署。
+
+## 评审轮修复（2026-10-28）
+
+两轴评审发现「验收脚本用正则扫描产品源码来维持同步」，这是 `CODING_STANDARDS.md`「声称须可执行」明令禁止的形状。改为单一权威：
+
+- `backend/chat/src/persona.ts` 新增并导出 `ownerIdentity(shortId, nickname?)`，`backend/chat/src/runtime.ts` 调用它，不再内联身份段文本。
+- `backend/memory/src/impression-prompt.ts` 承载印象 section 的 header/footer 与 `impressionSection()`，`impression.ts` 的 `promptText` 调用它。
+- `scripts/persona-acceptance.ts` 的 `loadProductPrompt()` 从这两个模块动态取函数；`OWNER_*`、`IMPRESSION_*` 常量与 `templateOf()` 源码扫描一并删除。
+- `tests/persona-acceptance.test.mjs` 改为断言「验收拿到的是产品导出的同一个函数」（引用相等），行为仍由 `tests/remote-chat.test.mjs` 的模型输入断言覆盖。
+
+同步修正的文档：`backend/memory/README.md` 的 `impression/invalid-content` 括注、`impression.ts` 模块注释中「只在用户明确要求时」的限定、`docs/research/2026-10-27-fairy-persona-distillation.md` 的规格行号（274→277）、两篇研究文档与 `245-impression` 证据的后续指针。
+
+门禁：`npm test` 412/412、`npm run combo:verify` 三行 ok、`npm run typecheck` 通过。本轮未改 `android/`，Android 门禁沿用合并前一次运行。

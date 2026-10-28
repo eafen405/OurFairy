@@ -309,7 +309,7 @@ Failures are native tool failures whose message starts with the code:
 | `impression/unauthorized` | the route request carries no live credential |
 | `impression/not-read` | no successful read has opened this session's edit |
 | `impression/too-long` | the body exceeds 8000 Unicode characters |
-| `impression/invalid-content` | the edit body is not a string (the tool's own schema refuses a non-string body before this guard is reached) |
+| `impression/invalid-content` | the edit body is not a string; the tool's own schema already refuses such a call, so this guard covers direct service callers and is asserted by `tests/memory-impression.test.mjs` |
 | `impression/missing-owner` | a tool call came from a session with no owner |
 
 A deleted number answers `memory/unknown-memory` even to a session that had

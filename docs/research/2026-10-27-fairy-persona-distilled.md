@@ -6,6 +6,8 @@
 
 # Fairy 人格蒸馏稿：从游戏台词到可对比的提示臂
 
+> 2026-10-28 后续：#249 已根据这些观察组合新候选，经真实模型验收后替换部署人格；交付证据见 [`work/implementation/evidence/249-fairy-persona/README.md`](../../work/implementation/evidence/249-fairy-persona/README.md)。下文保留研究当时的状态，不作为当前实现说明。
+
 ## 0. 本文产出与不承诺
 
 **产出**：

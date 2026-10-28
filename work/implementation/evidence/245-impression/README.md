@@ -1,5 +1,7 @@
 # #245 印象：本人读写、注入与客户端页面
 
+> 2026-10-28 后续：#249 已把用户侧改为只读——`/impression/edit` 路由与客户端编辑页已移除，印象只经 Fairy 工具修改。本文记录 #245 交付当时的状态，其中「本人读写」「两条用户路由」不再描述当前实现；现状见 [`../249-fairy-persona/README.md`](../249-fairy-persona/README.md)。
+
 日期：2026-10-27。票面：[`work/tickets/fairy-memory/05-impression.md`](../../../tickets/fairy-memory/05-impression.md)。
 分支 `ticket/245-impression`，worktree `.worktrees/245-impression`，基线 `40d8a190ef`
 （`integration/spec-240`）。规格：[`docs/specs/fairy-memory.md`](../../../../docs/specs/fairy-memory.md)

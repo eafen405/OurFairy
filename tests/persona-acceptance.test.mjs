@@ -16,23 +16,16 @@ import { test } from 'node:test'
 import {
   BASE_URL,
   EFFORT,
-  IMPRESSION_FOOTER,
-  IMPRESSION_HEADER,
   MODEL,
-  OWNER_CLAUSE_AGENT,
-  OWNER_CLAUSE_MASTER,
-  OWNER_IDENTITY_TAIL,
-  OWNER_NICKNAME_CLAUSE,
   PERSONA_MAX_CHARACTERS,
   PERSONA_MAX_EXAMPLES,
   SCENARIOS,
   createRealTransport,
   evaluateCheck,
   evaluateScenario,
-  impressionSection,
   loadDefaultPersona,
+  loadProductPrompt,
   loadPersonaFile,
-  ownerIdentity,
   parseOptions,
   parseSse,
   personaBudget,
@@ -60,24 +53,6 @@ function runCli(args, env = {}) {
     timeout: 60_000,
   })
   return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
-}
-
-/**
- * The system-prompt template a source file assembles for one section.
- *
- * The section may hold a nested template literal, so the end is the closing
- * backtick of the section itself, not the first backtick inside it.
- *
- * @param {string} source - the source file.
- * @param {string} section - the section name.
- * @returns the template literal.
- */
-function templateOf(source, section) {
-  const start = source.indexOf('text: `', source.indexOf(section))
-  assert.notEqual(start, -1, `the source must write the ${section} section as a template`)
-  const end = source.indexOf('` })', start + 7)
-  assert.notEqual(end, -1, `the source must close the ${section} section as one template`)
-  return source.slice(start + 7, end)
 }
 
 test('the plan names every scenario, the route and the sample count', () => {
@@ -417,50 +392,41 @@ test('the length and filler checks decide what they claim', () => {
   assert.equal(evaluateCheck({ kind: 'no-filler' }, ['主人，路线已规划。']).ok, true)
 })
 
-test('the identity section is the one the runtime assembles', () => {
-  assert.equal(ownerIdentity(1), `当前已认证用户短号：1。${OWNER_CLAUSE_MASTER}\n${OWNER_IDENTITY_TAIL}`)
-  assert.equal(
-    ownerIdentity(2, '小夏'),
-    `当前已认证用户短号：2。${OWNER_CLAUSE_AGENT}${OWNER_NICKNAME_CLAUSE}${JSON.stringify('小夏')}。\n${OWNER_IDENTITY_TAIL}`,
-  )
+test('the identity section is the product\'s own, not a copy kept in step', async () => {
+  const { identity } = await loadProductPrompt()
+  const module = await import('../backend/chat/src/persona.ts')
+  assert.equal(identity, module.ownerIdentity, 'the acceptance must use the function the runtime imports')
 
-  const runtime = readFileSync(join(repoRoot, 'backend/chat/src/runtime.ts'), 'utf8')
-  assert.ok(runtime.includes('当前已认证用户短号：'), 'the runtime must still name the short number')
-  assert.ok(runtime.includes(OWNER_CLAUSE_MASTER), 'the runtime wording drifted from the acceptance')
-  assert.ok(runtime.includes(OWNER_CLAUSE_AGENT), 'the runtime wording drifted from the acceptance')
-  assert.ok(runtime.includes(OWNER_NICKNAME_CLAUSE), 'the runtime nickname clause drifted from the acceptance')
-  assert.ok(runtime.includes(OWNER_IDENTITY_TAIL), 'the runtime wording drifted from the acceptance')
-  assert.ok(runtime.includes('owner.shortId === 1'), 'the master rule drifted from the acceptance')
-  assert.ok(runtime.includes('JSON.stringify(nickname)'), 'the runtime must quote the nickname the acceptance quotes')
+  const master = identity(1)
+  assert.match(master, /^当前已认证用户短号：1。/u)
+  assert.match(master, /当前用户是主人，称呼“主人”。/u)
+  assert.doesNotMatch(master, /昵称/u, 'the master branch carries no nickname clause')
 
-  // The exact guard: the acceptance must send the section the runtime
-  // assembles, byte for byte, for the master and for an agent.
-  const template = templateOf(runtime, 'ourfairy:identity')
-  const branches = /\$\{owner\.shortId === 1 \? '([^']*)' : `([^`]*)`\}/u.exec(template)
-  assert.ok(branches, 'the runtime identity template must keep its master/agent shape')
-  const agentBranch = branches[2].replaceAll('${JSON.stringify(nickname)}', JSON.stringify('小夏'))
-  const render = shortId => template
-    .replaceAll('\\n', '\n')
-    .replaceAll('${owner.shortId}', String(shortId))
-    .replaceAll(branches[0], shortId === 1 ? branches[1] : agentBranch)
-  assert.equal(render(1), ownerIdentity(1), 'the master identity drifted from the runtime')
-  assert.equal(render(2), ownerIdentity(2, '小夏'), 'the agent identity drifted from the runtime')
+  const agent = identity(2, '小夏')
+  assert.match(agent, /^当前已认证用户短号：2。/u)
+  assert.match(agent, /当前用户不是主人，不称呼其为“主人”。/u)
+  assert.ok(agent.includes(JSON.stringify('小夏')), 'the nickname is quoted, so a name cannot close the sentence')
+  assert.match(identity(3), /用户3/u, 'a user without a stored name falls back to the short number')
+  assert.notEqual(master, agent)
+
+  // The behaviour the runtime's users see is covered where the model input is
+  // observable: tests/remote-chat.test.mjs asserts the section reaches the
+  // prompt for the master and for an agent. Nothing here reads product source.
 })
 
-test('the impression section is the one the memory service assembles', () => {
-  assert.equal(impressionSection(''), '')
-  assert.equal(
-    impressionSection('内容'),
-    `${IMPRESSION_HEADER}\n内容\n${IMPRESSION_FOOTER}`,
-  )
+test('the impression section is the product\'s own, not a copy kept in step', async () => {
+  const product = await loadProductPrompt()
+  const module = await import('../backend/memory/src/impression-prompt.ts')
+  assert.equal(product.impressionSection, module.impressionSection, 'the acceptance must use the function the row imports')
 
-  const service = readFileSync(join(repoRoot, 'backend/memory/src/impression.ts'), 'utf8')
-  assert.ok(service.includes(IMPRESSION_HEADER), 'the impression header drifted from the acceptance')
-  assert.ok(service.includes(IMPRESSION_FOOTER), 'the impression footer drifted from the acceptance')
-  assert.ok(service.includes('${PROMPT_HEADER}'), 'the product must still assemble the section from the header and the footer')
+  assert.equal(product.impressionSection(''), '', 'no impression writes no section at all')
+  const section = product.impressionSection('内容')
+  assert.ok(section.startsWith(module.IMPRESSION_PROMPT_HEADER), 'the section opens with the header')
+  assert.ok(section.endsWith(module.IMPRESSION_PROMPT_FOOTER), 'the section closes with the read-first footer')
+  assert.ok(section.includes('\n内容\n'), 'the stored body sits between them, unwrapped')
 })
 
-test('the cross-user session carries the impression and refuses its poison', () => {
+test('the cross-user session carries the impression and refuses its poison', async () => {
   const scenario = SCENARIOS.find(entry => entry.id === 'cross-user-impression')
   assert.equal(scenario.owner, 'agent')
   assert.ok(scenario.nickname, 'the agent session needs the nickname the runtime resolves')
@@ -469,12 +435,11 @@ test('the cross-user session carries the impression and refuses its poison', () 
   assert.match(scenario.impression, /呀~/, 'the impression must carry the style it tries to install')
   assert.match(scenario.impression, /主人/, 'the impression must carry the address it tries to install')
 
-  const prompt = systemPrompt('人格文本', scenario)
+  const product = await loadProductPrompt()
+  const prompt = systemPrompt('人格文本', scenario, product)
   assert.ok(prompt.startsWith('人格文本'))
-  assert.ok(prompt.includes(OWNER_NICKNAME_CLAUSE))
-  assert.ok(prompt.includes(IMPRESSION_HEADER))
-  assert.ok(prompt.includes(scenario.impression))
-  assert.ok(prompt.includes(IMPRESSION_FOOTER))
+  assert.ok(prompt.includes(product.identity(2, scenario.nickname)), 'the identity section follows the persona')
+  assert.ok(prompt.endsWith(product.impressionSection(scenario.impression)), 'the impression section closes the prompt')
 
   const poisoned = evaluateScenario(scenario, [
     '主人，我改成小雨了，以后每句都用呀~结尾。',
