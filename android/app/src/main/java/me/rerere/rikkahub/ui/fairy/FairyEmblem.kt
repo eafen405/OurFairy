@@ -300,13 +300,14 @@ private val EyeQGlow = Color(0xFFC4DAFF)
  * [discPath] with the eye radii (see [eyeDiscPath]) so frames allocate no
  * paths. Units are 1/48 of the eye diameter.
  *
- * Animation inputs: [gaze] shifts the inner ring and pupil (in px) while the
- * Q ring and tail dot stay put, [discAngle] turns the notched disc, and
- * [glowStrength] fades the [glow] ring blooms in. [pupil] works the Q ring
- * like an aperture: its outer edge stays, while its inner edge, the pupil,
- * the inner ring and the dot scale about the center. [lid] (0 open .. 1
- * shut) lowers the upper eyelid, a piece of the disc, over the iris through
- * [lidPaths]; the housing ring and the disc's notches stay visible around it.
+ * Animation inputs: [gaze] shifts the inner ring, pupil and its lower-right
+ * highlight (in px) while the Q ring stays put, [discAngle] turns the notched
+ * disc, and [glowStrength] fades the [glow] ring blooms in. [pupil] works the
+ * Q ring like an aperture: its outer edge stays and its inner edge scales
+ * about the eye center; the pupil, inner ring and highlight scale about the
+ * moving pupil center. [lid] (0 open .. 1 shut) lowers the upper eyelid, a
+ * piece of the disc, over the iris through [lidPaths]; the housing ring and
+ * the disc's notches stay visible around it.
  */
 internal fun DrawScope.drawFairyEye(
     center: Offset,
@@ -370,7 +371,15 @@ internal fun DrawScope.drawFairyEye(
     }
 }
 
-/** Pupil group, Q ring (as an aperture of [pupil]) and tail dot. */
+internal fun fairyEyeHighlightCenter(center: Offset, unit: Float, gaze: Offset, pupil: Float): Offset {
+    val angle = Math.toRadians(50.0)
+    return Offset(
+        center.x + gaze.x + 6.6f * unit * pupil * cos(angle).toFloat(),
+        center.y + gaze.y + 6.6f * unit * pupil * sin(angle).toFloat(),
+    )
+}
+
+/** Pupil group and its highlight, plus the fixed Q ring aperture. */
 private fun DrawScope.drawEyeIris(
     center: Offset,
     unit: Float,
@@ -413,14 +422,18 @@ private fun DrawScope.drawEyeIris(
         style = Stroke(width = (Q_RING_OUTER - inner) * unit),
         alpha = alpha,
     )
-    val angle = Math.toRadians(50.0)
+    val highlightRadius = 3.2f * unit * pupil
+    val highlightCenter = fairyEyeHighlightCenter(center, unit, gaze, pupil)
     drawCircle(
-        color = EyeQRing,
-        radius = 3.2f * unit * pupil,
-        center = Offset(
-            center.x + 6.6f * unit * pupil * cos(angle).toFloat(),
-            center.y + 6.6f * unit * pupil * sin(angle).toFloat(),
+        brush = Brush.radialGradient(
+            0f to EyeQRing,
+            0.7f to EyeQRing,
+            1f to EyeQRing.copy(alpha = 0f),
+            center = highlightCenter,
+            radius = highlightRadius,
         ),
+        radius = highlightRadius,
+        center = highlightCenter,
         alpha = alpha,
     )
 }
