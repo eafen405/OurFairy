@@ -17,6 +17,7 @@ export const SESSION_PATHS = Object.freeze([
   '/sessions/select',
   '/sessions/primary',
   '/sessions/read',
+  '/sessions/archive',
 ])
 
 /**
@@ -51,7 +52,7 @@ export function sessionHandlers({ service, fence }: {
     codePrefix: 'sessions',
     internalMessage: 'the owned-session module failed to handle this request',
   })
-  /** One owned session, answered as `{ ok, session }`. Both read routes share it. */
+  /** One owned session, answered as `{ ok, session }`. The one-session routes share it. */
   const oneSession = (resolve: (caller: SessionOwner, sessionId: unknown) => Promise<Parameters<OwnedSessionService['expose']>[0]>) => post(async (body, request) => {
     const caller = callerOf(request)
     const header = await resolve(caller, body.sessionId)
@@ -64,9 +65,13 @@ export function sessionHandlers({ service, fence }: {
       const header = await service.create(caller)
       return { ok: true, session: service.expose(header, caller.shortId, await service.titleOf(header.id)) }
     })],
-    ['/sessions/list', post(async (_body, request) => {
+    ['/sessions/list', post(async (body, request) => {
       const caller = callerOf(request)
-      const listed = await service.list(caller)
+      // The archived view is the same path and the same credential; only the
+      // question changes. Reading the flag here keeps one filter point in the
+      // service, so every caller that does not ask for the archive sees the
+      // active sessions and nothing else.
+      const listed = await service.list(caller, { archived: body.archived === true })
       // One batch fold for the whole list: a title read per row would repeat
       // the persistence listing and could disagree with the one the batch saw.
       const titles = await service.titlesOf(listed.sessions.map(header => header.id))
@@ -83,5 +88,6 @@ export function sessionHandlers({ service, fence }: {
       return { ok: true, session: service.expose(header, caller.shortId, await service.titleOf(header.id)) }
     })],
     ['/sessions/read', oneSession((caller, sessionId) => service.read(caller, sessionId))],
+    ['/sessions/archive', oneSession((caller, sessionId) => service.archive(caller, sessionId))],
   ])
 }

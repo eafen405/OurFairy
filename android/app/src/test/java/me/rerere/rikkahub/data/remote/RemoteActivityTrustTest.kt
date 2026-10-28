@@ -44,6 +44,7 @@ class RemoteActivityTrustTest {
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun create(token: String) = error("not used")
         override suspend fun primary(token: String) = OwnedSession("s", primary = true)
+        override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
     }
     private class Backend : RemoteChatBackend {
         val updates = MutableSharedFlow<RemoteChatProjection>(extraBufferCapacity = 10)

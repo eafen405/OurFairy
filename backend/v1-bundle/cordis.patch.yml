@@ -268,8 +268,16 @@
         # second ownership table to keep in step with the session logs. It reads the
         # dsh session store and its persistence, which the rows above already mount,
         # and reuses the identity module's fence and POST helper.
+        #
+        # `path` is the archive file: the one product fact this module stores. It
+        # sits beside (never inside) `dshHomePath('sessions')`, which is
+        # session-persistence-jsonl's own log root; archiving writes a row, never a
+        # file among the logs. Deleting a conversation is archiving, so a session
+        # leaves the default list while its log and messages stay restorable.
         - id: sessions
           name: '@ourfairy/dsh-sessions'
+          config:
+            path: !!js dshHomePath('session-archive/archive.sqlite')
         # Native session titles: a log-only `session/title` event, a
         # deterministic fallback from the first human message, and the
         # first-message model provider. They are product capabilities, not

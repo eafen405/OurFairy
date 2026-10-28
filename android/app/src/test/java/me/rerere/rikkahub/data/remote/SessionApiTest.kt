@@ -233,6 +233,36 @@ class SessionApiTest {
         }
     }
 
+    // ---- archiving (this product's delete) ----
+
+    @Test
+    fun `archive names the session it wants and answers with it`() = runTest {
+        reply(200, """{"ok":true,"session":{"id":"s-5","owner":"user:1","primary":false,"createdAt":1760003600000}}""")
+
+        val archived = api.archive(TOKEN, "s-5")
+
+        val request = onlyRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/sessions/archive", request.path)
+        assertEquals("Bearer $TOKEN", request.authorization)
+        assertEquals("""{"sessionId":"s-5"}""", request.body)
+        assertEquals("application/json; charset=utf-8", request.contentType)
+        assertEquals("s-5", archived.id)
+    }
+
+    @Test
+    fun `archiving the primary session carries the backend's own refusal code`() = runTest {
+        reply(409, """{"ok":false,"error":{"code":"sessions/primary-not-archivable","message":"the primary session is never archived"}}""")
+
+        try {
+            api.archive(TOKEN, "s-1")
+            fail("expected the refusal to be raised")
+        } catch (refused: IdentityRefused) {
+            assertEquals(409, refused.status)
+            assertEquals("sessions/primary-not-archivable", refused.code)
+        }
+    }
+
     // ---- refusal ----
 
     @Test

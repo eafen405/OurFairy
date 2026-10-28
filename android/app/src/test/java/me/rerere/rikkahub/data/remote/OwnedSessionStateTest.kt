@@ -68,6 +68,11 @@ private class DeferredBackend : SessionBackend {
         )
     }
 
+    override suspend fun archive(token: String, sessionId: String): OwnedSession {
+        await(token)
+        return OwnedSession(id = sessionId, owner = "user:$token")
+    }
+
     private suspend fun await(token: String) {
         seenTokens += token
         withContext(NonCancellable) { gate.await() }
@@ -265,6 +270,7 @@ class OwnedSessionStateTest {
             override suspend fun primary(token: String) = listed
             override suspend fun read(token: String, sessionId: String) = empty
             override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
+            override suspend fun archive(token: String, sessionId: String) = empty
         }
         val state = OwnedSessionState(backend, this)
 
@@ -319,6 +325,7 @@ class OwnedSessionStateTest {
                     code = SessionsSnapshot.EMPTY_TITLE,
                     message = "the title has no visible characters once normalized",
                 )
+            override suspend fun archive(token: String, sessionId: String) = error("not used")
         }
         val state = OwnedSessionState(backend, this)
 
@@ -330,5 +337,63 @@ class OwnedSessionStateTest {
         // words itself, exactly as it words an unreachable backend.
         assertEquals(SessionsSnapshot.EMPTY_TITLE, state.snapshot.value.failure)
         assertEquals(false, state.snapshot.value.loading)
+    }
+
+    @Test
+    fun `archiving drops the row and moves a selection standing in it to main`() = runTest {
+        val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
+        val other = OwnedSession(id = "s-other", owner = "user:alice")
+        val backend = object : SessionBackend {
+            override suspend fun list(token: String) = OwnedSessions(listOf(main, other), main.id)
+            override suspend fun create(token: String) = error("not used")
+            override suspend fun select(token: String, sessionId: String) = other
+            override suspend fun primary(token: String) = main
+            override suspend fun read(token: String, sessionId: String) = other
+            override suspend fun archive(token: String, sessionId: String) = other
+            override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
+        }
+        val state = OwnedSessionState(backend, this)
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        state.select("s-other")
+        advanceUntilIdle()
+        assertEquals("s-other", state.snapshot.value.selectedId)
+
+        state.archive("s-other")
+        advanceUntilIdle()
+
+        assertEquals(listOf("s-alice"), state.snapshot.value.sessions.map { it.id })
+        assertEquals("s-alice", state.snapshot.value.selectedId)
+        assertEquals("s-alice", state.snapshot.value.primarySessionId)
+    }
+
+    @Test
+    fun `a refused archive leaves the list and the selection untouched`() = runTest {
+        val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
+        val other = OwnedSession(id = "s-other", owner = "user:alice")
+        val backend = object : SessionBackend {
+            override suspend fun list(token: String) = OwnedSessions(listOf(main, other), main.id)
+            override suspend fun create(token: String) = error("not used")
+            override suspend fun select(token: String, sessionId: String) = other
+            override suspend fun primary(token: String) = main
+            override suspend fun read(token: String, sessionId: String) = other
+            override suspend fun archive(token: String, sessionId: String): OwnedSession =
+                throw IdentityRefused(409, "sessions/primary-not-archivable", "the primary session is never archived")
+            override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
+        }
+        val state = OwnedSessionState(backend, this)
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        state.select("s-other")
+        advanceUntilIdle()
+
+        state.archive("s-alice")
+        advanceUntilIdle()
+
+        assertEquals(listOf("s-alice", "s-other"), state.snapshot.value.sessions.map { it.id })
+        assertEquals("s-other", state.snapshot.value.selectedId)
+        assertEquals("the primary session is never archived", state.snapshot.value.failure)
     }
 }

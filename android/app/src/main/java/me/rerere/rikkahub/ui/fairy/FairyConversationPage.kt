@@ -122,6 +122,9 @@ fun FairyConversationPage(
                     onClose = { scope.launch { drawer.close() } },
                     onHome = onBack,
                     onSettings = { scope.launch { drawer.close(); onSettings() } },
+                    // A row is stopped by its own id, not by whichever session
+                    // is open: every listed session has its own runtime here.
+                    stopReply = { id -> receive.stopReply(id) },
                 )
             }
         },

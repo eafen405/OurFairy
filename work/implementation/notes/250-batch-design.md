@@ -94,16 +94,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS session_archive_by_session ON session_archive(
   不为抽屉里的一行新造一个「这个会话在回复吗」的端点——回环状态只有被观察的会话才有
   （探查 E15）。`stop` 在空闲时本身就是 no-op。
 
-## 5. 归档视图
+## 5. 归档视图与恢复（#254）
 
-`/sessions/list` 用请求体里的 `archived: true` 切换到归档视图，不新开路径。归档视图里
-不出主会话、不提供物理删除、行名用与默认视图同一条标题规则（后端 `readSessionTitles` 已统一）。
-客户端 `SessionsSnapshot` 增加视图标记，切换视图不得丢掉 `selectedId`。
+`/sessions/list` 用请求体里的 `archived: true` 切换视图，不新开路径（#253 已实现）。行名与默认视图
+用同一条标题规则（后端 `readSessionTitles` 已统一），因此归档视图里的老会话不会是裸 id。
+
+**归档视图不能复用 `OwnedSessionState.snapshot`。** `RemoteReceiveState` 把可见列表当作「允许存在的
+chat」集合（`RemoteReceiveState.kt:53-67`）：不在列表里的会话 id 会被 `detach()`，`mutableSelected`
+也会被重指。若归档视图换了同一条快照的内容，用户「浏览归档」就会把正在进行的会话 chat、通知积压
+全部拆掉。所以归档列表必须是**独立的流/独立的状态**，与主列表共用 `backend`、`token` 与 epoch 守卫，
+但互不覆盖对方的可见集合。
+
+恢复的写侧已在 #253 的表上留好位：一行一会话，`status` 0 活动 / 1 已归档；`archive` 的 upsert 已写明
+「恢复（`status = 0, archived_at = NULL`）后再次归档取新时刻」。所以 #254 只需加一个 `restore` 写、
+`/sessions/restore` 路由与归档视图；**不要改表**、不要为恢复新开表或新包。
+
+恢复的语义边界：
+
+- 只能恢复**自己已归档**的会话：他人会话、不存在、未归档三种情况都不得改变任何状态。
+- 恢复后该会话必须能正常打开并继续对话，历史完整（日志从未被删，这是归档的定义）。
+- 归档视图不出现主会话，也不提供物理删除入口。
 
 ## 6. 两票并行的文件边界
 
 - #252 主改 `backend/chat/**` 与 Android 的 rename 入口。
 - #253 主改 `backend/sessions/**`（含新 store）、bundle 的 `sessions` 行、Android 的归档入口。
-- **抽屉里的行操作两边都会碰**（`IdentitySessionList.kt` 的同一行）。各自只做**增量**：
-  #252 加改名入口，#253 加删除入口；报告前都把 `integration/spec-250` 的最新提交合进自己分支，
-  冲突自己解，不要留给 merger。
+- **抽屉里的行操作三票都会碰**（`IdentitySessionList.kt` 的同一行）。各自只做**增量**：
+  #252 加改名入口，#253 加删除入口，#254 加视图切换与恢复入口；报告前都把 `integration/spec-250`
+  的最新提交合进自己分支，冲突自己解，不要留给 merger。

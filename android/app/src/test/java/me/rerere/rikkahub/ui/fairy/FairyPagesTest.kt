@@ -89,6 +89,7 @@ class FairyPagesTest {
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun primary(token: String) = OwnedSession("main", primary = true)
         override suspend fun create(token: String) = createdSession
+        override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
     }
     private val updates = mutableMapOf<String, MutableStateFlow<RemoteChatProjection>>()
     private val backend = object : RemoteChatBackend {
