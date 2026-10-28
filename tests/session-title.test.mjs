@@ -383,7 +383,7 @@ describe('OurFairy session titles over real HTTP', () => {
       'a second open of a titled session must not ask the model again')
   })
 
-  test('a provider failure keeps the fallback, does not block the reply, and a later process retries the fallback once', async () => {
+  test('a provider failure keeps the fallback, does not block the reply, and is not retried by a later process', async () => {
     releaseTitles()
     titlePlans = []
     const admin = await signIn()
@@ -417,14 +417,17 @@ describe('OurFairy session titles over real HTTP', () => {
     const list = await httpJson(port, '/sessions/list', { token })
     assert.equal(list.ok, true, 'a title failure does not make the list unavailable')
 
-    // A new process sees the fallback and is allowed one retry; the retry
-    // succeeds, so the session is not pinned to the fallback forever.
+    // The durable title-request fact makes the failed attempt visible to a new
+    // process: opening the session again must not spend another model request.
     await stopBackend()
     await startBackend()
     titlePlans = [{ kind: 'text', text: MODEL_TITLE }]
     await httpJson(port, '/chat/read', { token, body: { sessionId: legacy } })
-    await waitListed(token, legacy, session => session.titleSource === TITLE_SOURCE.provider,
-      'a fallback-only session is retried after a restart')
+    await new Promise(resolve => setTimeout(resolve, 250))
+    assert.equal(titleRequests, before + 1, 'a failed title must not be retried after a restart')
+    const afterRestart = await listed(token, legacy)
+    assert.equal(afterRestart.title, '失败场景的历史会话')
+    assert.equal(afterRestart.titleSource, TITLE_SOURCE.fallback)
   })
 
   test('a message sent while the first-open backfill is in flight still ends with a provider title', async () => {
