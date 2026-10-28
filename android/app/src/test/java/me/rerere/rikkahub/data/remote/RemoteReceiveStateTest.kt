@@ -116,7 +116,7 @@ class RemoteReceiveStateTest {
         backend.updates.getValue("alice-other").emit(RemoteChatProjection("alice-other", version = 2).copy(
             cursor = 0, durableThroughSeq = 0,
             events = listOf(kotlinx.serialization.json.Json.parseToJsonElement(
-                """{"seq":0,"type":"session/title","title":"后台兜底标题"}""",
+                """{"seq":0,"type":"session/title","data":{"title":"后台兜底标题"}}""",
             ) as kotlinx.serialization.json.JsonObject),
         )); runCurrent()
         assertEquals("a background session title must re-read the list", opened + 1, sessions.reads)
@@ -125,15 +125,31 @@ class RemoteReceiveStateTest {
             cursor = 1, durableThroughSeq = 1,
             events = listOf(
                 kotlinx.serialization.json.Json.parseToJsonElement(
-                    """{"seq":0,"type":"session/title","title":"后台兜底标题"}""",
+                    """{"seq":0,"type":"session/title","data":{"title":"后台兜底标题"}}""",
                 ) as kotlinx.serialization.json.JsonObject,
                 kotlinx.serialization.json.Json.parseToJsonElement(
-                    """{"seq":1,"type":"session/title","title":"后台模型标题"}""",
+                    """{"seq":1,"type":"session/title","data":{"title":"后台模型标题"}}""",
                 ) as kotlinx.serialization.json.JsonObject,
             ),
         )); runCurrent()
         sessions.gate!!.complete(Unit); runCurrent()
         assertEquals("a title landing during a list read needs a trailing read", opened + 2, sessions.reads)
+    }
+
+    @Test fun `a first projection refreshes a title that changed after the list read`() = runTest {
+        val sessions = Sessions()
+        val backend = Chats()
+        val state = RemoteReceiveState(sessions, backgroundScope, { RemoteChatState(backend, backgroundScope, Store(), "https://fairy") })
+        state.bind("alice", 1); runCurrent()
+        val opened = sessions.reads
+
+        backend.updates.getValue("alice-other").emit(RemoteChatProjection("alice-other", version = 1).copy(
+            cursor = 0, durableThroughSeq = 0,
+            events = listOf(kotlinx.serialization.json.Json.parseToJsonElement(
+                """{"seq":0,"type":"session/title","data":{"title":"列表读后变化的标题"}}""",
+            ) as kotlinx.serialization.json.JsonObject),
+        )); runCurrent()
+        assertEquals(opened + 1, sessions.reads)
     }
 
     @Test fun `the page drives the very session state reception binds and observes`() = runTest {

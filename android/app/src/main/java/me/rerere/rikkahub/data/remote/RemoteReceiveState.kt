@@ -96,16 +96,23 @@ class RemoteReceiveState(
         if (token != null && userShortId != null) owned.refresh()
     }
 
-    private fun refreshTitles() {
+    private fun refreshTitles(sessionId: String, title: String) {
+        val listed = owned.snapshot.value.sessions.firstOrNull { it.id == sessionId } ?: return
+        if (listed.title == title) return
         titleDirty = true
         if (titleRefresh?.isActive == true) return
         titleRefresh = scope.launch {
             while (titleDirty) {
                 titleDirty = false
-                owned.snapshot.first { !it.loading }
-                owned.archived.first { !it.loading }
+                val idle = kotlinx.coroutines.withTimeoutOrNull(30_000) {
+                    owned.snapshot.first { !it.loading }
+                    owned.archived.first { !it.loading }
+                }
+                if (idle == null) return@launch
                 owned.refresh()
-                owned.snapshot.first { !it.loading }
+                kotlinx.coroutines.withTimeoutOrNull(30_000) {
+                    owned.snapshot.first { !it.loading }
+                }
             }
         }
     }

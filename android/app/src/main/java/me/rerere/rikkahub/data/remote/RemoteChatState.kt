@@ -146,7 +146,7 @@ class RemoteChatState(
     private var taskObserver: Job? = null
     private var taskEpoch = 0L
     private var notifier: (() -> Unit)? = null
-    private var titleNotifier: (() -> Unit)? = null
+    private var titleNotifier: ((String, String) -> Unit)? = null
 
     suspend fun speechAvailability(expectedEpoch: Long): RemoteSpeechAvailability {
         check(expectedEpoch == attachmentEpoch)
@@ -233,7 +233,10 @@ class RemoteChatState(
                             projection = projection.copy(messages = orderedMessages()),
                             connected = true, connecting = false, failure = null, syncing = true,
                         )
-                        if (previous != null && projection.titleSeq() > previous.titleSeq()) titleNotifier?.invoke()
+                        val title = projection.titleText()
+                        if (title != null && (previous == null || projection.titleSeq() > previous.titleSeq())) {
+                            titleNotifier?.invoke(projection.sessionId, title)
+                        }
                         scheduleSync(boundEpoch, opened, credential, selected)
                     }
                 } catch (cancelled: CancellationException) {
@@ -276,13 +279,18 @@ class RemoteChatState(
     }
 
     /** A newly observed title row refreshes the shared list, even when this chat is not selected. */
-    internal fun onTitle(notify: () -> Unit) {
+    internal fun onTitle(notify: (String, String) -> Unit) {
         titleNotifier = notify
     }
 
     private fun RemoteChatProjection.titleSeq() = events
         .lastOrNull { it["type"]?.jsonPrimitive?.content == "session/title" }
         ?.get("seq")?.jsonPrimitive?.long ?: -1L
+
+    private fun RemoteChatProjection.titleText() = events
+        .lastOrNull { it["type"]?.jsonPrimitive?.content == "session/title" }
+        ?.get("data")?.let { it as? JsonObject }
+        ?.get("title")?.jsonPrimitive?.content
 
     /**
      * The reminder this session still owes: the session it opens and the output to show. It is

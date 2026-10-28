@@ -421,7 +421,7 @@ class FairyPagesTest {
         updates.getValue("main").value = updates.getValue("main").value.copy(
             version = 3, cursor = 0, durableThroughSeq = 0, fromSeq = 0,
             events = listOf(kotlinx.serialization.json.Json.parseToJsonElement(
-                """{"seq":0,"type":"session/title","title":"晚到的模型标题"}""",
+                """{"seq":0,"type":"session/title","data":{"title":"晚到的模型标题"}}""",
             ) as kotlinx.serialization.json.JsonObject),
         )
         compose.mainClock.advanceTimeBy(1_000)
