@@ -56,9 +56,9 @@ bundle 行是配置值，`tests/session-title.test.mjs` 的第一条用例经 ds
 那是 #252 禁止的。用例
 「a message sent while the first-open backfill is in flight still ends with a provider title」 钉住这个竞态。
 
-**进程内只补一次。** 每个 `/chat/read`、`/chat/page`、`/chat/stop` 都会 `open`，只看日志会让同一次
-标题请求被重复发起；`#titleBackfilled` 集合按 session id 记住已尝试，成功失败都不再重试（失败留给
-下一个进程再试一次）。
+**历史补生成只尝试一次。** 每个 `/chat/read`、`/chat/page`、`/chat/stop` 都会 `open`，只看日志会让同一次
+标题请求被重复发起；`#titleBackfilled` 集合按 session id 记住本进程已尝试，日志中的
+`session/title-llm-request` 让后续进程也知道已经尝试过，成功失败都不再重试。
 
 **失败不打扰用户。** 补生成是 fire-and-forget 且自带 `catch`：失败只写 `warn` 日志，不改回复、不改
 列表可用性。显式 `refresh` 路径本身会把 provider 错误抛给调用者，所以 `catch` 是必需的。

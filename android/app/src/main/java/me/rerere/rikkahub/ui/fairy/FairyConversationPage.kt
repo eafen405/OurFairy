@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.RemoteChatSnapshot
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
@@ -84,16 +86,19 @@ fun FairyConversationPage(
     // The open session's row, the same one the drawer renders: its title is what
     // the bar shows.
     val session = sessions.sessions.firstOrNull { it.id == sessionId }
-    // A title can change without a rename: the first exchange seeds a fallback
-    // title and the model's title follows the reply. The list is the one row
-    // source for the bar, so it is re-read on the running-to-idle edge of the
-    // open session — the moment a model title can have landed. Merely opening a
-    // session does not cross that edge, so opening costs no request.
-    var wasReplying by remember(sessionId) { mutableStateOf(false) }
-    val replying = snapshot?.projection?.let { it.replyStatus != 0 } ?: false
-    LaunchedEffect(sessionId, replying) {
-        if (wasReplying && !replying) receive.owned.refresh()
-        wasReplying = replying
+    // A title can change without a rename, including after the reply has settled.
+    // The list remains the row source; a newly observed title event refreshes it.
+    // The opening projection only establishes the observed seq and costs no read.
+    val titleSeq = snapshot?.projection?.let { projection ->
+        projection.events.lastOrNull { it["type"]?.jsonPrimitive?.content == "session/title" }
+            ?.get("seq")?.jsonPrimitive?.long ?: -1L
+    }
+    var observedTitleSeq by remember(sessionId) { mutableStateOf<Long?>(null) }
+    LaunchedEffect(sessionId, titleSeq) {
+        val current = titleSeq ?: return@LaunchedEffect
+        val previous = observedTitleSeq
+        observedTitleSeq = current
+        if (previous != null && current > previous) receive.owned.refresh()
     }
     val window = snapshot?.fairyWindow() ?: FairyWindowState(presence = FairyPresence.CONNECTING)
     val screenOpen = rememberFairyScreenOpen(window)

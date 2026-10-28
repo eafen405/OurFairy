@@ -309,8 +309,8 @@ export class SessionRuntime {
    * header), so a session written before the title rows were mounted has no
    * `session/title` event and nothing will ever create one. The first open is
    * that session's one chance: the refresh runs detached from the opening
-   * request, a failure is logged and never retried in this process, and a
-   * fallback-only title is retried by a later process.
+   * request, and a failure is logged and never retried. The durable title-request
+   * event makes an earlier failed attempt visible after a process restart too.
    *
    * The source is read twice on purpose. Schedule time decides whether there is
    * work at all; the check right before the refresh is what keeps a user title
@@ -328,9 +328,11 @@ export class SessionRuntime {
     this.#titleBackfilled.add(sessionId)
     void (async () => {
       try {
+        const events = (await readSessionEvents(this.ctx, sessionId)).events
         // The same eligibility rule the native service uses: a human message
         // with visible text. A session without one has no title to generate.
-        if (firstHumanMessageText((await readSessionEvents(this.ctx, sessionId)).events) === undefined) return
+        if (firstHumanMessageText(events) === undefined) return
+        if (events.some(event => (event.type as string) === 'session/title-llm-request')) return
         // A rename may have landed during that read: re-read the source, and
         // leave a user title alone.
         if (!needsBackfill(titles, state)) return

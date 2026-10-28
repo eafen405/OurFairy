@@ -393,33 +393,47 @@ class FairyPagesTest {
         }
     }
 
-    @Test fun `a reply that ends re-reads the list, so the model title reaches the bar`() {
-        // The bar reads the session row, and the model's title only exists after
-        // the reply. Deleting the running-to-idle re-read in the page must fail
-        // this test: the row never changes here, so a list read is the only way
-        // the bar could ever see a new title.
+    @Test fun `a model title arriving after the reply re-reads the list and reaches the bar`() {
         show {
             FairyConversationPage("main", {}, receive, onOpenConversation = {}, onSettings = {})
         }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
-        // The page only shows a live conversation once a chat runtime is selected
-        // for it, and this harness never opens one by itself.
         compose.runOnIdle { scope.launch { receive.openSession("main") } }
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
         compose.waitUntil { receive.selectedChat.value?.snapshot?.value?.sessionId == "main" }
-        val opened = listReads
 
-        // A running reply, then the same session idle: that is the edge.
         updates.getValue("main").value = updates.getValue("main").value.copy(replyStatus = 1, version = 1)
         compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
-        assertEquals("a running reply must not re-read the list", opened, listReads)
-
         updates.getValue("main").value = updates.getValue("main").value.copy(replyStatus = 0, version = 2)
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
-        assertEquals("a reply that ended must re-read the list", opened + 1, listReads)
+        val afterReply = listReads
+
+        // The model title can land after the reply has already settled. Its
+        // session/title event, not the reply edge, is what refreshes the row.
+        listedSessions = listedSessions.copy(
+            sessions = listedSessions.sessions.map {
+                if (it.id == "main") it.copy(title = "晚到的模型标题") else it
+            },
+        )
+        updates.getValue("main").value = updates.getValue("main").value.copy(
+            version = 3, cursor = 0, durableThroughSeq = 0, fromSeq = 0,
+            events = listOf(kotlinx.serialization.json.Json.parseToJsonElement(
+                """{"seq":0,"type":"session/title","title":"晚到的模型标题"}""",
+            ) as kotlinx.serialization.json.JsonObject),
+        )
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.runOnIdle {
+            val observed = receive.selectedChat.value?.snapshot?.value
+            assertEquals(null, observed?.failure)
+            assertEquals(3L, observed?.projection?.version)
+            assertEquals(1, observed?.projection?.events?.size)
+        }
+        compose.waitForIdle()
+        assertEquals("a late model title must re-read the list", afterReply + 1, listReads)
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("晚到的模型标题")
     }
 
     @Test fun `the conversation bar names the open session and follows the row it reads`() {
