@@ -107,18 +107,18 @@ private fun ProxyTerminalHeader(
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "空洞深潜系统",
+            text = "H.D.D.SYSTEM",
             fontFamily = tokens.titleFontFamily,
             fontWeight = FontWeight.Bold,
-            fontSize = 46.sp,
-            letterSpacing = 2.sp,
+            fontSize = 38.sp,
+            letterSpacing = 1.5.sp,
             textAlign = TextAlign.Center,
             color = tokens.textPrimary,
             maxLines = 1,
             // Narrow screens step the title down instead of wrapping it.
             autoSize = TextAutoSize.StepBased(
-                minFontSize = 30.sp,
-                maxFontSize = 46.sp,
+                minFontSize = 24.sp,
+                maxFontSize = 38.sp,
                 stepSize = 2.sp,
             ),
             modifier = Modifier.fillMaxWidth(),

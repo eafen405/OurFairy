@@ -748,7 +748,7 @@ class FairyPagesTest {
         compose.mainClock.advanceTimeBy(5_000)
         compose.waitForIdle()
 
-        compose.onNodeWithText("空洞深潜系统").assertIsDisplayed()
+        compose.onNodeWithText("H.D.D.SYSTEM").assertIsDisplayed()
         compose.onAllNodesWithText("登录").onFirst().assertIsDisplayed()
         screenshot("sign-in")
     }
