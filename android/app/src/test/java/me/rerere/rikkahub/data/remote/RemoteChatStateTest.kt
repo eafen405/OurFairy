@@ -375,6 +375,20 @@ class RemoteChatStateTest {
         assertEquals(1, backend.stopped)
     }
 
+    @Test fun `stopReply awaits the stop of the session this state is bound to`() = runTest {
+        val backend = Backend()
+        val state = RemoteChatState(backend, backgroundScope, MemoryChatSyncStore(), "https://fairy")
+        // Nothing is bound yet, so there is no session to stop.
+        state.stopReply()
+        assertEquals(0, backend.stopped)
+        state.bind("alice", "s1", 1)
+        runCurrent()
+
+        state.stopReply()
+
+        assertEquals(1, backend.stopped)
+    }
+
     @Test fun `older same generation projection cannot overwrite newer content`() = runTest {
         val backend = Backend()
         val state = RemoteChatState(backend, backgroundScope, MemoryChatSyncStore(), "https://fairy")

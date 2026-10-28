@@ -69,6 +69,16 @@ interface SessionBackend {
     suspend fun primary(token: String): OwnedSession
 
     suspend fun read(token: String, sessionId: String): OwnedSession
+
+    /**
+     * Archive one session — this product's delete.
+     *
+     * The log, the messages and the history stay; what changes is that the
+     * session is no longer offered in the default list and can be restored.
+     * The backend refuses the primary session, which is where replies and
+     * notifications land.
+     */
+    suspend fun archive(token: String, sessionId: String): OwnedSession
 }
 
 @Serializable
@@ -133,6 +143,10 @@ class SessionApi(
 
     override suspend fun read(token: String, sessionId: String): OwnedSession =
         call("/sessions/read", document = json.encodeToString(SessionDocument(sessionId)), token = token)
+            .named()
+
+    override suspend fun archive(token: String, sessionId: String): OwnedSession =
+        call("/sessions/archive", document = json.encodeToString(SessionDocument(sessionId)), token = token)
             .named()
 
     private suspend fun call(

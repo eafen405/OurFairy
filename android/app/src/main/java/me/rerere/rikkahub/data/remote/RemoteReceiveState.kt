@@ -92,6 +92,18 @@ class RemoteReceiveState(
 
     fun stateForSession(sessionId: String): RemoteChatState? = chats[sessionId]
 
+    /**
+     * Stop one listed session's reply and wait for the backend to accept it.
+     *
+     * The drawer acts on rows it may not have selected, so this is keyed by the
+     * row's own id rather than by whatever session is currently open. A session
+     * with no runtime, or one that is idle, makes this a no-op — the backend's
+     * stop is itself a no-op when nothing is running.
+     */
+    suspend fun stopReply(sessionId: String) {
+        chats[sessionId]?.stopReply()
+    }
+
     /** Open a route target through the account's authenticated session read. */
     suspend fun openSession(sessionId: String): Boolean {
         if (token == null || userShortId == null) return false

@@ -630,14 +630,23 @@ class RemoteChatState(
         }
     }
     fun stop() {
+        scope.launch { stopReply() }
+    }
+
+    /**
+     * Stop the reply of the session this state is bound to, awaiting the answer.
+     *
+     * [stop] is the same operation fired and forgotten. The archive flow awaits
+     * it so "stop the reply, then archive" is one ordered pair of requests
+     * instead of two racing ones — a stop is a no-op when nothing is running.
+     */
+    suspend fun stopReply() {
         val credential = token ?: return
         val selected = key ?: return
         val started = epoch
-        scope.launch {
-            try { backend.stop(credential, selected.sessionId) }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { if (started == epoch) mutable.value = mutable.value.copy(failure = failure.description()) }
-        }
+        try { backend.stop(credential, selected.sessionId) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (failure: Exception) { if (started == epoch) mutable.value = mutable.value.copy(failure = failure.description()) }
     }
     /** Opening or closing this view owns a polling lease, never the remote process. */
     fun observeTaskOutput(taskId: String) {

@@ -80,6 +80,7 @@ class RemoteNotificationStateTest {
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun create(token: String) = error("not used")
         override suspend fun primary(token: String) = OwnedSession(ids.getValue(token), primary = true)
+        override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
     }
 
     private fun TestScope.received(
