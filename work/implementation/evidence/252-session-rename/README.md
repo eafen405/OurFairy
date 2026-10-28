@@ -44,7 +44,7 @@ Android：
 | --- | --- |
 | `data/remote/SessionApi.kt` | `SessionBackend.rename(token, sessionId, title)` 与 `SessionApi` 实现（POST `/sessions/rename`，文档 `{sessionId,title}`，与 select/read 同形） |
 | `data/remote/OwnedSessionState.kt` | `rename(sessionId, title)` 走既有 `request{}` 守卫，用后端返回的行 `joined(stand = false)`；新增哨兵 `EMPTY_TITLE`，让 drawer 用自己的话术说「空标题」 |
-| `ui/identity/IdentitySessionList.kt` | 行内改名入口（非主会话行）+ 改名对话框；拒绝时对话框不关、把判定写在输入框下 |
+| `ui/identity/IdentitySessionList.kt` | 行内改名入口（非主会话行，与 #253 的删除入口并列）+ 改名对话框；拒绝时对话框不关、把判定写在输入框下 |
 | `ui/fairy/FairyWindowBar.kt` | `FairyWindowTopBar(title = …)`：有名字的会话把会话名放首行，产品名牌退为状态行的小标签；无名字仍显示名牌。标题列占满剩余宽度并省略号截断，状态行行为不变 |
 | `ui/fairy/FairyConversationPage.kt` | 标题栏读 `receive.owned.snapshot` 里**同一个 `OwnedSession` 行**；回复由运行转空闲时刷新这份列表（模型标题就在这一刻落地），只在这一条边沿刷新，进入会话本身不花请求 |
 
@@ -92,7 +92,21 @@ Android（`android/`）：
 | --- | --- |
 | `./gradlew test --tests …`（`test` 聚合任务不接受 `--tests`） | 不可用：`Unknown command-line option '--tests'`，改用 `:app:testDebugUnitTest` |
 | `./gradlew :app:testDebugUnitTest --tests SessionApiTest --tests OwnedSessionStateTest --tests FairyPagesTest` | **通过**（25 个用例中含本票新增 5 个） |
-| `./gradlew test lintDebug` | 见下（全量） |
+| `./gradlew test lintDebug`（全量，提交前钩子与手工各一次） | **BUILD SUCCESSFUL**：`:app:testDebugUnitTest` 与 app/ui/highlight 三个模块的 `lintDebug` 全绿 |
+| 并入 `integration/spec-250`（含 #253）后 `./gradlew :app:testDebugUnitTest` | **BUILD SUCCESSFUL**（两侧用例同在） |
+
+### 并入 `integration/spec-250`（含 #253）
+
+分支提交前并入 `e344d64531`（#253 已落地）。冲突全部是「同一行 UI / 同一组测试替身」：
+
+- `IdentitySessionList.kt`：抽屉行现在**同时**有改名与删除入口（非主会话行两个 IconButton），
+  改名对话框与归档确认框是两个独立块；`stopReply` 参数（#253）保留。
+- `SessionApi.kt` / `OwnedSessionState.kt`：`rename` 与 `archive` 并存，各自保留自己的 KDoc 与折叠规则。
+- 测试替身：每个 `SessionBackend` 实现补齐 `rename`/`archive` 两个方法（#253 新增的
+  `IdentitySessionListTest` 也在内）；`OwnedSessionStateTest` 同时保留两侧新增用例。
+- `backend/sessions/src/index.ts` / `README.md`：`SESSION_RENAME_PATH` 与归档 store 导出并存。
+
+合并后跑全量后端 **405 通过 / 0 失败**（含两侧全部用例）。
 
 沙箱要求的两处环境适配（不是绕过门禁：门禁本身照跑，只是把可写的缓存放到工作区内）：
 
