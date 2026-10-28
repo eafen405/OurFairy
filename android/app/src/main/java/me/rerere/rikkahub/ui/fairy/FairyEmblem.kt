@@ -422,10 +422,18 @@ private fun DrawScope.drawEyeIris(
         style = Stroke(width = (Q_RING_OUTER - inner) * unit),
         alpha = alpha,
     )
+    val highlightRadius = 3.2f * unit * pupil
+    val highlightCenter = fairyEyeHighlightCenter(center, unit, gaze, pupil)
     drawCircle(
-        color = EyeQRing,
-        radius = 3.2f * unit * pupil,
-        center = fairyEyeHighlightCenter(center, unit, gaze, pupil),
+        brush = Brush.radialGradient(
+            0f to EyeQRing,
+            0.7f to EyeQRing,
+            1f to EyeQRing.copy(alpha = 0f),
+            center = highlightCenter,
+            radius = highlightRadius,
+        ),
+        radius = highlightRadius,
+        center = highlightCenter,
         alpha = alpha,
     )
 }
