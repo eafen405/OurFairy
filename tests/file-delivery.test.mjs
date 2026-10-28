@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { before, after, test } from 'node:test'
 import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const home = makeHome('ourfairy-file-delivery-')
 const password = 'group-test-password'
@@ -52,6 +53,9 @@ async function stopBackend() {
 before(async () => {
   model = http.createServer(async (req, res) => {
     let data = ''; for await (const chunk of req) data += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(data, res)) return
     if (req.url.endsWith('/files')) {
       res.writeHead(404,{'content-type':'application/json'}); res.end(JSON.stringify({error:{type:'not_found_error',message:'model double uses inline image fallback'}})); return
     }

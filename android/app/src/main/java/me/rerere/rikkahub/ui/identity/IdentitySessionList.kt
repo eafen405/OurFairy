@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -88,18 +88,34 @@ internal fun IdentitySessionList(
             if (snapshot.sessions.isEmpty() && !snapshot.loading) {
                 item { Text("暂无会话", modifier = Modifier.padding(16.dp), color = tokens.textMuted) }
             }
-            itemsIndexed(snapshot.sessions, key = { _, session -> session.id }) { index, session ->
+            items(snapshot.sessions, key = { session -> session.id }) { session ->
                 val selected = session.id == snapshot.selectedId
-                Column(
+                Row(
                     Modifier.fillMaxWidth()
                         .background(if (selected) tokens.pill else tokens.panelOpaque, tokens.panelShape)
                         .semantics { this.selected = selected }
                         .clickable(enabled = !snapshot.loading) { onOpen(session.id) }
                         .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(if (session.primary) "主会话" else "会话 ${index + 1}", style = MaterialTheme.typography.titleSmall)
-                    Text(session.id, style = MaterialTheme.typography.labelSmall, color = tokens.textMuted,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // The session's own name is the row's name. An unnamed session
+                    // shows a placeholder; the opaque id is never the displayed
+                    // name. The primary binding stays a marker beside the title.
+                    Text(
+                        session.title.ifEmpty { "新会话" },
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (session.primary) {
+                        Text(
+                            "主会话",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = tokens.textMuted,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
                 }
             }
         }

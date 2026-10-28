@@ -18,6 +18,7 @@ import { after, before, test } from 'node:test'
 import {
   describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const home = makeHome('ourfairy-memory-policy-')
 const password = 'memory-policy-password'
@@ -105,6 +106,9 @@ before(async () => {
     // Collect first: decoding per network chunk splits a multi-byte character.
     const chunks = []
     for await (const chunk of incoming) chunks.push(chunk)
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(Buffer.concat(chunks).toString('utf8'), response)) return
     const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
     requests.push(body)
     emitText(response, isChild(body) ? 'MAINTENANCE-DONE' : `ACK:${latestUserText(body).slice(0, 60)}`)

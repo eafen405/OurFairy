@@ -11,9 +11,9 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { dshDir, describeRun, DURABLE_LOG, makeHome, readReport, removeHome, runBackendAsync } from './helpers/backend.mjs'
+import { describeRun, DURABLE_LOG, makeHome, readReport, removeHome, runBackendAsync } from './helpers/backend.mjs'
 
-const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 
 const home = makeHome('ourfairy-model-double-')
 const reportPath = join(home, 'turn-report.json')
@@ -24,7 +24,7 @@ after(async () => {
 })
 
 test('one real turn reaches the external model double, registers tools, and persists the session', async () => {
-  server = await startMockLlmServer({
+  server = await startTitleAwareModel({
     host: '127.0.0.1',
     port: 0,
     apiKey: 'mock-key',

@@ -44,27 +44,33 @@ export function sessionHandlers({ service, fence }: {
   /** One owned session, answered as `{ ok, session }`. Both read routes share it. */
   const oneSession = (resolve: (caller: SessionOwner, sessionId: unknown) => Promise<Parameters<OwnedSessionService['expose']>[0]>) => post(async (body, request) => {
     const caller = callerOf(request)
-    return { ok: true, session: service.expose(await resolve(caller, body.sessionId), caller.shortId) }
+    const header = await resolve(caller, body.sessionId)
+    return { ok: true, session: service.expose(header, caller.shortId, await service.titleOf(header.id)) }
   })
 
   return new Map([
     ['/sessions/create', post(async (_body, request) => {
       const caller = callerOf(request)
-      return { ok: true, session: service.expose(await service.create(caller), caller.shortId) }
+      const header = await service.create(caller)
+      return { ok: true, session: service.expose(header, caller.shortId, await service.titleOf(header.id)) }
     })],
     ['/sessions/list', post(async (_body, request) => {
       const caller = callerOf(request)
       const listed = await service.list(caller)
+      // One batch fold for the whole list: a title read per row would repeat
+      // the persistence listing and could disagree with the one the batch saw.
+      const titles = await service.titlesOf(listed.sessions.map(header => header.id))
       return {
         ok: true,
-        sessions: listed.sessions.map(header => service.expose(header, caller.shortId)),
+        sessions: listed.sessions.map(header => service.expose(header, caller.shortId, titles.get(header.id))),
         primarySessionId: listed.primarySessionId,
       }
     })],
     ['/sessions/select', oneSession((caller, sessionId) => service.read(caller, sessionId))],
     ['/sessions/primary', post(async (_body, request) => {
       const caller = callerOf(request)
-      return { ok: true, session: service.expose(await service.primary(caller), caller.shortId) }
+      const header = await service.primary(caller)
+      return { ok: true, session: service.expose(header, caller.shortId, await service.titleOf(header.id)) }
     })],
     ['/sessions/read', oneSession((caller, sessionId) => service.read(caller, sessionId))],
   ])

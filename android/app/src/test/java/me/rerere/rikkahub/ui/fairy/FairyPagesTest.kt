@@ -60,7 +60,11 @@ class FairyPagesTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var user = IdentityUser(2, "agent-two")
     private var listedSessions = OwnedSessions(
-        listOf(OwnedSession("main", primary = true), OwnedSession("other")), "main",
+        listOf(
+            OwnedSession("main", primary = true, title = "主会话标题"),
+            OwnedSession("other", title = "另一个会话"),
+        ),
+        "main",
     )
     private var createdSession = OwnedSession("created")
     private val sessions = object : SessionBackend {
@@ -163,6 +167,8 @@ class FairyPagesTest {
         compose.waitForIdle()
         screenshot("home-selected")
 
+        // The console still reports the opaque current-session id; the drawer is
+        // where the ticket replaces it with the session's title.
         compose.onNodeWithText("other").assertIsDisplayed()
         compose.onNodeWithText("进入会话").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(Screen.Conversation("other"), destination) }
@@ -202,9 +208,36 @@ class FairyPagesTest {
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
         compose.onNodeWithContentDescription("关闭会话列表").assertIsDisplayed()
+        // The row is named by the session's own title. The ordinal ("会话 1") and
+        // the opaque id are what the drawer used to show instead, so both must be
+        // gone; the main-session binding survives as a marker beside the title.
+        compose.onNodeWithText("主会话标题").assertIsDisplayed()
+        compose.onNodeWithText("另一个会话").assertIsDisplayed()
         compose.onNodeWithText("主会话").assertIsDisplayed()
-        compose.onNodeWithText("other").assertIsDisplayed()
+        compose.onNodeWithText("会话 1").assertDoesNotExist()
+        compose.onNodeWithText("会话 2").assertDoesNotExist()
+        compose.onNodeWithText("main").assertDoesNotExist()
+        compose.onNodeWithText("other").assertDoesNotExist()
         compose.runOnIdle { assertEquals(Screen.Sessions, destination) }
+    }
+
+    @Test fun `an untitled session shows a placeholder, never its opaque id`() {
+        listedSessions = OwnedSessions(
+            listOf(
+                OwnedSession("main", primary = true, title = "主会话标题"),
+                OwnedSession("unnamed-7f3a9c1b"),
+            ),
+            "main",
+        )
+        conversation()
+        compose.onNodeWithContentDescription("切换会话").performClick()
+        compose.mainClock.advanceTimeBy(500)
+
+        // The named row shows its title; the titled backend row is not the only
+        // shape, so the unnamed one shows the placeholder rather than its id.
+        compose.onAllNodesWithText("主会话标题").assertCountEquals(1)
+        compose.onAllNodesWithText("新会话").assertCountEquals(1)
+        compose.onAllNodesWithText("unnamed-7f3a9c1b").assertCountEquals(0)
     }
 
     @Test
@@ -372,7 +405,7 @@ class FairyPagesTest {
         conversation()
         compose.onNodeWithContentDescription("切换会话").performClick()
         compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithText("other").performClick()
+        compose.onNodeWithText("另一个会话").performClick()
         compose.mainClock.advanceTimeBy(600)
         compose.runOnIdle { assertEquals("other", receive.owned.snapshot.value.selectedId) }
         compose.onNodeWithContentDescription("切换会话").performClick()
@@ -384,7 +417,7 @@ class FairyPagesTest {
     }
 
     @Test fun `creating an existing empty conversation enters it without adding a row`() {
-        createdSession = OwnedSession("other")
+        createdSession = OwnedSession("other", title = "复用会话")
         var target by mutableStateOf("main")
         show {
             FairyConversationPage(target, {}, receive,
@@ -410,7 +443,7 @@ class FairyPagesTest {
         compose.onNodeWithText("会话不可用").assertDoesNotExist()
         compose.onNodeWithContentDescription("切换会话").performClick()
         compose.mainClock.advanceTimeBy(500)
-        compose.onAllNodesWithText("other").assertCountEquals(1)
+        compose.onAllNodesWithText("复用会话").assertCountEquals(1)
     }
 
     @Test fun `unavailable restored conversation offers another session`() {

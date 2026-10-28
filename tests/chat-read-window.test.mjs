@@ -100,6 +100,10 @@ function makeWorld() {
       return () => listeners.set(name, list.filter(item => item !== handler))
     },
     effect(execute) { return execute() },
+    // Optional services are read with `ctx.get`; this world mounts none of
+    // them, so the title backfill finds no `sessionTitle` row and stays out of
+    // the way — the same degradation a profile without that row has.
+    get(name) { return this[name] },
     ourfairySessions: { async read() {} },
     agentDefaultModel: { currentSelection: () => ({ provider: 'mock', model: 'mock' }) },
     agents: {

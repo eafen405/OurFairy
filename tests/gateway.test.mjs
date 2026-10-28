@@ -16,11 +16,11 @@ import { after, test } from 'node:test'
 // modules below are loaded; it must stay the first helper import of this file.
 import './helpers/dsh-peers.mjs'
 import {
-  dshDir, describeRun, httpJson, makeHome, readReport, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
+  describeRun, httpJson, makeHome, readReport, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'gateway-password'
-const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 const { loadOverlayPatches } = await import('@deepseek-ai/dsh-app-boot')
 const { flattenEntries } = await import('../scripts/combo.ts')
 const { Config: PiAiConfig } = await import('@deepseek-ai/dsh-llm-pi-ai')
@@ -51,7 +51,7 @@ function freshHome() {
 
 /** Start one loopback Messages double and return it with the env that selects it. */
 async function modelDouble(options = {}) {
-  const server = await startMockLlmServer({ host: '127.0.0.1', port: 0, apiKey: 'mock-key', sequence: ['success'], ...options })
+  const server = await startTitleAwareModel({ host: '127.0.0.1', port: 0, apiKey: 'mock-key', sequence: ['success'], ...options })
   servers.push(server)
   return { server, env: { OURFAIRY_MINIMAX_BASE_URL: `${server.baseURL}`, MINIMAX_CN_API_KEY: 'mock-key' } }
 }

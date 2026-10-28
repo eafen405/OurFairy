@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { before, after, test } from 'node:test'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { dshDir, describeRun, leadingJsonObject, makeHome, messageBlocks, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks } from './helpers/backend.mjs'
-const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
+import { describeRun, leadingJsonObject, makeHome, messageBlocks, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks } from './helpers/backend.mjs'
+import { answerIfTitle, startTitleAwareModel } from './helpers/title-aware.mjs'
 const home = makeHome('ourfairy-attachments-'), password = 'attachment-password'
 let model, port, admin, alice, bob
 async function start() {
@@ -49,7 +49,7 @@ async function upload(user, sessionId, bytes, name, mime) {
   assert.equal(complete.status, 200, JSON.stringify(complete)); return complete.body.upload
 }
 before(async () => {
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['success'], repeatLast: true, successText: 'attachment received' })
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['success'], repeatLast: true, successText: 'attachment received' })
   await start(); admin = (await request('/identity/sign-in', null, { name: 'phaethon', password })).body
   alice = await user('attachment-alice'); bob = await user('attachment-bob')
 })
@@ -180,6 +180,9 @@ async function startToolModel() {
   const requests = []
   const server = createServer(async (req, res) => {
     let bytes = ''; for await (const chunk of req) bytes += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(bytes, res)) return
     const body = JSON.parse(bytes); requests.push({ body })
     const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
     const commandIndex = blocks.findLastIndex(c => c.type === 'text' && c.text.startsWith('{"tool":'))

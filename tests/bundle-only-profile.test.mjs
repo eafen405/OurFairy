@@ -42,7 +42,7 @@ const { combo } = readCombo(repoRoot)
 const { backend } = combo
 const dshDir = repoPath(combo, 'dsh')
 const dshBin = join(dshDir, 'apps', 'cli', 'lib', 'bin.js')
-const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 
 const BUNDLE_PACKAGE = backend.bundlePackage
 const PROBE_PACKAGE = backend.probePackage
@@ -57,7 +57,7 @@ const homes = []
 let model
 
 before(async () => {
-  model = await startMockLlmServer({ host: '127.0.0.1', port: 0, apiKey: 'bundle-only-key', sequence: ['success'], successText })
+  model = await startTitleAwareModel({ host: '127.0.0.1', port: 0, apiKey: 'bundle-only-key', sequence: ['success'], successText })
 })
 
 after(async () => {

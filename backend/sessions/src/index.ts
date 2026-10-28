@@ -45,6 +45,11 @@ export function apply(ctx: Context): void {
 
 export { OwnedSessionService, primarySessionIdOf, sessionIdOf, SessionScopeError } from './service.js'
 export { SESSION_PATHS, sessionHandlers } from './http.js'
+export {
+  FALLBACK_MAX_BYTES, FALLBACK_MAX_WORDS, MAX_TITLE_BYTES, NO_TITLE, TITLE_SOURCE,
+  deriveFallbackTitle, firstHumanMessageText, readSessionEvents, readSessionTitles, titleFactOf,
+} from './events.js'
+export type { SessionTitleFact, TitleSourceCode } from './events.js'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

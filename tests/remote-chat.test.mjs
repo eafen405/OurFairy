@@ -4,9 +4,9 @@ import { join } from 'node:path'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { before, after, test } from 'node:test'
-import { dshDir, describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 
-const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 const home = makeHome('ourfairy-chat-')
 const password = 'test-chat-password'
 const answer = '# Fairy\n\n你好，**世界**。\n```js\n1 + 1\n```\n最后。'
@@ -53,7 +53,7 @@ async function eventually(work, check, timeout = 15000) {
   assert.fail(`condition not reached: ${JSON.stringify(value)}`)
 }
 before(async () => {
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
     successText: answer, chunkSize: 2, chunkDelayMs: 15 })
   await start()
   admin = (await request('/identity/sign-in', undefined, { name: 'phaethon', password })).body
@@ -248,7 +248,7 @@ test('a stop settles the visible prefix as interrupted and does not cancel the n
 test('a failed model attempt retains its exact partial text after a cold restart', async () => {
   await stop()
   await model.close()
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['partial_eof'], repeatLast: true,
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['partial_eof'], repeatLast: true,
     partialText: '失败前原文\n**不能丢**。', chunkSize: 2 })
   await start()
   const sessionId = await session(bob.token)
@@ -267,7 +267,7 @@ test('a failed model attempt retains its exact partial text after a cold restart
 test('the deployment owner identity is separate from a chat attempt to edit the persona', async () => {
   await stop()
   await model.close()
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
     successText: answer, chunkSize: 1, chunkDelayMs: 5 })
   await start()
   const sessionId = await session(admin.token)
@@ -319,7 +319,7 @@ test('stopping the current reply preserves accepted queued input for the next wa
 test('stopping before visible output records interruption rather than a failed reply', async () => {
   await stop()
   await model.close()
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['stall'], repeatLast: true })
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['stall'], repeatLast: true })
   await start()
   const sessionId = await session(alice.token)
   await request('/chat/send', alice.token, { sessionId, requestId: 'stop-before-text', text: 'wait for output' })

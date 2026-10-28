@@ -3,15 +3,15 @@ import http from 'node:http'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { createGunzip } from 'node:zlib'
-import { dshDir, httpJson, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { httpJson, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 
 test('a backpressured SSE observer catches up without replaying superseded reply snapshots', async () => {
-  const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
   const historyTurns = 40
   const reply = 'A fixed streaming reply. '.repeat(100).slice(0, 2048)
   const fragmentCount = reply.length / 8
   const home = makeHome('ourfairy-stream-pressure-')
-  const model = await startMockLlmServer({ host: '127.0.0.1', port: 0, apiKey: 'mock-key',
+  const model = await startTitleAwareModel({ host: '127.0.0.1', port: 0, apiKey: 'mock-key',
     sequence: [...Array(historyTurns).fill('success'), 'slow_success'],
     // Exceed the shared 32 ms publication window so cadence cannot mask transport backlog.
     successText: reply, chunkSize: 8, chunkDelayMs: 40 })
