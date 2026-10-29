@@ -145,7 +145,7 @@
 ## 票 #270 依据多会话基线受控优化接收生命周期
 
 - 分支 `ticket/270-receive-lifecycle`，worktree `.worktrees/259-270-receive-lifecycle`，基线
-  `TG268_TIP_TBD`（`integration/spec-259`，含 #268 与 #269）。
+  `0786bcb9fd`（`integration/spec-259`，含 #268 与 #269）。
 - 票面：[`work/tickets/259/270.md`](../../../tickets/259/270.md)。
 
 ### 决定：不做运行时释放或调度优化
