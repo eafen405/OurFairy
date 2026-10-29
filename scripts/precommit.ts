@@ -14,9 +14,10 @@
  * installs, a merge, an explicit `--full`, or a selection wider than the limit
  * run the whole suite.
  *
- * The selection is a direct-surface choice, not a coverage claim: a package no
- * test imports on purpose falls to `typecheck`, and the closing ticket runs the
- * full suite.
+ * The selection is a direct-surface choice, not a coverage claim: a suite that
+ * drives a package through the launcher rather than importing it declares the
+ * package in its own `@covers` line, a package no test declares or names falls
+ * to `typecheck`, and the closing ticket runs the full suite.
  *
  * Final backend and changed-face Android checks remain mandatory;
  * `CODING_STANDARDS.md` names the delivery commands and CI runs both product faces.
@@ -148,11 +149,35 @@ function productPackageName(root: string, name: string): string | undefined {
 }
 
 /**
+ * The line a test file writes to declare the product package it drives.
+ *
+ * A behaviour suite that reaches a package through the launcher and the
+ * product's HTTP routes imports no source from that package, so the body-name
+ * signal cannot see the association. The file states it instead, which keeps
+ * the association in the one file that knows it — there is no list to sync.
+ */
+const COVERS_DECLARATION = /@covers\s+backend\/([a-z0-9-]+)/gu
+
+/**
+ * Whether a test file declares one of the changed packages.
+ * @param body - the test file's text
+ * @param changed - package directory names under `backend/`
+ * @returns
+ */
+function declaresAny(body: string, changed: ReadonlySet<string>): boolean {
+  for (const [, name] of body.matchAll(COVERS_DECLARATION)) {
+    if (changed.has(name!)) return true
+  }
+  return false
+}
+
+/**
  * The test files a staged change is related to.
  *
  * Staged test files are always selected. A changed product package selects the
- * tests whose body names that package, and a changed script selects the tests
- * whose body names that script. A Markdown change selects the link check.
+ * tests that name it or declare it on a `@covers backend/<package>` line, and a
+ * changed script selects the tests whose body names that script. A Markdown
+ * change selects the link check.
  * @param paths staged paths, repository-relative
  * @param [options]
  * @returns repo-relative test paths.
@@ -160,6 +185,7 @@ function productPackageName(root: string, name: string): string | undefined {
 export function relatedTests(paths: string[], { root = repoRoot }: { root?: string } = {}): string[] {
   const selected = new Set<string>()
   const needles: string[] = []
+  const changedPackages = new Set<string>()
   for (const path of paths) {
     if (/^tests\/.+\.test\.mjs$/u.test(path)) {
       selected.add(path)
@@ -171,8 +197,10 @@ export function relatedTests(paths: string[], { root = repoRoot }: { root?: stri
     }
     const productPackage = /^backend\/([^/]+)\//u.exec(path)
     if (productPackage !== null) {
-      needles.push(`backend/${productPackage[1]}/`)
-      const published = productPackageName(root, productPackage[1]!)
+      const name = productPackage[1]!
+      changedPackages.add(name)
+      needles.push(`backend/${name}/`)
+      const published = productPackageName(root, name)
       if (published !== undefined) needles.push(published)
       continue
     }
@@ -182,7 +210,7 @@ export function relatedTests(paths: string[], { root = repoRoot }: { root?: stri
   if (needles.length > 0) {
     for (const file of testFiles(root)) {
       const body = readFileSync(join(root, file), 'utf8')
-      if (needles.some(needle => body.includes(needle))) selected.add(file)
+      if (needles.some(needle => body.includes(needle)) || declaresAny(body, changedPackages)) selected.add(file)
     }
   }
   return [...selected].sort()
