@@ -12,9 +12,11 @@
  * that names a related test runs that test, a source change with no related
  * test runs the type check, and only the authorities that decide what every
  * package installs run the whole suite. The selection is a direct-surface
- * choice, not a coverage claim: a suite that drives a package through the
- * launcher declares it on its own `@covers` line, a package no test declares or
- * names falls to `typecheck`, and the closing ticket runs the full suite.
+ * choice, not a coverage claim: the selector reads the changed path's direct
+ * references in a test body plus any `@covers backend/<package>` line the file
+ * writes for itself; whether a suite that drives a package through the launcher
+ * carries that line is the suite's own call, a package no test declares or names
+ * falls to `typecheck`, and the closing ticket runs the full suite.
  *
  * The commands themselves are not run: this file pins the classification, the
  * selection, and the command list, and the hook's own run is what proves the
