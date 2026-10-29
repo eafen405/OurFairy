@@ -6,7 +6,13 @@
  * a passing after-run, a history-slope regression, and a missing cell.
  */
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
+import { BENCHMARK_CELLS, HISTORY_TURN_COUNTS, OBSERVER_COUNTS } from '../scripts/bench-workload.ts'
 import { evaluateGates, median } from '../scripts/bench-gate.ts'
 
 const run = (historyTurns, observers, { cpu, readP95, memoryMb, payloadMb }) => ({
@@ -67,6 +73,42 @@ test('a missing cell fails instead of silently skipping a gate', () => {
   const result = evaluateGates([baseline], [incomplete])
   assert.equal(result.pass, false)
   assert.deepEqual(result.missing, ['160/2'])
+})
+
+test('the workload module owns the history and observer counts and derives the four cells', () => {
+  assert.deepEqual(HISTORY_TURN_COUNTS, [40, 160])
+  assert.deepEqual(OBSERVER_COUNTS, [1, 2])
+  assert.deepEqual(BENCHMARK_CELLS.map(cell => [cell.historyTurns, cell.observers, cell.key]), [
+    [40, 1, '40/1'],
+    [40, 2, '40/2'],
+    [160, 1, '160/1'],
+    [160, 2, '160/2'],
+  ])
+})
+
+test('the gate checks every cell the workload module derives', () => {
+  const sameCells = cells => doc(cells.map(({ historyTurns, observers }) =>
+    run(historyTurns, observers, { cpu: 2, readP95: 10, memoryMb: 250, payloadMb: 27 })))
+  const result = evaluateGates([sameCells(BENCHMARK_CELLS)], [sameCells(BENCHMARK_CELLS)])
+  assert.deepEqual(result.missing, [], 'a document carrying every derived cell leaves none missing')
+  assert.deepEqual(result.checks.filter(check => check.gate === 'readP95').map(check => check.cell),
+    BENCHMARK_CELLS.map(cell => cell.key), 'the per-cell gates read the derived cells')
+})
+
+test('importing the workload module starts no benchmark, parses no argument and writes no file', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'bench-workload-'))
+  try {
+    const result = spawnSync(process.execPath, ['--input-type=module', '--eval', 'await import(process.argv[1])',
+      fileURLToPath(new URL('../scripts/bench-workload.ts', import.meta.url)),
+      '--baseline', 'missing.json', '--after', 'missing.json', '--out', 'benchmark.json'],
+    { cwd, encoding: 'utf8', timeout: 10_000 })
+    assert.equal(result.status, 0, 'an import is not a CLI run')
+    assert.equal(result.stdout, '')
+    assert.equal(result.stderr, '')
+    assert.equal(existsSync(join(cwd, 'benchmark.json')), false, 'the benchmark must not run on import')
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
 })
 
 test('median uses the two middle values for an even sample', () => {
