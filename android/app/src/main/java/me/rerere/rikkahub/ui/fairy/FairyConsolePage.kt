@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.ui.fairy
 
-import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,11 +19,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,7 +35,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,18 +53,16 @@ import me.rerere.rikkahub.data.remote.IdentityUser
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import org.koin.compose.koinInject
 
-internal const val FIRST_LINE_MS = 45_000L
-private const val NEXT_LINE_MIN_MS = 60_000L
-private const val NEXT_LINE_MAX_MS = 90_000L
-private const val SLEEP_AT_MS = 180_000L
+/** How often the console pulses the interaction module while the screen is live. */
 private const val TICK_MS = 500L
 
 /**
  * The console: Fairy's large live screen over a quiet HDD background, one
  * grouped account/current-session card, and clear ways on to that session,
  * the session list or settings. Fairy follows the finger anywhere on the page
- * (observational only; touches still reach the keys), says a line after 45 s,
- * and dozes off stand-by after three idle minutes.
+ * (observational only; touches still reach the keys); 待机 and 台词 — a line
+ * after 45 s, stand-by after three idle minutes — are the interaction module's
+ * rules, which this page only pulses and renders.
  */
 @Composable
 fun FairyConsolePage(
@@ -77,44 +72,33 @@ fun FairyConsolePage(
     fairy: FairyInteraction = koinInject(),
 ) {
     val baseTokens = LocalFairyTokens.current
-    val context = LocalContext.current
-    val memory = remember { FairyUiMemory(context) }
-    val eye = remember { FairyEyeController() }
+    val eye = remember { FairyEyeController(asleep = fairy.state.value.asleep) }
     val identity by session.identity.collectAsStateWithLifecycle()
     val owned by receive.owned.snapshot.collectAsStateWithLifecycle()
-    var caption by remember { mutableStateOf<FairyLine?>(null) }
-    var asleep by remember { mutableStateOf(false) }
-    var lastTouch by remember { mutableLongStateOf(SystemClock.uptimeMillis()) }
-    var nextLineAt by remember { mutableLongStateOf(FIRST_LINE_MS) }
+    val interaction by fairy.state.collectAsStateWithLifecycle()
     var powerOn by remember { mutableIntStateOf(if (FairyColdStart.claim()) 1 else 0) }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val speaks = LocalConfiguration.current.locales[0].language == "zh"
     val running = lifecycle.isAtLeast(Lifecycle.State.STARTED)
+    val asleep = interaction.asleep
+    val caption = interaction.caption
     val tokens = baseTokens
 
+    // The page only supplies the beat; 待机 and 台词 live in the module (and outlive this page).
     LaunchedEffect(running, speaks, asleep) {
-        if (!running || !speaks || asleep) {
-            caption = null
+        if (!running) {
+            fairy.pageExit()
             return@LaunchedEffect
         }
+        if (!speaks || asleep) return@LaunchedEffect
         while (true) {
             delay(TICK_MS)
-            val idle = SystemClock.uptimeMillis() - lastTouch
-            when {
-                idle >= SLEEP_AT_MS && caption == null -> {
-                    asleep = true
-                    eye.asleep = true
-                    caption = memory.nextLine(FairyLines.sleepPool, 0)
-                    return@LaunchedEffect
-                }
-
-                idle >= nextLineAt && caption == null -> {
-                    caption = memory.nextLine(FairyLines.homePool, FairyLines.HOME_AVOID)
-                    nextLineAt = idle + NEXT_LINE_MIN_MS + (0L..(NEXT_LINE_MAX_MS - NEXT_LINE_MIN_MS)).random()
-                }
-            }
+            fairy.tick()
         }
     }
+    // The controller is the page's own transient eye state; the continuous 待机 lives in the module.
+    LaunchedEffect(asleep) { eye.asleep = asleep }
+    DisposableEffect(fairy) { onDispose { fairy.pageExit() } }
     val origin = remember { floatArrayOf(0f, 0f) }
     // 当前会话: the reader's last choice, else the account's main session. Home presents only this
     // one session — its runtime, its connection, its activity — never a union over the account.
@@ -151,13 +135,8 @@ fun FairyConsolePage(
                                 val event = awaitPointerEvent(PointerEventPass.Final)
                                 val touch = event.changes.firstOrNull { it.pressed }
                                 eye.lookAt(touch?.let { Offset(origin[0] + it.position.x, origin[1] + it.position.y) })
-                                if (touch != null) {
-                                    lastTouch = SystemClock.uptimeMillis()
-                                    nextLineAt = FIRST_LINE_MS
-                                    if (asleep) {
-                                        asleep = false
-                                        eye.wake(confused = true)
-                                    }
+                                if (touch != null && fairy.touch()) {
+                                    eye.wake(confused = true)
                                 }
                             }
                         }
@@ -196,8 +175,7 @@ fun FairyConsolePage(
                 caption?.let { line ->
                     FairyCaption(
                         line,
-                        compact = false,
-                        onFinished = { caption = null },
+                        onFinished = { fairy.captionFinished() },
                         modifier = Modifier.testTag("fairy-caption"),
                     )
                 }

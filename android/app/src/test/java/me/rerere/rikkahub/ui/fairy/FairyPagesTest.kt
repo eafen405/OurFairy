@@ -27,6 +27,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.graphics.asAndroidBitmap
 import java.io.File
 import java.time.Duration
@@ -47,6 +49,9 @@ import me.rerere.rikkahub.ui.identity.IdentitySignInPage
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -116,7 +121,13 @@ class FairyPagesTest {
         override suspend fun load(key: ChatSyncKey) = ChatSyncRecord(-1, true)
         override suspend fun save(key: ChatSyncKey, record: ChatSyncRecord) = Unit
     }
-    private val fairy = FairyInteraction(now = SystemClock::uptimeMillis, random = kotlin.random.Random(11))
+    private val fairy by lazy {
+        FairyInteraction(
+            now = SystemClock::uptimeMillis,
+            random = kotlin.random.Random(11),
+            lines = FairyUiMemory(RuntimeEnvironment.getApplication()),
+        )
+    }
     private val receive = RemoteReceiveState(sessions, scope, {
         RemoteChatState(backend, scope, store, "https://fairy.test")
     })
@@ -304,6 +315,95 @@ class FairyPagesTest {
                 FairyPresence.THINKING,
                 fairy.state.value.window.presence,
             )
+        }
+    }
+
+    @Test fun `home dozes off and the conversation page carries the standby`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        show {
+            when (val target = destination) {
+                is Screen.Conversation -> FairyConversationPage(
+                    target.sessionId, { destination = Screen.Home }, receive, fairy,
+                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
+                )
+                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
+            }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        ShadowSystemClock.advanceBy(Duration.ofMillis(SLEEP_AT_MS + 1_000))
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertTrue("首页闲置三分钟后进入待机", fairy.state.value.asleep)
+            val line = fairy.state.value.caption
+            assertTrue(
+                "待机台词取自既有 sleepPool",
+                line != null && line.id in FairyLines.sleepPool,
+            )
+        }
+        compose.onNodeWithText("TAP TO WAKE").assertIsDisplayed()
+
+        // A page switch without a touch on the sleeping console (the route change the app makes
+        // when it follows an archived session): only then can the screen still be asleep on the
+        // next page. Any touch — including the console's own buttons — wakes it first.
+        compose.mainClock.autoAdvance = true
+        compose.runOnIdle { destination = Screen.Conversation("main") }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle {
+            assertTrue("对话页继承首页的待机", fairy.state.value.asleep)
+            assertNull("上一页未播完的待机台词不跨页补播", fairy.state.value.caption)
+        }
+
+        compose.onRoot().performTouchInput { click(center) }
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertFalse("对话页的一次触摸唤醒 module 的待机", fairy.state.value.asleep)
+        }
+    }
+
+    @Test fun `an unfinished home line is settled instead of replayed after a page switch`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        show {
+            when (val target = destination) {
+                is Screen.Conversation -> FairyConversationPage(
+                    target.sessionId, { destination = Screen.Home }, receive, fairy,
+                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
+                )
+                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
+            }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        ShadowSystemClock.advanceBy(Duration.ofMillis(FIRST_LINE_MS + 1_000))
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        val unfinished = compose.runOnIdle {
+            val line = fairy.state.value.caption
+            assertNotNull("四十五秒后首页应有一条台词", line)
+            line!!.id
+        }
+
+        compose.onNodeWithText("进入会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle { assertNull("离页时未播完的台词结算", fairy.state.value.caption) }
+
+        compose.runOnIdle { destination = Screen.Home }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle { assertNull("返回首页不补播上一句", fairy.state.value.caption) }
+
+        // The idle clock kept running while the line was on screen: the next line is due, and the
+        // device memory keeps it from being the line that was just settled.
+        ShadowSystemClock.advanceBy(Duration.ofMillis(120_000))
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            val next = fairy.state.value.caption
+            assertNotNull("返回后仍按待机规则出新台词", next)
+            assertNotEquals("新台词不会立刻重复刚结算的一句", unfinished, next!!.id)
         }
     }
 
