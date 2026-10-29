@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.di
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.lifecycle.ProcessLifecycleOwner
 import me.rerere.rikkahub.data.remote.RemoteAttachmentApi
 import me.rerere.rikkahub.data.remote.RemoteSpeechApi
@@ -18,6 +19,7 @@ import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.service.AndroidRemoteNotifications
 import me.rerere.rikkahub.service.RemoteReceiveController
 import me.rerere.rikkahub.service.RemoteReceiveServiceLauncher
+import me.rerere.rikkahub.ui.fairy.FairyInteraction
 import me.rerere.rikkahub.data.remote.AndroidChatSyncStore
 import me.rerere.rikkahub.data.remote.ChatSyncStore
 import me.rerere.rikkahub.data.remote.AccountSession
@@ -93,6 +95,11 @@ val identityModule = module {
     }
 
     single { RemoteReceiveServiceLauncher(get<Context>()) }
+
+    // One interaction owner for the process: both pages ask it for 当前表现, and #261 continues
+    // 待机 and 台词 from the same instance. Its clock is injected here, so the module itself holds
+    // no Android clock and a test drives it with a fixed one.
+    single { FairyInteraction(now = SystemClock::uptimeMillis, random = kotlin.random.Random.Default) }
 
     single {
         // The app-wide foreground fact is the notification boundary's own read; the
