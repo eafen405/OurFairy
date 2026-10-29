@@ -42,6 +42,10 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DisplayPreferences
 import me.rerere.rikkahub.data.remote.*
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
+import me.rerere.rikkahub.ui.destination.Content
+import me.rerere.rikkahub.ui.destination.DestinationActions
+import me.rerere.rikkahub.ui.destination.DestinationPageScope
+import me.rerere.rikkahub.ui.destination.FairyDestinations
 import me.rerere.rikkahub.ui.identity.IdentitySignInPage
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -158,8 +162,44 @@ class FairyPagesTest {
         }
     }
 
+    /**
+     * The page the user stands on, assembled by the production catalog.
+     *
+     * This file starts no Koin: the catalog is handed this test's own account
+     * and fakes exactly as the activity hands it the container's. `push` and
+     * `replace` stand on their target; `pop` returns to the console every
+     * fixture below starts from; `reset` stands on the last page of its stack.
+     */
+    @Composable
+    private fun DestinationHost(destination: Screen, onNavigate: (Screen) -> Unit) {
+        val scope = DestinationPageScope(
+            actions = DestinationActions(
+                push = onNavigate,
+                replace = onNavigate,
+                pop = { onNavigate(Screen.Home) },
+                reset = { stack -> onNavigate(stack.last()) },
+                identityCompleted = {},
+            ),
+            session = account,
+            receive = receive,
+            identityBackend = identityBackend,
+        )
+        FairyDestinations.destinationOf(destination).Content(destination, scope)
+    }
+
+    /** Show [initial], following its own navigation into this test's state. */
+    private fun destination(initial: Screen, onNavigate: (Screen) -> Unit = {}) {
+        var current by mutableStateOf(initial)
+        show {
+            DestinationHost(current) { next ->
+                current = next
+                onNavigate(next)
+            }
+        }
+    }
+
     private fun home(onOpen: (Screen) -> Unit) {
-        show { FairyConsolePage(onOpen, account, receive) }
+        destination(Screen.Home, onOpen)
     }
 
     @Test fun `idle line sits below the fairy screen`() {
@@ -210,18 +250,7 @@ class FairyPagesTest {
     @Test fun `home opens all sessions directly with their real count`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (val target = destination) {
-                Screen.Home -> FairyConsolePage({ destination = it }, account, receive)
-                Screen.Sessions -> FairyConversationPage(
-                    null, { destination = Screen.Home }, receive,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, { destination = Screen.Home }, receive,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                else -> error("Unexpected destination: $target")
-            }
+            DestinationHost(destination) { destination = it }
         }
 
         compose.onNodeWithText("全部会话").performScrollTo()
@@ -315,12 +344,7 @@ class FairyPagesTest {
     @Test fun `home opens settings with visible account content`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (destination) {
-                Screen.Home -> FairyConsolePage({ destination = it }, account, receive)
-                else -> FairySettingsPage(
-                    {}, {}, account, backend = identityBackend, onBack = { destination = Screen.Home },
-                )
-            }
+            DestinationHost(destination) { destination = it }
         }
         compose.onNodeWithText("agent-two").assertIsDisplayed()
         compose.onNodeWithText("#2").assertIsDisplayed()
@@ -386,11 +410,7 @@ class FairyPagesTest {
     }
 
     private fun conversation(initial: String = "main") {
-        var target by mutableStateOf(initial)
-        show {
-            FairyConversationPage(target, {}, receive,
-                onOpenConversation = { target = it }, onSettings = {})
-        }
+        destination(Screen.Conversation(initial))
     }
 
     @Test fun `a model title arriving after the reply re-reads the list and reaches the bar`() {
@@ -497,13 +517,7 @@ class FairyPagesTest {
     @Test fun `home opens the current conversation with a visible composer`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (val target = destination) {
-                is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, {}, receive,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                else -> FairyConsolePage({ destination = it }, account, receive)
-            }
+            DestinationHost(destination) { destination = it }
         }
         compose.onNodeWithText("进入会话").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(600)

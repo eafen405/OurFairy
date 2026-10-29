@@ -9,8 +9,7 @@ import me.rerere.rikkahub.ui.identity.IdentityScope
 
 /**
  * One destination: the name a run stores it under, who may compose it, where a
- * cold start returns to it, and — once its page has been moved here — how it is
- * assembled.
+ * cold start returns to it, and how it is assembled.
  *
  * All four are required, so a destination cannot be declared without a policy
  * for each.
@@ -23,11 +22,13 @@ class FairyDestination(
     /** Whether a cold start returns to it, and to which stack. */
     val restore: DestinationRestore,
     /**
-     * The page assembly, or null while the destination is still assembled by the
-     * legacy `entryProvider {}` arms in `RouteActivity`. #264 moves the remaining
-     * pages here and drops the nullable arm together with that path.
+     * The page assembly for one instance of this destination.
+     *
+     * Takes the [Screen] because a page's assembly may depend on the instance:
+     * the session list and every conversation open the same page, but a
+     * conversation's page is the session its key names.
      */
-    val page: (@Composable DestinationPageScope.() -> Unit)? = null,
+    val page: @Composable DestinationPageScope.(Screen) -> Unit,
 ) {
     override fun toString(): String = "FairyDestination($route)"
 }

@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.remote.*
+import me.rerere.rikkahub.ui.destination.FairyDestinations
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -37,6 +38,35 @@ class RemoteNotificationNavigationTest {
         assertEquals(listOf(Screen.Home), stack)
         assertTrue(openRemoteNotification(target, "https://fairy", account) { opened = it; true })
         assertEquals("s2", opened)
+    }
+
+    @Test fun `an accepted notification lands on the conversation stack the catalog declares`() = runTest {
+        val account = AccountSession(Identity(), Credentials())
+        account.restore()
+        val stack = mutableListOf<NavKey>(Screen.Conversation("before"))
+        val target = RemoteNotificationTarget("https://fairy", 2, "s2")
+        var opened: String? = null
+
+        // Refused coordinates never reach the landing: the notification keeps
+        // its stack where it was.
+        assertFalse(openRemoteNotification(target.copy(endpoint = "https://other"), "https://fairy", account) { opened = it; true })
+        assertFalse(openRemoteNotification(target.copy(userShortId = 3), "https://fairy", account) { opened = it; true })
+        assertNull(opened)
+        assertEquals(listOf<NavKey>(Screen.Conversation("before")), stack)
+
+        assertTrue(openRemoteNotification(target, "https://fairy", account) { opened = it; true })
+        assertEquals("s2", opened)
+        stack.clear()
+        stack.addAll(FairyDestinations.resumedStack(FairyDestinations.CONVERSATION_ROUTE, target.sessionId))
+        assertEquals(
+            "the catalog says a notification opens the conversation above the console",
+            listOf<NavKey>(Screen.Home, Screen.Conversation("s2")),
+            stack,
+        )
+        assertTrue(
+            "and the gate admits the page it lands on for a signed-in account",
+            FairyDestinations.mayCompose(stack.last() as Screen, IdentityScope(signedIn = true, isAdmin = false)),
+        )
     }
 
     @Test fun `another account or deployment never initiates a session query`() = runTest {
