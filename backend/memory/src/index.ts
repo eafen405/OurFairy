@@ -14,6 +14,7 @@
  */
 import z from '@deepseek-ai/schemastery'
 import { ImpressionService, IMPRESSION_PATHS, impressionHandlers, registerImpressions } from './impression.js'
+import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from './maintenance-policy.js'
 import { MaintenanceEngine, readMaintenanceSettings, type MaintenanceField } from './maintenance.js'
 import { MemoryService } from './service.js'
 import { MemoryStore } from './store.js'
@@ -44,16 +45,19 @@ export const inject = ['tools', 'agents', 'sessionPersistence', 'sessionQuery',
  * The row's configuration.
  *
  * `path` is the memory database. The four maintenance fields are the settings
- * #247 will bind to the gateway's “记忆 → 维护” tree; they are declared here
+ * the gateway's “记忆 → 维护” tree reads and writes; they are declared here
  * with their defaults, ranges and `volatile()` so a saved value is read on the
- * next maintenance evaluation without remounting the row. The default light
- * model route is MiniMax-M3.1-Flash; changing the main session's model never
- * changes these values.
+ * next maintenance evaluation without remounting the row. The two numbers and
+ * their ranges are the memory package's maintenance policy, not local copies.
+ * The default light model route is MiniMax-M3.1-Flash; changing the main
+ * session's model never changes these values.
  */
 export const Config = z.object({
   path: z.string().min(1).required(),
-  maintenanceTurns: z.natural().min(5).max(50).default(15).volatile(),
-  maintenanceDecayHours: z.natural().min(3).max(24).default(6).volatile(),
+  maintenanceTurns: z.natural().min(MAINTENANCE_TURNS.min).max(MAINTENANCE_TURNS.max)
+    .default(MAINTENANCE_TURNS.default).volatile(),
+  maintenanceDecayHours: z.natural().min(MAINTENANCE_DECAY_HOURS.min).max(MAINTENANCE_DECAY_HOURS.max)
+    .default(MAINTENANCE_DECAY_HOURS.default).volatile(),
   maintenanceModel: z.string().min(1).default('MiniMax-M3.1-Flash').volatile(),
   maintenanceProvider: z.string().min(1).default('minimax-cn').volatile(),
 })

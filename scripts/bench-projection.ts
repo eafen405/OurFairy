@@ -19,9 +19,10 @@
  * The seeded history is measured at two sizes so the output shows whether the
  * per-fragment cost and memory grow with history, which one size cannot show.
  *
- * Every workload parameter lives in {@link PARAMS} and is echoed in the output
- * document. The script writes one JSON document to stdout (or `--out <path>`)
- * and progress to stderr. It is not part of `npm test`.
+ * Every workload parameter is echoed from {@link PARAMS} in the output
+ * document; the history and observer shape is declared in
+ * `scripts/bench-workload.ts`. The script writes one JSON document to stdout
+ * (or `--out <path>`) and progress to stderr. It is not part of `npm test`.
  *
  * Usage:
  *   node scripts/bench-projection.ts [--out <path>] [--label <text]]
@@ -33,6 +34,7 @@ import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 import http from 'node:http'
+import { HISTORY_TURN_COUNTS, OBSERVER_COUNTS } from './bench-workload.ts'
 import type { Combo } from './ourfairy-composition.ts'
 
 /**
@@ -40,12 +42,15 @@ import type { Combo } from './ourfairy-composition.ts'
  * evidence directory, so a recorded baseline names the exact load it measured.
  *
  * Two history sizes are measured because the question this baseline answers is
- * whether per-fragment cost grows with history: comparing 40 and 160 turns at
- * the same stream shows the slope, while one size alone cannot.
+ * whether per-fragment cost grows with history: comparing the two sizes at the
+ * same stream shows the slope, while one size alone cannot.
+ *
+ * The history and observer shape is declared in `./bench-workload.ts`, which
+ * the gate reads too.
  */
 export const PARAMS = Object.freeze({
   /** User turns pushed into the history before the measured stream, per size. */
-  historyTurnCounts: [40, 160],
+  historyTurnCounts: HISTORY_TURN_COUNTS,
   /** Reply characters the double returns for every turn (history and stream). */
   replyChars: 2048,
   /** Unicode code points per text delta the double emits. */
@@ -53,7 +58,7 @@ export const PARAMS = Object.freeze({
   /** Inter-delta delay for the measured stream (`slow_success` only). */
   streamChunkDelayMs: 15,
   /** Deliberate observer counts; each is measured `repetitions` times. */
-  observerCounts: [1, 2],
+  observerCounts: OBSERVER_COUNTS,
   /** Times each observer count is measured, on a freshly seeded session. */
   repetitions: 2,
   /**

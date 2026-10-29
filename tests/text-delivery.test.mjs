@@ -1,3 +1,7 @@
+/**
+ * @covers backend/delivery — this suite drives the row through the product's
+ * chat and HTTP routes rather than importing it.
+ */
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'

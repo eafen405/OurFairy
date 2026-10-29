@@ -7,6 +7,8 @@
  * sends and reads. The complement — the same pending row settling when the row
  * is mounted — is the final boot here; the ordinary delivery suites cover the
  * semantics with the row mounted.
+ *
+ * @covers backend/delivery
  */
 import assert from 'node:assert/strict'
 import { join } from 'node:path'

@@ -27,6 +27,10 @@ import {
 } from './helpers/backend.mjs'
 import { answerIfTitle } from './helpers/title-aware.mjs'
 
+// The memory package owns the two numbers' product decision. Reading it here is
+// what makes a gateway that stops consuming it fail: this file pins the policy
+// to the spec's numbers and derives every gateway expectation from the policy.
+const { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } = await import('@ourfairy/dsh-memory/maintenance-policy')
 const { loadOverlayPatches } = await import('@deepseek-ai/dsh-app-boot')
 
 const PHAETHON_PASSWORD = 'gateway-maintenance-password'
@@ -210,7 +214,16 @@ test('the maintenance numbers are an administrator-only deployment setting: 15/6
     const admin = await signIn(port)
     const agent = await registerUser(port, admin, 'maintenance-agent')
 
+    // The product decision the policy must carry, stated independently of it.
+    assert.deepEqual({ ...MAINTENANCE_TURNS }, { default: 15, min: 5, max: 50 },
+      'the memory package policy carries the spec\'s turn default and range')
+    assert.deepEqual({ ...MAINTENANCE_DECAY_HOURS }, { default: 6, min: 3, max: 24 },
+      'the memory package policy carries the spec\'s decay default and range')
+
     const initial = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
+    // The served defaults are the bundle's explicit deployment config, so this
+    // asserts those values and not the policy's defaults: a deployment seeds a
+    // row, and the policy only supplies a fallback when a row carries no value.
     assert.deepEqual(initial.maintenance, { triggerTurns: 15, decayHours: 6 },
       'the deployment defaults are 15 closed turns and a 6-hour decay interval')
     assert.equal(initial.editable.maintenance, true, 'the shipped profile mounts the memory row')
@@ -228,7 +241,8 @@ test('the maintenance numbers are an administrator-only deployment setting: 15/6
     }
 
     const outsideRange = [
-      { triggerTurns: 4, decayHours: 6 }, { triggerTurns: 51, decayHours: 6 },
+      { triggerTurns: MAINTENANCE_TURNS.min - 1, decayHours: MAINTENANCE_DECAY_HOURS.default },
+      { triggerTurns: MAINTENANCE_TURNS.max + 1, decayHours: MAINTENANCE_DECAY_HOURS.default },
       { triggerTurns: 5.5, decayHours: 6 }, { triggerTurns: '5', decayHours: 6 },
       { triggerTurns: null, decayHours: 6 },
       { triggerTurns: 15, decayHours: 2 }, { triggerTurns: 15, decayHours: 25 },
@@ -238,12 +252,14 @@ test('the maintenance numbers are an administrator-only deployment setting: 15/6
       const refused = await httpJson(port, '/gateway/maintenance', { token: admin, body, expect: false })
       assert.equal(refused.status, 400, `${JSON.stringify(body)}: ${refused.text}`)
       assert.equal(refused.json.error.code, 'gateway/invalid-maintenance')
-      if (body.triggerTurns !== 15) {
-        assert.match(refused.json.error.message, /5/u, 'the refusal states the lower turn bound')
-        assert.match(refused.json.error.message, /50/u, 'the refusal states the upper turn bound')
+      if (body.triggerTurns !== MAINTENANCE_TURNS.default) {
+        assert.match(refused.json.error.message,
+          new RegExp(`from ${MAINTENANCE_TURNS.min} to ${MAINTENANCE_TURNS.max}`, 'u'),
+          'the refusal states the policy\'s turn range')
       } else {
-        assert.match(refused.json.error.message, /3/u, 'the refusal states the lower hour bound')
-        assert.match(refused.json.error.message, /24/u, 'the refusal states the upper hour bound')
+        assert.match(refused.json.error.message,
+          new RegExp(`from ${MAINTENANCE_DECAY_HOURS.min} to ${MAINTENANCE_DECAY_HOURS.max}`, 'u'),
+          'the refusal states the policy\'s hour range')
       }
     }
     for (const body of [{}, { triggerTurns: 15 }, { decayHours: 6 },
@@ -258,7 +274,13 @@ test('the maintenance numbers are an administrator-only deployment setting: 15/6
       'a refused write is not reported as saved')
     assert.equal(untouched.saved.maintenance, false)
 
-    for (const maintenance of [{ triggerTurns: 5, decayHours: 3 }, { triggerTurns: 50, decayHours: 24 }]) {
+    const boundaries = [
+      { triggerTurns: MAINTENANCE_TURNS.min, decayHours: MAINTENANCE_DECAY_HOURS.min },
+      { triggerTurns: MAINTENANCE_TURNS.max, decayHours: MAINTENANCE_DECAY_HOURS.max },
+    ]
+    assert.deepEqual(boundaries, [{ triggerTurns: 5, decayHours: 3 }, { triggerTurns: 50, decayHours: 24 }],
+      'the policy boundaries are the spec\'s 5/50 and 3/24')
+    for (const maintenance of boundaries) {
       const saved = await httpJson(port, '/gateway/maintenance', { token: admin, body: maintenance })
       assert.deepEqual(saved.maintenance, maintenance, 'both range boundaries are accepted inclusively')
     }

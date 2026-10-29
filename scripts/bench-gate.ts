@@ -14,6 +14,8 @@
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { BENCHMARK_CELLS } from './bench-workload.ts'
+import type { BenchmarkCell } from './bench-workload.ts'
 import { isCliEntry } from './cli-guard.ts'
 
 /** The agreed relative limits. Every value is an after/before ratio. */
@@ -32,7 +34,19 @@ export const LIMITS = Object.freeze({
   payload: 1.05,
 })
 
-const CELLS = Object.freeze(['40/1', '40/2', '160/1', '160/2'])
+/** The `history/observers` keys the gate must find, derived from the workload shape. */
+const CELL_KEYS = BENCHMARK_CELLS.map(cell => cell.key)
+
+/** The observer counts in the derived cell set, smallest first. */
+const OBSERVERS = [...new Set(BENCHMARK_CELLS.map(cell => cell.observers))].sort((left, right) => left - right)
+
+/** The history sizes in the derived cell set, smallest first. */
+const HISTORIES = [...new Set(BENCHMARK_CELLS.map(cell => cell.historyTurns))].sort((left, right) => left - right)
+
+/** The derived cell for one history size and observer count. */
+function cellOf(historyTurns: number, observers: number): BenchmarkCell {
+  return BENCHMARK_CELLS.find(cell => cell.historyTurns === historyTurns && cell.observers === observers)!
+}
 
 /** One run's metric bundle, in the units the gate compares. */
 type Metrics = {
@@ -152,24 +166,32 @@ export function mediansOf(documents: BenchmarkDocument[]): Record<string, Record
 export function evaluateGates(baseline: BenchmarkDocument[], after: BenchmarkDocument[]): GateResult {
   const before = mediansOf(baseline)
   const changed = mediansOf(after)
-  const missing = CELLS.filter(cell => before[cell] === undefined || changed[cell] === undefined)
+  const missing = CELL_KEYS.filter(cell => before[cell] === undefined || changed[cell] === undefined)
   const checks: GateCheck[] = []
   const add = (gate: string, cell: string, actual: number, limit: number) => checks.push({ gate, cell, actual, limit,
     pass: Number.isFinite(actual) && actual <= limit })
 
   if (missing.length === 0) {
-    // Every cell the gates read is present here, so the assertion holds.
-    for (const observers of [1, 2]) {
-      add('historySlope', `160/${observers}`, changed[`160/${observers}`]!.cpuPerObserver! / changed[`40/${observers}`]!.cpuPerObserver!,
+    // Every derived cell is present here, so the slope's two ends and the
+    // observer extremes are present too.
+    const shortestHistory = HISTORIES[0]!
+    const longestHistory = HISTORIES.at(-1)!
+    for (const observers of OBSERVERS) {
+      const longest = cellOf(longestHistory, observers)
+      const shortest = cellOf(shortestHistory, observers)
+      add('historySlope', longest.key, changed[longest.key]!.cpuPerObserver! / changed[shortest.key]!.cpuPerObserver!,
         LIMITS.historySlope)
-      add('cost160', `160/${observers}`, changed[`160/${observers}`]!.cpuPerObserver! / before[`160/${observers}`]!.cpuPerObserver!,
+      add('cost160', longest.key, changed[longest.key]!.cpuPerObserver! / before[longest.key]!.cpuPerObserver!,
         LIMITS.cost160)
     }
-    add('observerRatio', '160', changed['160/2']!.cpuTotal! / changed['160/1']!.cpuTotal!, LIMITS.observerRatio)
-    for (const cell of CELLS) {
-      add('readP95', cell, changed[cell]!.readP95! / before[cell]!.readP95!, LIMITS.readP95)
-      add('memory', cell, changed[cell]!.memoryMb! / before[cell]!.memoryMb!, LIMITS.memory)
-      add('payload', cell, changed[cell]!.payloadMb! / before[cell]!.payloadMb!, LIMITS.payload)
+    const loneObserver = cellOf(longestHistory, OBSERVERS[0]!)
+    const mostObservers = cellOf(longestHistory, OBSERVERS.at(-1)!)
+    add('observerRatio', String(longestHistory), changed[mostObservers.key]!.cpuTotal! / changed[loneObserver.key]!.cpuTotal!,
+      LIMITS.observerRatio)
+    for (const cell of BENCHMARK_CELLS) {
+      add('readP95', cell.key, changed[cell.key]!.readP95! / before[cell.key]!.readP95!, LIMITS.readP95)
+      add('memory', cell.key, changed[cell.key]!.memoryMb! / before[cell.key]!.memoryMb!, LIMITS.memory)
+      add('payload', cell.key, changed[cell.key]!.payloadMb! / before[cell.key]!.payloadMb!, LIMITS.payload)
     }
   }
   return { pass: missing.length === 0 && checks.every(check => check.pass), checks, missing, before, changed }

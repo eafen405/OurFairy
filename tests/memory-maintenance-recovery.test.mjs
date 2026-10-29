@@ -6,6 +6,8 @@
  * the same environment the bundle exposes. The tests stop and start the real
  * backend around persisted `memory.sqlite` state, so the recovery being proved
  * is the product's recomputation, not an in-process timer.
+ *
+ * @covers backend/memory
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'
@@ -14,6 +16,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { after, before, test } from 'node:test'
+import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from '@ourfairy/dsh-memory/maintenance-policy'
 import {
   describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
@@ -206,23 +209,35 @@ test('configured 5-turn / 3-hour values and restart recomputation drive the next
   await stopBackend()
 })
 
-test('the maintenance settings reader reads volatile fields at call time, not at construction', () => {
-  let turns = 5
-  const settings = () => readMaintenanceSettings({
-    maintenanceTurns: { get: () => turns },
-    maintenanceDecayHours: { get: () => 3 },
+test('the maintenance settings reader reads volatile fields at call time and applies the policy bounds', () => {
+  let turns = MAINTENANCE_TURNS.min
+  const read = (turnValue, decayValue = MAINTENANCE_DECAY_HOURS.default) => readMaintenanceSettings({
+    maintenanceTurns: { get: () => turnValue },
+    maintenanceDecayHours: { get: () => decayValue },
     maintenanceModel: { get: () => 'MiniMax-M3.1-Flash' },
     maintenanceProvider: { get: () => 'minimax-cn' },
   })
-  assert.equal(settings().turns, 5)
-  turns = 9
-  assert.equal(settings().turns, 9, 'a later write changes the next read')
-  assert.throws(() => readMaintenanceSettings({
-    maintenanceTurns: { get: () => 4 },
-    maintenanceDecayHours: { get: () => 3 },
-    maintenanceModel: { get: () => 'MiniMax-M3.1-Flash' },
-    maintenanceProvider: { get: () => 'minimax-cn' },
-  }), /maintenanceTurns/, 'an out-of-range live value is refused at read time')
+  const settings = () => read(turns)
+  assert.equal(settings().turns, MAINTENANCE_TURNS.min)
+  turns = MAINTENANCE_TURNS.default
+  assert.equal(settings().turns, MAINTENANCE_TURNS.default, 'a later write changes the next read')
+  // The accepted range is the policy's: both bounds are taken as written, and
+  // one step outside each is refused here rather than only by the row's Config.
+  for (const value of [MAINTENANCE_TURNS.min, MAINTENANCE_TURNS.max]) {
+    assert.equal(read(value).turns, value, 'both policy turn bounds are accepted at read time')
+  }
+  for (const value of [MAINTENANCE_DECAY_HOURS.min, MAINTENANCE_DECAY_HOURS.max]) {
+    assert.equal(read(MAINTENANCE_TURNS.default, value).decayHours, value,
+      'both policy decay bounds are accepted at read time')
+  }
+  assert.throws(() => read(MAINTENANCE_TURNS.min - 1), /maintenanceTurns/,
+    'one turn below the policy minimum is refused at read time')
+  assert.throws(() => read(MAINTENANCE_TURNS.max + 1), /maintenanceTurns/,
+    'one turn above the policy maximum is refused at read time')
+  assert.throws(() => read(MAINTENANCE_TURNS.default, MAINTENANCE_DECAY_HOURS.min - 1), /maintenanceDecayHours/,
+    'one hour below the policy minimum is refused at read time')
+  assert.throws(() => read(MAINTENANCE_TURNS.default, MAINTENANCE_DECAY_HOURS.max + 1), /maintenanceDecayHours/,
+    'one hour above the policy maximum is refused at read time')
 })
 
 test('a version 1 memory database gains the frozen-cut column without losing state', () => {
@@ -291,7 +306,7 @@ test('a persisted out-of-range maintenance value fails the load at the owning Co
     const profilePatch = join(caseHome, 'dsh-home', 'profiles', 'ourfairy', 'cordis.patch.yml')
     writeFileSync(profilePatch, '- id: memory\n  config:\n'
       + `    path: ${JSON.stringify(join(caseHome, 'dsh-home', 'memory', 'memory.sqlite'))}\n`
-      + '    maintenanceTurns: 4\n')
+      + `    maintenanceTurns: ${MAINTENANCE_TURNS.min - 1}\n`)
 
     const run = await runBackendAsync(['probe', '--report', join(caseHome, 'second.json')], {
       OURFAIRY_HOME: caseHome, MINIMAX_CN_API_KEY: 'mock-config-key',
@@ -299,7 +314,8 @@ test('a persisted out-of-range maintenance value fails the load at the owning Co
     assert.notEqual(run.code, 0, `a persisted out-of-range value must fail the load: ${describeRun('probe', run)}`)
     const output = `${run.stdout}\n${run.stderr}`
     assert.match(output, /maintenanceTurns/, 'the failure names the field')
-    assert.match(output, /expected number >= 5/, 'the owning Config schema rejects the persisted value')
+    assert.match(output, new RegExp(`expected number >= ${MAINTENANCE_TURNS.min}`),
+      'the owning Config schema rejects the persisted value at the policy minimum')
   } finally {
     removeHome(caseHome)
   }
