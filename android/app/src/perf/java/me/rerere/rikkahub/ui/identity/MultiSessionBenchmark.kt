@@ -101,10 +101,7 @@ internal class MultiSessionBenchmark(
         val historyMessages: Int,
         val replyChars: Int,
         val backend: SyntheticChatBackend,
-    ) {
-        /** Observe leases opened for this session: production holds one while observing it. */
-        val opens = AtomicInteger()
-    }
+    )
 
     private fun replay(name: String, history: Int, reply: Int): Replay {
         val streaming = reply > 0
@@ -150,7 +147,6 @@ internal class MultiSessionBenchmark(
     override fun observe(token: String, sessionId: String): Flow<RemoteChatProjection> {
         val session = route(sessionId)
         return flow {
-            session.opens.incrementAndGet()
             opened.incrementAndGet()
             val concurrent = active.incrementAndGet()
             peak.updateAndGet { current -> maxOf(current, concurrent) }

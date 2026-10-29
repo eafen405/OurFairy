@@ -297,21 +297,17 @@ class RemoteChatState(
         ?.get("title")?.jsonPrimitive?.content
 
     /**
-     * Consume the episode [selected] owes, before reception attempts to publish it.
+     * Consume the episode [key] owes, before reception attempts to publish it.
      *
      * Reception discovers debt in the ledger, not here; this method exists so that the write lands
      * under the lock this session also commits its records with. Otherwise a settlement in flight
      * could save a copy loaded before the consumption and resurrect a reminder already spent. The
-     * load below deliberately reads through to the store: the in-memory copy may predate a record
-     * another run wrote, and the durable record is the authority for whether anything is owed.
-     *
-     * Consumed before the attempt: a crash here may miss the sound, but cannot replay it.
+     * shared store rule reads through to the durable record: the in-memory copy may predate a
+     * record another run wrote, and the durable record is the authority for whether anything is
+     * owed.
      */
-    internal suspend fun consumeReminder(selected: ChatSyncKey) = recordLock.withLock {
-        val previous = store.load(selected)
-        val next = if (previous.notificationOwed) previous.copy(notificationOwed = false) else previous
-        if (next != previous) store.save(selected, next)
-        records[selected] = next
+    internal suspend fun consumeReminder(key: ChatSyncKey) = recordLock.withLock {
+        records[key] = store.consumeReminder(key)
     }
 
     private fun scheduleSync(boundEpoch: Long, opened: Long, credential: String, selected: ChatSyncKey) {

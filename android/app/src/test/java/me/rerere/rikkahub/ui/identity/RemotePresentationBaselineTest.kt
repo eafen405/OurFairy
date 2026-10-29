@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.identity
 import java.io.File
 import me.rerere.ui.markdown.parseMarkdown
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Host parsing baseline only; neither Android frames nor a device performance acceptance test. */
@@ -51,9 +50,23 @@ class RemotePresentationBaselineTest {
         )
     }
 
-    /** The combined workload streams the #74 body; an empty body would measure an idle transcript. */
-    @Test fun `multi-session workload has a streaming body to replay`() {
+    /**
+     * The combined reply is the #74 `stream` tier's body, repeated exactly 64 times.
+     *
+     * `stream` joins `LONG_REPLY_REPEATS = 64` copies of `workload.md` with a newline, so its
+     * reply is `64 * body.length + 63`. The declaration's `replyChars` must equal that number:
+     * changing the body (or the repetition rule) fails here until the combined workload is
+     * re-declared, instead of silently measuring a different length under the same name.
+     */
+    @Test fun `the combined reply reuses the single-session stream body`() {
         val body = File("src/perf/assets/presentation/workload.md").readText()
-        assertTrue(body.length >= 3_635)
+        val declared = File("src/perf/assets/presentation/multi-session.md").readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .associate { line -> line.substringBefore("=").trim() to line.substringAfter("=").trim() }
+        assertEquals(
+            List(64) { body }.joinToString("\n").length,
+            declared.getValue("replyChars").toInt(),
+        )
     }
 }

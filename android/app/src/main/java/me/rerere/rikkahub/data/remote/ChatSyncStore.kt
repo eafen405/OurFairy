@@ -2,14 +2,25 @@ package me.rerere.rikkahub.data.remote
 
 import kotlinx.serialization.Serializable
 
-data class ChatSyncKey(val endpoint: String, val userShortId: Int, val sessionId: String)
+/**
+ * One durable record's key, in its canonical form.
+ *
+ * The endpoint is stored without a trailing slash. Rejecting a trailing slash here is what makes
+ * [chatSyncKey] the only normalizer: a caller cannot quietly build a second key shape that the
+ * session runtime and the reminder scan would disagree about.
+ */
+data class ChatSyncKey(val endpoint: String, val userShortId: Int, val sessionId: String) {
+    init {
+        require(!endpoint.endsWith('/')) { "记录键的 endpoint 必须以无尾斜杠的形式传入" }
+    }
+}
 
 /**
- * The one place a durable record key is built.
+ * The key a durable record is read and written with.
  *
  * Reception reads reminder debt from the ledger by these keys while each session reads and writes
- * its own record by them; if the two disagreed by so much as a trailing slash they would be
- * talking about two different records. Both call this, so they cannot.
+ * its own record by them; [ChatSyncKey] refuses an unnormalized endpoint, so this function is the
+ * only way to turn a configured endpoint into a key and the two sides cannot disagree about it.
  */
 internal fun chatSyncKey(endpoint: String, userShortId: Int, sessionId: String) =
     ChatSyncKey(endpoint.trimEnd('/'), userShortId, sessionId)
@@ -38,4 +49,18 @@ interface ChatSyncStore {
     suspend fun load(key: ChatSyncKey): ChatSyncRecord
 
     suspend fun save(key: ChatSyncKey, record: ChatSyncRecord)
+}
+
+/**
+ * Retire the episode [key] owes, reading through to the durable record.
+ *
+ * This is the single rule for what "consumed" writes, so the runtime path (which also updates its
+ * cache under its record lock) and the no-runtime path cannot disagree. Consuming before the
+ * notification attempt means a crash can lose one sound, but cannot replay that episode.
+ */
+internal suspend fun ChatSyncStore.consumeReminder(key: ChatSyncKey): ChatSyncRecord {
+    val record = load(key)
+    val next = if (record.notificationOwed) record.copy(notificationOwed = false) else record
+    if (next != record) save(key, next)
+    return next
 }

@@ -38,7 +38,9 @@ class AndroidChatSyncStore(context: Context) : ChatSyncStore {
     }
 
     private fun ChatSyncKey.preferenceKey(): String {
-        val canonical = json.encodeToString(KeyTuple(endpoint.trimEnd('/'), userShortId, sessionId))
+        // The key is already canonical (see chatSyncKey); normalizing again here would be a
+        // second authority for what names a record.
+        val canonical = json.encodeToString(KeyTuple(endpoint, userShortId, sessionId))
         val digest = MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(Charsets.UTF_8))
         return buildString(digest.size * 2) {
             for (byte in digest) {

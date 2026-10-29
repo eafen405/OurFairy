@@ -24,7 +24,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,7 +94,7 @@ class MultiSessionBenchmarkActivity : ComponentActivity() {
     private var summary by mutableStateOf("运行中……")
 
     /** Completed once every listed session's runtime exists and is being watched. */
-    private val runtimesReady = CompletableDeferred<Unit>()
+    private val runtimesReady = CompletableDeferred<Boolean>()
 
     /** Completed once the presented session's terminal document has been drawn. */
     private val terminalPresented = CompletableDeferred<Boolean>()
@@ -105,15 +104,12 @@ class MultiSessionBenchmarkActivity : ComponentActivity() {
     }
 
     /**
-     * Foreground, so the reminder backlog scan runs exactly as it does with the app open, and its
-     * publication is counted instead of touching Android's notification service.
+     * The page is open, so the reminder backlog scan runs as it does with the app in front and
+     * suppression is exercised. No Android notification is published from a measurement build.
      */
     private val notifications = object : RemoteNotificationPlatform {
-        val publishes = AtomicInteger()
         override fun isForeground(): Boolean = true
-        override fun publish(key: ChatSyncKey, preview: String) {
-            publishes.incrementAndGet()
-        }
+        override fun publish(key: ChatSyncKey, preview: String) = Unit
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -151,7 +147,15 @@ class MultiSessionBenchmarkActivity : ComponentActivity() {
             FairyAppTheme {
                 LaunchedEffect(Unit) { openWindow() }
                 LaunchedEffect(Unit) {
-                    runtimesReady.await()
+                    // A round that cannot bind every runtime still writes its result: an abnormal
+                    // sample must be visible as a miss, not disappear into a bare script timeout.
+                    if (!runtimesReady.await()) {
+                        ticker?.cancel()
+                        summary = writeResult(workload, runId, allSessionsSettled = false,
+                            bindingFailure = "reception bound only $attached of ${workload.sessions} runtimes")
+                        if (runId != null) finish()
+                        return@LaunchedEffect
+                    }
                     val settled = withTimeoutOrNull(WORKLOAD_TIMEOUT_MILLIS) {
                         benchmark.replays.forEach { it.backend.awaitCompletion() }
                         true
@@ -223,12 +227,10 @@ class MultiSessionBenchmarkActivity : ComponentActivity() {
         committedBySession.clear()
         latestApplied.clear()
         mainThreadLatenessNanos.clear()
-        startHeap = usedHeap()
+        startHeap = usedHeapBytes()
         windowOpen = true
         ticker = startMainThreadTicker()
-        if (ready) runtimesReady.complete(Unit) else runtimesReady.completeExceptionally(
-            IllegalStateException("reception bound ${attached.size}/${benchmark.workload.sessions} session runtimes"),
-        )
+        runtimesReady.complete(ready)
         benchmark.release()
     }
 
@@ -288,6 +290,7 @@ class MultiSessionBenchmarkActivity : ComponentActivity() {
         workload: MultiSessionWorkload,
         runId: String?,
         allSessionsSettled: Boolean,
+        bindingFailure: String? = null,
     ): String {
         val refreshBudget = 1_000_000_000.0 / windowManager.defaultDisplay.refreshRate
         val presented = benchmark.streaming.sessionId
@@ -330,25 +333,25 @@ class MultiSessionBenchmarkActivity : ComponentActivity() {
             put("unappliedAtEnd", unapplied.size)
             put("terminalPresented", terminalRichMs >= 0)
             put("terminalRichPresentedMs", if (terminalRichMs >= 0) terminalRichMs else null)
-            put("receiveToStateP50Ms", percentile(everySession, 0.50))
-            put("receiveToStateP95Ms", percentile(everySession, 0.95))
-            put("receiveToStateMaxMs", percentile(everySession, 1.0))
-            put("receiveToStatePresentedP95Ms", percentile(presentedState, 0.95))
-            put("receiveToFrameP50Ms", percentile(frameLatencyNanos, 0.50))
-            put("receiveToFrameP95Ms", percentile(frameLatencyNanos, 0.95))
-            put("frameP95Ms", percentile(frameNanos, 0.95))
+            put("receiveToStateP50Ms", percentileMillis(everySession, 0.50))
+            put("receiveToStateP95Ms", percentileMillis(everySession, 0.95))
+            put("receiveToStateMaxMs", percentileMillis(everySession, 1.0))
+            put("receiveToStatePresentedP95Ms", percentileMillis(presentedState, 0.95))
+            put("receiveToFrameP50Ms", percentileMillis(frameLatencyNanos, 0.50))
+            put("receiveToFrameP95Ms", percentileMillis(frameLatencyNanos, 0.95))
+            put("frameP95Ms", percentileMillis(frameNanos, 0.95))
             put("frameCount", frameNanos.size)
             put("overRefreshBudgetRatio", frameNanos.count { it > refreshBudget }.toDouble() / frameNanos.size.coerceAtLeast(1))
-            put("mainThreadTickP50Ms", percentile(mainThreadLatenessNanos, 0.50))
-            put("mainThreadTickP95Ms", percentile(mainThreadLatenessNanos, 0.95))
-            put("mainThreadTickMaxMs", percentile(mainThreadLatenessNanos, 1.0))
+            put("mainThreadTickP50Ms", percentileMillis(mainThreadLatenessNanos, 0.50))
+            put("mainThreadTickP95Ms", percentileMillis(mainThreadLatenessNanos, 0.95))
+            put("mainThreadTickMaxMs", percentileMillis(mainThreadLatenessNanos, 1.0))
             put("mainThreadTicks", mainThreadLatenessNanos.size)
-            put("notificationsPublished", notifications.publishes.get())
             put("consumedThrough", snapshot.consumedThrough)
             put("initialized", snapshot.initialized)
             put("failure", snapshot.failure)
+            put("receptionBindingFailure", bindingFailure)
             put("heapStartBytes", startHeap)
-            put("heapEndBytes", usedHeap())
+            put("heapEndBytes", usedHeapBytes())
             put("emittedBySession", JSONObject().apply {
                 emitted.toSortedMap().forEach { (session, count) -> put(session, count) }
             })
@@ -356,7 +359,7 @@ class MultiSessionBenchmarkActivity : ComponentActivity() {
         // One file per run: a later round must never be read back as this one. The
         // `presentation-` prefix is the one the replay script already reads, so a combined round
         // uses the same reader as the #74 tiers instead of a second path.
-        val name = if (runId == null) "presentation-$SCENARIO.json" else "presentation-$SCENARIO-$runId.json"
+        val name = resultFileName(SCENARIO, runId)
         val file = java.io.File(filesDir, name)
         file.writeText(result.toString(2))
         Log.i(LOG_TAG, result.toString())
@@ -371,10 +374,6 @@ class MultiSessionBenchmarkActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private fun usedHeap(): Long = Runtime.getRuntime().let { it.totalMemory() - it.freeMemory() }
-
-    private fun percentile(values: List<Long>, quantile: Double): Double =
-        if (values.isEmpty()) 0.0 else values.sorted()[((values.size - 1) * quantile).toInt()] / 1_000_000.0
 
     private companion object {
         const val LOG_TAG = "OurFairyPresentation"

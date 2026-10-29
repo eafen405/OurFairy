@@ -180,9 +180,13 @@ class RemoteReceiveState(
      * permanently unreachable session cannot keep another session's reminder waiting.
      *
      * The debt itself is read from the ledger by the account's session keys. A live runtime is
-     * asked only what it observed — never whether anything is owed — so a session whose runtime is
-     * absent, retired or still opening is still discoverable, and one whose runtime exists cannot
-     * hide a debt written by a previous run.
+     * asked only what it observed — never whether anything is owed — so a debt written by a
+     * previous run cannot hide behind a runtime's cached copy, and the preview does not require
+     * that runtime to have existed when the debt was recorded.
+     *
+     * The catch-up gate still names the live runtimes because reception creates one for every
+     * listed session before it can publish. If a later optimization releases runtimes, it must
+     * replace this gate with the listed-session answer first: an absent session has not answered.
      */
     private fun publishBacklog() {
         val platform = notifications ?: return
@@ -208,7 +212,7 @@ class RemoteReceiveState(
                 // One reminder for the account's whole backlog. It opens the primary session when
                 // that one owes something, so a merge still lands where the user reads.
                 val primary = owned.snapshot.value.primarySessionId
-                val target = owed.minWithOrNull(compareBy({ it.sessionId != primary }, { it.sessionId }))
+                val target = owed.minWithOrNull(compareBy({ it.key.sessionId != primary }, { it.key.sessionId }))
                     ?: return@launch
                 platform.publish(target.key, target.preview)
             } catch (cancelled: CancellationException) {
@@ -240,26 +244,25 @@ class RemoteReceiveState(
             val preview = chats[session.id]?.snapshot?.value?.projection?.messages
                 ?.newestFairyOutput(record.consumedThrough)?.text
                 ?.take(160)?.ifBlank { null } ?: GENERIC_PREVIEW
-            Owed(session.id, key, preview)
+            Owed(key, preview)
         }
 
     /**
      * Retire the debt through the session's own runtime when it has one, so the write lands under
-     * the lock that runtime commits records with; otherwise write the ledger directly, where no
-     * runtime exists to race. Both name the same record.
+     * the lock that runtime commits records with; otherwise use the same store rule directly,
+     * where no runtime exists to race.
      */
     private suspend fun consume(owed: Owed) {
-        val chat = chats[owed.sessionId]
+        val chat = chats[owed.key.sessionId]
         if (chat != null) {
             chat.consumeReminder(owed.key)
             return
         }
         val ledger = ledger ?: return
-        val record = ledger.load(owed.key)
-        if (record.notificationOwed) ledger.save(owed.key, record.copy(notificationOwed = false))
+        ledger.consumeReminder(owed.key)
     }
 
-    private class Owed(val sessionId: String, val key: ChatSyncKey, val preview: String)
+    private class Owed(val key: ChatSyncKey, val preview: String)
 
     private companion object {
         const val RETRY_MILLIS = 1_000L
