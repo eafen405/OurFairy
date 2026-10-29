@@ -16,6 +16,7 @@ import { once } from 'node:events'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { after, before, test } from 'node:test'
+import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from '@ourfairy/dsh-memory/maintenance-policy'
 import {
   describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks,
 } from './helpers/backend.mjs'
@@ -323,18 +324,20 @@ after(async () => {
   removeHome(home)
 })
 
-test('the default threshold is 15 closed user turns, and a zero-write child advances the watermark', async () => {
+test('the default threshold is the policy\'s 15 closed user turns, and a zero-write child advances the watermark', async () => {
+  assert.deepEqual(MAINTENANCE_TURNS, { default: 15, min: 5, max: 50 }, 'the policy pins the product decision')
+  const turns = MAINTENANCE_TURNS.default
   const alice = await user('maintenance-threshold')
   const session = await newSession(alice)
-  for (let index = 0; index < 14; index += 1) {
+  for (let index = 0; index < turns - 1; index += 1) {
     await sendTurn(alice, session, `TURN:${index}:普通对话第${index}轮`)
   }
   await waitFor('the source observation row', () => maintenanceRow(session))
   const observed = maintenanceRow(session)
   assert.equal(observed.child_session, null, 'below the threshold no maintenance child exists')
-  assert.ok(childRequests.length === 0, `no child may start below 15 closed turns; got ${childRequests.length}`)
+  assert.ok(childRequests.length === 0, `no child may start below ${turns} closed turns; got ${childRequests.length}`)
 
-  await sendTurn(alice, session, 'TURN:14:普通对话第14轮')
+  await sendTurn(alice, session, `TURN:${turns - 1}:普通对话第${turns - 1}轮`)
   const completed = await waitFor('the zero-write maintenance completion', () => {
     const row = maintenanceRow(session)
     return row?.status === 0 && row?.child_session !== null && row?.watermark_seq >= 0 ? row : undefined
@@ -345,7 +348,7 @@ test('the default threshold is 15 closed user turns, and a zero-write child adva
   assert.equal(child.body.model, 'MiniMax-M3.1-Flash', 'the child uses the deployment light model route')
 
   const endings = (await sourceEvents(alice, session)).filter(event => event.type === 'turn/end')
-  assert.equal(endings.length, 15)
+  assert.equal(endings.length, turns)
   assert.equal(completed.watermark_seq, endings.at(-1).seq, 'the completed watermark covers the frozen interval')
   assert.equal(completed.cut_seq, endings.at(-1).seq, 'the frozen cut is the last closed turn of the interval')
 })
@@ -604,10 +607,13 @@ test('the maintenance child stays out of the user session list and search, and l
 })
 
 test('a parked interval is re-evaluated on time: one full decay interval lowers the threshold by one', async () => {
+  assert.deepEqual(MAINTENANCE_DECAY_HOURS, { default: 6, min: 3, max: 24 }, 'the policy pins the decay decision')
+  const turns = MAINTENANCE_TURNS.default
+  const decayHours = MAINTENANCE_DECAY_HOURS.default
   resetChildDouble()
   const alice = await user('maintenance-decay')
   const session = await newSession(alice)
-  for (let index = 0; index < 14; index += 1) {
+  for (let index = 0; index < turns - 1; index += 1) {
     await sendTurn(alice, session, `TURN:${index}:衰减前置第${index}轮`)
   }
   const latestEnd = (await sourceEvents(alice, session)).filter(event => event.type === 'turn/end').at(-1).seq
@@ -615,10 +621,10 @@ test('a parked interval is re-evaluated on time: one full decay interval lowers 
     const row = maintenanceRow(session)
     return row?.cut_seq === latestEnd ? row : undefined
   })
-  assert.equal(observed.child_session, null, 'fourteen turns stay below the default threshold of fifteen')
-  // The source is cold enough after one full six-hour interval: the threshold
-  // is fourteen, so the same untouched interval must now start maintenance.
-  setLastClosedAt(session, Date.now() - 7 * 60 * 60 * 1000)
+  assert.equal(observed.child_session, null, `${turns - 1} turns stay below the default threshold of ${turns}`)
+  // The source is cold enough after one full decay interval: the threshold is
+  // one lower, so the same untouched interval must now start maintenance.
+  setLastClosedAt(session, Date.now() - (decayHours + 1) * 60 * 60 * 1000)
   const completed = await waitFor('the decayed interval completion', () => {
     const row = maintenanceRow(session)
     return row?.status === 0 && row?.watermark_seq >= 0 ? row : undefined
@@ -627,4 +633,36 @@ test('a parked interval is re-evaluated on time: one full decay interval lowers 
   const endings = (await sourceEvents(alice, session)).filter(event => event.type === 'turn/end')
   assert.equal(completed.watermark_seq, endings.at(-1).seq)
   assert.equal(childRequests.length, 1, 'the decayed threshold starts exactly one child')
+})
+
+test('the memory row refuses a maintenance setting outside the policy range, naming the field and the bound', async () => {
+  // The owning Config schema is the first check a deployment value meets, and
+  // its bounds are the memory package policy's. Booting the real launcher with
+  // one value outside each range proves the two consumers share the decision:
+  // a Config that kept its own literal bounds would fail on a different number.
+  const cases = [
+    { field: 'maintenanceTurns', value: MAINTENANCE_TURNS.min - 1,
+      bound: `expected number >= ${MAINTENANCE_TURNS.min}` },
+    { field: 'maintenanceDecayHours', value: MAINTENANCE_DECAY_HOURS.max + 1,
+      bound: `expected number <= ${MAINTENANCE_DECAY_HOURS.max}` },
+  ]
+  for (const { field, value, bound } of cases) {
+    const caseHome = makeHome(`ourfairy-memory-policy-${field}-`)
+    try {
+      const env = field === 'maintenanceTurns'
+        ? { OURFAIRY_MEMORY_MAINTENANCE_TURNS: String(value) }
+        : { OURFAIRY_MEMORY_MAINTENANCE_DECAY_HOURS: String(value) }
+      const run = await runBackendAsync(['probe', '--report', join(caseHome, 'report.json')], {
+        OURFAIRY_HOME: caseHome, MINIMAX_CN_API_KEY: 'mock-policy-key',
+        OURFAIRY_MEMORY_MAINTENANCE_TURNS: undefined, OURFAIRY_MEMORY_MAINTENANCE_DECAY_HOURS: undefined,
+        ...env,
+      })
+      assert.notEqual(run.code, 0, `${field}=${value} must fail the load: ${describeRun('probe', run)}`)
+      const output = `${run.stdout}\n${run.stderr}`
+      assert.match(output, new RegExp(field, 'u'), 'the failure names the field')
+      assert.match(output, new RegExp(bound, 'u'), `the failure states the policy bound: ${bound}`)
+    } finally {
+      removeHome(caseHome)
+    }
+  }
 })
