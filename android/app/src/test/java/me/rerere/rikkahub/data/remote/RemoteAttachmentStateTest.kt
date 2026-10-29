@@ -76,8 +76,11 @@ class RemoteAttachmentStateTest {
         val file = original()
         state.addAttachment(state.snapshot.value.attachmentEpoch,file,"note.txt","text/plain"); runCurrent()
         assertArrayEquals("exact original\n".toByteArray(),files.originals.single())
-        assertTrue(state.send("")); runCurrent()
+        val accepted = state.send("")
+        assertNotNull(accepted)
+        runCurrent()
         val unknown = state.snapshot.value.pending!!
+        assertEquals("returned requestId is the pending command's own key", accepted, unknown.requestId)
         assertEquals(listOf("a".repeat(32)),unknown.uploadIds)
         assertTrue(unknown.acceptanceUnknown)
         val serialized = Json.encodeToString(store.load(ChatSyncKey("https://fairy", 1, "s1")))
@@ -102,7 +105,7 @@ class RemoteAttachmentStateTest {
         state.bind("alice","s1",1); runCurrent()
         state.addAttachment(state.snapshot.value.attachmentEpoch,original(),"note.txt","text/plain"); runCurrent()
         store.fail = true
-        assertTrue(state.send("note")); runCurrent()
+        assertNotNull(state.send("note")); runCurrent()
         assertTrue(chat.sent.isEmpty())
         assertEquals(listOf("a".repeat(32)),state.snapshot.value.pending?.uploadIds)
     }

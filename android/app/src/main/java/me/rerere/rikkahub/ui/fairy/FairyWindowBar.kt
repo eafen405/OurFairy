@@ -139,6 +139,12 @@ fun FairyWindowTopBar(
     title: String? = null,
     subtitleLeading: (@Composable () -> Unit)? = null,
     subtitleTag: String? = null,
+    /**
+     * New Fairy outputs that arrived while 当前表现 is SPEAKING, from the interaction module's
+     * transient presentation state. It reaches both screens; their existing SPEAKING gate decides
+     * whether a pulse is drawn.
+     */
+    speechPulse: Int = 0,
     screenOpen: Boolean = rememberFairyScreenOpen(window),
     onNavigateBack: () -> Unit,
     moreMenuContent: (@Composable ColumnScope.(dismiss: () -> Unit) -> Unit)? = null,
@@ -191,7 +197,7 @@ fun FairyWindowTopBar(
                             FairyScreen(
                                 presence = window.presence,
                                 eyeSize = 36.dp,
-                                speechPulse = window.speechPulse,
+                                speechPulse = speechPulse,
                                 eye = eye,
                                 modifier = Modifier.size(width = 64.dp, height = 44.dp),
                             )
@@ -290,7 +296,7 @@ fun FairyWindowTopBar(
                 FairyScreen(
                     presence = window.presence,
                     eyeSize = 88.dp,
-                    speechPulse = window.speechPulse,
+                    speechPulse = speechPulse,
                     hud = true,
                     eye = eye,
                     modifier = Modifier

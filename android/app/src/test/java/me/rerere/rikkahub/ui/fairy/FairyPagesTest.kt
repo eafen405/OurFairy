@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.fairy
 
 import android.app.Application
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -14,7 +15,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -30,6 +31,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.geometry.Offset
+import androidx.lifecycle.Lifecycle
 import java.io.File
 import java.time.Duration
 import android.graphics.Bitmap
@@ -67,7 +70,7 @@ import org.robolectric.shadows.ShadowSystemClock
 @Config(application = Application::class, sdk = [35], qualifiers = "zh-rCN-w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class FairyPagesTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var user = IdentityUser(2, "agent-two")
     private var listedSessions = OwnedSessions(
@@ -113,7 +116,8 @@ class FairyPagesTest {
         override suspend fun checkpoint(token: String, sessionId: String) = updates.getValue(sessionId).value.cursor
         override suspend fun page(token: String, sessionId: String, throughSeq: Long, beforeSeq: Long) = error("not used")
         override suspend fun read(token: String, sessionId: String) = error("not used")
-        override suspend fun send(token: String, sessionId: String, requestId: String, text: String, uploadIds: List<String>) = error("not used")
+        override suspend fun send(token: String, sessionId: String, requestId: String, text: String, uploadIds: List<String>) =
+            ChatReceipt(sessionId, requestId, "sent-$requestId", 0)
         override suspend fun receipt(token: String, sessionId: String, requestId: String): ChatReceipt? = null
         override suspend fun stop(token: String, sessionId: String) = Unit
     }
@@ -204,6 +208,28 @@ class FairyPagesTest {
             durableThroughSeq = 0,
             events = eventCoverage(0, 0),
             activity = RemoteActivity(status, reasons),
+        ),
+    )
+
+    /**
+     * One live frame of the same connection: the cut (throughSeq 0) stays put, the version
+     * advances, and the established activity reports one delivered output at [seq].
+     */
+    private fun delivered(sessionId: String, seq: Long, version: Long) = RemoteChatProjection(
+        sessionId = sessionId,
+        generation = "g",
+        version = version,
+        cursor = 0,
+        durableThroughSeq = 0,
+        events = eventCoverage(0, 0),
+        messages = listOf(
+            RemoteChatMessage("delivery$seq", seq, seq, role = 2, status = 2, text = "delivered$seq"),
+        ),
+        activity = RemoteActivity(
+            status = 1,
+            throughSeq = 0,
+            delivery = RemoteActivityDelivery("$sessionId-run", seq),
+            completed = RemoteCompletedActivity("$sessionId-run", 0, seq, seq),
         ),
     )
 
@@ -619,6 +645,151 @@ class FairyPagesTest {
             FairyConversationPage(target, {}, receive, fairy,
                 onOpenConversation = { target = it }, onSettings = {})
         }
+    }
+
+    @Test fun `sending a message asks for attention without pretending Fairy is thinking`() {
+        conversation()
+        compose.waitUntil { fairy.state.value.context == FairyInteractionContext("main") }
+        compose.waitUntil { receive.selectedChat.value?.snapshot?.value?.storageReady == true }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithText("发送消息…").performTextInput("你好，Fairy")
+        compose.onNodeWithContentDescription("发送消息").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals(
+                "发送被接受后应有一次注意反应",
+                FairyReactionKind.SENT,
+                fairy.state.value.reaction?.kind,
+            )
+            assertEquals(
+                "本地发送不得把安静会话显示成后端正在思考",
+                FairyPresence.IDLE,
+                fairy.state.value.window.presence,
+            )
+        }
+        compose.onNodeWithText("正在思考…").assertDoesNotExist()
+    }
+
+    @Test fun `coming back to the foreground settles what arrived while away`() {
+        updates["main"] = activity("main", 1)
+        conversation()
+        compose.waitUntil { fairy.state.value.context == FairyInteractionContext("main") }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        compose.waitForIdle()
+        // A delivery lands while the app is stopped and no page is presenting it.
+        compose.runOnIdle {
+            updates.getValue("main").value = delivered("main", 1, version = 1)
+        }
+        compose.waitUntil {
+            receive.stateForSession("main")?.snapshot?.value?.activity?.status == 1
+        }
+
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertNull(
+                "回到前台不得补演离开期间到达的投递",
+                fairy.state.value.reaction,
+            )
+            assertEquals(
+                "回来时呈现的是当前事实：安静会话里的一次投递不算执行中",
+                FairyPresence.IDLE,
+                fairy.state.value.window.presence,
+            )
+        }
+
+        // A delivery that arrives after the return is a genuine event and does react.
+        compose.runOnIdle {
+            updates.getValue("main").value =
+                delivered("main", 2, version = 2)
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(
+                "回来之后的新投递仍然产生一次反应",
+                FairyReactionKind.DELIVERY,
+                fairy.state.value.reaction?.kind,
+            )
+        }
+    }
+
+    @Test fun `a quiet delivery shows content without pretending work under reduced motion`() {
+        updates["main"] = activity("main", 1)
+        conversation()
+        compose.waitUntil { fairy.state.value.context == FairyInteractionContext("main") }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            updates.getValue("main").value = delivered("main", 1, version = 1)
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithText("delivered1").assertIsDisplayed()
+        compose.onNodeWithText("已连接").assertIsDisplayed()
+        compose.onNodeWithText("正在思考…").assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(
+                "Reduced Motion 下投递仍显示当前表现为安静",
+                FairyPresence.IDLE,
+                fairy.state.value.window.presence,
+            )
+            assertEquals(
+                "反应仍是 module 的答案，页面只播放",
+                FairyReactionKind.DELIVERY,
+                fairy.state.value.reaction?.kind,
+            )
+        }
+    }
+
+    @Test fun `the module's reaction reaches the page's eye once`() {
+        val eye = FairyEyeController()
+        var reaction by mutableStateOf<FairyReaction?>(null)
+        var recompositions by mutableStateOf(0)
+        compose.setContent {
+            recompositions // a live recomposition source, to prove the same reaction does not replay
+            FairyEyeReactions(
+                reaction = reaction,
+                eye = eye,
+                composer = { Offset(10f, 20f) },
+                content = { Offset(30f, 40f) },
+            )
+        }
+        compose.waitForIdle()
+        assertEquals("没有反应时眼睛不动", 0, eye.glances)
+
+        reaction = FairyReaction(1, FairyReactionKind.SENT)
+        compose.waitForIdle()
+        assertEquals("发送让眼睛看向输入处", 1, eye.glances)
+
+        reaction = FairyReaction(2, FairyReactionKind.OUTPUT)
+        compose.waitForIdle()
+        assertEquals("新输出让眼睛看向内容", 2, eye.glances)
+
+        reaction = FairyReaction(3, FairyReactionKind.DELIVERY)
+        compose.waitForIdle()
+        assertEquals("投递让眼睛看向内容", 3, eye.glances)
+
+        reaction = FairyReaction(4, FairyReactionKind.COMPLETED)
+        compose.waitForIdle()
+        assertEquals("完成只眨眼，不再转眼", 3, eye.glances)
+        assertEquals("完成事件眨一次眼", 1, eye.blinks)
+
+        recompositions += 1
+        compose.waitForIdle()
+        assertEquals("重组不得重演同一次反应", 3, eye.glances)
+        assertEquals("重组不得重演同一次眨眼", 1, eye.blinks)
     }
 
     @Test fun `a model title arriving after the reply re-reads the list and reaches the bar`() {

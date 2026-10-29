@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
@@ -77,7 +78,8 @@ fun FairyConsolePage(
     val owned by receive.owned.snapshot.collectAsStateWithLifecycle()
     val interaction by fairy.state.collectAsStateWithLifecycle()
     var powerOn by remember { mutableIntStateOf(if (FairyColdStart.claim()) 1 else 0) }
-    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current.lifecycle
+    val lifecycle by lifecycleOwner.currentStateAsState()
     val speaks = LocalConfiguration.current.locales[0].language == "zh"
     val running = lifecycle.isAtLeast(Lifecycle.State.STARTED)
     val asleep = interaction.asleep
@@ -98,8 +100,39 @@ fun FairyConsolePage(
     }
     // The controller is the page's own transient eye state; the continuous 待机 lives in the module.
     LaunchedEffect(asleep) { eye.asleep = asleep }
+    // Coming back to the foreground presents the current session's facts as they are right now —
+    // read from its runtime, not from this composition, which did not run while away — and settles
+    // whatever arrived in the meantime instead of replaying it. Leaving settles the transient
+    // presentation.
+    DisposableEffect(lifecycleOwner, fairy, receive) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> {
+                    val sessionId = receive.owned.snapshot.value.currentSessionId()
+                    val current = sessionId?.let(receive::stateForSession)?.snapshot?.value
+                    fairy.foregrounded(
+                        sessionId?.let(::FairyInteractionContext),
+                        current?.fairyFacts(),
+                    )
+                }
+                Lifecycle.Event.ON_STOP -> fairy.pageExit()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.addObserver(observer)
+        onDispose { lifecycleOwner.removeObserver(observer) }
+    }
     DisposableEffect(fairy) { onDispose { fairy.pageExit() } }
     val origin = remember { floatArrayOf(0f, 0f) }
+    val bounds = remember { floatArrayOf(0f, 0f) }
+    // New events glance at the page's content; the console has no composer of its own, so a SENT
+    // reaction (which only a conversation page can produce) has no target here.
+    FairyEyeReactions(
+        reaction = interaction.reaction,
+        eye = eye,
+        composer = { null },
+        content = { Offset(origin[0] + bounds[0] / 2f, origin[1] + bounds[1] * 0.55f) },
+    )
     // 当前会话: the reader's last choice, else the account's main session. Home presents only this
     // one session — its runtime, its connection, its activity — never a union over the account.
     val currentSessionId = owned.currentSessionId()
@@ -128,6 +161,8 @@ fun FairyConsolePage(
                     .onGloballyPositioned {
                         origin[0] = it.positionInRoot().x
                         origin[1] = it.positionInRoot().y
+                        bounds[0] = it.size.width.toFloat()
+                        bounds[1] = it.size.height.toFloat()
                     }
                     .pointerInput(eye) {
                         awaitPointerEventScope {
@@ -153,6 +188,7 @@ fun FairyConsolePage(
                     FairyScreen(
                         presence = window.presence,
                         eyeSize = 112.dp,
+                        speechPulse = interaction.speechPulse,
                         hud = true,
                         eye = eye,
                         hudStatus = if (asleep) "SLEEP" else null,

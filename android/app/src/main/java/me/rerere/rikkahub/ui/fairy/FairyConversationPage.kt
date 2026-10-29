@@ -40,6 +40,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -72,7 +75,39 @@ fun FairyConversationPage(
     val eye = remember { FairyEyeController(asleep = fairy.state.value.asleep) }
     LaunchedEffect(interaction.asleep) { eye.asleep = interaction.asleep }
     DisposableEffect(fairy) { onDispose { fairy.pageExit() } }
+    // Coming back to the foreground presents the routed session's facts as they are right now —
+    // read from its runtime, not from this composition, which did not run while away — and settles
+    // whatever arrived in the meantime instead of replaying it. Leaving settles the transient
+    // presentation.
+    val lifecycleOwner = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycleOwner, fairy, receive, sessionId) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> {
+                    val runtime = sessionId?.let(receive::stateForSession)
+                    val current = runtime?.snapshot?.value?.takeIf { it.sessionId == sessionId }
+                    fairy.foregrounded(
+                        sessionId?.let(::FairyInteractionContext),
+                        current?.fairyFacts(),
+                    )
+                }
+                Lifecycle.Event.ON_STOP -> fairy.pageExit()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.addObserver(observer)
+        onDispose { lifecycleOwner.removeObserver(observer) }
+    }
     val origin = remember { floatArrayOf(0f, 0f) }
+    val bounds = remember { floatArrayOf(0f, 0f) }
+    // The module names the stimulus; this page maps it to the eye response. A send glances toward
+    // the composer, new output or a delivery toward the transcript, and a finished run blinks.
+    FairyEyeReactions(
+        reaction = interaction.reaction,
+        eye = eye,
+        composer = { Offset(origin[0] + bounds[0] / 2f, origin[1] + bounds[1]) },
+        content = { Offset(origin[0] + bounds[0] / 2f, origin[1] + bounds[1] * 0.55f) },
+    )
     var opening by remember(sessionId) { mutableStateOf(true) }
     var failed by remember(sessionId) { mutableStateOf(false) }
     var retry by remember(sessionId) { mutableIntStateOf(0) }
@@ -163,6 +198,8 @@ fun FairyConversationPage(
                 .onGloballyPositioned {
                     origin[0] = it.positionInRoot().x
                     origin[1] = it.positionInRoot().y
+                    bounds[0] = it.size.width.toFloat()
+                    bounds[1] = it.size.height.toFloat()
                 }
                 // Observational only (Final pass, never consumed): fingers still reach the list,
                 // the composer and the bar. The module answers whether a touch woke a sleeping
@@ -185,6 +222,7 @@ fun FairyConversationPage(
                         RemoteChatPanel(
                             state = selectedChat,
                             onReconnect = receive::resumeObservation,
+                            onSendAccepted = fairy::sent,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -210,6 +248,7 @@ fun FairyConversationPage(
                 window = window,
                 eye = eye,
                 title = session?.title,
+                speechPulse = interaction.speechPulse,
                 screenOpen = screenOpen,
                 subtitle = when {
                     opening -> "正在打开会话…"

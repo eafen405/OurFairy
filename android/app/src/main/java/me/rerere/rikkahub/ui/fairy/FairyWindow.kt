@@ -81,7 +81,6 @@ internal fun fairyGlowRange(presence: FairyPresence): ClosedFloatingPointRange<F
 data class FairyWindowState(
     val presence: FairyPresence,
     val expanded: Boolean = false,
-    val speechPulse: Int = 0,
     val awaitingReply: Boolean = false,
 )
 
@@ -134,11 +133,9 @@ private fun FairyEyeInput.fill(eye: FairyEyeController?, eyeRoot: FloatArray, re
         else Offset.Unspecified
     if (eye == null) return
     pointer = units(eye.pointer)
-    attention = units(eye.attention)
     glance = units(eye.glance)
     glanceMs = eye.glanceMs
     glances = eye.glances
-    startles = eye.startles
     blinks = eye.blinks
     wakes = eye.wakes
     wakeConfused = eye.wakeConfused
@@ -157,7 +154,7 @@ private fun FairyEyeInput.fill(eye: FairyEyeController?, eyeRoot: FloatArray, re
  * The eye is alive through [FairyEyeMotion]: saccades between fixations
  * that follow the presence (THINKING searches up left and right, SPEAKING
  * looks at the user, IDLE rests and glances around), blinks, a pupil that
- * dips on [FairyEyeController.startle] and widens in stand-by
+ * dips when waking and widens in stand-by
  * ([FairyEyeController.asleep]), and a gaze that pursues
  * [FairyEyeController.lookAt]. SPEAKING also pulses the eye on
  * [speechPulse]; the disc turns faster while working.
