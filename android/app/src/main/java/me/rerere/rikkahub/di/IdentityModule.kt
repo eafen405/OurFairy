@@ -89,7 +89,7 @@ val identityModule = module {
                 speechBackend = get<RemoteSpeechBackend>(),
                 settleReminders = settles,
             )
-        }, notifications, { notifications.enabled.value })
+        }, notifications, { notifications.enabled.value }, syncStore, identityEndpoint)
     }
 
     single { RemoteReceiveServiceLauncher(get<Context>()) }

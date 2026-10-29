@@ -92,7 +92,7 @@ class RemoteNotificationStateTest {
         enabled: () -> Boolean = { true },
     ) = RemoteReceiveState(Sessions(), backgroundScope, { settle ->
         RemoteChatState(backend, backgroundScope, store, "https://fairy", settleReminders = settle)
-    }, platform, enabled)
+    }, platform, enabled, store, "https://fairy")
 
     private fun TestScope.opened(
         store: ChatSyncStore,

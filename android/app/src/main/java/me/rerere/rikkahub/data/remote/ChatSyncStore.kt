@@ -4,6 +4,16 @@ import kotlinx.serialization.Serializable
 
 data class ChatSyncKey(val endpoint: String, val userShortId: Int, val sessionId: String)
 
+/**
+ * The one place a durable record key is built.
+ *
+ * Reception reads reminder debt from the ledger by these keys while each session reads and writes
+ * its own record by them; if the two disagreed by so much as a trailing slash they would be
+ * talking about two different records. Both call this, so they cannot.
+ */
+internal fun chatSyncKey(endpoint: String, userShortId: Int, sessionId: String) =
+    ChatSyncKey(endpoint.trimEnd('/'), userShortId, sessionId)
+
 @Serializable
 data class StoredChatSend(val requestId: String, val text: String, val uploadIds: List<String> = emptyList())
 
