@@ -19,8 +19,10 @@
 | `06-android-snapshot-residue.md` | CLEAN-06 | 删除高置信 Android 快照残留 | 无 |
 | `07-generated-artifacts.md` | CLEAN-07 | 确认并回收本地可再生产物 | 无；不阻塞合并 |
 | `08-closeout.md` | CLEAN-08 | 两轴评审、证据与全量门禁 | CLEAN-01～CLEAN-06 |
+| `09-related-selection-coverage.md` | CLEAN-09 | 补齐其余包行为套件的 `@covers` 声明（CLEAN-01 遗留缺口） | 无（CLEAN-01 已合入） |
 
-CLEAN-01～CLEAN-06 可按写范围并行。CLEAN-07 只操作本机产物，建议在 CLEAN-08 前完成，以让最终 Android 门禁覆盖一次真实重建；它不是代码合并依赖。
+CLEAN-01～CLEAN-06 可按写范围并行。CLEAN-09 是 CLEAN-01 合入后才暴露的遗留缺口：选择器只给五个包补了声明，
+其余包仍有「套件驱动该包、却不会被该包改动选中」的单向关联；它不阻塞本批交付，单独排期。CLEAN-07 只操作本机产物，建议在 CLEAN-08 前完成，以让最终 Android 门禁覆盖一次真实重建；它不是代码合并依赖。
 
 ## 共同约定
 
