@@ -78,6 +78,8 @@ sudo systemctl restart ourfairy-backend.service
   `ourfairy@009521b40e85` + `dsh@d80522d276dd`、dsh CLI、产品包构建、profile 已安装、
   12 个包由 17 行挂载、14 个包与 dsh 0.2.1-rc.2 兼容、五项原生能力。
 - 重启后 `ActiveState=active`、`NRestarts=0`、监听 `127.0.0.1:3080`。
+- 部署后 `main` 又前进到 `aaa1a62109`（只加本证据文档），产品包与 APK 未变；服务器检出停在
+  发布提交 `009521b40e`，没有再构建或重启。
 
 ## 部署后验证（真实服务）
 
