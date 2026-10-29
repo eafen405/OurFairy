@@ -14,10 +14,13 @@
  * installs, a merge, an explicit `--full`, or a selection wider than the limit
  * run the whole suite.
  *
- * The selection is a direct-surface choice, not a coverage claim: a suite that
- * drives a package through the launcher rather than importing it declares the
- * package in its own `@covers` line, a package no test declares or names falls
- * to `typecheck`, and the closing ticket runs the full suite.
+ * The selection is a direct-surface choice, not a coverage claim: the selector
+ * reads the changed path's direct references in a test body plus any
+ * `@covers backend/<package>` line the test file writes for itself. Whether a
+ * suite that drives a package through the launcher carries that line is the
+ * suite's own call — this selector claims no complete coverage — a package no
+ * test declares or names falls to `typecheck`, and the closing ticket runs the
+ * full suite.
  *
  * Final backend and changed-face Android checks remain mandatory;
  * `CODING_STANDARDS.md` names the delivery commands and CI runs both product faces.
