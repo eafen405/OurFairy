@@ -5,8 +5,10 @@
  * §5/§6: a source session is maintained after 15 closed user turns by default,
  * the threshold may be set from 5 to 50, the decay interval is 6 hours by
  * default and may be set from 3 to 24. The row's own Config, the maintenance
- * engine's read-time validation and the gateway's phone-facing checks all read
- * this module instead of restating a bound, so the three cannot drift apart.
+ * engine's read-time validation and the gateway's phone-facing checks take
+ * their defaults and bounds from this module. The gateway, memory-maintenance
+ * and recovery suites derive their expectations from it, so a consumer that
+ * declares its own numbers fails them once the two differ.
  *
  * The module imports nothing: the gateway reads it without loading the memory
  * row's runtime graph.

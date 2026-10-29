@@ -112,8 +112,9 @@ function textSetting(field: MaintenanceField, fallback: string, name: string): s
  * Every call reads the current value of each field: the loader hands over
  * volatile refs, and a settings write changes what the next evaluation sees.
  * Nothing here is cached across evaluations. The fallbacks and the accepted
- * ranges are the memory package's maintenance policy, so this read-time check
- * and the row's own Config cannot disagree.
+ * ranges come from the memory package's maintenance policy
+ * (`./maintenance-policy.ts`); `tests/memory-maintenance-recovery.test.mjs`
+ * holds this read-time check to that policy's bounds.
  * @param config - the memory row config as the loader handed it over.
  * @returns the checked settings for this evaluation.
  */
