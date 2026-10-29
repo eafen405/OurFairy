@@ -6,6 +6,8 @@
  * tools are driven exactly as the client and the model do; where the contract
  * is about the stored row rather than the interface, the memory SQLite file is
  * read directly.
+ *
+ * @covers backend/memory
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'

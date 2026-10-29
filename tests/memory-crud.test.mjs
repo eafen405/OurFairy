@@ -6,6 +6,8 @@
  * model would. Assertions read what the model receives (the tool result blocks)
  * and, where the contract is about storage rather than interface, the memory
  * SQLite file itself — never a hand-mounted plugin or a private class.
+ *
+ * @covers backend/memory
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'

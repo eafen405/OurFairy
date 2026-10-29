@@ -1,3 +1,7 @@
+/**
+ * @covers backend/search — this suite drives conversation search through the
+ * product's chat routes rather than importing the package.
+ */
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'

@@ -8,6 +8,8 @@
  * same loopback wire. Assertions read what the child model actually received
  * (the captured request body), the source session's events, and the memory
  * row's own `memory.sqlite` — never a hand-mounted plugin or a private class.
+ *
+ * @covers backend/memory
  */
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
