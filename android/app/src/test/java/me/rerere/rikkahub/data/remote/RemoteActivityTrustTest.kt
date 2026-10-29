@@ -72,7 +72,7 @@ class RemoteActivityTrustTest {
     ): RemoteChatState {
         val receiver = RemoteReceiveState(Sessions(), backgroundScope, { settle ->
             RemoteChatState(backend, backgroundScope, store, "https://fairy", settleReminders = settle)
-        }, platform)
+        }, platform, { true }, store, "https://fairy")
         receiver.bind("alice", 1); runCurrent()
         return requireNotNull(receiver.stateForSession("s"))
     }

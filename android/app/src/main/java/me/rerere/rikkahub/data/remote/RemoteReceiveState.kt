@@ -29,7 +29,24 @@ class RemoteReceiveState(
     private val chatFactory: (settleReminders: Boolean) -> RemoteChatState,
     private val notifications: RemoteNotificationPlatform? = null,
     private val notificationsEnabled: () -> Boolean = { true },
+    /**
+     * The durable ledger the reminder is read from and consumed in.
+     *
+     * Reception discovers debt here by the account's session keys rather than by asking each live
+     * runtime what it holds, so whether a reminder can be settled no longer depends on that
+     * session's runtime existing. Required whenever [notifications] is set: a receiver that
+     * publishes reminders without the ledger could only publish by walking runtimes again.
+     */
+    private val ledger: ChatSyncStore? = null,
+    /** The endpoint the ledger keys are scoped by; must be the one the sessions were built with. */
+    private val endpoint: String? = null,
 ) {
+    init {
+        require(notifications == null || (ledger != null && endpoint != null)) {
+            "接收发布提醒时必须提供持久记录（ledger）与其 endpoint"
+        }
+    }
+
     /**
      * The account's own session list and the actions on it.
      *
@@ -67,7 +84,10 @@ class RemoteReceiveState(
                     }
                 }
                 mutableSelected.value = chats[listed.selectedId]
-                if (removed.isNotEmpty()) publishBacklog()
+                // The list is what names the account's session keys, so it is also the first
+                // moment debt that a previous run recorded becomes discoverable. A backlog owed
+                // by sessions that have not answered yet is held by the catch-up gate below.
+                if (removed.isNotEmpty() || listed.sessions.isNotEmpty()) publishBacklog()
             }
         }
     }
@@ -158,26 +178,37 @@ class RemoteReceiveState(
      * sessions answered first — one reminder per arriving session. A session whose attempt failed
      * has answered too: it owes nothing on that connection, so it stops holding the backlog and a
      * permanently unreachable session cannot keep another session's reminder waiting.
+     *
+     * The debt itself is read from the ledger by the account's session keys. A live runtime is
+     * asked only what it observed — never whether anything is owed — so a session whose runtime is
+     * absent, retired or still opening is still discoverable, and one whose runtime exists cannot
+     * hide a debt written by a previous run.
      */
     private fun publishBacklog() {
         val platform = notifications ?: return
+        val ledger = ledger ?: return
+        val endpoint = endpoint ?: return
+        // Observation is the only state in which settlement may spend a reminder. A list refresh
+        // can arrive after observation stopped (background reception off), and reading the ledger
+        // then would retire debt the stopped receiver is not allowed to publish.
+        if (!observing) return
         if (publishing?.isActive == true) return
         if (chats.values.any { it.snapshot.value.isCatchingUp }) return
         val started = epoch
+        val account = userShortId ?: return
         publishing = scope.launch {
             try {
-                val owed = chats.values.mapNotNull { chat ->
-                    chat.owedReminder()?.let { Owed(chat, it.first, it.second) }
-                }
-                // Ask again after the awaited disk work: the account and the app may have moved.
-                if (owed.isEmpty() || started != epoch) return@launch
+                val owed = owedRecords(ledger, endpoint, account)
+                // Ask again after the awaited disk work: the account, the observation and the app
+                // may have moved while the records were read.
+                if (owed.isEmpty() || started != epoch || !observing) return@launch
                 // Consumed before the attempt: a crash here may miss the sound, but cannot replay it.
-                owed.forEach { it.chat.consumeReminder() }
-                if (started != epoch || !notificationsEnabled() || platform.isForeground()) return@launch
+                owed.forEach { consume(it) }
+                if (started != epoch || !observing || !notificationsEnabled() || platform.isForeground()) return@launch
                 // One reminder for the account's whole backlog. It opens the primary session when
                 // that one owes something, so a merge still lands where the user reads.
                 val primary = owned.snapshot.value.primarySessionId
-                val target = owed.minWithOrNull(compareBy({ it.key.sessionId != primary }, { it.key.sessionId }))
+                val target = owed.minWithOrNull(compareBy({ it.sessionId != primary }, { it.sessionId }))
                     ?: return@launch
                 platform.publish(target.key, target.preview)
             } catch (cancelled: CancellationException) {
@@ -192,9 +223,48 @@ class RemoteReceiveState(
         }
     }
 
-    private class Owed(val chat: RemoteChatState, val key: ChatSyncKey, val preview: String)
+    /**
+     * The account's session keys that the ledger says owe a reminder.
+     *
+     * The listed sessions are the keys: reception already treats that list as the set of sessions
+     * allowed to exist. The preview is this observation's newest Fairy output when a runtime has
+     * one, and the generic fallback otherwise — a process that restarted has no projection to read
+     * and must not have to persist a second copy of the body to say something useful.
+     */
+    private suspend fun owedRecords(ledger: ChatSyncStore, endpoint: String, account: Int): List<Owed> =
+        owned.snapshot.value.sessions.mapNotNull { session ->
+            val key = chatSyncKey(endpoint, account, session.id)
+            val record = ledger.load(key)
+            // The episode identity only answers "is anything owed"; session ids stay opaque.
+            if (record.notificationEpisodeId == null || !record.notificationOwed) return@mapNotNull null
+            val preview = chats[session.id]?.snapshot?.value?.projection?.messages
+                ?.newestFairyOutput(record.consumedThrough)?.text
+                ?.take(160)?.ifBlank { null } ?: GENERIC_PREVIEW
+            Owed(session.id, key, preview)
+        }
+
+    /**
+     * Retire the debt through the session's own runtime when it has one, so the write lands under
+     * the lock that runtime commits records with; otherwise write the ledger directly, where no
+     * runtime exists to race. Both name the same record.
+     */
+    private suspend fun consume(owed: Owed) {
+        val chat = chats[owed.sessionId]
+        if (chat != null) {
+            chat.consumeReminder(owed.key)
+            return
+        }
+        val ledger = ledger ?: return
+        val record = ledger.load(owed.key)
+        if (record.notificationOwed) ledger.save(owed.key, record.copy(notificationOwed = false))
+    }
+
+    private class Owed(val sessionId: String, val key: ChatSyncKey, val preview: String)
 
     private companion object {
         const val RETRY_MILLIS = 1_000L
+
+        /** What a reminder says when no observation of this run has a body to quote. */
+        const val GENERIC_PREVIEW = "Fairy 已完成本次活动"
     }
 }

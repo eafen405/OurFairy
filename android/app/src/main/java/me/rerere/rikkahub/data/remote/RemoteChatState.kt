@@ -164,7 +164,7 @@ class RemoteChatState(
 
     fun bind(credential: String?, selectedSessionId: String?, userShortId: Int?) {
         val selected = if (selectedSessionId != null && userShortId != null) {
-            ChatSyncKey(endpoint.trimEnd('/'), userShortId, selectedSessionId)
+            chatSyncKey(endpoint, userShortId, selectedSessionId)
         } else null
         if (credential == token && selected == key && observer?.isActive == true) return
         val same = selected == key && selected != null
@@ -195,6 +195,10 @@ class RemoteChatState(
             mutable.value = RemoteChatSnapshot(sessionId = selectedSessionId, attachmentEpoch = attachmentEpoch)
         } else mutable.value = mutable.value.copy(connected = false, connecting = false)
         if (credential == null || selected == null) return
+        // The binding is now waiting on its first answer. Set that before the observer coroutine
+        // runs: reception's backlog gate asks the same snapshot, and a launch that has not been
+        // dispatched yet must read as "has not answered", not as "answered with nothing owed".
+        mutable.value = mutable.value.copy(connecting = true)
         val boundEpoch = epoch
         observer = scope.launch {
             while (boundEpoch == epoch) {
@@ -293,25 +297,21 @@ class RemoteChatState(
         ?.get("title")?.jsonPrimitive?.content
 
     /**
-     * The reminder this session still owes: the session it opens and the output to show. It is
-     * read from the durable record the settlement committed, so a backlog restored by a later run
-     * is still owed rather than silently dropped.
+     * Consume the episode [selected] owes, before reception attempts to publish it.
+     *
+     * Reception discovers debt in the ledger, not here; this method exists so that the write lands
+     * under the lock this session also commits its records with. Otherwise a settlement in flight
+     * could save a copy loaded before the consumption and resurrect a reminder already spent. The
+     * load below deliberately reads through to the store: the in-memory copy may predate a record
+     * another run wrote, and the durable record is the authority for whether anything is owed.
+     *
+     * Consumed before the attempt: a crash here may miss the sound, but cannot replay it.
      */
-    internal suspend fun owedReminder(): Pair<ChatSyncKey, String>? {
-        val selected = key ?: return null
-        val record = load(selected)
-        // The episode identity only answers "is anything owed"; session ids stay opaque.
-        if (record.notificationEpisodeId == null || !record.notificationOwed) return null
-        val preview = mutable.value.projection?.messages
-            ?.newestFairyOutput(record.consumedThrough)?.text
-            ?.take(160)?.ifBlank { null } ?: "Fairy 已完成本次活动"
-        return selected to preview
-    }
-
-    /** Consumed before the attempt: a crash here may miss the sound, but cannot replay it. */
-    internal suspend fun consumeReminder() {
-        val selected = key ?: return
-        update(selected) { if (it.notificationOwed) it.copy(notificationOwed = false) else it }
+    internal suspend fun consumeReminder(selected: ChatSyncKey) = recordLock.withLock {
+        val previous = store.load(selected)
+        val next = if (previous.notificationOwed) previous.copy(notificationOwed = false) else previous
+        if (next != previous) store.save(selected, next)
+        records[selected] = next
     }
 
     private fun scheduleSync(boundEpoch: Long, opened: Long, credential: String, selected: ChatSyncKey) {

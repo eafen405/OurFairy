@@ -212,7 +212,9 @@ class RemoteReceiveStateTest {
         assertFalse(state.openSession("bob-private"))
         assertEquals("alice-other", state.owned.snapshot.value.selectedId)
         assertEquals(listOf("alice" to "alice-other", "alice" to "bob-private"), sessions.authorized)
-    }    @Test fun `one sessions long task does not block another sessions notification and each uses its own position`() = runTest {
+    }
+
+    @Test fun `one sessions long task does not block another sessions notification and each uses its own position`() = runTest {
         val store = Store()
         val backend = Chats()
         val alerts = mutableListOf<ChatSyncKey>()
@@ -222,7 +224,7 @@ class RemoteReceiveStateTest {
         }
         val receiver = RemoteReceiveState(Sessions(), backgroundScope, { settle ->
             RemoteChatState(backend, backgroundScope, store, "https://fairy", settleReminders = settle)
-        }, platform)
+        }, platform, { true }, store, "https://fairy")
         receiver.bind("alice", 1); runCurrent()
         backend.updates.getValue("alice-main").emit(deliveryProjection(1).copy(sessionId = "alice-main",
             activity = RemoteActivity(2, listOf(2), "alice-main/1", 1, 1))); runCurrent()

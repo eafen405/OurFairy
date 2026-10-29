@@ -74,7 +74,7 @@ class RemoteNotificationWireTest {
             override suspend fun restore(token: String, sessionId: String) = error("not used")
         }, backgroundScope, { settle ->
             RemoteChatState(RemoteChatApi(endpoint, OkHttpClient()), backgroundScope, store, endpoint, settleReminders = settle)
-        }, platform)
+        }, platform, { true }, store, endpoint)
         val state: RemoteChatState
         try {
             receiver.bind("fixture-recipient", 3)
