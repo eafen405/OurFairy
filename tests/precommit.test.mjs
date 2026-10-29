@@ -85,7 +85,13 @@ test('a package a suite drives through the launcher is selected by that suite’
   // the only way the selector could ever see them. The declaration is that name.
   const decision = plan(['backend/delivery/src/index.ts'])
   assert.equal(decision.mode, 'related', 'delivery has behaviour suites, so the gate must run them instead of the type check')
-  for (const file of ['tests/text-delivery.test.mjs', 'tests/file-delivery.test.mjs', 'tests/delivery-row.test.mjs']) {
+  // The last two call `deliver_message` as one step of another subject: search
+  // needs a delivered message to find, and the row suite asserts the tool is
+  // gone once its row is disabled. That second assertion also passes when the
+  // row never registered the tool, so the three suites above — not this list —
+  // carry the behaviour claim.
+  for (const file of ['tests/text-delivery.test.mjs', 'tests/file-delivery.test.mjs', 'tests/delivery-row.test.mjs',
+    'tests/conversation-search.test.mjs', 'tests/row-addressability.test.mjs']) {
     assert.ok(
       decision.tests.includes(file),
       `a delivery source change must select ${file}; the gate selected ${decision.tests.join(', ') || '(none)'}`,
@@ -93,17 +99,24 @@ test('a package a suite drives through the launcher is selected by that suite’
   }
 })
 
-test('a speech source change selects the suite that drives the speech route', () => {
+test('a speech source change selects the suites that drive the speech route', () => {
   const tests = plan(['backend/speech/src/service.ts']).tests
-  assert.ok(
-    tests.includes('tests/speech.test.mjs'),
-    `speech has a behaviour suite; the gate selected ${tests.join(', ') || '(none)'}`,
-  )
+  // `speech` owns the subject; the other two call the route from outside it —
+  // the gateway suite exercises the configured ASR route, and the host-fence
+  // case asserts `/speech` rejects an untrusted authority before its body.
+  for (const file of ['tests/speech.test.mjs', 'tests/gateway.test.mjs', 'tests/identity-http.test.mjs']) {
+    assert.ok(
+      tests.includes(file),
+      `speech has a behaviour suite; the gate selected ${tests.join(', ') || '(none)'}`,
+    )
+  }
 })
 
 test('a memory source change selects every memory suite that drives its tools', () => {
   const tests = plan(['backend/memory/src/index.ts']).tests
-  for (const suite of ['memory-crud', 'memory-impression', 'memory-policy', 'memory-maintenance', 'memory-maintenance-recovery']) {
+  // `native-compaction` scripts a `memory_search` tool call through the model
+  // double and asserts the compacted session can still make it.
+  for (const suite of ['memory-crud', 'memory-impression', 'memory-policy', 'memory-maintenance', 'memory-maintenance-recovery', 'native-compaction']) {
     const file = `tests/${suite}.test.mjs`
     assert.ok(tests.includes(file), `a memory source change must select ${file}; the gate selected ${tests.join(', ') || '(none)'}`)
   }
@@ -111,13 +124,78 @@ test('a memory source change selects every memory suite that drives its tools', 
 
 test('a groups or search source change selects the suites that drive those tools', () => {
   const groups = plan(['backend/groups/src/index.ts']).tests
-  for (const file of ['tests/groups.test.mjs', 'tests/groups-row.test.mjs']) {
+  // `groups` and `groups-row` own the subject. The rest call a group tool for
+  // their own scenario: a group root to deliver into, a tool result to carry
+  // into the next turn, and the disabled-row catalog.
+  for (const file of ['tests/groups.test.mjs', 'tests/groups-row.test.mjs', 'tests/file-delivery.test.mjs',
+    'tests/conversation-search.test.mjs', 'tests/text-delivery.test.mjs', 'tests/row-addressability.test.mjs']) {
     assert.ok(groups.includes(file), `a groups source change must select ${file}; the gate selected ${groups.join(', ') || '(none)'}`)
   }
   const search = plan(['backend/search/src/index.ts']).tests
+  // `conversation-search` owns the subject; `session-archive` searches across
+  // archived sessions, and `memory-maintenance` proves search never reaches the
+  // ownerless maintenance child.
+  for (const file of ['tests/conversation-search.test.mjs', 'tests/session-archive.test.mjs', 'tests/memory-maintenance.test.mjs']) {
+    assert.ok(search.includes(file), `a search source change must select ${file}; the gate selected ${search.join(', ') || '(none)'}`)
+  }
+})
+
+test('an attachments source change selects the suites that drive its routes', () => {
+  const tests = plan(['backend/attachments/src/index.ts']).tests
+  // `attachments` and `pdf` own the subject. The others upload through
+  // `/attachments/propose`, `/chunk` and `/complete` to get a qualified file:
+  // delivery's recipient qualification, the gateway suite's image turn, the
+  // image-offload and maintenance-material cases, and the host fence's
+  // representative attachments entry point.
+  for (const file of ['tests/attachments.test.mjs', 'tests/pdf.test.mjs', 'tests/file-delivery.test.mjs',
+    'tests/gateway.test.mjs', 'tests/native-compaction.test.mjs', 'tests/memory-maintenance.test.mjs',
+    'tests/identity-http.test.mjs']) {
+    assert.ok(tests.includes(file), `an attachments source change must select ${file}; the gate selected ${tests.join(', ') || '(none)'}`)
+  }
+})
+
+test('a chat source change selects the suites that drive its non-bootstrap routes', () => {
+  const tests = plan(['backend/chat/src/service.ts']).tests
+  // `/chat/send` and `/chat/read` are the bootstrap every suite walks, so a
+  // suite that only does that is not associated. These drive the rest of the
+  // row's surface: the live observer, checkpoints, job output and stop, page
+  // reads, receipts and explicit turn stops.
+  for (const file of ['tests/chat-cold-boundary.test.mjs', 'tests/chat-multi-observer.test.mjs',
+    'tests/chat-stream-backpressure.test.mjs', 'tests/jobs.test.mjs', 'tests/remote-chat.test.mjs',
+    'tests/native-rows.test.mjs']) {
+    assert.ok(tests.includes(file), `a chat source change must select ${file}; the gate selected ${tests.join(', ') || '(none)'}`)
+  }
+})
+
+test('a gateway source change selects the suites that drive its routes', () => {
+  const tests = plan(['backend/gateway/src/service.ts']).tests
+  // `gateway` and `gateway-service` own the subject. The settings suites read
+  // and write `/gateway/read`, `/gateway/maintenance`, `/gateway/compaction` and
+  // `/gateway/selection`; the other two use those routes from their own subject.
+  for (const file of ['tests/gateway-maintenance-settings.test.mjs', 'tests/gateway-compaction-settings.test.mjs',
+    'tests/memory-maintenance.test.mjs', 'tests/identity-http.test.mjs']) {
+    assert.ok(tests.includes(file), `a gateway source change must select ${file}; the gate selected ${tests.join(', ') || '(none)'}`)
+  }
+})
+
+test('an identity source change selects the suite that drives its credential routes', () => {
+  const tests = plan(['backend/identity/src/routes.ts']).tests
+  // Every suite signs in, so `/identity/sign-in` alone is not an association.
+  // This one asserts identity's own semantics: invitation, registration, the
+  // session read, the agent roster, sign-out, and the refusals of each.
   assert.ok(
-    search.includes('tests/conversation-search.test.mjs'),
-    `a search source change must select the conversation search suite; the gate selected ${search.join(', ') || '(none)'}`,
+    tests.includes('tests/identity-http.test.mjs'),
+    `identity has a behaviour suite; the gate selected ${tests.join(', ') || '(none)'}`,
+  )
+})
+
+test('a sessions source change selects the suite that drives archive and restore', () => {
+  const tests = plan(['backend/sessions/src/http.ts']).tests
+  // `/sessions/create` and `/sessions/read` are bootstrap every suite walks;
+  // archive and restore are this suite's own subject.
+  assert.ok(
+    tests.includes('tests/session-archive.test.mjs'),
+    `a sessions source change must select the archive suite; the gate selected ${tests.join(', ') || '(none)'}`,
   )
 })
 
@@ -138,8 +216,7 @@ test('a source change no test names falls back to the type check', () => {
   // package is selected for that package, so writing it here would make this
   // file select itself and the case could never hold. It is a real source file:
   // the acceptance script needs the deployment's real credentials, so no suite
-  // drives it — and every backend package now has a suite that declares it, so
-  // a package path would no longer show the fallback.
+  // drives it — the one property this mode needs of its input.
   const unreferenced = ['scripts', 'real-acceptance.ts'].join('/')
   assert.equal(classify([unreferenced]), 'typecheck', 'no test names this script, so the gate must not claim behaviour coverage')
   const decision = plan([unreferenced])

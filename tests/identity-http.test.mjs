@@ -13,6 +13,14 @@
  * The helper's `startArgs` derives `--allow-drift` for an explicit
  * `OURFAIRY_DSH_DIR` override (a ticket worktree of the harness); without it the
  * launcher checks out the pinned combination, which is what a normal run must do.
+ *
+ * @covers backend/identity — this is the credential suite's own subject: the
+ * invitation, registration, session read, agent roster and sign-out routes, and
+ * the refusal each one answers.
+ * @covers backend/gateway — the host fence case names `/gateway/read` as that
+ * row's entry point, so a route that stopped being registered fails here.
+ * @covers backend/attachments — the same case names `/attachments/propose`.
+ * @covers backend/speech — the same case names `/speech`.
  */
 import assert from 'node:assert/strict'
 import { after, before, describe, test } from 'node:test'

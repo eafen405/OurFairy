@@ -1,6 +1,10 @@
 /**
  * @covers backend/delivery — this suite drives the row through the product's
  * chat and HTTP routes rather than importing it.
+ * @covers backend/attachments — the delivered file is qualified through the
+ * product's upload routes before the recipient can read it.
+ * @covers backend/groups — one case delivers into a group root that the group
+ * tools create and join.
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'

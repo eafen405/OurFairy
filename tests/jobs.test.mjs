@@ -1,3 +1,8 @@
+/**
+ * @covers backend/chat — this suite drives `/chat/jobs/output`,
+ * `/chat/jobs/stop`, `/chat/observe` and `/chat/stop` through the product's own
+ * routes rather than importing the package.
+ */
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'

@@ -29,6 +29,10 @@
  *   `scoped-bash` and inserts a fixture row that provides the same `shell`
  *   service. Because the fixture extends the product's own scoped provider and
  *   calls `super.execute`, the replacement keeps the scope enforcement.
+ *
+ * @covers backend/delivery — disabling the delivery row must take
+ * `deliver_message` out of the model's catalog.
+ * @covers backend/groups — the same case for the group tools.
  */
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'

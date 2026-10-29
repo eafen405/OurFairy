@@ -19,6 +19,9 @@
  * settled job's notice is queued instead of being collected. Appending the
  * unknown row uses the same JSONL/Zstandard container the launcher writes; no
  * product code is patched.
+ *
+ * @covers backend/chat — the cold read, `/chat/observe` and `/chat/checkpoint`
+ * are this suite's own subject.
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'

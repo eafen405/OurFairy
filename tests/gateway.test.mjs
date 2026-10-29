@@ -8,6 +8,11 @@
  * Messages-protocol double selected through `OURFAIRY_MINIMAX_BASE_URL`, exactly as the
  * baseline probe suite does; that is a model double, not a claim about a real
  * provider.
+ *
+ * @covers backend/attachments — the image turns reach the model through a file
+ * uploaded on the product's attachment routes.
+ * @covers backend/speech — the ASR case records through `/speech/transcriptions`
+ * against the endpoint the gateway saved.
  */
 import assert from 'node:assert/strict'
 import { join } from 'node:path'

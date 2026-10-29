@@ -12,6 +12,11 @@
  * asks the same route) and otherwise scripts one tool call per message whose
  * text is a `{"name": ...}` command. The search case needs that because the
  * product's search is a model tool, not an HTTP route.
+ *
+ * @covers backend/sessions — the archive and restore routes are this suite's
+ * own subject; `create`, `list` and `read` are the bootstrap every suite walks.
+ * @covers backend/search — the archived session must stay out of
+ * `conversation_search` results.
  */
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'

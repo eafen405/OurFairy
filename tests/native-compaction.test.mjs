@@ -7,6 +7,11 @@
  * and the reply the authenticated session receives; no plugin is assembled by
  * hand. The one non-boot case reads the shipped bundle through dsh's own patch
  * loader, which is the composition the launcher boots.
+ *
+ * @covers backend/attachments — the image the offload cases carry arrives
+ * through the product's attachment routes.
+ * @covers backend/memory — one case scripts a `memory_search` call and asserts
+ * the compacted session can still make it.
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'

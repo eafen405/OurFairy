@@ -1,9 +1,12 @@
-# OurFairy 仓库环境清扫（本地票集 CLEAN-01～CLEAN-08）
+# OurFairy 仓库环境清扫（本地票集 CLEAN-01～CLEAN-09）
 
 日期：2026-10-29。集成分支 `integration/repo-cleanup`，基线 `main` @ `b812695b08`，
 最终 tip `2c84c3b9fd`；代码合并 tip 为 `f46981c580`（29 个提交，38 个文件，+755/−188），其后只有证据与索引提交。票面见
 [`work/tickets/repo-cleanup/`](../../../tickets/repo-cleanup/README.md)；本票集是本地草案，
 未发布到 GitHub，因此以 `CLEAN-xx` 引用。
+
+CLEAN-09 是本批合入 `main` 之后单开的后续票：基线 `main` @ `adf332dcb0`，分支
+`ticket/09-related-selection-coverage`。
 
 这批工作只改「仓库给出的状态、测试选择与文档导航」和两处重复权威，不新增产品行为。
 
@@ -248,6 +251,105 @@ lint 三个模块均无错误。`node --test tests/android-source.test.mjs` 6/6�
   state `unpushed`、ahead 29、worktree 1；其余行与基线一致（240 copies 已从 MISSING 变 ok，
   另多出 23 一行）。退出码 1 由 `repo-cleanup unpushed` 自身造成——本批按用户决定不推送。
 
+## CLEAN-09 其余包行为套件的关联声明
+
+改动：19 个既有套件各补 `@covers backend/<package>` 声明行（共 30 行，声明文件 12 → 27），
+`tests/precommit.test.mjs` 新增 5 个包的选择用例（attachments、chat、gateway、identity、sessions）、
+扩展 4 个既有用例。产品代码与
+`scripts/precommit.ts` 未改，因此四模式、`FULL_AUTHORITY`、`FULL_TEST_LIMIT`、每档
+`combo:verify` 与 Android 命令都是原样。逐包探针：[`related-selection-probe.mjs`](related-selection-probe.mjs)。
+
+```bash
+node work/implementation/evidence/repo-cleanup/related-selection-probe.mjs
+```
+
+### 改动前后对照
+
+探针对每个 `backend/<pkg>/` 取 `src/` 下第一个 `.ts` 作改动路径，调 `relatedTests`；括注是该包
+注册的 HTTP 路由字面量与工具名，用来扫出「打这个包、但没被选中」的候选。
+
+| 包 | 改动前 | 改动后 | 新增 |
+| --- | --- | --- | --- |
+| attachments | 4 | 12 | attachments、file-delivery、gateway、identity-http、memory-maintenance、native-compaction、pdf、precommit |
+| gateway | 2 | 7 | gateway-compaction-settings、gateway-maintenance-settings、identity-http、memory-maintenance、precommit |
+| groups | 4 | 8 | conversation-search、file-delivery、row-addressability、text-delivery |
+| identity | 9 | 11 | identity-http、precommit |
+| delivery | 4 | 6 | conversation-search、row-addressability |
+| sessions | 4 | 6 | session-archive、precommit |
+| search | 3 | 5 | memory-maintenance、session-archive |
+| speech | 2 | 4 | gateway、identity-http |
+| memory | 7 | 8 | native-compaction |
+| chat | 14 | 20 | chat-cold-boundary、chat-multi-observer、chat-stream-backpressure、jobs、native-rows、remote-chat |
+| spaces 7、probe 2、v1-bundle 1、http 1 | — | 不变 | — |
+
+表里的 `precommit` 不是新声明：新用例的正文写了 `backend/<pkg>/src/...`，选择器读正文引用，
+于是 `tests/precommit.test.mjs` 自身被选中。这与既有用例对 chat/delivery/groups/memory/search
+的效果相同。改动后每个包的选中数量 20/12/11/8/8/7/6/6/5/4（chat/attachments/identity/groups/
+memory/gateway/delivery/sessions/search/speech），全部低于 `FULL_TEST_LIMIT` 45。
+
+### 逐个取舍
+
+判定规则用票面的操作口径：套件正文真的经产品 HTTP 路由或模型工具调用该包，就算关联；
+工具名只作夹具字符串、以及所有套件都走的公共面（`/identity`、`/sessions`、`/chat`）不算。
+
+| 套件 | 新增声明 | 正文里的调用点 |
+| --- | --- | --- |
+| `attachments` | attachments | `/attachments/propose`、`/chunk`、`/complete`、`/download`：本套件的主体 |
+| `pdf` | attachments | 同上四条路由 + `pdf_info`、`pdf_read_pages`、`pdf_render_pages` |
+| `file-delivery` | attachments、groups | 上传资格经 `/attachments/*`；一例用 `group_create`/`group_members` 建组并投递到组根 |
+| `gateway` | attachments、speech | `uploadImage` 走 `/attachments/propose|chunk|complete`；ASR 用例打 `/speech` 与 `/speech/transcriptions` |
+| `identity-http` | identity、gateway、attachments、speech | `/identity/session|agents|sign-out` 与各自的拒绝；host fence 用例逐个打 `/gateway/read`、`/attachments/propose`、`/speech` |
+| `memory-maintenance` | gateway、attachments、search | `/gateway/maintenance` 降门槛；材料经 `/attachments/*` 上传；`conversation_search` 证明搜不到无主维护子会话 |
+| `native-compaction` | attachments、memory | 图片经 `/attachments/*` 进入会话；替身脚本一次 `memory_search` 调用，断言压缩后仍可调用 |
+| `conversation-search` | delivery、groups | `deliver_message` 造一条可搜到的投递；`groups` 工具留下一个工具结果供区间读取 |
+| `row-addressability` | delivery、groups | 关掉 delivery/groups 行后模型目录里不再有 `deliver_message` 与组工具 |
+| `text-delivery` | groups | 一轮 `groups` 工具结果，用来断言下一轮输入同时带投递文本与工具结果 |
+| `session-archive` | sessions、search | `/sessions/archive`、`/sessions/restore`；`conversation_search` 不能看到归档会话 |
+| `gateway-compaction-settings` | gateway | `/gateway/read`、`/gateway/compaction`、`/gateway/selection` |
+| `gateway-maintenance-settings` | gateway | `/gateway/read`、`/gateway/maintenance` |
+| `chat-cold-boundary` | chat | 冷启动后的读，以及 `/chat/observe`、`/chat/checkpoint` |
+| `chat-multi-observer` | chat | 同一会话上的两条 `/chat/observe` 连接 |
+| `chat-stream-backpressure` | chat | 背压下的 `/chat/observe` |
+| `jobs` | chat | `/chat/jobs/output`、`/chat/jobs/stop`、`/chat/observe`、`/chat/stop` |
+| `remote-chat` | chat | `/chat/page`、`/chat/observe`、`/chat/receipt`、`/chat/stop` |
+| `native-rows` | chat | 模型退避期间用 `/chat/stop` 结束回合，并断言立刻返回 |
+
+不补的候选，逐个说明：
+
+| 候选 | 判定 |
+| --- | --- |
+| `model-double`（attachments/delivery/groups/memory/search） | 工具名是替身夹具的字符串清单（`tests/model-double.test.mjs:66–84`），没有产品调用 |
+| `identity-store`、`identity-interfaces`（groups） | `groups` 分别是 SQLite 表名与 identity interface 的键名，不是工具调用 |
+| 各套件的 `/identity/sign-in|invite|register`、`/sessions/create|list|read|primary`、`/chat/send`、`/chat/read` | 每个套件都走的公共面，按票面排除；只为它补声明等于把几乎所有套件都选进来 |
+| `backend/http` | 所有 HTTP 套件共用的传输外壳（host fence 也在这里）；同理排除 |
+
+`/chat` 只排除 bootstrap 的 `/chat/send` 与 `/chat/read`：`/chat/observe`、`/chat/checkpoint`、
+`/chat/page`、`/chat/receipt`、`/chat/jobs/output|stop`、`/chat/stop` 不是每个套件都走的路径，
+按同一条规则计入——上面六个套件就是由此补上的。
+
+### 验证
+
+```bash
+npm run build
+node --test tests/precommit.test.mjs
+```
+
+- 红：把 19 个套件的声明退回基线（只留新用例）后 `node --test tests/precommit.test.mjs` →
+  27 tests / 18 pass / 9 fail，失败的正是新增与扩展的选择用例（delivery、speech、memory、
+  groups/search、attachments、chat、gateway、identity、sessions）。
+- 绿：声明落地后同一命令 27/27。
+- 声明行数：`grep -rc "@covers backend/" tests/*.test.mjs` 合计 43 行、28 个文件；其中
+  `tests/precommit.test.mjs` 那 1 行是机制说明的正文（写作 `@covers backend/<package>`，不匹配
+  选择器正则），套件里的声明是 42 行、27 个文件。
+- 证据口径（`CONVENTIONS.md` §5）：本节的关联全部发生在替身面上——模型是
+  `OURFAIRY_MINIMAX_BASE_URL` 指向的 Messages 替身，语音是回环 provider，PDF 走本地 worker。
+  本票不改产品行为，没有真实服务验收，也没有真机验收。
+
+### 未做
+
+- 不声称「所有此类套件都已覆盖」：探针的候选清单本身就是读正文的近似，机制无法证明完整性。
+- 不给没有真实调用的候选凑声明（见上表）；不改产品代码、不改任何测试断言。
+
 ## 未完成
 
 - Spec 轴评审的**运行结果**只在最终树核对，不覆盖历史红证据：评审子代理未执行 `npm test`、
@@ -257,5 +359,6 @@ lint 三个模块均无错误。`node --test tests/android-source.test.mjs` 6/6�
 - 未推送、未开 PR、未合入 `main`：按用户决定保持本地集成分支。
 - 未跑 CI（仓库协议是收口时跑一次，但本轮没有触发远端流水线）。
 - 未做真机验收（本批无设备相关改动）。
-- CLEAN-01 的同类缺口（gateway 等包的行为套件没有 `@covers` 声明）未在本票修复，实测缺口分布在
-  attachments/groups/gateway/delivery/identity/search/memory 多个包，属后续票素材。
+- CLEAN-01 的同类缺口（gateway 等包的行为套件没有 `@covers` 声明）已由 CLEAN-09 补齐：实测缺口的
+  attachments/gateway/groups/delivery/identity/sessions/search/speech 八个包现在都有行为套件声明，
+  取舍见上一节。

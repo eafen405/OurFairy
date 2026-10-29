@@ -10,6 +10,9 @@
  * The assertions are caller-visible: the projection the phone reads, the durable
  * events a cold restart replays, the request history the model receives, and the
  * files a spilled result leaves on disk.
+ *
+ * @covers backend/chat — one case stops a turn through `/chat/stop` during a
+ * model backoff and asserts it ends promptly.
  */
 import assert from 'node:assert/strict'
 import { readFileSync, statSync } from 'node:fs'
