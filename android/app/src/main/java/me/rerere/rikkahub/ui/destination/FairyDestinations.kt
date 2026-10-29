@@ -1,11 +1,16 @@
 package me.rerere.rikkahub.ui.destination
 
 import androidx.compose.runtime.Composable
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.NavKey
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.fairy.FairyConsolePage
+import me.rerere.rikkahub.ui.fairy.FairyConversationPage
 import me.rerere.rikkahub.ui.fairy.FairySettingsPage
 import me.rerere.rikkahub.ui.identity.GatewayPage
+import me.rerere.rikkahub.ui.identity.IdentityRegisterPage
 import me.rerere.rikkahub.ui.identity.IdentityScope
+import me.rerere.rikkahub.ui.identity.IdentitySignInPage
 import me.rerere.rikkahub.ui.identity.ImpressionPage
 
 /**
@@ -19,17 +24,13 @@ val UNKNOWN_LANDING: List<Screen> = listOf(Screen.Home)
 
 /**
  * The destination table: one fixed, in-process declaration of every screen's
- * stored name, who may compose it, where a cold start returns to it, and — for
- * the destinations this catalog assembles — its page.
+ * stored name, who may compose it, where a cold start returns to it, and how its
+ * page is assembled.
  *
  * The table holds each fact once. Which destination a [Screen] is comes from an
  * exhaustive `when`, so a new screen fails to compile until it is registered;
- * nothing is discovered by reflection or registered at runtime.
- *
- * Page assembly is still split this ticket: the console, settings, gateway and
- * impression are built here, and the credential and session pages by the legacy
- * `entryProvider {}` arms in `RouteActivity` until #264 moves them and deletes
- * that path.
+ * nothing is discovered by reflection or registered at runtime. Page assembly is
+ * a required field, so a destination cannot be declared without one either.
  */
 object FairyDestinations {
 
@@ -40,33 +41,55 @@ object FairyDestinations {
         route = "sign_in",
         access = DestinationAccess.Visitors,
         restore = DestinationRestore.Never,
-    )
+    ) {
+        IdentitySignInPage(
+            onSignedIn = { actions.identityCompleted() },
+            onRegister = { actions.reset(listOf(Screen.Register)) },
+            session = session,
+        )
+    }
 
     private val register = FairyDestination(
         route = "register",
         access = DestinationAccess.Visitors,
         restore = DestinationRestore.Never,
-    )
+    ) {
+        IdentityRegisterPage(
+            // Same power-down bookend as sign-in: both leave the identity shell
+            // for the console.
+            onRegistered = { actions.identityCompleted() },
+            onBackToSignIn = { actions.reset(listOf(Screen.SignIn)) },
+            session = session,
+        )
+    }
 
     private val home = FairyDestination(
         route = "home",
         access = DestinationAccess.SignedIn,
         restore = DestinationRestore.Resume(listOf(Screen.Home)),
     ) {
-        FairyConsolePage(onOpen = actions.push)
+        FairyConsolePage(
+            onOpen = actions.push,
+            session = session,
+            receive = receive,
+        )
     }
 
     private val sessions = FairyDestination(
         route = "sessions",
         access = DestinationAccess.SignedIn,
         restore = DestinationRestore.Resume(listOf(Screen.Home, Screen.Sessions)),
-    )
+    ) {
+        conversationPage(sessionId = null)
+    }
 
     private val conversation = FairyDestination(
         route = CONVERSATION_ROUTE,
         access = DestinationAccess.SignedIn,
         restore = DestinationRestore.ResumeConversation(listOf(Screen.Home)),
-    )
+    ) { screen ->
+        conversationPage(sessionId = (screen as Screen.Conversation).sessionId)
+    }
 
     private val settings = FairyDestination(
         route = "settings",
@@ -116,15 +139,6 @@ object FairyDestinations {
     /** The destination the top of the stack is, or null for an empty stack. */
     fun destinationOrNull(screen: Screen?): FairyDestination? = screen?.let(::destinationOf)
 
-    /**
-     * Whether this catalog composes [screen]'s page today.
-     *
-     * False means the legacy `entryProvider {}` arms in `RouteActivity` still
-     * build it; #264 removes those arms, at which point this answers true for
-     * every screen and the temporary branch goes with them.
-     */
-    fun assembles(screen: Screen): Boolean = destinationOf(screen).page != null
-
     /** Who may compose [screen]; an empty stack (`null`) composes nothing. */
     fun mayCompose(screen: Screen?, identity: IdentityScope): Boolean =
         destinationOrNull(screen)?.access?.admits(identity) ?: false
@@ -154,6 +168,20 @@ object FairyDestinations {
      * page but never its saved state.
      */
     fun contentKeyOf(screen: Screen): String = routeOf(screen) + ":" + screen
+
+    /**
+     * The navigation entry for [screen]: its page, under a key that is the screen
+     * itself and a content key that can be saved.
+     *
+     * The entry is built here rather than by each host, so the key, the
+     * saved-state identity and the page all come from the same table.
+     */
+    fun entryOf(screen: Screen, scope: DestinationPageScope): NavEntry<NavKey> = NavEntry(
+        key = screen,
+        contentKey = contentKeyOf(screen),
+        metadata = emptyMap(),
+        content = { destinationOf(screen).Content(screen, scope) },
+    )
 
     /** The coordinates to persist for [screen]; null when it is not a place to return to. */
     fun restingPlaceOf(screen: Screen): DestinationRestingPlace? {
@@ -186,12 +214,28 @@ object FairyDestinations {
         }
     }
 
+    /**
+     * The conversation page, for both a named conversation and the session list.
+     *
+     * The two destinations share the page and differ only in whether a session
+     * is open, so their navigation is declared once here.
+     */
+    @Composable
+    private fun DestinationPageScope.conversationPage(sessionId: String?) {
+        FairyConversationPage(
+            sessionId = sessionId,
+            onBack = { actions.reset(listOf(Screen.Home)) },
+            receive = receive,
+            onOpenConversation = { id -> actions.replace(Screen.Conversation(id)) },
+            onSettings = { actions.push(Screen.Settings) },
+        )
+    }
+
     private fun entryNamed(route: String): FairyDestination = entries.first { it.route == route }
 }
 
-/** Render this destination's page with the scope its host assembled. */
+/** Render this destination's page for [screen] with the scope its host assembled. */
 @Composable
-fun FairyDestination.Content(scope: DestinationPageScope) {
-    val page = page ?: error("$route is still assembled by the legacy route path")
-    page.invoke(scope)
+fun FairyDestination.Content(screen: Screen, scope: DestinationPageScope) {
+    page.invoke(scope, screen)
 }

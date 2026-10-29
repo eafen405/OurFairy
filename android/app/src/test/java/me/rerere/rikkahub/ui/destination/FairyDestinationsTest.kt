@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.destination
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.identity.IdentityScope
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,8 +11,7 @@ import org.junit.Test
  * The destination catalog's public answers, read the way a caller reads them.
  *
  * Every case is a product rule the ticket states — who may compose a page, where
- * a cold start lands — never how the table stores it, so these survive the second
- * ticket moving the remaining destinations into the same table.
+ * a cold start lands, which page is assembled — never how the table stores it.
  */
 class FairyDestinationsTest {
 
@@ -21,36 +19,56 @@ class FairyDestinationsTest {
     private val phaethon = IdentityScope(signedIn = true, isAdmin = true)
     private val staleAdmin = IdentityScope(signedIn = false, isAdmin = true)
 
-    /** A destination the catalog arranges, and who the product lets compose it. */
-    private data class Admission(val screen: Screen, val agent: Boolean, val phaethon: Boolean)
+    /** A destination and the identities the product says may compose it. */
+    private data class Admission(
+        val screen: Screen,
+        val visitor: Boolean,
+        val agent: Boolean,
+        val phaethon: Boolean,
+        val staleAdmin: Boolean,
+    )
 
     private val admissions = listOf(
-        Admission(Screen.Home, agent = true, phaethon = true),
-        Admission(Screen.Settings, agent = true, phaethon = true),
-        Admission(Screen.Gateway, agent = false, phaethon = true),
-        Admission(Screen.Impression, agent = true, phaethon = true),
+        // A signed-out scope that still wears the admin flag is still a visitor:
+        // the flag never admits an administrator's page, and never blocks a
+        // credential page.
+        Admission(Screen.SignIn, visitor = true, agent = false, phaethon = false, staleAdmin = true),
+        Admission(Screen.Register, visitor = true, agent = false, phaethon = false, staleAdmin = true),
+        Admission(Screen.Home, visitor = false, agent = true, phaethon = true, staleAdmin = false),
+        Admission(Screen.Sessions, visitor = false, agent = true, phaethon = true, staleAdmin = false),
+        Admission(Screen.Conversation("s-1"), visitor = false, agent = true, phaethon = true, staleAdmin = false),
+        Admission(Screen.Settings, visitor = false, agent = true, phaethon = true, staleAdmin = false),
+        Admission(Screen.Gateway, visitor = false, agent = false, phaethon = true, staleAdmin = false),
+        Admission(Screen.Impression, visitor = false, agent = true, phaethon = true, staleAdmin = false),
     )
 
     @Test
-    fun `the migrated destinations admit an agent, Phaethon, and nobody signed out`() {
+    fun `every destination admits exactly the identities the product names`() {
         for (case in admissions) {
-            assertEquals("an agent at ${case.screen.route()}", case.agent, FairyDestinations.mayCompose(case.screen, agent))
-            assertEquals(
-                "Phaethon at ${case.screen.route()}",
-                case.phaethon,
-                FairyDestinations.mayCompose(case.screen, phaethon),
+            val expectations = listOf(
+                Triple("a visitor", IdentityScope.SignedOut, case.visitor),
+                Triple("an agent", agent, case.agent),
+                Triple("Phaethon", phaethon, case.phaethon),
+                Triple("a signed-out scope that still wears the admin flag", staleAdmin, case.staleAdmin),
             )
-            assertEquals(
-                "a visitor at ${case.screen.route()}",
-                false,
-                FairyDestinations.mayCompose(case.screen, IdentityScope.SignedOut),
-            )
-            assertEquals(
-                "a signed-out scope that still wears the admin flag at ${case.screen.route()}",
-                false,
-                FairyDestinations.mayCompose(case.screen, staleAdmin),
-            )
+            for ((who, identity, expected) in expectations) {
+                assertEquals(
+                    "$who at ${case.screen.route()}",
+                    expected,
+                    FairyDestinations.mayCompose(case.screen, identity),
+                )
+            }
         }
+    }
+
+    @Test
+    fun `the admission matrix names every destination`() {
+        assertEquals(
+            "a destination with no row here would escape the matrix",
+            FairyDestinations.entries.map { it.route }.toSet(),
+            admissions.map { it.screen.route() }.toSet(),
+        )
+        assertEquals("one row per destination", FairyDestinations.entries.size, admissions.size)
     }
 
     @Test
@@ -64,40 +82,82 @@ class FairyDestinationsTest {
         assertEquals(false, FairyDestinations.mayCompose(null, phaethon))
     }
 
-    /** A cold start's stored coordinates, and the stack the product says they open. */
-    private data class ResumeCase(val route: String, val conversation: String?, val stack: List<Screen>)
+    /** A destination and the stack, or the absence of one, a cold start gives it. */
+    private data class Restore(
+        val screen: Screen,
+        val conversation: String? = null,
+        /** Null means the destination is never a place to return to. */
+        val stack: List<Screen>?,
+    )
 
-    private val resumes = listOf(
-        ResumeCase("home", null, listOf(Screen.Home)),
-        ResumeCase("settings", null, listOf(Screen.Home, Screen.Settings)),
-        ResumeCase("gateway", null, listOf(Screen.Home, Screen.Settings, Screen.Gateway)),
-        ResumeCase("impression", null, listOf(Screen.Home, Screen.Settings, Screen.Impression)),
-        ResumeCase("sessions", null, listOf(Screen.Home, Screen.Sessions)),
-        ResumeCase("conversation", "main", listOf(Screen.Home, Screen.Conversation("main"))),
+    private val restores = listOf(
+        Restore(Screen.SignIn, stack = null),
+        Restore(Screen.Register, stack = null),
+        Restore(Screen.Home, stack = listOf(Screen.Home)),
+        Restore(Screen.Settings, stack = listOf(Screen.Home, Screen.Settings)),
+        Restore(Screen.Sessions, stack = listOf(Screen.Home, Screen.Sessions)),
+        Restore(
+            Screen.Conversation("s-1"),
+            conversation = "s-1",
+            stack = listOf(Screen.Home, Screen.Conversation("s-1")),
+        ),
+        Restore(Screen.Gateway, stack = listOf(Screen.Home, Screen.Settings, Screen.Gateway)),
+        Restore(Screen.Impression, stack = listOf(Screen.Home, Screen.Settings, Screen.Impression)),
     )
 
     @Test
-    fun `a stored destination reopens the stack the product enters it through`() {
-        for (case in resumes) {
+    fun `every destination declares the stack a cold start returns to it`() {
+        for (case in restores) {
+            val destination = FairyDestinations.destinationOf(case.screen)
+            val resumed = FairyDestinations.resumedStack(destination.route, case.conversation)
+            if (case.stack == null) {
+                assertEquals(
+                    "${destination.route} is never a return address",
+                    DestinationRestore.Never,
+                    destination.restore,
+                )
+                assertNull("${destination.route} is not written", FairyDestinations.restingPlaceOf(case.screen))
+                assertEquals("a stored ${destination.route} lands on the console", UNKNOWN_LANDING, resumed)
+            } else {
+                assertEquals("${destination.route} resumes its declared stack", case.stack, resumed)
+                assertEquals(
+                    "${destination.route} resumes to a stack ending on itself",
+                    destination.route,
+                    case.stack.last().route(),
+                )
+                assertEquals(
+                    "${destination.route} is written under the same name it resumes",
+                    destination,
+                    FairyDestinations.destinationOf(case.stack.last()),
+                )
+            }
+        }
+        assertEquals(
+            "every destination has one restore row",
+            FairyDestinations.entries.map { it.route }.toSet(),
+            restores.map { it.screen.route() }.toSet(),
+        )
+        assertEquals(restores.size, FairyDestinations.entries.size)
+    }
+
+    @Test
+    fun `a bookmarked conversation keeps its id, and a missing one lands on the console`() {
+        assertEquals(
+            listOf(Screen.Home, Screen.Conversation("s-9")),
+            FairyDestinations.resumedStack(FairyDestinations.CONVERSATION_ROUTE, "s-9"),
+        )
+        for (coordinate in listOf(null, "", "   ")) {
             assertEquals(
-                "a stored ${case.route}",
-                case.stack,
-                FairyDestinations.resumedStack(case.route, case.conversation),
+                "a conversation without a usable id has no page to open",
+                UNKNOWN_LANDING,
+                FairyDestinations.resumedStack(FairyDestinations.CONVERSATION_ROUTE, coordinate),
             )
         }
     }
 
     @Test
-    fun `an impression returns to settings, which is where it is entered`() {
-        assertEquals(
-            listOf(Screen.Home, Screen.Settings, Screen.Impression),
-            FairyDestinations.resumedStack("impression", null),
-        )
-    }
-
-    @Test
     fun `stored coordinates that name no page land on the console`() {
-        for (stored in listOf("sign_in", "register", "moved_away", "")) {
+        for (stored in listOf("moved_away", "")) {
             assertEquals(
                 "a stored '$stored' is not a place to return to",
                 UNKNOWN_LANDING,
@@ -105,13 +165,6 @@ class FairyDestinationsTest {
             )
         }
         assertEquals("nothing stored at all", UNKNOWN_LANDING, FairyDestinations.resumedStack(null, null))
-        for (coordinate in listOf(null, "", "   ")) {
-            assertEquals(
-                "a conversation without a usable id has no page to open",
-                UNKNOWN_LANDING,
-                FairyDestinations.resumedStack("conversation", coordinate),
-            )
-        }
     }
 
     @Test
@@ -133,10 +186,7 @@ class FairyDestinationsTest {
         val routes = FairyDestinations.entries.map { it.route }
         assertEquals("a stored name identifies exactly one destination", routes.size, routes.toSet().size)
 
-        val screens = listOf(
-            Screen.SignIn, Screen.Register, Screen.Home, Screen.Sessions,
-            Screen.Settings, Screen.Gateway, Screen.Impression, Screen.Conversation("main"),
-        )
+        val screens = allScreens()
         for (screen in screens) {
             val destination = FairyDestinations.destinationOf(screen)
             assertEquals(
@@ -155,32 +205,26 @@ class FairyDestinationsTest {
             routes.toSet(),
             screens.map(FairyDestinations::routeOf).toSet(),
         )
+        assertEquals("the product has eight destinations", 8, routes.size)
     }
 
-    @Test
-    fun `every resume stack ends on the destination that declares it`() {
-        for (case in resumes) {
-            val destination = FairyDestinations.entries.first { it.route == case.route }
-            when (val restore = destination.restore) {
-                DestinationRestore.Never -> throw AssertionError("${case.route} is a resume target, not Never")
-                is DestinationRestore.Resume -> {
-                    assertTrue("${case.route} resumes to a non-empty stack", restore.stack.isNotEmpty())
-                    assertEquals(
-                        "${case.route} resumes to a stack that ends on itself",
-                        case.route,
-                        restore.stack.last().route(),
-                    )
-                }
-                is DestinationRestore.ResumeConversation -> {
-                    assertEquals(
-                        "a conversation's resume stack is its stored prefix plus the conversation",
-                        case.stack,
-                        restore.prefix + Screen.Conversation(case.conversation.orEmpty()),
-                    )
-                }
-            }
-        }
-    }
+    /**
+     * One sample of every [Screen] subtype.
+     *
+     * This list is not the completeness guard — `destinationOf`'s exhaustive
+     * `when` is, because a new subtype fails to compile there — but it is the
+     * list the route-set claim above reads.
+     */
+    private fun allScreens(): List<Screen> = listOf(
+        Screen.SignIn,
+        Screen.Register,
+        Screen.Home,
+        Screen.Sessions,
+        Screen.Conversation("s-1"),
+        Screen.Settings,
+        Screen.Gateway,
+        Screen.Impression,
+    )
 
     @Test
     fun `no resume stack passes through a destination that is never resumed`() {
@@ -190,10 +234,10 @@ class FairyDestinationsTest {
             listOf("sign_in", "register"),
             never,
         )
-        for (case in resumes) {
-            for (screen in case.stack) {
+        for (case in restores) {
+            for (screen in case.stack.orEmpty()) {
                 assertEquals(
-                    "${case.route} must not resume through ${screen.route()}, which is never resumed",
+                    "${case.screen.route()} must not resume through ${screen.route()}, which is never resumed",
                     false,
                     never.contains(screen.route()),
                 )
@@ -208,13 +252,6 @@ class FairyDestinationsTest {
         assertTrue("two conversations must not share saved state", first != second)
         assertEquals(first, FairyDestinations.contentKeyOf(Screen.Conversation("first")))
         assertEquals("home:Home", FairyDestinations.contentKeyOf(Screen.Home))
-    }
-
-    @Test
-    fun `the four migrated destinations are assembled by the catalog`() {
-        for (screen in admissions.map { it.screen }) {
-            assertNotNull("${screen.route()} has a page in the catalog", FairyDestinations.destinationOf(screen).page)
-        }
     }
 }
 

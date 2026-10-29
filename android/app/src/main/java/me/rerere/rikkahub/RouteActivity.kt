@@ -33,7 +33,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
@@ -57,18 +56,12 @@ import me.rerere.rikkahub.service.AndroidRemoteNotifications
 import me.rerere.rikkahub.service.RemoteReceiveController
 import me.rerere.rikkahub.ui.destination.DestinationActions
 import me.rerere.rikkahub.ui.destination.DestinationPageScope
-import me.rerere.rikkahub.ui.destination.Content
 import me.rerere.rikkahub.ui.destination.FairyDestinations
 import me.rerere.rikkahub.ui.fairy.FairyAppTheme
-import me.rerere.rikkahub.ui.fairy.FairyConversationPage
 import me.rerere.rikkahub.ui.fairy.FairyCrtPowerDown
 import me.rerere.rikkahub.ui.fairy.FairyLastLocation
-import me.rerere.rikkahub.ui.identity.IdentityAccessPolicy
-import me.rerere.rikkahub.ui.identity.IdentityDestination
 import me.rerere.rikkahub.ui.identity.IdentityNotReadyPage
-import me.rerere.rikkahub.ui.identity.IdentityRegisterPage
 import me.rerere.rikkahub.ui.identity.IdentityScope
-import me.rerere.rikkahub.ui.identity.IdentitySignInPage
 import me.rerere.rikkahub.ui.identity.openRemoteNotification
 import me.rerere.rikkahub.ui.identity.restoreIdentitySession
 import okhttp3.OkHttpClient
@@ -122,9 +115,13 @@ class RouteActivity : ComponentActivity() {
         val target = AndroidRemoteNotifications.target(intent) ?: return
         lifecycleScope.launch {
             if (openRemoteNotification(target, BuildConfig.IDENTITY_ENDPOINT, accountSession, remoteReceiveController::openNotification)) {
+                // Endpoint, account and session ownership were settled above;
+                // the catalog answers where a conversation stands, and the gate
+                // below still decides whether its page may compose.
                 backStack.clear()
-                backStack.add(Screen.Home)
-                backStack.add(Screen.Conversation(target.sessionId))
+                backStack.addAll(
+                    FairyDestinations.resumedStack(FairyDestinations.CONVERSATION_ROUTE, target.sessionId),
+                )
             }
         }
     }
@@ -166,7 +163,7 @@ class RouteActivity : ComponentActivity() {
             Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }.background(MaterialTheme.colorScheme.background)) {
                 when {
                     !identitySettled -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                    poweringDown || mayCompose(backStack.lastOrNull() as? Screen, identityScope) -> FairyCrtPowerDown(
+                    poweringDown || FairyDestinations.mayCompose(backStack.lastOrNull() as? Screen, identityScope) -> FairyCrtPowerDown(
                         active = poweringDown,
                         onCollapsed = {
                             backStack.clear()
@@ -205,7 +202,7 @@ class RouteActivity : ComponentActivity() {
                             predictivePopTransitionSpec = {
                                 slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith slideOutHorizontally { it }
                             },
-                            entryProvider = { key -> navigationEntry(key as Screen, pageScope) },
+                            entryProvider = { key -> FairyDestinations.entryOf(key as Screen, pageScope) },
                         )
                     }
                     else -> IdentityNotReadyPage(identity = identityScope, onSignIn = {
@@ -216,91 +213,6 @@ class RouteActivity : ComponentActivity() {
             }
         }
     }
-
-    /**
-     * The navigation entry for one screen.
-     *
-     * The console, settings, gateway and impression are assembled by
-     * [FairyDestinations] and are handed the scope it was given. The remaining
-     * pages are still built here: #264 moves them into the catalog and deletes
-     * this second arm together with [IdentityAccessPolicy].
-     */
-    private fun navigationEntry(screen: Screen, scope: DestinationPageScope): NavEntry<NavKey> =
-        when (screen) {
-            Screen.Home, Screen.Settings, Screen.Gateway, Screen.Impression ->
-                entry(screen) { FairyDestinations.destinationOf(screen).Content(scope) }
-
-            Screen.SignIn -> entry(screen) {
-                IdentitySignInPage(
-                    onSignedIn = { scope.actions.identityCompleted() },
-                    onRegister = { scope.actions.reset(listOf(Screen.Register)) },
-                )
-            }
-
-            Screen.Register -> entry(screen) {
-                IdentityRegisterPage(
-                    // Same power-down bookend as sign-in: both leave
-                    // the identity shell for the console.
-                    onRegistered = { scope.actions.identityCompleted() },
-                    onBackToSignIn = { scope.actions.reset(listOf(Screen.SignIn)) },
-                )
-            }
-
-            is Screen.Conversation -> entry(screen) {
-                FairyConversationPage(
-                    sessionId = screen.sessionId,
-                    onBack = { scope.actions.reset(listOf(Screen.Home)) },
-                    onOpenConversation = { id -> scope.actions.replace(Screen.Conversation(id)) },
-                    onSettings = { scope.actions.push(Screen.Settings) },
-                )
-            }
-
-            Screen.Sessions -> entry(screen) {
-                FairyConversationPage(
-                    sessionId = null,
-                    onBack = { scope.actions.reset(listOf(Screen.Home)) },
-                    onOpenConversation = { id -> scope.actions.replace(Screen.Conversation(id)) },
-                    onSettings = { scope.actions.push(Screen.Settings) },
-                )
-            }
-        }
-
-    /**
-     * One entry whose page is whatever [content] composes.
-     *
-     * The key is the screen itself; the content key is a Bundle-storable String
-     * that also tells two conversations apart, because the saveable-state
-     * decorator keeps one saved state per content key.
-     */
-    private fun entry(screen: Screen, content: @Composable () -> Unit): NavEntry<NavKey> = NavEntry(
-        key = screen,
-        contentKey = FairyDestinations.contentKeyOf(screen),
-        metadata = emptyMap(),
-        content = { _: NavKey -> content() },
-    )
-
-    /**
-     * Whether the page on top of the stack may compose.
-     *
-     * A destination [FairyDestinations] assembles answers from the catalog; the
-     * rest still answer from [IdentityAccessPolicy] until #264 moves them over
-     * and deletes that policy.
-     */
-    private fun mayCompose(screen: Screen?, identity: IdentityScope): Boolean = when {
-        screen == null -> false
-        FairyDestinations.assembles(screen) -> FairyDestinations.mayCompose(screen, identity)
-        else -> IdentityAccessPolicy.mayCompose(screen.toIdentityDestination(), identity)
-    }
-}
-
-internal fun Screen.toIdentityDestination(): IdentityDestination = when (this) {
-    Screen.SignIn -> IdentityDestination.SIGN_IN
-    Screen.Register -> IdentityDestination.REGISTER
-    Screen.Home, Screen.Settings -> IdentityDestination.ACCOUNT
-    Screen.Sessions -> IdentityDestination.SESSIONS
-    is Screen.Conversation -> IdentityDestination.CONVERSATION
-    Screen.Gateway -> IdentityDestination.GATEWAY
-    Screen.Impression -> IdentityDestination.IMPRESSION
 }
 
 sealed interface Screen : NavKey {

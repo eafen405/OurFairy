@@ -37,7 +37,7 @@ _Avoid_: 页面、路由、屏幕
 
 **目的地 catalog**（`FairyDestinations`）：
 进程内静态的目的地表。它拥有目的地词汇、页面装配、身份准入与恢复策略；不扫描、不远程配置，
-新增目的地靠对 `Screen` 的穷尽 `when` 在编译期强制登记。
+新增目的地靠对 `Screen` 的穷尽 `when` 在编译期强制登记。生产路由、通知落点与页面测试读同一份表。
 _Avoid_: 路由表、导航图、插件注册
 
 **冷启动恢复**（`FairyLastLocation` + `DestinationRestore`）：
