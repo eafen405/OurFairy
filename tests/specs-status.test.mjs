@@ -16,9 +16,9 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
-import { LANDING_BRANCH, collect, render, specStatus, worktreeNamesSpec } from '../scripts/specs-status.ts'
+import { LANDING_BRANCH, collect, render, specStatus, specsInCheckout, worktreeNamesSpec } from '../scripts/specs-status.ts'
 
 const roots = []
 
@@ -68,6 +68,21 @@ function commitOn(root, branch, path) {
   writeFileSync(join(root, path), 'evidence\n')
   git(root, ['add', '.'])
   git(root, ['commit', '--quiet', '-m', `${branch} work`])
+}
+
+/** Commit files, path to content, on the branch the fixture has checked out. */
+function commitFiles(root, files) {
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, path)), { recursive: true })
+    writeFileSync(join(root, path), content)
+  }
+  git(root, ['add', '.'])
+  git(root, ['commit', '--quiet', '-m', 'ticket copies'])
+}
+
+/** A ticket README that declares its parent spec the way the ticket copies do. */
+function declaresParent(spec) {
+  return `# 票面\n\n父规格：[#${spec}](https://github.com/eafen405/OurFairy/issues/${spec})。\n`
 }
 
 test('a branch that never left the machine is the defect this command exists for', () => {
@@ -188,6 +203,67 @@ test('ticket copies are read from the branch, and a missing copy is reported', (
 
   assert.equal(specStatus(903, { root, worktrees: [] }).copies, true, 'a copy on the spec branch is reachable')
   assert.equal(specStatus(904, { root, worktrees: [] }).copies, false, 'a spec with no copy says so')
+})
+
+test('a named ticket directory declaring its parent spec is that spec copy on the landing branch', () => {
+  const root = fixture()
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  commitFiles(root, {
+    'work/tickets/fairy-memory/README.md': declaresParent(915),
+    'work/tickets/fairy-memory/01-ticket.md': 'ticket\n',
+  })
+  git(root, ['push', '--quiet', 'origin', LANDING_BRANCH])
+
+  const report = collect({ root, offline: true })
+  const row = report.rows.find(row => row.spec === 915)
+
+  assert.equal(specsInCheckout(root).has(915), true, 'the declared parent names a spec the checkout knows')
+  assert.ok(row, 'a named copy puts #915 in the report although no directory is called 915')
+  assert.equal(row.copies, true, 'the landing tree carries the declared copy')
+  assert.match(render(report), /915\s+planned\s+-\s+-\s+-\s+-\s+-\s+-\s+0\s+ok\s+0/u)
+})
+
+test('a spec branch tip carrying a named ticket copy is that spec copy', () => {
+  const root = fixture()
+  git(root, ['checkout', '--quiet', '-b', 'integration/spec-916', LANDING_BRANCH])
+  commitFiles(root, {
+    'work/tickets/memory-wave/README.md': declaresParent(916),
+    'work/tickets/memory-wave/01-ticket.md': 'ticket\n',
+  })
+  git(root, ['push', '--quiet', 'origin', 'integration/spec-916'])
+  // Leave the landing branch checked out: the copy is reachable only in the branch tree.
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+
+  assert.equal(specStatus(916, { root, worktrees: [] }).copies, true,
+    'the copy is read from the branch tree, not from the working tree')
+})
+
+test('a directory that declares no parent spec is not a copy of any spec', () => {
+  const root = fixture()
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  commitFiles(root, {
+    'work/tickets/local-drafts/README.md': '# 草案\n\n父规格：见正文。\n',
+    'work/tickets/local-drafts/01-ticket.md': 'ticket\n',
+    'work/tickets/no-declaration/README.md': '# 说明\n\n这里只是本地工作副本。\n',
+  })
+  git(root, ['push', '--quiet', 'origin', LANDING_BRANCH])
+
+  assert.equal(specStatus(917, { root, worktrees: [] }).copies, false, 'a prose 父规格 line names no spec')
+  assert.equal(specStatus(918, { root, worktrees: [] }).copies, false, 'an arbitrary README is not a ticket copy')
+  assert.equal(specsInCheckout(root).has(917), false)
+})
+
+test('a numeric ticket directory stays its own spec, whatever its README says', () => {
+  const root = fixture()
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  commitFiles(root, {
+    'work/tickets/919/README.md': declaresParent(920),
+    'work/tickets/919/01-ticket.md': 'ticket\n',
+  })
+  git(root, ['push', '--quiet', 'origin', LANDING_BRANCH])
+
+  assert.equal(specStatus(919, { root, worktrees: [] }).copies, true, 'a numeric directory is its own spec')
+  assert.equal(specStatus(920, { root, worktrees: [] }).copies, false, 'a numeric directory does not speak for another spec')
 })
 
 test('the report keeps the tracker half injectable and offline mode honest', () => {

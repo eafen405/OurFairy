@@ -23,8 +23,8 @@
  * complete.
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isCliEntry } from './cli-guard.ts'
 
@@ -152,13 +152,58 @@ function integrationBranches(root: string): string[] {
     .filter(branch => branch.startsWith('integration/')))]
 }
 
+/**
+ * The spec a ticket directory works for.
+ *
+ * A numeric directory name is the spec, exactly as before. Any other name has
+ * to declare its parent — the directory's own README does — and a directory
+ * that declares nothing belongs to no spec, so it is never a copy. Reading the
+ * declaration through a callback keeps this one rule working for both the
+ * working tree and an arbitrary git ref.
+ * @param name directory name under `work/tickets`
+ * @param readme the directory's README text, read only when the name is not numeric
+ */
+function specOfDirectory(name: string, readme: () => string | undefined): number | undefined {
+  if (/^\d+$/u.test(name)) return Number(name)
+  return readmeParent(readme())
+}
+
+/** The README's `父规格` line, when it links a spec issue. */
+function readmeParent(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined
+  for (const line of raw.split('\n')) {
+    if (!/^\s*(?:[-*]\s+)?父规格\s*[:：]/u.test(line)) continue
+    // Both forms the ticket copies use: a bare issue URL and `[#NNN](url)`.
+    const linked = /\/issues\/(\d+)/u.exec(line) ?? /\[#(\d+)\]/u.exec(line)
+    if (linked !== null) return Number(linked[1])
+  }
+  return undefined
+}
+
+/** A file's text, or undefined when this checkout does not have it. */
+function readText(path: string): string | undefined {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return undefined
+  }
+}
+
+/** Ticket directory names in a ref's tree; a ref that carries none lists nothing. */
+function ticketDirectories(root: string, ref: string): string[] {
+  const listed = git(root, ['ls-tree', '-d', '--name-only', `${ref}:work/tickets`])
+  return listed === undefined || listed.length === 0 ? [] : listed.split('\n')
+}
+
 /** The spec numbers the checkout knows: ticket-copy directories and spec branches. */
 export function specsInCheckout(root: string): Set<number> {
   const specs = new Set<number>()
   const tickets = resolve(root, 'work', 'tickets')
   if (existsSync(tickets)) {
     for (const entry of readdirSync(tickets, { withFileTypes: true })) {
-      if (entry.isDirectory() && /^\d+$/u.test(entry.name)) specs.add(Number(entry.name))
+      if (!entry.isDirectory()) continue
+      const spec = specOfDirectory(entry.name, () => readText(join(tickets, entry.name, 'README.md')))
+      if (spec !== undefined) specs.add(spec)
     }
   }
   for (const branch of integrationBranches(root)) {
@@ -212,7 +257,9 @@ function associatedWorktrees(branch: string, spec: number | undefined, entries: 
 
 /** Whether the branch tip carries the spec's ticket copies. */
 function carriesCopies(root: string, ref: string, spec: number): boolean {
-  return git(root, ['cat-file', '-e', `${ref}:work/tickets/${spec}`]) !== undefined
+  return ticketDirectories(root, ref).some(name => specOfDirectory(name, () => (
+    git(root, ['cat-file', '-p', `${ref}:work/tickets/${name}/README.md`])
+  )) === spec)
 }
 
 /** Whether merging the ref would leave the landing tree unchanged. */
