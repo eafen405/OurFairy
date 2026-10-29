@@ -157,7 +157,14 @@
 
 | 目录 | 内容 |
 | --- | --- |
-| [135-native-semantic-guards](135-native-semantic-guards/) | spec #135 原生语义漂移守卫：六处原生语义（#163 任务状态、#164 路由保存、#165 停止结果、#166 选型写入、#167 请求幂等、#168 输入模态）各有测试期对账，#169 把它们写进 dsh 升级复核入口，135-review-fixes 处置两轴评审；逐票 README 在子目录 |
+| [135-native-semantic-guards/163-job-status](135-native-semantic-guards/163-job-status/README.md) | #163 任务状态未知值显式化为 0，pinned dsh `JobStatus` 的增删在测试期失败 |
+| [135-native-semantic-guards/164-route-save](135-native-semantic-guards/164-route-save/README.md) | #164 路由保存只覆盖手机可编辑的五个字段，草稿省略的字段从结果中删除 |
+| [135-native-semantic-guards/165-job-stop-outcome](135-native-semantic-guards/165-job-stop-outcome/README.md) | #165 `/chat/jobs/stop` 只映射产品认识的原生 `kill` 结果，未知结果 5xx 且点名 |
+| [135-native-semantic-guards/166-selection-native-entry](135-native-semantic-guards/166-selection-native-entry/README.md) | #166 选型写入改走原生 `agentDefaultModel.saveSelection`，不再直接 mutate settings 行 |
+| [135-native-semantic-guards/167-idempotent-resend](135-native-semantic-guards/167-idempotent-resend/README.md) | #167 同一 `requestId` 连续重发只产生一条消息（只加断言，无生产改动） |
+| [135-native-semantic-guards/168-input-modalities](135-native-semantic-guards/168-input-modalities/README.md) | #168 输入模态从 pinned dsh 的运行时导出导入，网关不再有本地字面量 |
+| [135-native-semantic-guards/169-upgrade-checklist](135-native-semantic-guards/169-upgrade-checklist/README.md) | #169 六处守卫写进 dsh 升级复核入口，引用清单在测试改名/删除时失败 |
+| [135-native-semantic-guards/135-review-fixes](135-native-semantic-guards/135-review-fixes/README.md) | spec #135 集成分支两轴评审的修复：未落实的顺序声称与未构造的启动失败声称都换成会失败的检查，并补票面行为缺口 |
 
 ## 包清单真实性（规格 #136）
 
