@@ -97,7 +97,7 @@ class RemoteNotificationBacklogTest {
     private fun TestScope.receiver(harness: Harness, sessions: SessionBackend = Sessions()) =
         RemoteReceiveState(sessions, backgroundScope, { settle ->
             RemoteChatState(harness.chats, backgroundScope, harness.store, "https://fairy", settleReminders = settle)
-        }, harness.platform, { harness.platform.enabled })
+        }, harness.platform, { harness.platform.enabled }, harness.store, "https://fairy")
 
     @Test fun `three staggered reconnects publish one merged reminder`() = runTest {
         val harness = Harness()
@@ -156,6 +156,86 @@ class RemoteNotificationBacklogTest {
         harness.chats.updates.getValue("alice-main").emit(delivery("alice-main", 1)); runCurrent()
         assertEquals(listOf("alice-main"), harness.platform.alerts.map { it.first.sessionId })
         assertFalse(harness.store.load(key).notificationOwed)
+    }
+
+    /**
+     * The ledger is the reminder's authority, not whichever runtime happens to be live.
+     *
+     * The session settles here holding a record that owes nothing, and only afterwards does the
+     * ledger gain an owed episode — which is what a previous run, or any other writer, looks like
+     * from this one. Walking the live runtimes would answer "nothing owed" from their cached copy
+     * and the episode would be stranded; reading the ledger answers with what is actually owed.
+     */
+    @Test fun `debt the ledger records is settled even when the live runtime never saw it`() = runTest {
+        val harness = Harness()
+        val receiver = receiver(harness)
+        receiver.bind("alice", 1); runCurrent()
+        val key = ChatSyncKey("https://fairy", 1, "alice-main")
+        // A quiet settlement: the session answers, and claims nothing, so its record owes nothing.
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+        assertTrue("the quiet settlement owes nothing", harness.store.load(key).notificationOwed.not())
+        assertTrue(harness.platform.alerts.isEmpty())
+
+        // A record this run did not write: the episode was claimed before the process restarted.
+        harness.store.seed(key, ChatSyncRecord(0, true, notificationThrough = 1,
+            notificationEpisodeId = "alice-main/1", notificationOwed = true))
+        // The account's list is what names the session keys, so asking it again is what makes the
+        // debt discoverable. Nothing about the runtime changed, and nothing had to.
+        receiver.owned.refresh(); runCurrent()
+
+        assertEquals(1, harness.platform.alerts.size)
+        assertEquals("alice-main", harness.platform.alerts.single().first.sessionId)
+        assertEquals("Fairy 已完成本次活动", harness.platform.alerts.single().second)
+        assertFalse("the settled debt is retired in the ledger", harness.store.load(key).notificationOwed)
+    }
+
+    /** Debt is read for the account's own session keys; a record outside them is not published. */
+    @Test fun `a record for a session this account does not list is never published`() = runTest {
+        val harness = Harness()
+        harness.store.seed(ChatSyncKey("https://fairy", 1, "alice-archived"), ChatSyncRecord(0, true,
+            notificationThrough = 1, notificationEpisodeId = "alice-archived/1", notificationOwed = true))
+        val receiver = receiver(harness)
+        receiver.bind("alice", 1); runCurrent()
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+        receiver.owned.refresh(); runCurrent()
+
+        assertTrue("a session outside the account's list has no reminder", harness.platform.alerts.isEmpty())
+        assertTrue("and its record is left exactly as it was",
+            harness.store.load(ChatSyncKey("https://fairy", 1, "alice-archived")).notificationOwed)
+    }
+
+    /**
+     * A stopped observation must not spend debt it is no longer allowed to publish.
+     *
+     * The ledger is readable whether or not reception is observing, so a list refresh after the
+     * receiver stopped would otherwise retire an episode silently — the reminder would disappear
+     * with no notification, and resuming would have nothing left to publish. The debt stays put
+     * until observation resumes and a session answers; only then is it consumed and published.
+     */
+    @Test fun `a stopped observation leaves the ledger's debt for the resumed one`() = runTest {
+        val harness = Harness()
+        val key = ChatSyncKey("https://fairy", 1, "alice-main")
+        harness.store.seed(key, ChatSyncRecord(0, true, notificationThrough = 1,
+            notificationEpisodeId = "alice-main/1", notificationOwed = true))
+        val receiver = receiver(harness)
+        receiver.bind("alice", 1); runCurrent()
+        receiver.stopObservation(); runCurrent()
+        // Background reception being off only stops observing; it must not settle the backlog.
+        receiver.owned.refresh(); runCurrent()
+        assertTrue("a stopped observation publishes nothing", harness.platform.alerts.isEmpty())
+        assertTrue("and does not spend the debt", harness.store.load(key).notificationOwed)
+
+        receiver.resumeObservation(); runCurrent()
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+        assertEquals(1, harness.platform.alerts.size)
+        assertEquals("alice-main", harness.platform.alerts.single().first.sessionId)
+        assertFalse("the resumed observation retires the debt", harness.store.load(key).notificationOwed)
     }
 
     @Test fun `the reminder preview is the newest output by seq, not the last position`() = runTest {
