@@ -1,3 +1,7 @@
+/**
+ * @covers backend/chat — this suite drives `/chat/observe` under backpressure
+ * through the product's own routes rather than importing the package.
+ */
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { join } from 'node:path'

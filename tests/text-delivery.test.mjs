@@ -1,6 +1,8 @@
 /**
  * @covers backend/delivery — this suite drives the row through the product's
  * chat and HTTP routes rather than importing it.
+ * @covers backend/groups — one case calls the `groups` tool so the next turn
+ * carries a tool result alongside the delivered text.
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'

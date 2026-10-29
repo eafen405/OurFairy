@@ -10,6 +10,12 @@
  * row's own `memory.sqlite` — never a hand-mounted plugin or a private class.
  *
  * @covers backend/memory
+ * @covers backend/gateway — the cases lower the maintenance threshold through
+ * `/gateway/maintenance` instead of faking 15 turns of noise.
+ * @covers backend/attachments — the material a source turn carries is uploaded
+ * on the product's attachment routes.
+ * @covers backend/search — one case proves `conversation_search` never reaches
+ * the ownerless maintenance child.
  */
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'

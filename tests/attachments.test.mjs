@@ -1,3 +1,8 @@
+/**
+ * @covers backend/attachments — this suite drives the resumable upload and the
+ * original download through the product's own routes rather than importing the
+ * package.
+ */
 import assert from 'node:assert/strict'
 import { before, after, test } from 'node:test'
 import { createHash } from 'node:crypto'

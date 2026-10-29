@@ -14,6 +14,9 @@
  * Only the documented HTTP/SSE surface is used: no internal counter and no
  * private field is read or asserted. The launcher and the model double are the
  * real ones used by the other chat suites.
+ *
+ * @covers backend/chat — two `/chat/observe` connections on one session are
+ * this suite's own subject.
  */
 import assert from 'node:assert/strict'
 import { join } from 'node:path'

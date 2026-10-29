@@ -13,6 +13,9 @@
  * provider. The profile patch is read back through dsh's own patch loader, the
  * document that survives a restart, rather than through the gateway that wrote
  * it.
+ *
+ * @covers backend/gateway — `/gateway/compaction`, `/gateway/selection` and
+ * `/gateway/read` are this suite's own subject.
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'

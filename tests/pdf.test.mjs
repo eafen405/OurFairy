@@ -1,3 +1,7 @@
+/**
+ * @covers backend/attachments — this suite uploads through the product's
+ * attachment routes and drives the PDF tools that row registers.
+ */
 import assert from 'node:assert/strict'
 import { before, after, test } from 'node:test'
 import { createHash } from 'node:crypto'
