@@ -266,6 +266,32 @@ test('a numeric ticket directory stays its own spec, whatever its README says', 
   assert.equal(specStatus(920, { root, worktrees: [] }).copies, false, 'a numeric directory does not speak for another spec')
 })
 
+test('a named ticket directory can declare its parent spec in published.json', () => {
+  const root = fixture()
+  git(root, ['checkout', '--quiet', '-b', 'integration/spec-921', LANDING_BRANCH])
+  commitFiles(root, {
+    'work/tickets/memory-wave/published.json': '{\n  "parent": 921,\n  "title": "记忆治理"\n}\n',
+    'work/tickets/memory-wave/01-ticket.md': 'ticket\n',
+  })
+  assert.equal(specsInCheckout(root).has(921), true, 'the working tree declaration names a known spec')
+
+  git(root, ['push', '--quiet', 'origin', 'integration/spec-921'])
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+
+  assert.equal(specStatus(921, { root, worktrees: [] }).copies, true, 'the branch tree carries the declared copy')
+})
+
+test('a published.json without a parent field is not a copy of any spec', () => {
+  const root = fixture()
+  git(root, ['checkout', '--quiet', LANDING_BRANCH])
+  commitFiles(root, {
+    'work/tickets/field-map/published.json': '{\n  "01-ticket.md": { "number": 922 }\n}\n',
+  })
+  git(root, ['push', '--quiet', 'origin', LANDING_BRANCH])
+
+  assert.equal(specStatus(922, { root, worktrees: [] }).copies, false, 'only a parent field names a spec')
+})
+
 test('the report keeps the tracker half injectable and offline mode honest', () => {
   const root = fixture()
   commitOn(root, 'integration/spec-905', 'work/implementation/evidence/905-closeout/README.md')

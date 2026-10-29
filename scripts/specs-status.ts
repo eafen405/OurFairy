@@ -152,20 +152,35 @@ function integrationBranches(root: string): string[] {
     .filter(branch => branch.startsWith('integration/')))]
 }
 
+/** A ticket directory's own parent-spec declarations, as the directory holds them. */
+type TicketDeclarations = { published: string | undefined; readme: string | undefined }
+
 /**
  * The spec a ticket directory works for.
  *
  * A numeric directory name is the spec, exactly as before. Any other name has
- * to declare its parent — the directory's own README does — and a directory
- * that declares nothing belongs to no spec, so it is never a copy. Reading the
- * declaration through a callback keeps this one rule working for both the
- * working tree and an arbitrary git ref.
+ * to declare its parent — `published.json`'s `parent` or the README's `父规格`
+ * link — and a directory that declares nothing belongs to no spec, so it is
+ * never a copy. Reading the declaration through a callback keeps this one rule
+ * working for both the working tree and an arbitrary git ref.
  * @param name directory name under `work/tickets`
- * @param readme the directory's README text, read only when the name is not numeric
+ * @param declarations the directory's own files, read only when the name is not numeric
  */
-function specOfDirectory(name: string, readme: () => string | undefined): number | undefined {
+function specOfDirectory(name: string, declarations: () => TicketDeclarations): number | undefined {
   if (/^\d+$/u.test(name)) return Number(name)
-  return readmeParent(readme())
+  const own = declarations()
+  return publishedParent(own.published) ?? readmeParent(own.readme)
+}
+
+/** `published.json`'s declared parent spec, when it has one. */
+function publishedParent(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined
+  try {
+    const { parent } = JSON.parse(raw) as { parent?: unknown }
+    return typeof parent === 'number' && Number.isInteger(parent) && parent > 0 ? parent : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /** The README's `父规格` line, when it links a spec issue. */
@@ -202,7 +217,10 @@ export function specsInCheckout(root: string): Set<number> {
   if (existsSync(tickets)) {
     for (const entry of readdirSync(tickets, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue
-      const spec = specOfDirectory(entry.name, () => readText(join(tickets, entry.name, 'README.md')))
+      const spec = specOfDirectory(entry.name, () => ({
+        published: readText(join(tickets, entry.name, 'published.json')),
+        readme: readText(join(tickets, entry.name, 'README.md')),
+      }))
       if (spec !== undefined) specs.add(spec)
     }
   }
@@ -257,9 +275,11 @@ function associatedWorktrees(branch: string, spec: number | undefined, entries: 
 
 /** Whether the branch tip carries the spec's ticket copies. */
 function carriesCopies(root: string, ref: string, spec: number): boolean {
-  return ticketDirectories(root, ref).some(name => specOfDirectory(name, () => (
-    git(root, ['cat-file', '-p', `${ref}:work/tickets/${name}/README.md`])
-  )) === spec)
+  const read = (path: string) => git(root, ['cat-file', '-p', `${ref}:work/tickets/${path}`])
+  return ticketDirectories(root, ref).some(name => specOfDirectory(name, () => ({
+    published: read(`${name}/published.json`),
+    readme: read(`${name}/README.md`),
+  })) === spec)
 }
 
 /** Whether merging the ref would leave the landing tree unchanged. */
