@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.identity
 import java.io.File
 import me.rerere.ui.markdown.parseMarkdown
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Host parsing baseline only; neither Android frames nor a device performance acceptance test. */
@@ -18,5 +19,41 @@ class RemotePresentationBaselineTest {
             (System.nanoTime() - started) / 1_000_000.0
         }.sorted()
         println("PRESENTATION_HOST_BASELINE chars=${source.length} samples=${timings.joinToString(",")} medianMs=${timings[3]} p95Ms=${timings[6]}")
+    }
+
+    /**
+     * The combined workload (#268) is a fixed declaration, not an inference.
+     *
+     * `src/perf/assets/presentation/multi-session.md` is the whole declaration the measurement
+     * activity parses, and a round on a device is only comparable with another round that names the
+     * same numbers. Pinning the file here makes a change deliberate: editing the workload fails this
+     * test until the new numbers are written down, instead of silently producing a new baseline that
+     * looks like the old one.
+     *
+     * This asserts the declaration, not the activity's reader — the activity lives in `src/perf`,
+     * which the debug unit-test variant does not compile, so the same file is the shared authority.
+     */
+    @Test fun `multi-session combined workload declaration stays fixed`() {
+        val declared = File("src/perf/assets/presentation/multi-session.md").readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+        assertEquals(
+            listOf(
+                "sessions = 6",
+                "historySessions = 5",
+                "historyMessages = 200",
+                "streamingSessions = 1",
+                "replyChars = 232703",
+                "chunkChars = 128",
+                "intervalMillis = 20",
+            ),
+            declared,
+        )
+    }
+
+    /** The combined workload streams the #74 body; an empty body would measure an idle transcript. */
+    @Test fun `multi-session workload has a streaming body to replay`() {
+        val body = File("src/perf/assets/presentation/workload.md").readText()
+        assertTrue(body.length >= 3_635)
     }
 }
