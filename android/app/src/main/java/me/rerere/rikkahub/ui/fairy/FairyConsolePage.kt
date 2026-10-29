@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.remote.IdentityUser
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
@@ -73,6 +74,7 @@ fun FairyConsolePage(
     onOpen: (Screen) -> Unit,
     session: me.rerere.rikkahub.data.remote.AccountSession = koinInject(),
     receive: RemoteReceiveState = koinInject(),
+    fairy: FairyInteraction = koinInject(),
 ) {
     val baseTokens = LocalFairyTokens.current
     val context = LocalContext.current
@@ -114,7 +116,21 @@ fun FairyConsolePage(
         }
     }
     val origin = remember { floatArrayOf(0f, 0f) }
-    val currentSessionId = owned.selectedId ?: owned.primarySessionId
+    // 当前会话: the reader's last choice, else the account's main session. Home presents only this
+    // one session — its runtime, its connection, its activity — never a union over the account.
+    val currentSessionId = owned.currentSessionId()
+    val runtimes by receive.runtimes.collectAsStateWithLifecycle()
+    val currentRuntime = currentSessionId?.let(runtimes::get)
+    // Unconditional collection: the runtime may not exist yet, and a page that appeared or
+    // vanished mid-composition would change the composition's shape.
+    val currentSnapshot by remember(currentRuntime) {
+        currentRuntime?.snapshot ?: flowOf(null)
+    }.collectAsStateWithLifecycle(null)
+    val currentFacts = currentSnapshot?.fairyFacts()
+    val window = fairy.window(currentFacts)
+    LaunchedEffect(fairy, currentSessionId, currentFacts) {
+        fairy.show(currentSessionId?.let(::FairyInteractionContext), currentFacts)
+    }
     CompositionLocalProvider(LocalFairyTokens provides tokens) {
         Box(
             Modifier
@@ -156,7 +172,7 @@ fun FairyConsolePage(
                 Spacer(Modifier.height(16.dp))
                 Box(Modifier.fillMaxWidth().zIndex(1f)) {
                     FairyScreen(
-                        presence = FairyPresence.IDLE,
+                        presence = window.presence,
                         eyeSize = 112.dp,
                         hud = true,
                         eye = eye,

@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import java.io.File
 import java.time.Duration
 import android.graphics.Bitmap
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -115,6 +116,7 @@ class FairyPagesTest {
         override suspend fun load(key: ChatSyncKey) = ChatSyncRecord(-1, true)
         override suspend fun save(key: ChatSyncKey, record: ChatSyncRecord) = Unit
     }
+    private val fairy = FairyInteraction(now = SystemClock::uptimeMillis, random = kotlin.random.Random(11))
     private val receive = RemoteReceiveState(sessions, scope, {
         RemoteChatState(backend, scope, store, "https://fairy.test")
     })
@@ -159,7 +161,7 @@ class FairyPagesTest {
     }
 
     private fun home(onOpen: (Screen) -> Unit) {
-        show { FairyConsolePage(onOpen, account, receive) }
+        show { FairyConsolePage(onOpen, account, receive, fairy) }
     }
 
     @Test fun `idle line sits below the fairy screen`() {
@@ -177,6 +179,132 @@ class FairyPagesTest {
             caption.top >= screen.bottom,
         )
         screenshot("home-idle-line")
+    }
+
+    /** One session's projection with the given backend activity and no reply text yet. */
+    private fun activity(
+        sessionId: String,
+        status: Int,
+        reasons: List<Int> = emptyList(),
+    ) = MutableStateFlow(
+        RemoteChatProjection(
+            sessionId = sessionId,
+            cursor = 0,
+            durableThroughSeq = 0,
+            events = eventCoverage(0, 0),
+            activity = RemoteActivity(status, reasons),
+        ),
+    )
+
+    @Test fun `home presents the current session's live state instead of standby`() {
+        updates["main"] = activity("main", 2, listOf(1))
+        home {}
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals(FairyInteractionContext("main"), fairy.state.value.context)
+            assertEquals(
+                "主会话正在执行时，首页必须显示思考而不是固定的待机",
+                FairyPresence.THINKING,
+                fairy.state.value.window.presence,
+            )
+            assertTrue(fairy.state.value.window.awaitingReply)
+        }
+    }
+
+    @Test fun `home presents unknown activity as linking, never as standby`() {
+        updates["main"] = activity("main", 0)
+        home {}
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals(
+                "活动未知不能被显示成安静",
+                FairyPresence.CONNECTING,
+                fairy.state.value.window.presence,
+            )
+        }
+    }
+
+    @Test fun `home follows only the current session, not the rest of the account`() {
+        // Another session is working; the current one is quiet. Home must show its own session.
+        updates["other"] = activity("other", 2, listOf(1))
+        home {}
+        compose.waitUntil { receive.runtimes.value.keys.containsAll(listOf("main", "other")) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(FairyPresence.IDLE, fairy.state.value.window.presence)
+        }
+
+        compose.runOnIdle { receive.owned.select("other") }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(
+                "切到正在执行的会话后，首页显示的是这个会话的思考",
+                FairyPresence.THINKING,
+                fairy.state.value.window.presence,
+            )
+        }
+    }
+
+    @Test fun `an account switch stops the old sessions from driving home`() {
+        updates["main"] = activity("main", 2, listOf(1))
+        home {}
+        compose.waitUntil { fairy.state.value.window.presence == FairyPresence.THINKING }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        // The identity publisher's own entry: reception retires the account's sessions here.
+        compose.runOnIdle { receive.bindIdentity(null) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals(null, fairy.state.value.context)
+            assertEquals(
+                "账号切换后旧会话的事实不得继续驱动首页",
+                FairyPresence.CONNECTING,
+                fairy.state.value.window.presence,
+            )
+        }
+    }
+
+    @Test fun `home and the conversation page present the same state for the same session`() {
+        updates["main"] = activity("main", 2, listOf(1))
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        show {
+            when (val target = destination) {
+                is Screen.Conversation -> FairyConversationPage(
+                    target.sessionId, {}, receive, fairy,
+                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
+                )
+                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
+            }
+        }
+        compose.waitUntil { fairy.state.value.window.presence == FairyPresence.THINKING }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithText("进入会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(Screen.Conversation("main"), destination) }
+
+        compose.runOnIdle {
+            assertEquals(FairyInteractionContext("main"), fairy.state.value.context)
+            assertEquals(
+                "对话页与首页对同一会话必须得到同一个当前表现",
+                FairyPresence.THINKING,
+                fairy.state.value.window.presence,
+            )
+        }
     }
 
     @Test fun `home displays and opens the recently selected session`() {
@@ -211,13 +339,13 @@ class FairyPagesTest {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
             when (val target = destination) {
-                Screen.Home -> FairyConsolePage({ destination = it }, account, receive)
+                Screen.Home -> FairyConsolePage({ destination = it }, account, receive, fairy)
                 Screen.Sessions -> FairyConversationPage(
-                    null, { destination = Screen.Home }, receive,
+                    null, { destination = Screen.Home }, receive, fairy,
                     onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
                 )
                 is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, { destination = Screen.Home }, receive,
+                    target.sessionId, { destination = Screen.Home }, receive, fairy,
                     onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
                 )
                 else -> error("Unexpected destination: $target")
@@ -316,7 +444,7 @@ class FairyPagesTest {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
             when (destination) {
-                Screen.Home -> FairyConsolePage({ destination = it }, account, receive)
+                Screen.Home -> FairyConsolePage({ destination = it }, account, receive, fairy)
                 else -> FairySettingsPage(
                     {}, {}, account, backend = identityBackend, onBack = { destination = Screen.Home },
                 )
@@ -388,14 +516,14 @@ class FairyPagesTest {
     private fun conversation(initial: String = "main") {
         var target by mutableStateOf(initial)
         show {
-            FairyConversationPage(target, {}, receive,
+            FairyConversationPage(target, {}, receive, fairy,
                 onOpenConversation = { target = it }, onSettings = {})
         }
     }
 
     @Test fun `a model title arriving after the reply re-reads the list and reaches the bar`() {
         show {
-            FairyConversationPage("main", {}, receive, onOpenConversation = {}, onSettings = {})
+            FairyConversationPage("main", {}, receive, fairy, onOpenConversation = {}, onSettings = {})
         }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
         compose.runOnIdle { scope.launch { receive.openSession("main") } }
@@ -438,7 +566,7 @@ class FairyPagesTest {
 
     @Test fun `the conversation bar names the open session and follows the row it reads`() {
         show {
-            FairyConversationPage("main", {}, receive, onOpenConversation = {}, onSettings = {})
+            FairyConversationPage("main", {}, receive, fairy, onOpenConversation = {}, onSettings = {})
         }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
         compose.mainClock.advanceTimeBy(1_000)
@@ -471,7 +599,7 @@ class FairyPagesTest {
 
     @Test fun `the drawer offers a rename entry on every session the reader can name`() {
         show {
-            FairyConversationPage("main", {}, receive, onOpenConversation = {}, onSettings = {})
+            FairyConversationPage("main", {}, receive, fairy, onOpenConversation = {}, onSettings = {})
         }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
         compose.mainClock.advanceTimeBy(1_000)
@@ -499,10 +627,10 @@ class FairyPagesTest {
         show {
             when (val target = destination) {
                 is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, {}, receive,
+                    target.sessionId, {}, receive, fairy,
                     onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
                 )
-                else -> FairyConsolePage({ destination = it }, account, receive)
+                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
             }
         }
         compose.onNodeWithText("进入会话").performScrollTo().performClick()
@@ -545,7 +673,7 @@ class FairyPagesTest {
         createdSession = OwnedSession("other", title = "复用会话")
         var target by mutableStateOf("main")
         show {
-            FairyConversationPage(target, {}, receive,
+            FairyConversationPage(target, {}, receive, fairy,
                 onOpenConversation = { target = it }, onSettings = {})
         }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
@@ -587,7 +715,7 @@ class FairyPagesTest {
         listedSessions = OwnedSessions(emptyList(), "main")
         var target by mutableStateOf("other")
         show {
-            FairyConversationPage(target, {}, receive,
+            FairyConversationPage(target, {}, receive, fairy,
                 onOpenConversation = { target = it }, onSettings = {})
         }
         compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
@@ -666,7 +794,7 @@ class FairyPagesTest {
         show(reduceMotion = false) {
             val resolved = LocalAgoraMotionPolicy.current
             SideEffect { policy = resolved }
-            FairyConversationPage(target, {}, receive,
+            FairyConversationPage(target, {}, receive, fairy,
                 onOpenConversation = { target = it }, onSettings = {})
         }
         assertFalse("该用例必须在允许空间动效的策略下运行", policy!!.reduceMotion)

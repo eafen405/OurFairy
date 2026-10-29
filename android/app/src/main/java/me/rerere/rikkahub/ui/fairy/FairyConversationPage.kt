@@ -50,6 +50,7 @@ fun FairyConversationPage(
     sessionId: String?,
     onBack: () -> Unit,
     receive: RemoteReceiveState = koinInject(),
+    fairy: FairyInteraction = koinInject(),
     onOpenConversation: (String) -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -84,7 +85,13 @@ fun FairyConversationPage(
     // The open session's row, the same one the drawer renders: its title is what
     // the bar shows.
     val session = sessions.sessions.firstOrNull { it.id == sessionId }
-    val window = snapshot?.fairyWindow() ?: FairyWindowState(presence = FairyPresence.CONNECTING)
+    // 当前表现 comes from the interaction module and from this session's facts only. A session the
+    // page is not settled in is presented with no facts at all, which the module answers as the
+    // unknown presentation — never the previous session's.
+    val context = contextFor(sessionId, settled)
+    val facts = snapshot?.fairyFacts()
+    val window = fairy.window(facts)
+    LaunchedEffect(fairy, context, facts) { fairy.show(context, facts) }
     val screenOpen = rememberFairyScreenOpen(window)
     val tokens = LocalFairyTokens.current
     val failure = sessions.failure?.let {
@@ -212,19 +219,13 @@ private fun FairyConversationSurface(
     }
 }
 
-internal fun RemoteChatSnapshot.fairyWindow(): FairyWindowState {
-    val working = activity.status == 2
-    val hasOutput = !projection?.attempt?.text.isNullOrBlank()
-    return FairyWindowState(
-        presence = when {
-            connecting -> FairyPresence.CONNECTING
-            !connected -> FairyPresence.OFFLINE
-            activity.status == 0 -> FairyPresence.CONNECTING
-            working && hasOutput -> FairyPresence.SPEAKING
-            working -> FairyPresence.THINKING
-            else -> FairyPresence.IDLE
-        },
-        expanded = connected && projection != null && projection.messages.isEmpty() && !hasOutput,
-        awaitingReply = working && 1 in activity.reasons && !hasOutput,
-    )
+/**
+ * The context this page presents: the open session, once the page is settled in it.
+ *
+ * A page that is not yet settled (still opening, failed to open, or looking at the session-list
+ * drawer) presents nothing rather than a session it is not showing.
+ */
+private fun contextFor(sessionId: String?, settled: Boolean): FairyInteractionContext? {
+    if (!settled || sessionId == null) return null
+    return FairyInteractionContext(sessionId)
 }
