@@ -40,7 +40,7 @@ Android `ui/fairy` / `data/remote` / `ui/identity`：
 
 | 文件 | 覆盖 |
 | --- | --- |
-| [`FairyInteractionTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/ui/fairy/FairyInteractionTest.kt) | 既有 32 个用例 + 本票 20 个纯 JUnit 用例（共 52）：发送/重试/切页幂等、输出、安静投递、completed、投递+完成合并、活动未知、建立后一次、离页与回前台的基线、持续状态、重放、会话/账号切换、跨会话 seq、SPEAKING 脉冲、首帧事实转述 |
+| [`FairyInteractionTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/ui/fairy/FairyInteractionTest.kt) | 既有 32 个用例 + 本票 21 个纯 JUnit 用例（共 53）：发送/重试/切页幂等、输出、安静投递、completed、投递+完成合并、活动未知、建立后一次、离页与回前台的基线（含回前台时仍未建立的投递）、持续状态、重放、会话/账号切换、跨会话 seq、SPEAKING 脉冲、首帧事实转述 |
 | [`FairyPagesTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/ui/fairy/FairyPagesTest.kt) | 既有 32 个用例 + 本票 4 个：真实发送接线、`ActivityScenario` 前后台与不补播、Reduced Motion 下的安静投递、module→眼睛映射只演一次（共 36） |
 | [`RemoteAttachmentStateTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteAttachmentStateTest.kt) | 两处 `send` 返回值断言改为「非 null」，并断言返回的 requestId 就是 pending 命令的 key |
 
@@ -53,7 +53,7 @@ Android `ui/fairy` / `data/remote` / `ui/identity`：
 | 投递（`RemoteActivity.delivery` 的 episodeId + seq） | `FairyReaction(DELIVERY)`；安静会话仍是 IDLE | 眼睛看向内容；quiet 不显示成执行中 | `a delivery in a quiet session glances once and stays idle`；页面 `a quiet delivery shows content without pretending work under reduced motion`；`the module's reaction reaches the page's eye once` |
 | 完成（`RemoteActivity.completed` 的 episodeId + finishedSeq） | `FairyReaction(COMPLETED)` | 眨眼一次 | `a finished run blinks once`；`the module's reaction reaches the page's eye once` |
 | 投递 + 完成同帧 | 一次 `DELIVERY`（投递优先，完成不另排） | 只有一次视线反应 | `a delivery and its completion are one reaction` |
-| 回到前台 | 以**当前**运行时事实重呈现，结算旧反应，下一次呈现不演任何事件 | 当前表现与事实一致；离开期间到达的事件不补演 | 页面 `coming back to the foreground settles what arrived while away`；module `facts that only arrive after leaving are settled instead of replayed`、`coming back to the foreground presents current facts without a reaction`、`coming back keeps the continuous state` |
+| 回到前台 | 以**当前**运行时事实重呈现，结算旧反应，下一次呈现不演任何事件；结算时连未建立活动里的投递/完成键也记下 | 当前表现与事实一致；离开期间到达的事件不补演，重连建立后也不补演 | 页面 `coming back to the foreground settles what arrived while away`；module `facts that only arrive after leaving are settled instead of replayed`、`a delivery settled while away does not replay when its activity is established later`、`coming back to the foreground presents current facts without a reaction`、`coming back keeps the continuous state` |
 | 活动未知时收到投递 | 不反应（unknown 不是事实） | 当前表现 CONNECTING | `an unestablished activity reacts to nothing`；建立后同一投递只演一次：`the same delivery reacts once it is established` |
 | 重连 / generation 重建（同一 episode 重放） | 已触发集合命中，不再反应 | 不重复演 | `a replayed episode after a reconnection is not a second reaction`；`the first facts after an empty presentation are a baseline, not history` |
 | 会话切换 / 登出 | 换上下文整份退休，旧反应不进入新上下文 | 旧事件不驱动新上下文 | `a session switch retires the transient reaction`；`signing out retires a pending reaction`；`an output seq already seen in another session is still new here` |
@@ -93,6 +93,12 @@ Android `ui/fairy` / `data/remote` / `ui/identity`：
 基线：更新 当前表现、记下事件、不演反应。之后真正新到的事件仍会反应（页面用例
 `coming back to the foreground settles what arrived while away` 同时断言这两段）。
 
+**结算时连未建立活动的投递/完成事实也记下。** 回前台时若会话仍处于断开/未建立状态，投影里的投递
+事实还在，但 `activity.status` 是 0；如果只在「活动已建立」时才记键，重连把活动建立后同一条投递会
+被当成新事件补演。所以正在结算的呈现（每个上下文的第一份事实、`pageExit` / `foregrounded` 之后的
+首帧）对 output / delivery / completed 一律记账、只是不演；只有前台正常观察时才要求活动已建立
+（`a delivery settled while away does not replay when its activity is established later`）。
+
 **「第一次拿到事实」也是基线。** 页面可以先带着路由的 sessionId 呈现（此时运行时还没有事实），
 第一份事实到达时上下文没变；如果只在换上下文时建基线，打开一个已有历史的会话会把最新输出/投递补演
 一遍。module 因此另记 `hasPresentedFacts`：每个上下文的第一份非空事实只记录不演
@@ -130,9 +136,9 @@ Motion 时 `FairyScreen` 不跑帧循环，但副标题（「正在思考…」/
 | 命令 | 结果 |
 | --- | --- |
 | `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.ui.fairy.FairyInteractionTest'`（测试先行、实现前） | 预期红：`BUILD FAILED in 46s`，`Unresolved reference 'FairyDelivery' / 'FairyReactionKind'`、`Unresolved reference 'reaction' / 'foregrounded' / 'speechPulse'` |
-| `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.ui.fairy.FairyInteractionTest'`（实现后） | `BUILD SUCCESSFUL in 9s`，52/52 |
-| `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.ui.fairy.*' --tests 'me.rerere.rikkahub.data.remote.*'` | `BUILD SUCCESSFUL in 20s`；fairy 101 + data.remote 221 = 322 个用例，0 失败（JUnit XML 汇总） |
-| `./gradlew test lintDebug assembleDebug`（最终门禁，全量） | `BUILD SUCCESSFUL in 2m 12s`；56 suites / 485 tests / 0 failures / 0 errors；`lintDebug` 0 errors、30 warnings（仓库既有 warning）；产出 `app-universal-debug.apk` 等 3 个 debug APK。原始日志 `work/tmp/262/gradle-final.log`（不入库） |
+| `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.ui.fairy.FairyInteractionTest'`（实现后） | `BUILD SUCCESSFUL in 4s`，53/53 |
+| `./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.ui.fairy.*' --tests 'me.rerere.rikkahub.data.remote.*'` | `BUILD SUCCESSFUL in 29s`；fairy 102 + data.remote 221 = 323 个用例，0 失败（JUnit XML 汇总） |
+| `./gradlew test lintDebug assembleDebug`（最终门禁，全量） | `BUILD SUCCESSFUL in 2m 14s`；56 suites / 486 tests / 0 failures / 0 errors；`lintDebug` 0 errors、30 warnings（仓库既有 warning）；产出 `app-universal-debug.apk` 等 3 个 debug APK。原始日志 `work/tmp/262/gradle-final2.log`（不入库） |
 
 根仓库 pre-commit 对 `android/` 改动会跑全量 `npm test`（`scripts/precommit.ts` 把 `android/` 列为
 FULL_AUTHORITY）。#261 实测本机因后端 probe 并发超时失败（与 Android 改动无关）；本票的 pre-commit
@@ -152,7 +158,7 @@ FULL_AUTHORITY）。#261 实测本机因后端 probe 并发超时失败（与 An
 - 单独运行：`node --test tests/memory-impression.test.mjs` → `EXIT:0`，5/5 pass，8.5 s
   （原始日志 `work/tmp/262/memory-impression-alone.log`，不入库）。即并发全量下的后端启动/安装失败，
   该测试文件本身在当前环境可单独通过。
-- 因此本票的提交用 `--no-verify` 落地（`fb6a729925`），不声称根门禁通过。Android 全量门禁
+- 因此本票的提交用 `--no-verify` 落地（首个 feat `fb6a729925`；随后的小修正同），不声称根门禁通过。Android 全量门禁
   （test + lintDebug + assembleDebug）已实际通过；根仓库全量门禁按 CONVENTIONS 属于 spec 收口项，
   需在收口环境重跑。
 
