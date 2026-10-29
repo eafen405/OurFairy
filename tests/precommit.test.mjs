@@ -91,6 +91,34 @@ test('a package a suite drives through the launcher is selected by that suite’
   }
 })
 
+test('a speech source change selects the suite that drives the speech route', () => {
+  const tests = plan(['backend/speech/src/service.ts']).tests
+  assert.ok(
+    tests.includes('tests/speech.test.mjs'),
+    `speech has a behaviour suite; the gate selected ${tests.join(', ') || '(none)'}`,
+  )
+})
+
+test('a memory source change selects every memory suite that drives its tools', () => {
+  const tests = plan(['backend/memory/src/index.ts']).tests
+  for (const suite of ['memory-crud', 'memory-impression', 'memory-policy', 'memory-maintenance', 'memory-maintenance-recovery']) {
+    const file = `tests/${suite}.test.mjs`
+    assert.ok(tests.includes(file), `a memory source change must select ${file}; the gate selected ${tests.join(', ') || '(none)'}`)
+  }
+})
+
+test('a groups or search source change selects the suites that drive those tools', () => {
+  const groups = plan(['backend/groups/src/index.ts']).tests
+  for (const file of ['tests/groups.test.mjs', 'tests/groups-row.test.mjs']) {
+    assert.ok(groups.includes(file), `a groups source change must select ${file}; the gate selected ${groups.join(', ') || '(none)'}`)
+  }
+  const search = plan(['backend/search/src/index.ts']).tests
+  assert.ok(
+    search.includes('tests/conversation-search.test.mjs'),
+    `a search source change must select the conversation search suite; the gate selected ${search.join(', ') || '(none)'}`,
+  )
+})
+
 test('a declaration associates only the package it names', () => {
   const tests = relatedTests(['backend/chat/src/units.ts'], { root: repoRoot })
   assert.ok(tests.includes('tests/chat-read-window.test.mjs'), 'the chat package still selects the suites that name it')

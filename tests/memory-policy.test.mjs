@@ -10,6 +10,8 @@
  * model double and reads the prompts the model actually receives, so a policy
  * that stops being mounted fails here even though the real semantic sample is
  * not part of CI.
+ *
+ * @covers backend/memory
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'

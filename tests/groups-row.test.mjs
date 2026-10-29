@@ -7,6 +7,8 @@
  * here is caller-visible: the tool catalog the model receives, and the results
  * the tools return through the product's own chat routes. The row id is
  * exercised the way an operator addresses it — an overlay disabling `groups`.
+ *
+ * @covers backend/groups
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'
