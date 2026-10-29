@@ -130,3 +130,22 @@ fake `session` / `receive` / `identityBackend`（就是 `FairyPagesTest` 已有�
 - **#264**：迁移登录、注册、会话、会话列表、通知定位；删除 `entryProvider {}` 的其余分支与
   `IdentityAccessPolicy` / `IdentityDestination` / `toIdentityDestination`；`FairyPagesTest` 的手抄路由
   改为用 catalog 装配；表驱动测试枚举全部目的地与三种身份。
+
+### 8.1 #264 的落地决定（#263 合并后补记）
+
+- `FairyDestination.page` 变成**非空**：迁移完成后每个目的地都必须有页面装配，`assembles()` 与
+  `RouteActivity.navigationEntry` 的第二条分支一起删除，`entryProvider` 只剩
+  `destinationOf(screen).Content(scope)`。
+- `IdentityAccessPolicy`、`IdentityDestination`、`Screen.toIdentityDestination()` 删除；
+  `IdentityScope` 留在 `ui/identity`（它是身份事实，不是导航词汇）。`ScreenIdentityDestinationTest`
+  随之删除，它的断言并入 catalog 的表驱动测试。
+- **通知落点复用 catalog 的会话栈**：`handleIntent` 在端点、用户编号、会话坐标都通过之后，
+  用 `resumedStack(CONVERSATION_ROUTE, sessionId)` 重置返回栈，而不是再写一遍
+  `[Home, Conversation(id)]`。通知语义仍由 `openRemoteNotification` 拥有，catalog 只回答
+  「会话这个目的地占哪个栈」。
+- `FairyPagesTest` 用一个**单槽**导航模型接 catalog：`push`/`replace` 都写同一个 `destination`
+  状态，`pop` 与 `reset` 落到它们的目标页。测试方法体里的断言一律不改，只把三块手抄
+  `when (destination)` 与两个装配 helper 换成「用 catalog 装配当前 `destination`」。
+- 完整性测试补齐：八个目的地 × 三种身份的表驱动准入、八条恢复策略、以及「`entries` 覆盖
+  `Screen` 的全部子类型」——最后一条由 `destinationOf` 的穷尽 `when` 编译期保证，测试只断言
+  `entries` 的 route 集合与「每个样本都能解析回自己」。
