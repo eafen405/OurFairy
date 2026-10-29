@@ -131,8 +131,8 @@
   -Pourfairy.identityEndpoint=https://example.invalid
 ```
 
-- `BUILD SUCCESSFUL`；`data.remote` 227 项、`RemotePresentation*` 7 项，0 failures；perf APK 在
-  评审修复后重新构建通过。
+- `BUILD SUCCESSFUL`；`7 tests completed, 0 failures`（`RemotePresentationTest` 4 项 +
+  `RemotePresentationBaselineTest` 3 项）；perf APK 在评审修复后重新构建通过。
 - 产出 `app-arm64-v8a-perf.apk`、`app-x86_64-perf.apk`、`app-universal-perf.apk`；universal
   8,721,351 字节，`aapt2 dump badging` 读到 `versionName='2.5.9-perf'`、`versionCode='194'`。
 - `perf` 的合并清单含 `MultiSessionBenchmarkActivity`（exported）；APK 的 assets 含
@@ -191,7 +191,19 @@
 
 ## 收口
 
-收口在 `integration/spec-259` 上执行，结果按下发时的实际输出补记；本节是 #269 记录里引用的最终
-门禁位置。待补：`android: test lintDebug`、`npm test`、`combo:verify`、两轴 code-review 与
-GitHub 票面关闭。
+收口在 `integration/spec-259` 执行；代码修复提交为 `fbf6d18e20`，本证据随收口文档提交。
+
+- 两轴 code-review（Standards / Spec）的硬问题已回到所属模块修复：`ChatSyncKey` 只保留一种规范
+  形态；消费规则收敛到 `ChatSyncStore.consumeReminder` 并补无运行时测试；绑定在首个投影前的
+  "尚未回答"有断言；组合负载 `replyChars` 与 #74 `stream` 正文精确核对；测量活动去掉恒为 0 的
+  提醒计数、绑定失败也写结果，并抽出两个活动共用的指标助手。
+- `android/`：`./gradlew test lintDebug` → `BUILD SUCCESSFUL`；全模块 430 tests / 0 failures，
+  `lintDebug` 0 errors。
+- `npm test` → `430 tests / pass 430 / fail 0`（`duration_ms` 207,832），空载重跑后通过；首次
+  并行负载下的 300 s 后端启动超时与本次 Android 改动无关，已由空载重跑排除。
+- `npm run combo:verify` → 三行 ok（ourfairy 基于 main，dsh `d80522d276`，android source
+  `460109d1`）。
+- GitHub：#268、#269、#270 已按 tracker 关闭；#259 保持 OPEN，直到 `integration/spec-259` 落地
+  `main`。
+- 未执行：目标设备三轮基线、真机通知、真实进程重启。
 
