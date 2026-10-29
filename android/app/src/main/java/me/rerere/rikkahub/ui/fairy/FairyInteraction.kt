@@ -32,6 +32,41 @@ data class FairyInteractionContext(val sessionId: String)
 /** The part of a session's transcript 当前表现 asks about. */
 data class FairyTranscript(val messages: Int, val replyText: String? = null)
 
+/** One backend delivery fact: output that reached the session at [seq], run [episodeId]. */
+data class FairyDelivery(val episodeId: String, val seq: Long)
+
+/** One backend completion fact: run [episodeId] finished its coverage at [finishedSeq]. */
+data class FairyCompletion(val episodeId: String, val finishedSeq: Long)
+
+/**
+ * A real stimulus the presenting page observed, one per real event the module reacts to.
+ *
+ * The kind names the event, not an animation: the page maps each kind to the eye response it can
+ * show (see `FairyEyeReactions`). A reaction is transient — it is settled by [FairyInteraction.pageExit]
+ * and by [FairyInteraction.foregrounded], and it is never queued.
+ */
+enum class FairyReactionKind {
+    /** A local send command was accepted; the backend has not said anything yet. */
+    SENT,
+
+    /** A Fairy output reached the projected transcript. */
+    OUTPUT,
+
+    /** The established activity reports a delivered output. */
+    DELIVERY,
+
+    /** The established activity reports a finished run. */
+    COMPLETED,
+}
+
+/**
+ * One reaction the presenting page owes.
+ *
+ * [id] only makes a later presentation of the same reaction distinguishable from a new one: the
+ * page keys its one-shot eye response on it, and an unchanged id means nothing new happened.
+ */
+data class FairyReaction(val id: Long, val kind: FairyReactionKind)
+
 /**
  * The remote facts one presented session offers Fairy, read out of that session's snapshot by
  * `RemoteChatSnapshot.fairyFacts()`. It carries no history and no facts of its own.
@@ -40,6 +75,12 @@ data class FairyTranscript(val messages: Int, val replyText: String? = null)
  * including unknown (`0`). Whether a committed prefix establishes anything is answered once, by
  * `RemoteChatSnapshot.activity`; this module copies that answer and never inspects raw events, so
  * it has no way to turn unknown into silence on its own.
+ *
+ * [outputSeq] is the newest Fairy message `seq` in the projected transcript, if any.
+ * [delivery] / [completed] are the activity's own delivery and completion facts; the module only
+ * reacts to them while [activityStatus] is established, because an unknown activity must not be
+ * presented as a fact either. None of these three is keyed by the projection generation: a new
+ * generation replays the same message and episode, and treating it as new would react twice.
  */
 data class FairyRemoteFacts(
     val connected: Boolean = false,
@@ -47,6 +88,9 @@ data class FairyRemoteFacts(
     val activityStatus: Int = 0,
     val activityReasons: List<Int> = emptyList(),
     val transcript: FairyTranscript? = null,
+    val outputSeq: Long? = null,
+    val delivery: FairyDelivery? = null,
+    val completed: FairyCompletion? = null,
 )
 
 /**
@@ -78,22 +122,37 @@ data class FairyInteractionState(
     val asleep: Boolean = false,
     /** The line the presenting page is showing; null while nothing is being said. */
     val caption: FairyLine? = null,
+    /**
+     * The transient eye reaction the presenting page owes, or null when there is none. The page
+     * keys its eye response on [FairyReaction.id], so recomposing or rebuilding the page without
+     * leaving it cannot replay an already-shown reaction; leaving the page settles it.
+     */
+    val reaction: FairyReaction? = null,
+    /**
+     * Counts new Fairy outputs that arrived while 当前表现 is SPEAKING: the screen pulses once per
+     * output. It is a transient presentation value like [reaction], not continuous state.
+     */
+    val speechPulse: Int = 0,
 )
 
 /** Unknown, not quiet: 当前表现 with no facts behind it. */
 private val UNKNOWN = FairyWindowState(presence = FairyPresence.CONNECTING)
 
 /**
- * Fairy 互动: the single owner of 当前表现, 屏幕待机, 台词选择 and 最近台词记忆.
+ * Fairy 互动: the single owner of 当前表现, 屏幕待机, 台词选择, 最近台词记忆 and the transient
+ * reactions real events ask for.
  *
  * A page renders [window] with the facts of the session it is showing, records that it did so with
- * [show], pulses [tick] while the screen is visible, and reports what the reader does with [touch].
- * It never synthesizes a presence of its own, keeps a second copy of these facts, or presents a
- * session it is not showing.
+ * [show], pulses [tick] while the screen is visible, reports what the reader does with [touch], and
+ * reports a send with [sent] and a return to the foreground with [foregrounded]. It never
+ * synthesizes a presence of its own, keeps a second copy of these facts, or presents a session it
+ * is not showing.
  *
  * The continuous state — 当前表现, [FairyInteractionState.asleep] and the line memory — outlives a
- * page. The transient state — an unfinished [FairyInteractionState.caption] — is settled by
- * [pageExit] and never replayed on the next page.
+ * page. The transient state — an unfinished [FairyInteractionState.caption], an unshown
+ * [FairyInteractionState.reaction] and [FairyInteractionState.speechPulse] — is settled by
+ * [pageExit] and never replayed on the next page. Events the module only learns about when the page
+ * comes back (facts that landed while it was away) settle silently by the same rule.
  *
  * [now] and [random] are this module's only clock and randomness, injected by the assembly so no
  * rule reaches for a global one. The page supplies the heartbeat ([tick]) but never the rule: when
@@ -106,7 +165,10 @@ class FairyInteraction(
 ) {
     private val mutable = MutableStateFlow(FairyInteractionState())
 
-    /** The retained interaction state; [show], [tick], [touch] and [pageExit] are its writers. */
+    /**
+     * The retained interaction state; [show], [sent], [foregrounded], [tick], [touch], [pageExit]
+     * and [captionFinished] are its writers.
+     */
     val state: StateFlow<FairyInteractionState> = mutable.asStateFlow()
 
     /**
@@ -121,6 +183,42 @@ class FairyInteraction(
 
     /** Whether a page has presented at all; [idleSince] is meaningless before that. */
     private var presented = false
+
+    /**
+     * Keys of events already seen, so a reconnect, a recomposition or a page change cannot replay
+     * one. They only grow; nothing clears them on a generation change, because a new generation
+     * replays the same episode/message. Each key is qualified by the thing that owns it (session id
+     * for an output, the backend's episode id for a delivery or completion), so switching context
+     * cannot make another context's event look like a replay.
+     */
+    private val sentRequestIds = mutableSetOf<String>()
+    private val seenOutputs = mutableSetOf<OutputKey>()
+    private val seenDeliveries = mutableSetOf<DeliveryKey>()
+    private val seenCompletions = mutableSetOf<CompletionKey>()
+
+    /** Only makes one reaction distinguishable from the next; never used as a key. */
+    private var reactionSeq = 0L
+
+    /**
+     * Whether the current context has presented facts at all. A context can be recorded with no
+     * facts yet (its runtime is not settled); the first facts that arrive are still a baseline —
+     * they are the session's history, not news — even though the context itself is unchanged.
+     */
+    private var hasPresentedFacts = false
+
+    /**
+     * The next [show] was not watched while it happened: it settles the events it presents
+     * instead of playing them. Set by [pageExit] and by [foregrounded]; cleared by the next
+     * presentation. This is what keeps an event that landed while the page was away from being
+     * replayed on return.
+     */
+    private var catchingUp = false
+
+    private data class OutputKey(val sessionId: String, val seq: Long)
+    private data class DeliveryKey(val episodeId: String, val seq: Long)
+    private data class CompletionKey(val episodeId: String, val finishedSeq: Long)
+
+    private data class Observation(val reaction: FairyReaction? = null, val pulse: Boolean = false)
 
     /**
      * 当前表现 for one session's facts — the branches the conversation page used to derive on its
@@ -168,6 +266,10 @@ class FairyInteraction(
      * 待机 and 台词 are replaced wholesale, so the previous context's state cannot survive into
      * the new one. The same context only replaces its facts, which is what keeps 待机 and the line
      * memory continuous across a page change.
+     *
+     * A presentation that was not being watched — the first one for a context, or the first after
+     * [pageExit] / [foregrounded] — settles the events it contains without playing them; only a
+     * change observed while presenting produces a [FairyInteractionState.reaction].
      */
     fun show(context: FairyInteractionContext?, facts: FairyRemoteFacts?) {
         if (!presented) {
@@ -175,13 +277,59 @@ class FairyInteraction(
             idleSince = now()
         }
         val held = mutable.value
+        val nextWindow = window(facts)
         if (held.context != context) {
             idleSince = now()
             nextLineAt = FIRST_LINE_MS
-            publish(FairyInteractionState(context, facts, window(facts)))
+            catchingUp = false
+            hasPresentedFacts = facts != null
+            observe(context, facts, react = false)
+            publish(FairyInteractionState(context, facts, nextWindow))
             return
         }
-        publish(held.copy(facts = facts, window = window(facts)))
+        // The first facts of a context are its history even when the context was recorded earlier
+        // with none (a runtime that had not settled yet); they update 当前表现 but play nothing.
+        val firstFacts = facts != null && !hasPresentedFacts
+        if (facts != null) hasPresentedFacts = true
+        val react = !catchingUp && !firstFacts
+        catchingUp = false
+        val observation = observe(context, facts, react, nextWindow)
+        publish(
+            held.copy(
+                facts = facts,
+                window = nextWindow,
+                reaction = observation.reaction ?: held.reaction,
+                speechPulse = held.speechPulse + if (observation.pulse) 1 else 0,
+            ),
+        )
+    }
+
+    /**
+     * Record a local send that was accepted with [requestId], the idempotency key of one send.
+     *
+     * This is only the client acknowledging the reader's action: it produces a short attention
+     * reaction and leaves 当前表现 alone, so nothing here pretends the backend has started
+     * thinking. The key makes a retry, a rebind or a page that re-reports the same send one event.
+     */
+    fun sent(requestId: String) {
+        if (!sentRequestIds.add(requestId)) return
+        val held = mutable.value
+        publish(held.copy(reaction = FairyReaction(++reactionSeq, FairyReactionKind.SENT)))
+    }
+
+    /**
+     * Record that a page is visible again, presenting [context] with the facts that are true right
+     * now — read by the page from the session's runtime, not from its last composition.
+     *
+     * Coming back never replays what happened while no page was watching: the current facts settle
+     * the events they contain and update 当前表现, while the continuous state (待机, 当前表现, the
+     * line memory) stays. Only a change after this presentation produces a reaction.
+     */
+    fun foregrounded(context: FairyInteractionContext?, facts: FairyRemoteFacts?) {
+        val held = mutable.value
+        if (held.reaction != null) publish(held.copy(reaction = null))
+        catchingUp = true
+        show(context, facts)
     }
 
     /**
@@ -237,13 +385,65 @@ class FairyInteraction(
     }
 
     /**
-     * The presenting page stopped: its transient presentation is settled. An unfinished line is
-     * dropped — it does not queue for, or replay on, the next page — while the continuous state
+     * Settle the presenting page's transient state: an unfinished line and an unshown reaction are
+     * dropped, and the next presentation is marked as unwatched (see [catchingUp]) — they do not
+     * queue for, or replay on, the next page. The continuous state
      * ([FairyInteractionState.asleep], 当前表现, the line memory) stays where it is.
      */
     fun pageExit() {
+        catchingUp = true
         val held = mutable.value
-        if (held.caption != null) publish(held.copy(caption = null))
+        if (held.caption != null || held.reaction != null) {
+            publish(held.copy(caption = null, reaction = null))
+        }
+    }
+
+    /**
+     * Read one presentation's events against the append-only seen keys and record them.
+     *
+     * With [react] false the keys are recorded but nothing is played: that is the first
+     * presentation of a context or the first one after leaving a page, where the facts are history
+     * rather than news. Delivery and completion only count while the activity is established:
+     * unknown is not a fact to present, so the same delivery reacts once the prefix that proves it
+     * lands.
+     */
+    private fun observe(
+        context: FairyInteractionContext?,
+        facts: FairyRemoteFacts?,
+        react: Boolean,
+        window: FairyWindowState = UNKNOWN,
+    ): Observation {
+        if (context == null || facts == null) return Observation()
+        var output = false
+        var delivery = false
+        var completed = false
+        facts.outputSeq?.let { seq ->
+            if (seenOutputs.add(OutputKey(context.sessionId, seq))) output = true
+        }
+        if (facts.activityStatus != 0) {
+            facts.delivery?.let { fact ->
+                if (seenDeliveries.add(DeliveryKey(fact.episodeId, fact.seq))) delivery = true
+            }
+            facts.completed?.let { fact ->
+                if (seenCompletions.add(CompletionKey(fact.episodeId, fact.finishedSeq))) {
+                    completed = true
+                }
+            }
+        }
+        if (!react) return Observation()
+        // One presentation produces at most one transient reaction: a delivery and the completion
+        // that describes the same message are one event for the reader. Delivery wins because it
+        // is the fact that carries the new content.
+        val kind = when {
+            delivery -> FairyReactionKind.DELIVERY
+            output -> FairyReactionKind.OUTPUT
+            completed -> FairyReactionKind.COMPLETED
+            else -> null
+        }
+        return Observation(
+            reaction = kind?.let { FairyReaction(++reactionSeq, it) },
+            pulse = output && window.presence == FairyPresence.SPEAKING,
+        )
     }
 
     private fun publish(next: FairyInteractionState) {

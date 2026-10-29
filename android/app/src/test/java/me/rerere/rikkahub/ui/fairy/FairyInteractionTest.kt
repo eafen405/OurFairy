@@ -32,12 +32,18 @@ class FairyInteractionTest {
         reasons: List<Int> = emptyList(),
         messages: Int? = 0,
         reply: String? = null,
+        output: Long? = null,
+        delivery: FairyDelivery? = null,
+        completed: FairyCompletion? = null,
     ) = FairyRemoteFacts(
         connected = connected,
         connecting = connecting,
         activityStatus = status,
         activityReasons = reasons,
         transcript = messages?.let { FairyTranscript(it, reply) },
+        outputSeq = output,
+        delivery = delivery,
+        completed = completed,
     )
 
     private fun presented(remote: FairyRemoteFacts? = facts()): FairyWindowState =
@@ -273,6 +279,308 @@ class FairyInteractionTest {
 
         assertEquals(FairyPresence.THINKING, module.state.value.window.presence)
         assertTrue(module.state.value.window.awaitingReply)
+    }
+
+    @Test fun `the facts a page renders carry the newest fairy output and the activity events`() {
+        // The newest output is the largest Fairy seq, not the last row: position only orders the
+        // transcript. Delivery and completion are the established activity's own facts.
+        val snapshot = me.rerere.rikkahub.data.remote.RemoteChatSnapshot(
+            sessionId = "main",
+            connected = true,
+            initialized = true,
+            consumedThrough = 6,
+            projection = me.rerere.rikkahub.data.remote.RemoteChatProjection(
+                sessionId = "main",
+                cursor = 6,
+                messages = listOf(
+                    me.rerere.rikkahub.data.remote.RemoteChatMessage(
+                        "later-row", 2, 5, role = 2, status = 2, text = "older",
+                    ),
+                    me.rerere.rikkahub.data.remote.RemoteChatMessage(
+                        "newest", 1, 6, role = 2, status = 2, text = "newest",
+                    ),
+                    me.rerere.rikkahub.data.remote.RemoteChatMessage(
+                        "user", 0, 0, role = 1, status = 2, text = "hello",
+                    ),
+                ),
+                activity = me.rerere.rikkahub.data.remote.RemoteActivity(
+                    status = 1,
+                    throughSeq = 6,
+                    delivery = me.rerere.rikkahub.data.remote.RemoteActivityDelivery("episode-1", 6),
+                    completed = me.rerere.rikkahub.data.remote.RemoteCompletedActivity(
+                        "episode-1", 3, 6, 6,
+                    ),
+                ),
+            ),
+        )
+
+        val facts = snapshot.fairyFacts()
+
+        assertEquals(6L, facts.outputSeq)
+        assertEquals(FairyDelivery("episode-1", 6), facts.delivery)
+        assertEquals(FairyCompletion("episode-1", 6), facts.completed)
+        assertEquals(1, facts.activityStatus)
+    }
+
+    // --- 真实事件 (#262) ---------------------------------------------------------------------
+
+    @Test fun `a local send asks for attention without pretending the backend is working`() {
+        module.show(main, facts(status = 1))
+
+        module.sent("send-1")
+
+        val state = module.state.value
+        assertEquals("本地发送只产生注意反应", FairyReactionKind.SENT, state.reaction?.kind)
+        assertEquals("本地发送不得提前伪造后端工作", FairyPresence.IDLE, state.window.presence)
+        assertFalse("本地发送不得伪造等待回复", state.window.awaitingReply)
+    }
+
+    @Test fun `the same send is one event however often it is reported`() {
+        module.show(main, facts(status = 1))
+        module.sent("send-1")
+
+        module.foregrounded(main, facts(status = 1))
+        module.sent("send-1")
+
+        assertNull("同一次发送在重试或重新上报后不得再演", module.state.value.reaction)
+        module.sent("send-2")
+        assertEquals("另一次发送是一次新事件", FairyReactionKind.SENT, module.state.value.reaction?.kind)
+    }
+
+    @Test fun `a send reported again after a page change does not repeat`() {
+        module.show(main, facts(status = 1))
+        module.sent("send-1")
+        assertNotNull(module.state.value.reaction)
+
+        module.pageExit()
+        module.show(main, facts(status = 1))
+        assertNull("离页时未消费的反应结算", module.state.value.reaction)
+
+        module.sent("send-1")
+        assertNull("重绑或重试同一次发送不得再次触发", module.state.value.reaction)
+    }
+
+    @Test fun `a new fairy output asks for one glance`() {
+        module.show(main, facts(output = 4))
+        assertNull("首次呈现只建立基线，不补演历史输出", module.state.value.reaction)
+
+        module.show(main, facts(output = 5))
+        val reaction = module.state.value.reaction
+        assertEquals(FairyReactionKind.OUTPUT, reaction?.kind)
+        assertEquals("输出不改变安静会话的当前表现", FairyPresence.IDLE, module.state.value.window.presence)
+
+        module.show(main, facts(output = 5))
+        assertEquals("同一输出重放不得产生第二次反应", reaction, module.state.value.reaction)
+    }
+
+    @Test fun `the first facts after an empty presentation are a baseline, not history`() {
+        // A page can name its session before that session's runtime has facts. The first facts that
+        // arrive are the session's history, even though the context itself did not change.
+        module.show(main, null)
+        assertNull(module.state.value.reaction)
+
+        module.show(main, facts(output = 7, delivery = FairyDelivery("episode-1", 7)))
+        assertNull("首次拿到事实只建立基线，不补演历史", module.state.value.reaction)
+
+        module.show(main, facts(output = 8, delivery = FairyDelivery("episode-1", 8)))
+        assertEquals(
+            "基线之后真正新到的事件仍然反应",
+            FairyReactionKind.DELIVERY,
+            module.state.value.reaction?.kind,
+        )
+    }
+
+    @Test fun `an output in a quiet session does not pulse the screen`() {
+        module.show(main, facts(status = 1, output = 1))
+
+        module.show(main, facts(status = 1, output = 2))
+
+        assertEquals(FairyReactionKind.OUTPUT, module.state.value.reaction?.kind)
+        assertEquals("安静会话没有 SPEAKING 可脉冲", 0, module.state.value.speechPulse)
+    }
+
+    @Test fun `a delivery in a quiet session glances once and stays idle`() {
+        module.show(main, facts(status = 1))
+
+        module.show(main, facts(status = 1, delivery = FairyDelivery("episode-1", 7)))
+
+        val state = module.state.value
+        assertEquals(FairyReactionKind.DELIVERY, state.reaction?.kind)
+        assertEquals("安静会话中的投递不得显示成仍在执行", FairyPresence.IDLE, state.window.presence)
+        assertFalse(state.window.presence.isWorking)
+        assertFalse(state.window.awaitingReply)
+    }
+
+    @Test fun `a finished run blinks once`() {
+        module.show(main, facts(status = 1))
+
+        module.show(main, facts(status = 1, completed = FairyCompletion("episode-1", 7)))
+        val reaction = module.state.value.reaction
+        assertEquals(FairyReactionKind.COMPLETED, reaction?.kind)
+
+        module.show(main, facts(status = 1, completed = FairyCompletion("episode-1", 7)))
+        assertEquals("同一完成事件重放不得眨眼两次", reaction, module.state.value.reaction)
+    }
+
+    @Test fun `a delivery and its completion are one reaction`() {
+        module.show(main, facts(status = 1))
+
+        module.show(
+            main,
+            facts(
+                status = 1,
+                output = 7,
+                delivery = FairyDelivery("episode-1", 7),
+                completed = FairyCompletion("episode-1", 7),
+            ),
+        )
+
+        assertEquals(
+            "同一条消息的投递与完成只演一次",
+            FairyReactionKind.DELIVERY,
+            module.state.value.reaction?.kind,
+        )
+        module.foregrounded(
+            main,
+            facts(
+                status = 1,
+                output = 7,
+                delivery = FairyDelivery("episode-1", 7),
+                completed = FairyCompletion("episode-1", 7),
+            ),
+        )
+        assertNull("完成事件不另排一次反应", module.state.value.reaction)
+    }
+
+    @Test fun `an unestablished activity reacts to nothing`() {
+        module.show(main, facts(status = 1))
+
+        module.show(main, facts(status = 0, delivery = FairyDelivery("episode-1", 7)))
+
+        assertNull("活动未知时投递事实不足以触发反应", module.state.value.reaction)
+        assertEquals("活动未知不是安静", FairyPresence.CONNECTING, module.state.value.window.presence)
+    }
+
+    @Test fun `the same delivery reacts once it is established`() {
+        module.show(main, facts(status = 1))
+        module.show(main, facts(status = 0, delivery = FairyDelivery("episode-1", 7)))
+        assertNull(module.state.value.reaction)
+
+        module.show(main, facts(status = 1, delivery = FairyDelivery("episode-1", 7)))
+
+        assertEquals(
+            "同一投递在活动建立后只演一次",
+            FairyReactionKind.DELIVERY,
+            module.state.value.reaction?.kind,
+        )
+    }
+
+    @Test fun `facts that only arrive after leaving are settled instead of replayed`() {
+        module.show(main, facts(status = 1))
+        module.pageExit()
+
+        module.show(main, facts(status = 1, delivery = FairyDelivery("episode-1", 7)))
+
+        assertNull("离开期间到达的投递不得在回来时补演", module.state.value.reaction)
+        assertEquals("表现仍与当前事实一致", FairyPresence.IDLE, module.state.value.window.presence)
+    }
+
+    @Test fun `coming back to the foreground presents current facts without a reaction`() {
+        module.show(main, facts(status = 1))
+        module.pageExit()
+
+        module.foregrounded(
+            main,
+            facts(status = 1, output = 7, delivery = FairyDelivery("episode-1", 7)),
+        )
+
+        val state = module.state.value
+        assertNull("回前台不补演离开期间的事件", state.reaction)
+        assertEquals("回来时呈现当前事实而不是离开前的事实", FairyPresence.IDLE, state.window.presence)
+
+        module.show(main, facts(status = 1, output = 8, delivery = FairyDelivery("episode-1", 8)))
+        assertEquals(
+            "回来后真正新到的事件仍然反应",
+            FairyReactionKind.DELIVERY,
+            module.state.value.reaction?.kind,
+        )
+    }
+
+    @Test fun `coming back keeps the continuous state`() {
+        module.show(main, facts(status = 1))
+        tickAt(SLEEP_AT_MS)
+        assertTrue(module.state.value.asleep)
+
+        module.pageExit()
+        module.foregrounded(main, facts(status = 1))
+
+        assertTrue("回到前台不退休待机", module.state.value.asleep)
+        assertNull("离页时未播完的台词不补播", module.state.value.caption)
+        assertNull(module.state.value.reaction)
+    }
+
+    @Test fun `a replayed episode after a reconnection is not a second reaction`() {
+        val delivery = FairyDelivery("episode-1", 7)
+        module.show(main, facts(status = 1))
+        module.show(main, facts(status = 1, output = 7, delivery = delivery))
+        assertEquals(FairyReactionKind.DELIVERY, module.state.value.reaction?.kind)
+        module.foregrounded(main, facts(status = 1, output = 7, delivery = delivery))
+        assertNull(module.state.value.reaction)
+
+        // A new projection generation is rebuilt from scratch: its facts disappear, then replay.
+        module.show(main, facts(connected = true, status = 0))
+        module.show(main, facts(status = 1, output = 7, delivery = delivery))
+
+        assertNull("同一 episode 的投递重放不得再演", module.state.value.reaction)
+    }
+
+    @Test fun `a session switch retires the transient reaction`() {
+        module.show(main, facts(status = 1))
+        module.sent("send-1")
+        assertNotNull(module.state.value.reaction)
+
+        module.show(other, facts(status = 1))
+
+        assertNull("换会话后旧反应不得出现在新上下文", module.state.value.reaction)
+        module.sent("send-2")
+        assertEquals(FairyReactionKind.SENT, module.state.value.reaction?.kind)
+    }
+
+    @Test fun `signing out retires a pending reaction`() {
+        module.show(main, facts(status = 1))
+        module.sent("send-1")
+        assertNotNull(module.state.value.reaction)
+
+        module.show(null, null)
+
+        assertNull("登出后旧账号的反应不得留着", module.state.value.reaction)
+        assertNull(module.state.value.context)
+    }
+
+    @Test fun `an output seq already seen in another session is still new here`() {
+        module.show(main, facts(output = 5))
+        module.foregrounded(main, facts(output = 5))
+        assertNull(module.state.value.reaction)
+
+        module.show(other, facts(output = 4))
+        module.show(other, facts(output = 5))
+
+        assertEquals(
+            "去重按会话分开，不能把别的会话的 seq 当成重放",
+            FairyReactionKind.OUTPUT,
+            module.state.value.reaction?.kind,
+        )
+    }
+
+    @Test fun `each new output while speaking pulses the screen once`() {
+        module.show(main, facts(status = 2, reasons = listOf(1), reply = "文本", output = 1))
+        assertEquals("基线不脉冲", 0, module.state.value.speechPulse)
+
+        module.show(main, facts(status = 2, reasons = listOf(1), reply = "更长的文本", output = 2))
+        assertEquals(1, module.state.value.speechPulse)
+
+        module.show(main, facts(status = 2, reasons = listOf(1), reply = "更长的文本", output = 2))
+        assertEquals("同一输出不重复脉冲", 1, module.state.value.speechPulse)
     }
 
     // --- 待机与台词 (#261) -------------------------------------------------------------------

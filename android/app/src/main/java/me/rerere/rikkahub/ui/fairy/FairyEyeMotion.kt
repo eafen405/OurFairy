@@ -23,9 +23,6 @@ private const val PURSUIT_TAU_MS = 45f
 private const val RELEASE_HOLD_MS = 1500f
 /** Farthest gaze, in eye units; past this the pupil slides under the Q ring. */
 internal const val MAX_GAZE_UNITS = 2.2f
-/** Small reading saccades around a held attention target. */
-private const val ATTEND_JITTER_X = 0.3f
-private const val ATTEND_JITTER_Y = 0.15f
 
 private const val STARTLE_IN_MS = 80f
 private const val STARTLE_HOLD_MS = 150f
@@ -71,11 +68,10 @@ internal fun restingPupil(asleep: Boolean): Float = if (asleep) SLEEP_PUPIL else
  * [FairyScreen] it is passed to. Positions are root coordinates.
  *
  * - [lookAt]: a finger to pursue (null once lifted; the gaze lingers 1.5 s).
- * - [attend]: a held target such as the focused input box; Fairy keeps
- *   looking there, with small reading saccades, until it is cleared.
- * - [glanceAt]: a brief look, e.g. at a reply that just landed.
- * - [startle]: the pupil snaps small and recovers within a second.
- * - [blink], [wake] (a startle; [wake] with `confused` first looks left
+ * - [glanceAt]: a brief look, e.g. at a reply that just landed or at the
+ *   composer a send came from.
+ * - [blink]: one blink, e.g. when a run finishes.
+ * - [wake] (a startle; [wake] with `confused` first looks left
  *   and right).
  * - [asleep]: stand-by, set from the interaction module's 待机 state: eye
  *   open, gaze still, pupil a little wide, slow blinks.
@@ -87,15 +83,11 @@ internal fun restingPupil(asleep: Boolean): Float = if (asleep) SLEEP_PUPIL else
 class FairyEyeController(asleep: Boolean = false) {
     internal var pointer: Offset = Offset.Unspecified
         private set
-    internal var attention: Offset = Offset.Unspecified
-        private set
     internal var glance: Offset = Offset.Unspecified
         private set
     internal var glanceMs = 0f
         private set
     internal var glances = 0
-        private set
-    internal var startles = 0
         private set
     internal var blinks = 0
         private set
@@ -111,18 +103,10 @@ class FairyEyeController(asleep: Boolean = false) {
         pointer = rootPosition ?: Offset.Unspecified
     }
 
-    fun attend(rootPosition: Offset?) {
-        attention = rootPosition ?: Offset.Unspecified
-    }
-
     fun glanceAt(rootPosition: Offset, durationMs: Int) {
         glance = rootPosition
         glanceMs = durationMs.toFloat()
         glances++
-    }
-
-    fun startle() {
-        startles++
     }
 
     fun blink() {
@@ -144,11 +128,9 @@ class FairyEyeController(asleep: Boolean = false) {
  */
 internal class FairyEyeInput {
     var pointer = Offset.Unspecified
-    var attention = Offset.Unspecified
     var glance = Offset.Unspecified
     var glanceMs = 0f
     var glances = 0
-    var startles = 0
     var blinks = 0
     var wakes = 0
     var wakeConfused = false
@@ -158,10 +140,10 @@ internal class FairyEyeInput {
 /**
  * Eye state machine advanced by [FairyScreen]'s frame loop. Gaze moves in
  * saccades between fixations (targets depend on [FairyPresence]) with a
- * small drift, or pursues a pointer, a glance or a held attention target;
- * the pupil eases toward a mood size and dips on startles; the upper lid
- * blinks every few seconds and droops with drowsiness. [seen] holds the
- * controller's event counters at creation so old events do not replay.
+ * small drift, or pursues a pointer or a glance; the pupil eases toward a
+ * mood size and dips when waking; the upper lid blinks every few seconds
+ * and more slowly in stand-by. [seen] holds the controller's event counters
+ * at creation so old events do not replay.
  */
 internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
     private val random = Random(seed)
@@ -171,15 +153,12 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
     private var tau = SACCADE_TAU_MS
     private var releaseHold = 0f
     private var glanceLeft = 0f
-    private var attending = false
-    private var attendLeft = 0f
     private var scriptIndex = -1
     private var scriptLeft = 0f
     private var thinkSide = 1f
     private var driftT = random.nextFloat() * 10_000f
     private var basePupil = restingPupil(seen?.asleep == true)
     private var driftScale = if (seen?.asleep == true) 0f else 1f
-    private var seenStartles = seen?.startles ?: 0
     private var seenBlinks = seen?.blinks ?: 0
     private var seenWakes = seen?.wakes ?: 0
     private var seenGlances = seen?.glances ?: 0
@@ -199,6 +178,7 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
         private set
 
     fun advance(dt: Float, presence: FairyPresence, input: FairyEyeInput) {
+        // Wake: a startle with an optional confused look around.
         if (input.wakes != seenWakes) {
             seenWakes = input.wakes
             startleT = 0f
@@ -207,11 +187,6 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
                 scriptIndex = 0
                 scriptLeft = ConfusedScan[0].second
             }
-        }
-        // Startle: restart the dip on every new event.
-        if (input.startles != seenStartles) {
-            seenStartles = input.startles
-            startleT = 0f
         }
         if (input.blinks != seenBlinks) {
             seenBlinks = input.blinks
@@ -266,7 +241,7 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
         gazeY = gaze.y + drift.y + shake.y
     }
 
-    /** Picks this frame's gaze target: script > finger > glance > attention > wander. */
+    /** Picks this frame's gaze target: script > finger > glance > wander. */
     private fun advanceGaze(dt: Float, presence: FairyPresence, input: FairyEyeInput) {
         if (scriptIndex >= 0) {
             target = ConfusedScan[scriptIndex].first
@@ -298,28 +273,8 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
             target = input.glance
             tau = SACCADE_TAU_MS
             glanceLeft -= dt
-            if (glanceLeft <= 0f) {
-                fixationLeft = 0f
-                attendLeft = 0f
-            }
+            if (glanceLeft <= 0f) fixationLeft = 0f
             return
-        }
-        // The focused input box holds her eye even while she works.
-        if (input.attention.isSpecified) {
-            if (!attending) attendLeft = 0f
-            attending = true
-            attendLeft -= dt
-            if (attendLeft <= 0f) {
-                // Reading: small hops around the target, never leaving it.
-                target = input.attention + Offset(range(-1f, 1f) * ATTEND_JITTER_X, range(-1f, 1f) * ATTEND_JITTER_Y)
-                tau = SACCADE_TAU_MS
-                attendLeft = range(400f, 900f)
-            }
-            return
-        }
-        if (attending) {
-            attending = false
-            fixationLeft = 0f
         }
         fixationLeft -= dt
         if (fixationLeft <= 0f) pickFixation(presence)
