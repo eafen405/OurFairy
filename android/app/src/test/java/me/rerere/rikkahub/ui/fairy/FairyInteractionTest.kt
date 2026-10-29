@@ -485,6 +485,21 @@ class FairyInteractionTest {
         assertEquals("表现仍与当前事实一致", FairyPresence.IDLE, module.state.value.window.presence)
     }
 
+    @Test fun `a delivery settled while away does not replay when its activity is established later`() {
+        // Back from the background, the session can still be detached: its delivery fact is in the
+        // projection but the activity is unknown. Settling the return must record that fact too,
+        // or the reconnect that establishes the activity would make it look like a new delivery.
+        val delivery = FairyDelivery("episode-1", 7)
+        module.show(main, facts(status = 1))
+        module.pageExit()
+
+        module.foregrounded(main, facts(status = 0, delivery = delivery))
+        assertNull("活动未知时回前台不演", module.state.value.reaction)
+
+        module.show(main, facts(status = 1, delivery = delivery))
+        assertNull("离开期间到达、重连后才建立的投递不得补演", module.state.value.reaction)
+    }
+
     @Test fun `coming back to the foreground presents current facts without a reaction`() {
         module.show(main, facts(status = 1))
         module.pageExit()

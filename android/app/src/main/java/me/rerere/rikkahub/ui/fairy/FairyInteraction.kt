@@ -405,7 +405,9 @@ class FairyInteraction(
      * presentation of a context or the first one after leaving a page, where the facts are history
      * rather than news. Delivery and completion only count while the activity is established:
      * unknown is not a fact to present, so the same delivery reacts once the prefix that proves it
-     * lands.
+     * lands. A presentation that is being settled records them even while unknown, because an
+     * event that landed while no page was watching must not react later, when a reconnect finally
+     * establishes the activity.
      */
     private fun observe(
         context: FairyInteractionContext?,
@@ -420,7 +422,7 @@ class FairyInteraction(
         facts.outputSeq?.let { seq ->
             if (seenOutputs.add(OutputKey(context.sessionId, seq))) output = true
         }
-        if (facts.activityStatus != 0) {
+        if (facts.activityStatus != 0 || !react) {
             facts.delivery?.let { fact ->
                 if (seenDeliveries.add(DeliveryKey(fact.episodeId, fact.seq))) delivery = true
             }
