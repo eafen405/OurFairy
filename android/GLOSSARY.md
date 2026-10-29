@@ -30,7 +30,8 @@ _Avoid_: 主会话、选中会话
 _Avoid_: 会话页面、Sessions 页面
 
 **待机**（`asleep`）：
-控制台约三分钟无操作、且没有台词在播时进入的屏幕休眠表现，点击唤醒。它指屏幕，不指 Fairy。
+Fairy 屏幕的休眠表现：控制台约三分钟无操作、且没有台词在播时进入，点击唤醒。它由 Fairy 互动
+module 持有，跨页保留并在两页的眼屏上呈现；指屏幕，不指 Fairy。
 _Avoid_: 睡着、sleeping（后者是 Fairy 的状态）
 
 **后台接收**（`RemoteReceiveState`）：

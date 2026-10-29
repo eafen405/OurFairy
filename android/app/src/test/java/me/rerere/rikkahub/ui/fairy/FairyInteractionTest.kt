@@ -2,17 +2,26 @@ package me.rerere.rikkahub.ui.fairy
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
 
 /**
- * The interaction module's own seam: 当前表现 is asked of the module with remote-fact doubles, a
- * fixed clock and a seeded random, so no Android or Compose runtime is involved.
+ * The interaction module's own seam: 当前表现, 待机 and 台词 are asked of the module with
+ * remote-fact doubles, a fixed clock, a seeded random and an in-memory line memory, so no Android
+ * or Compose runtime is involved.
  */
 class FairyInteractionTest {
-    private val module = FairyInteraction(now = { 0L }, random = Random(7))
+    /** The module's clock: only this test moves it. */
+    private var clock = 0L
+
+    /** Stands in for [FairyUiMemory]: the same pick/record rule, without SharedPreferences. */
+    private val lines = FakeLines()
+
+    private val module = FairyInteraction(now = { clock }, random = Random(7), lines = lines)
     private val main = FairyInteractionContext(sessionId = "main")
     private val other = FairyInteractionContext(sessionId = "other")
 
@@ -33,6 +42,12 @@ class FairyInteractionTest {
 
     private fun presented(remote: FairyRemoteFacts? = facts()): FairyWindowState =
         module.window(remote)
+
+    /** One page heartbeat at [at]; the pages pulse every 500 ms, tests pulse at the decision. */
+    private fun tickAt(at: Long) {
+        clock = at
+        module.tick()
+    }
 
     @Test fun `a session that says nothing yet is CONNECTING, never quiet`() {
         val window = presented(remote = null)
@@ -161,18 +176,31 @@ class FairyInteractionTest {
     }
 
     @Test fun `the presence rule reads neither the clock nor the random source`() {
-        // 当前表现 must be a function of the facts alone. A module whose clock and random source
-        // throw when touched proves the rule takes nothing from them; #261 is where they get read.
+        // 当前表现 must be a function of the facts alone. A module whose clock, random source and
+        // line memory throw when touched proves the rule takes nothing from them; 待机 and 台词 are
+        // what get to read them.
+        val strictRandom = object : Random() {
+            override fun nextBits(bitCount: Int): Int = error("当前表现不得读取随机源")
+        }
+        val strictLines = object : FairyLineMemory {
+            override val recentLines: List<Int> get() = error("当前表现不得读取台词记忆")
+            override fun nextLine(pool: List<Int>, avoid: Int, random: Random): FairyLine =
+                error("当前表现不得写入台词记忆")
+        }
         val strict = FairyInteraction(
             now = { error("当前表现不得读取时钟") },
-            random = object : Random() {
-                override fun nextBits(bitCount: Int): Int = error("当前表现不得读取随机源")
-            },
+            random = strictRandom,
+            lines = strictLines,
         )
         assertEquals(FairyPresence.IDLE, strict.window(facts(status = 1)).presence)
         assertEquals(FairyPresence.CONNECTING, strict.window(null).presence)
-        strict.show(main, facts(status = 2, reasons = listOf(1)))
-        assertEquals(FairyPresence.THINKING, strict.state.value.window.presence)
+
+        // show() reads the clock once to arm 待机, but the 当前表现 it records is still the rule's
+        // pure answer: neither the random source nor the line memory is touched.
+        val recording = FairyInteraction(now = { 0L }, random = strictRandom, lines = strictLines)
+        recording.show(main, facts(status = 2, reasons = listOf(1)))
+        assertEquals(FairyPresence.THINKING, recording.state.value.window.presence)
+        assertTrue(recording.state.value.window.awaitingReply)
     }
 
     @Test fun `presenting the same context again replaces its facts`() {
@@ -245,5 +273,204 @@ class FairyInteractionTest {
 
         assertEquals(FairyPresence.THINKING, module.state.value.window.presence)
         assertTrue(module.state.value.window.awaitingReply)
+    }
+
+    // --- 待机与台词 (#261) -------------------------------------------------------------------
+
+    @Test fun `the first idle line waits forty-five seconds`() {
+        module.show(main, facts())
+
+        tickAt(FIRST_LINE_MS - 1)
+        assertNull("不到四十五秒不得播台词", module.state.value.caption)
+
+        tickAt(FIRST_LINE_MS)
+        val caption = module.state.value.caption
+        assertNotNull("四十五秒后首页应有一条待机台词", caption)
+        assertTrue("首页台词取自既有 homePool", caption!!.id in FairyLines.homePool)
+        assertEquals(
+            "首页台词沿用 HOME_AVOID",
+            FairyLines.homePool to FairyLines.HOME_AVOID,
+            lines.picks.single(),
+        )
+    }
+
+    @Test fun `three idle minutes put the screen to sleep with a sleep line`() {
+        module.show(main, facts())
+        // The page pulses every 500 ms, so the first line plays and finishes before stand-by.
+        tickAt(FIRST_LINE_MS)
+        module.captionFinished()
+        tickAt(140_000L)
+        module.captionFinished()
+
+        tickAt(SLEEP_AT_MS - 1)
+        assertFalse("三分之四秒前不进入待机", module.state.value.asleep)
+
+        tickAt(SLEEP_AT_MS)
+        assertTrue("三分钟无操作后屏幕进入待机", module.state.value.asleep)
+        val caption = module.state.value.caption
+        assertNotNull("待机时应说出待机台词", caption)
+        assertTrue("待机台词取自既有 sleepPool", caption!!.id in FairyLines.sleepPool)
+        assertEquals(
+            "待机台词沿用 avoid = 0",
+            FairyLines.sleepPool to 0,
+            lines.picks.last(),
+        )
+    }
+
+    @Test fun `stand-by waits for a line that is still playing`() {
+        module.show(main, facts())
+        tickAt(FIRST_LINE_MS)
+        val playing = module.state.value.caption
+        assertNotNull(playing)
+
+        tickAt(SLEEP_AT_MS)
+        assertFalse("台词还在播时不进入待机", module.state.value.asleep)
+        assertEquals("台词不会因为空闲变长而换一条", playing, module.state.value.caption)
+
+        module.captionFinished()
+        module.tick()
+        assertTrue("台词结束后，已经超过三分钟的空闲立刻进入待机", module.state.value.asleep)
+    }
+
+    @Test fun `a touch resets the idle clock and the next line waits again`() {
+        module.show(main, facts())
+        tickAt(FIRST_LINE_MS)
+        val first = module.state.value.caption!!
+        module.captionFinished()
+
+        clock = 100_000L
+        assertFalse("醒着的屏幕，触摸不算唤醒", module.touch())
+
+        tickAt(100_000L + FIRST_LINE_MS - 1)
+        assertNull("触摸后重新数四十五秒", module.state.value.caption)
+        tickAt(100_000L + FIRST_LINE_MS)
+        val next = module.state.value.caption
+        assertNotNull("触摸后的下一个空闲周期仍会说话", next)
+        assertNotEquals("刚说过的台词不得立刻重复", first.id, next!!.id)
+    }
+
+    @Test fun `the recent lines are remembered across a page change`() {
+        // The memory belongs to the device, not to the page: it is the same list a new page reads.
+        lines.remember(1, 2, 3, 4, 5)
+        module.show(main, facts())
+        tickAt(FIRST_LINE_MS)
+        val first = module.state.value.caption!!
+        assertFalse("首页台词必须避开最近说过的五条", first.id in listOf(1, 2, 3, 4, 5))
+        module.captionFinished()
+
+        module.pageExit()
+        module.show(main, facts())
+        tickAt(FIRST_LINE_MS + 95_000L)
+        val next = module.state.value.caption
+        assertNotNull("换页后仍按同一记忆选下一条", next)
+        assertFalse(
+            "换页后最近五条仍被避开（含上一页刚说的一条）",
+            next!!.id in listOf(first.id, 1, 2, 3, 4),
+        )
+    }
+
+    @Test fun `the screen dozes off without a current session too`() {
+        // 待机 is a screen state, not a session state: the console shows it before any session
+        // exists, exactly as it did when the page owned the timer.
+        module.show(null, null)
+
+        tickAt(SLEEP_AT_MS)
+        assertTrue(module.state.value.asleep)
+    }
+
+    @Test fun `a touch wakes a sleeping screen and answers only that touch`() {
+        module.show(main, facts())
+        tickAt(SLEEP_AT_MS)
+        assertTrue(module.state.value.asleep)
+        val sleepLine = module.state.value.caption
+
+        assertTrue("待机时的一次触摸唤醒屏幕", module.touch())
+        assertFalse(module.state.value.asleep)
+        assertEquals("唤醒不移除正在播的台词", sleepLine, module.state.value.caption)
+        assertFalse("唤醒不会排队到下一次触摸", module.touch())
+    }
+
+    @Test fun `leaving the page settles an unfinished line instead of queueing it`() {
+        module.show(main, facts())
+        tickAt(FIRST_LINE_MS)
+        assertNotNull(module.state.value.caption)
+
+        module.pageExit()
+        assertNull("离页时未播完的台词清算", module.state.value.caption)
+
+        module.show(main, facts())
+        assertNull("下一页不得补播上一页未播完的台词", module.state.value.caption)
+    }
+
+    @Test fun `stand-by survives a page change until a touch ends it`() {
+        module.show(main, facts())
+        tickAt(SLEEP_AT_MS)
+        assertTrue(module.state.value.asleep)
+
+        module.pageExit()
+        module.show(main, facts())
+        assertTrue("待机随页面保留", module.state.value.asleep)
+        assertNull("待机台词随上一页结算，不跨页补播", module.state.value.caption)
+
+        assertTrue(module.touch())
+        assertFalse(module.state.value.asleep)
+    }
+
+    @Test fun `a different context retires the previous screen state`() {
+        module.show(main, facts())
+        tickAt(SLEEP_AT_MS)
+        assertTrue(module.state.value.asleep)
+        assertNotNull(module.state.value.caption)
+
+        module.show(other, facts())
+
+        assertFalse("换上下文后旧会话的待机不得留着", module.state.value.asleep)
+        assertNull("换上下文后旧会话的台词不得留着", module.state.value.caption)
+        assertEquals(FairyPresence.IDLE, module.state.value.window.presence)
+    }
+
+    @Test fun `signing out settles the screen as well as the session`() {
+        module.show(main, facts())
+        tickAt(FIRST_LINE_MS)
+        assertNotNull(module.state.value.caption)
+
+        module.show(null, null)
+
+        assertNull("登出时未播完的台词清算", module.state.value.caption)
+        assertFalse("登出后不得留着旧会话的待机", module.state.value.asleep)
+    }
+
+    @Test fun `a sleeping screen ignores page pulses`() {
+        module.show(main, facts())
+        tickAt(SLEEP_AT_MS)
+        val sleepLine = module.state.value.caption
+        module.captionFinished()
+
+        tickAt(SLEEP_AT_MS + 90_000L)
+        assertTrue(module.state.value.asleep)
+        assertNull("待机中不再选新台词", module.state.value.caption)
+        assertEquals("待机后不再向台词记忆要新台词", listOf(FairyLines.sleepPool to 0), lines.picks)
+        assertNotNull("待机台词确实说过一条", sleepLine)
+    }
+
+    /** In-memory [FairyLineMemory]: the production pick-and-record rule, no SharedPreferences. */
+    private class FakeLines : FairyLineMemory {
+        private var recent = emptyList<Int>()
+
+        /** (pool, avoid) of every pick, in order, so tests can pin the trigger semantics. */
+        val picks = mutableListOf<Pair<List<Int>, Int>>()
+
+        override val recentLines: List<Int> get() = recent
+
+        fun remember(vararg ids: Int) {
+            recent = ids.toList()
+        }
+
+        override fun nextLine(pool: List<Int>, avoid: Int, random: Random): FairyLine {
+            picks += pool to avoid
+            val id = pickFairyLine(pool, recent, avoid, random)
+            recent = (listOf(id) + recent.filter { it != id }).take(8)
+            return FairyLines.line(id)
+        }
     }
 }

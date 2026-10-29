@@ -125,6 +125,11 @@ fun FairyWindowTopBar(
     window: FairyWindowState,
     subtitle: String?,
     /**
+     * The page's eye controller, passed to the mini screen and the opened one. The page owns it
+     * (and with it every transient eye reaction); the window state carries no renderer handle.
+     */
+    eye: FairyEyeController? = null,
+    /**
      * The open session's own name. A session with no name yet keeps the product
      * nameplate as the bar's first line; a named one shows its name there and
      * keeps the nameplate as the small tag, so the bar names what the reader is
@@ -187,7 +192,7 @@ fun FairyWindowTopBar(
                                 presence = window.presence,
                                 eyeSize = 36.dp,
                                 speechPulse = window.speechPulse,
-                                eye = window.eye,
+                                eye = eye,
                                 modifier = Modifier.size(width = 64.dp, height = 44.dp),
                             )
                         }
@@ -287,7 +292,7 @@ fun FairyWindowTopBar(
                     eyeSize = 88.dp,
                     speechPulse = window.speechPulse,
                     hud = true,
-                    eye = window.eye,
+                    eye = eye,
                     modifier = Modifier
                         .padding(
                             start = 16.dp,

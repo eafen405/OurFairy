@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -32,6 +33,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,6 +66,13 @@ fun FairyConversationPage(
     val chat = selectedChat?.snapshot?.collectAsStateWithLifecycle()?.value
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    // The page owns the eye's transient animation; the continuous 待机 comes from the module so a
+    // screen already asleep on home is found asleep here too, and a touch wakes the same state.
+    val interaction by fairy.state.collectAsStateWithLifecycle()
+    val eye = remember { FairyEyeController(asleep = fairy.state.value.asleep) }
+    LaunchedEffect(interaction.asleep) { eye.asleep = interaction.asleep }
+    DisposableEffect(fairy) { onDispose { fairy.pageExit() } }
+    val origin = remember { floatArrayOf(0f, 0f) }
     var opening by remember(sessionId) { mutableStateOf(true) }
     var failed by remember(sessionId) { mutableStateOf(false) }
     var retry by remember(sessionId) { mutableIntStateOf(0) }
@@ -85,10 +98,12 @@ fun FairyConversationPage(
     // The open session's row, the same one the drawer renders: its title is what
     // the bar shows.
     val session = sessions.sessions.firstOrNull { it.id == sessionId }
-    // 当前表现 comes from the interaction module and from this session's facts only. A session the
-    // page is not settled in is presented with no facts at all, which the module answers as the
-    // unknown presentation — never the previous session's.
-    val context = contextFor(sessionId, settled)
+    // 当前表现 comes from the interaction module and from this session's facts only. The route
+    // says which session this page presents even before it settles; until then it has no facts,
+    // which the module answers as the unknown presentation — never the previous session's. Keeping
+    // the routed id (instead of presenting nothing while opening) is what lets the continuous
+    // 待机 and 当前表现 cross from the console into this page for the same session.
+    val context = sessionId?.let(::FairyInteractionContext)
     val facts = snapshot?.fairyFacts()
     val window = fairy.window(facts)
     LaunchedEffect(fairy, context, facts) { fairy.show(context, facts) }
@@ -142,7 +157,27 @@ fun FairyConversationPage(
             }
         },
     ) {
-        Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .onGloballyPositioned {
+                    origin[0] = it.positionInRoot().x
+                    origin[1] = it.positionInRoot().y
+                }
+                // Observational only (Final pass, never consumed): fingers still reach the list,
+                // the composer and the bar. The module answers whether a touch woke a sleeping
+                // screen; the page maps that answer to the eye's own reaction.
+                .pointerInput(eye) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            val touch = event.changes.firstOrNull { it.pressed }
+                            eye.lookAt(touch?.let { Offset(origin[0] + it.position.x, origin[1] + it.position.y) })
+                            if (touch != null && fairy.touch()) eye.wake(confused = true)
+                        }
+                    }
+                },
+        ) {
             FairyBackground(watermark = false)
             FairyConversationSurface(screenOpen = screenOpen) {
                 if (settled && selectedChat != null) {
@@ -173,6 +208,7 @@ fun FairyConversationPage(
             }
             FairyWindowTopBar(
                 window = window,
+                eye = eye,
                 title = session?.title,
                 screenOpen = screenOpen,
                 subtitle = when {
@@ -219,13 +255,3 @@ private fun FairyConversationSurface(
     }
 }
 
-/**
- * The context this page presents: the open session, once the page is settled in it.
- *
- * A page that is not yet settled (still opening, failed to open, or looking at the session-list
- * drawer) presents nothing rather than a session it is not showing.
- */
-private fun contextFor(sessionId: String?, settled: Boolean): FairyInteractionContext? {
-    if (!settled || sessionId == null) return null
-    return FairyInteractionContext(sessionId)
-}
