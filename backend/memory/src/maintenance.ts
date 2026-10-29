@@ -24,6 +24,7 @@
 import { randomUUID } from 'node:crypto'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
+import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from './maintenance-policy.js'
 import { MemoryError } from './tool-kit.js'
 import { assembleMaterial, closedUserTurns, type ClosedTurn } from './material.js'
 import { MAINTENANCE_PRESET } from './preset.js'
@@ -38,10 +39,6 @@ import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-tools'
 
-/** Default closed-user-turn threshold (spec: 15, configurable 5–50). */
-export const DEFAULT_MAINTENANCE_TURNS = 15
-/** Default decay interval in hours (spec: 6, configurable 3–24). */
-export const DEFAULT_MAINTENANCE_DECAY_HOURS = 6
 /** Default light-model route the maintenance child uses. */
 export const DEFAULT_MAINTENANCE_MODEL = 'MiniMax-M3.1-Flash'
 /** Provider of the default light-model route. */
@@ -114,14 +111,18 @@ function textSetting(field: MaintenanceField, fallback: string, name: string): s
  *
  * Every call reads the current value of each field: the loader hands over
  * volatile refs, and a settings write changes what the next evaluation sees.
- * Nothing here is cached across evaluations.
+ * Nothing here is cached across evaluations. The fallbacks and the accepted
+ * ranges are the memory package's maintenance policy, so this read-time check
+ * and the row's own Config cannot disagree.
  * @param config - the memory row config as the loader handed it over.
  * @returns the checked settings for this evaluation.
  */
 export function readMaintenanceSettings(config: MaintenanceConfig): MaintenanceSettings {
   return {
-    turns: integerSetting(config.maintenanceTurns, DEFAULT_MAINTENANCE_TURNS, 5, 50, 'maintenanceTurns'),
-    decayHours: integerSetting(config.maintenanceDecayHours, DEFAULT_MAINTENANCE_DECAY_HOURS, 3, 24, 'maintenanceDecayHours'),
+    turns: integerSetting(config.maintenanceTurns, MAINTENANCE_TURNS.default,
+      MAINTENANCE_TURNS.min, MAINTENANCE_TURNS.max, 'maintenanceTurns'),
+    decayHours: integerSetting(config.maintenanceDecayHours, MAINTENANCE_DECAY_HOURS.default,
+      MAINTENANCE_DECAY_HOURS.min, MAINTENANCE_DECAY_HOURS.max, 'maintenanceDecayHours'),
     model: textSetting(config.maintenanceModel, DEFAULT_MAINTENANCE_MODEL, 'maintenanceModel'),
     provider: textSetting(config.maintenanceProvider, DEFAULT_MAINTENANCE_PROVIDER, 'maintenanceProvider'),
   }

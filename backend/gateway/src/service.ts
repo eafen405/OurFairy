@@ -11,6 +11,7 @@
  * @module @ourfairy/dsh-gateway/src/service
  */
 import { Service } from '@deepseek-ai/cordis'
+import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from '@ourfairy/dsh-memory/maintenance-policy'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
@@ -120,10 +121,12 @@ const COMPACTION_DEFAULT_TOKENS = 500_000
  *
  * The `memory` row is the one the shipped bundle mounts; `maintenanceTurns` and
  * `maintenanceDecayHours` are volatile fields, so a save applies to the next
- * maintenance evaluation without remounting the engine. The ranges are the
- * product decision from `docs/specs/fairy-memory.md` §5/§6, enforced here
- * because the row's own schema is the same bound but the wire contract names
- * the error code and spelling the phone sees.
+ * maintenance evaluation without remounting the engine. The defaults and the
+ * ranges are the memory package's maintenance policy (§5/§6 of
+ * `docs/specs/fairy-memory.md`), read here through a runtime import so the row's
+ * Config, the engine's read-time check and this phone-facing check share one
+ * declaration. The wire contract still names the error code and spelling the
+ * phone sees.
  *
  * The gateway view names them `triggerTurns` and `decayHours`; the profile keeps
  * the row's own field names.
@@ -131,12 +134,6 @@ const COMPACTION_DEFAULT_TOKENS = 500_000
 const MAINTENANCE_ROW = 'memory'
 const MAINTENANCE_TURNS_FIELD = 'maintenanceTurns'
 const MAINTENANCE_DECAY_FIELD = 'maintenanceDecayHours'
-const MAINTENANCE_MIN_TURNS = 5
-const MAINTENANCE_MAX_TURNS = 50
-const MAINTENANCE_MIN_DECAY_HOURS = 3
-const MAINTENANCE_MAX_DECAY_HOURS = 24
-const MAINTENANCE_DEFAULT_TURNS = 15
-const MAINTENANCE_DEFAULT_DECAY_HOURS = 6
 
 /**
  * One model entry of a provider route, as the settings row and the phone draft
@@ -482,8 +479,8 @@ export class GatewayService extends Service {
     const turns = value?.[MAINTENANCE_TURNS_FIELD]
     const decayHours = value?.[MAINTENANCE_DECAY_FIELD]
     return {
-      triggerTurns: isSafeInteger(turns) ? turns : MAINTENANCE_DEFAULT_TURNS,
-      decayHours: isSafeInteger(decayHours) ? decayHours : MAINTENANCE_DEFAULT_DECAY_HOURS,
+      triggerTurns: isSafeInteger(turns) ? turns : MAINTENANCE_TURNS.default,
+      decayHours: isSafeInteger(decayHours) ? decayHours : MAINTENANCE_DECAY_HOURS.default,
     }
   }
 
@@ -706,18 +703,18 @@ export class GatewayService extends Service {
     }
     const triggerTurns = input.triggerTurns
     if (!isSafeInteger(triggerTurns)
-      || triggerTurns < MAINTENANCE_MIN_TURNS || triggerTurns > MAINTENANCE_MAX_TURNS) {
+      || triggerTurns < MAINTENANCE_TURNS.min || triggerTurns > MAINTENANCE_TURNS.max) {
       const got = triggerTurns === undefined ? 'no value' : JSON.stringify(triggerTurns)
       throw new GatewayError(400, 'gateway/invalid-maintenance',
-        `triggerTurns must be a whole number of closed turns from ${MAINTENANCE_MIN_TURNS} to ${MAINTENANCE_MAX_TURNS},`
+        `triggerTurns must be a whole number of closed turns from ${MAINTENANCE_TURNS.min} to ${MAINTENANCE_TURNS.max},`
         + ` inclusive; got ${got}`)
     }
     const decayHours = input.decayHours
     if (!isSafeInteger(decayHours)
-      || decayHours < MAINTENANCE_MIN_DECAY_HOURS || decayHours > MAINTENANCE_MAX_DECAY_HOURS) {
+      || decayHours < MAINTENANCE_DECAY_HOURS.min || decayHours > MAINTENANCE_DECAY_HOURS.max) {
       const got = decayHours === undefined ? 'no value' : JSON.stringify(decayHours)
       throw new GatewayError(400, 'gateway/invalid-maintenance',
-        `decayHours must be a whole number of hours from ${MAINTENANCE_MIN_DECAY_HOURS} to ${MAINTENANCE_MAX_DECAY_HOURS},`
+        `decayHours must be a whole number of hours from ${MAINTENANCE_DECAY_HOURS.min} to ${MAINTENANCE_DECAY_HOURS.max},`
         + ` inclusive; got ${got}`)
     }
     if (this.row(MAINTENANCE_ROW) === undefined) {

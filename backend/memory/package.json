@@ -16,6 +16,10 @@
       "types": "./dist/preset.d.ts",
       "default": "./dist/preset.js"
     },
+    "./maintenance-policy": {
+      "types": "./dist/maintenance-policy.d.ts",
+      "default": "./dist/maintenance-policy.js"
+    },
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },

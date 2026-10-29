@@ -6,6 +6,8 @@
  * the same environment the bundle exposes. The tests stop and start the real
  * backend around persisted `memory.sqlite` state, so the recovery being proved
  * is the product's recomputation, not an in-process timer.
+ *
+ * @covers backend/memory
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'

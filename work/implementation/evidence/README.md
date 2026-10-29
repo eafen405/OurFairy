@@ -66,17 +66,23 @@
 | [arch-49-search-owner-read](arch-49-search-owner-read/README.md) | #49 search 经公开 read 解析归属 |
 | [arch-50-owner-codec](arch-50-owner-codec/README.md) | #50 `user:<shortId>` 编码收敛到唯一 codec |
 | [arch-51-chat-runtime](arch-51-chat-runtime/README.md) | #51 有名字的 live-session runtime |
+| [arch-52-identity-interfaces](arch-52-identity-interfaces/README.md) | #52 identity 暴露的 32 个裸 store 成员收窄为按领域 interface，不拆库 |
+| [arch-53-projection-fold](arch-53-projection-fold/README.md) | #53 会话投影对同一日志的折叠次数 2 → 1，输出语义不变 |
 | [arch-54-space-scope-contributors](arch-54-space-scope-contributors/README.md) | #54 SpaceScope 贡献者注册机制 |
 | [arch-55-activity-trust](arch-55-activity-trust/README.md) | #55 客户端快照可信度只答一次 |
 | [arch-56-notification-backlog](arch-56-notification-backlog/README.md) | #56 跨会话通知积压合并 |
 | [arch-57-test-seam](arch-57-test-seam/README.md) | #57 测试 seam 收敛 |
+| [arch-58-sessions-snapshot](arch-58-sessions-snapshot/README.md) | #58 会话集快照单一权威，账号发布时同步绑定 receiver |
 | [arch-59-chat-read-decision](arch-59-chat-read-decision/README.md) | #59 `RemoteChatBackend.read` 去留 |
 | [arch-60-foreground](arch-60-foreground/README.md) | #60 前台事实单一读取 |
 | [arch-61-attempt-row-key](arch-61-attempt-row-key/README.md) | #61 attempt 行 key 约定 |
 | [arch-62-interface-width](arch-62-interface-width/README.md) | #62 接口宽度收敛 |
+| [arch-63-chat-store-tests](arch-63-chat-store-tests/README.md) | #63 Android 测试走 ChatSyncStore interface，覆盖事件 fixture 收敛 |
 | [arch-64-executable-claims](arch-64-executable-claims/README.md) | #64 可执行声称检查 |
 | [arch-66-session-events](arch-66-session-events/README.md) | #66 会话事件单次安全读取 |
 | [arch-67-projection-exports](arch-67-projection-exports/README.md) | #67 projection 多余导出 |
+| [arch-68-receive-state](arch-68-receive-state/README.md) | #68 删掉 RemoteReceiveState 的五个纯转发方法，调用方直接用 OwnedSessionState |
+| [arch-70-closeout](arch-70-closeout/README.md) | #70 地图 #69 收口：两仓版本组合固定与 final 组合的全量验证 |
 
 ## 插件生态（规格 #73）
 
@@ -146,6 +152,12 @@
 | 目录 | 内容 |
 | --- | --- |
 | [134-bundle-groups](134-bundle-groups/README.md) | #159–#162 组合层显式化内核与插件：收口记录与零语义变化对照；逐票证据见 [#159](134-bundle-groups/01-native-group-aware.md)、[#161](134-bundle-groups/02-bundle-groups.md)、[#160](134-bundle-groups/03-absence-attribution.md) |
+
+## 原生语义漂移守卫（规格 #135）
+
+| 目录 | 内容 |
+| --- | --- |
+| [135-native-semantic-guards](135-native-semantic-guards/) | spec #135 原生语义漂移守卫：六处原生语义（#163 任务状态、#164 路由保存、#165 停止结果、#166 选型写入、#167 请求幂等、#168 输入模态）各有测试期对账，#169 把它们写进 dsh 升级复核入口，135-review-fixes 处置两轴评审；逐票 README 在子目录 |
 
 ## 包清单真实性（规格 #136）
 
@@ -261,7 +273,16 @@
 | --- | --- |
 | [release-2.5.8](release-2.5.8/README.md) | `main` 合并 #240 与 Fairy 视觉令牌重做后发布 2.5.8 / versionCode 193：合并前 `npm test` 381/381、`combo:verify` 三行 ok、Android `test lintDebug` 通过；APK 读取实际产物确认 versionCode 193、arm64、内嵌 `https://85.137.246.15:38518/ourfairy`、与旧包同签名，公网下载 SHA-256 一致；fairybox 用 `ourfairy-backend.service` 更新到 app `02dce245b6` + dsh `d80522d276`（dsh 构建产物本地构建后 rsync，服务器不跑 `tsc -b`），doctor 通过、真实 MiniMax 一轮完成、`/gateway/read` 出现 compaction 500000 与 maintenance 15/6、`/impression/read` 200；真机内更新全流程未复测 |
 
-## 界面微调（#215/#217/#218/#239）
+## 会话管理（规格 #250）
+
+| 目录 | 内容 |
+| --- | --- |
+| [251-session-titles](251-session-titles/README.md) | #251 挂载原生会话标题两行：五个 `/sessions/*` 路由都带标题、`/sessions/list` 一次批量折叠，没有 `session/title` 事件的老会话按首条人类消息派生只读兜底（不写日志、不调模型） |
+| [252-session-rename](252-session-rename/README.md) | #252 改名只经原生标题服务写入并钉住用户标题，新增 `/sessions/rename`（`open` 关补生成 → 改名 → `barrier` 落盘），客户端行内改名入口与标题栏显示会话名 |
+| [253-session-archive](253-session-archive/README.md) | #253 删除复用归档：归档表自持 SQLite、`list(owner, { archived })` 是唯一过滤点、主会话拒绝归档（`sessions/primary-not-archivable`），客户端 `AlertDialog` 二次确认；不提供物理删除 |
+| [254-archived-sessions](254-archived-sessions/README.md) | #254 归档的另一半：新增 `/sessions/restore`（未归档则 409 `sessions/not-archived`），客户端归档视图只填归档流、不出主会话也不给物理删除 |
+
+## 界面微调（#215/#217/#218/#239/#255）
 
 | 目录 | 内容 |
 | --- | --- |
@@ -269,6 +290,7 @@
 | [ui-217](ui-217/README.md) | #217 启动图标替换为 Fairy 徽记（五档密度、adaptive 前景/单色层与旧版位图；真机未执行） |
 | [ui-218](ui-218/README.md) | #218 长按消息复制正文，含流式进行中的行；保留查看全文与 toast（真机未执行） |
 | [239-idle-caption](239-idle-caption/README.md) | #239 待机台词气泡改在 Fairy 屏幕下方向下展开（411dp Robolectric 断言与前后截图；真机未执行） |
+| [255-fairy-eye-highlight](255-fairy-eye-highlight/README.md) | #255 Fairy 眼睛高光随瞳孔移动、围绕移动后的瞳孔中心缩放，内侧 70% 保持原亮度、外侧 30% 渐隐（`FairyEyeTest` 固定几何；真机未执行） |
 
 ## Triage 修复
 
@@ -289,6 +311,7 @@
 | [stage-t13-t15](stage-t13-t15/README.md) · [review-t13-t15](review-t13-t15/README.md) | T13–T15 整合与两轴评审 |
 | [stage-t16-t19](stage-t16-t19/) · [review-t16-t19](review-t16-t19/) · [review-t16-t19-fix](review-t16-t19-fix/README.md) | T16–T19 整合、评审与修复 |
 | [review-24-26](review-24-26/README.md) · [review-24-26-backend](review-24-26-backend/evidence.md) | #24–#26 阶段评审 |
+| [review-arch-map69](review-arch-map69/README.md) · [review-arch-map69-fixes](review-arch-map69-fixes/README.md) | 地图 #69 最终两轴 code-review（四份逐字报告）与逐条评审项的修复/记录不修 |
 | [retro-guardrails](retro-guardrails/README.md) | 复盘修复验证 |
 
 ## 阅读顺序

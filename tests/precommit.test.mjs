@@ -12,8 +12,9 @@
  * that names a related test runs that test, a source change with no related
  * test runs the type check, and only the authorities that decide what every
  * package installs run the whole suite. The selection is a direct-surface
- * choice, not a coverage claim — a package no test imports on purpose falls to
- * `typecheck`, and the closing ticket runs the full suite.
+ * choice, not a coverage claim: a suite that drives a package through the
+ * launcher declares it on its own `@covers` line, a package no test declares or
+ * names falls to `typecheck`, and the closing ticket runs the full suite.
  *
  * The commands themselves are not run: this file pins the classification, the
  * selection, and the command list, and the hook's own run is what proves the
@@ -31,6 +32,7 @@ import {
   TYPECHECK_COMMANDS,
   classify,
   plan,
+  relatedTests,
   stagedPaths,
   testFiles,
 } from '../scripts/precommit.ts'
@@ -75,6 +77,54 @@ test('a product package change runs the tests that mention that package', () => 
   )
 })
 
+test('a package a suite drives through the launcher is selected by that suite’s declaration', () => {
+  // The delivery suites reach the row through `/chat/send` and the product's own
+  // routes; they import no delivery source, so naming the package in the body is
+  // the only way the selector could ever see them. The declaration is that name.
+  const decision = plan(['backend/delivery/src/index.ts'])
+  assert.equal(decision.mode, 'related', 'delivery has behaviour suites, so the gate must run them instead of the type check')
+  for (const file of ['tests/text-delivery.test.mjs', 'tests/file-delivery.test.mjs', 'tests/delivery-row.test.mjs']) {
+    assert.ok(
+      decision.tests.includes(file),
+      `a delivery source change must select ${file}; the gate selected ${decision.tests.join(', ') || '(none)'}`,
+    )
+  }
+})
+
+test('a speech source change selects the suite that drives the speech route', () => {
+  const tests = plan(['backend/speech/src/service.ts']).tests
+  assert.ok(
+    tests.includes('tests/speech.test.mjs'),
+    `speech has a behaviour suite; the gate selected ${tests.join(', ') || '(none)'}`,
+  )
+})
+
+test('a memory source change selects every memory suite that drives its tools', () => {
+  const tests = plan(['backend/memory/src/index.ts']).tests
+  for (const suite of ['memory-crud', 'memory-impression', 'memory-policy', 'memory-maintenance', 'memory-maintenance-recovery']) {
+    const file = `tests/${suite}.test.mjs`
+    assert.ok(tests.includes(file), `a memory source change must select ${file}; the gate selected ${tests.join(', ') || '(none)'}`)
+  }
+})
+
+test('a groups or search source change selects the suites that drive those tools', () => {
+  const groups = plan(['backend/groups/src/index.ts']).tests
+  for (const file of ['tests/groups.test.mjs', 'tests/groups-row.test.mjs']) {
+    assert.ok(groups.includes(file), `a groups source change must select ${file}; the gate selected ${groups.join(', ') || '(none)'}`)
+  }
+  const search = plan(['backend/search/src/index.ts']).tests
+  assert.ok(
+    search.includes('tests/conversation-search.test.mjs'),
+    `a search source change must select the conversation search suite; the gate selected ${search.join(', ') || '(none)'}`,
+  )
+})
+
+test('a declaration associates only the package it names', () => {
+  const tests = relatedTests(['backend/chat/src/units.ts'], { root: repoRoot })
+  assert.ok(tests.includes('tests/chat-read-window.test.mjs'), 'the chat package still selects the suites that name it')
+  assert.ok(!tests.includes('tests/memory-crud.test.mjs'), 'a memory declaration must not select memory for a chat change')
+})
+
 test('a staged test file selects itself', () => {
   const paths = ['tests/chat-read-window.test.mjs']
   assert.equal(classify(paths), 'related')
@@ -84,9 +134,12 @@ test('a staged test file selects itself', () => {
 test('a source change no test names falls back to the type check', () => {
   // The path is assembled rather than written out: a test file that names a
   // package is selected for that package, so writing it here would make this
-  // file select itself and the case could never hold.
-  const unreferenced = ['backend', 'delivery', 'src', 'index.mjs'].join('/')
-  assert.equal(classify([unreferenced]), 'typecheck', 'no test names this package, so the gate must not claim behaviour coverage')
+  // file select itself and the case could never hold. It is a real source file:
+  // the acceptance script needs the deployment's real credentials, so no suite
+  // drives it — and every backend package now has a suite that declares it, so
+  // a package path would no longer show the fallback.
+  const unreferenced = ['scripts', 'real-acceptance.ts'].join('/')
+  assert.equal(classify([unreferenced]), 'typecheck', 'no test names this script, so the gate must not claim behaviour coverage')
   const decision = plan([unreferenced])
   assert.deepEqual(decision.tests, [])
   assert.deepEqual(decision.commands, TYPECHECK_COMMANDS)
