@@ -1,0 +1,53 @@
+{
+  "title": "原生语义漂移守卫（规格 #135）",
+  "entries": [
+    {
+      "dirs": [
+        "135-native-semantic-guards/163-job-status"
+      ],
+      "note": "#163 任务状态未知值显式化为 0，pinned dsh `JobStatus` 的增删在测试期失败"
+    },
+    {
+      "dirs": [
+        "135-native-semantic-guards/164-route-save"
+      ],
+      "note": "#164 路由保存只覆盖手机可编辑的五个字段，草稿省略的字段从结果中删除"
+    },
+    {
+      "dirs": [
+        "135-native-semantic-guards/165-job-stop-outcome"
+      ],
+      "note": "#165 `/chat/jobs/stop` 只映射产品认识的原生 `kill` 结果，未知结果 5xx 且点名"
+    },
+    {
+      "dirs": [
+        "135-native-semantic-guards/166-selection-native-entry"
+      ],
+      "note": "#166 选型写入改走原生 `agentDefaultModel.saveSelection`，不再直接 mutate settings 行"
+    },
+    {
+      "dirs": [
+        "135-native-semantic-guards/167-idempotent-resend"
+      ],
+      "note": "#167 同一 `requestId` 连续重发只产生一条消息（只加断言，无生产改动）"
+    },
+    {
+      "dirs": [
+        "135-native-semantic-guards/168-input-modalities"
+      ],
+      "note": "#168 输入模态从 pinned dsh 的运行时导出导入，网关不再有本地字面量"
+    },
+    {
+      "dirs": [
+        "135-native-semantic-guards/169-upgrade-checklist"
+      ],
+      "note": "#169 六处守卫写进 dsh 升级复核入口，引用清单在测试改名/删除时失败"
+    },
+    {
+      "dirs": [
+        "135-native-semantic-guards/135-review-fixes"
+      ],
+      "note": "spec #135 集成分支两轴评审的修复：未落实的顺序声称与未构造的启动失败声称都换成会失败的检查，并补票面行为缺口"
+    }
+  ]
+}
