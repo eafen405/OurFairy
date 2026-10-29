@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.fairy
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -40,12 +39,7 @@ private const val BLINK_SHUT_MS = 40f
 private const val BLINK_OPEN_MS = 120f
 private const val DOUBLE_BLINK_GAP_MS = 120f
 private const val DOUBLE_BLINK_CHANCE = 0.15f
-/** Upper lid position when drowsy (fraction of the iris covered). */
-internal const val DROWSY_LID = 0.55f
-private const val LID_EASE_MS = 800f
-/** The lid lifts faster than it sinks (waking from a doze). */
-private const val LID_LIFT_MS = 300f
-/** Standby (asleep): the pupil widens a little and the gaze settles still. */
+/** Stand-by ([FairyEyeController.asleep]): the pupil widens a little and the gaze settles still. */
 private const val SLEEP_PUPIL = 1.12f
 private const val SLEEP_SETTLE_MS = 400f
 private const val PUPIL_EASE_MS = 500f
@@ -69,14 +63,8 @@ internal data class FairyEyePose(
 /** Test seam: when non-null, every [FairyScreen] eye holds this pose. */
 internal val LocalFairyEyePoseOverride = staticCompositionLocalOf<FairyEyePose?> { null }
 
-/** Lid at rest: drooping with [drowsy] (asleep, the eye stays open). */
-internal fun restingLid(drowsy: Float): Float = DROWSY_LID * drowsy.coerceIn(0f, 1f)
-
-/** Pupil at rest: wider when drowsy, a little wider still in standby. */
-internal fun restingPupil(drowsy: Float, asleep: Boolean): Float = if (asleep) SLEEP_PUPIL else drowsyPupil(drowsy)
-
-/** Pupil size for a drowsiness level: sleepy eyes dilate a little. */
-internal fun drowsyPupil(drowsy: Float): Float = 1f + 0.15f * drowsy.coerceIn(0f, 1f)
+/** Pupil at rest: a little wider in stand-by. */
+internal fun restingPupil(asleep: Boolean): Float = if (asleep) SLEEP_PUPIL else 1f
 
 /**
  * A host's handle on Fairy's attention and reactions, shared by every
@@ -88,12 +76,11 @@ internal fun drowsyPupil(drowsy: Float): Float = 1f + 0.15f * drowsy.coerceIn(0f
  * - [glanceAt]: a brief look, e.g. at a reply that just landed.
  * - [startle]: the pupil snaps small and recovers within a second.
  * - [blink], [wake] (a startle; [wake] with `confused` first looks left
- *   and right), [sleepNow] (straight into standby).
- * - [drowsy]: 0 awake .. 1 drowsy (lid at [DROWSY_LID], wider pupil), the
- *   brief doze; [asleep] is the standby after it: eye open, gaze still,
- *   pupil a little wide, slow blinks.
+ *   and right).
+ * - [asleep]: stand-by, set from the interaction module's 待机 state: eye
+ *   open, gaze still, pupil a little wide, slow blinks.
  *
- * Except [drowsy] and [asleep], values are plain fields polled by the screens' frame
+ * Except [asleep], values are plain fields polled by the screens' frame
  * loops, so writing them never recomposes anything.
  */
 @Stable
@@ -116,12 +103,8 @@ class FairyEyeController(asleep: Boolean = false) {
         private set
     internal var wakeConfused = false
         private set
-    internal var snaps = 0
-        private set
 
-    var drowsy by mutableFloatStateOf(0f)
-
-    /** Standby: the eye stays open and still (see the class notes). */
+    /** Stand-by: the eye stays open and still (see the class notes). */
     var asleep by mutableStateOf(asleep)
 
     fun lookAt(rootPosition: Offset?) {
@@ -146,19 +129,11 @@ class FairyEyeController(asleep: Boolean = false) {
         blinks++
     }
 
-    /** Opens the eyes at once (awake, drowsy 0) with a startle; [confused] looks around first. */
+    /** Opens the eyes at once with a startle; [confused] looks around first. */
     fun wake(confused: Boolean = false) {
         asleep = false
-        drowsy = 0f
         wakeConfused = confused
         wakes++
-    }
-
-    /** Standby right now, without the doze (e.g. found asleep on return). */
-    fun sleepNow() {
-        drowsy = 0f
-        asleep = true
-        snaps++
     }
 }
 
@@ -177,8 +152,6 @@ internal class FairyEyeInput {
     var blinks = 0
     var wakes = 0
     var wakeConfused = false
-    var snaps = 0
-    var drowsy = 0f
     var asleep = false
 }
 
@@ -204,17 +177,12 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
     private var scriptLeft = 0f
     private var thinkSide = 1f
     private var driftT = random.nextFloat() * 10_000f
-    private var basePupil = restingPupil(seen?.drowsy ?: 0f, seen?.asleep == true)
-    private var baseLid = restingLid(seen?.drowsy ?: 0f)
+    private var basePupil = restingPupil(seen?.asleep == true)
     private var driftScale = if (seen?.asleep == true) 0f else 1f
     private var seenStartles = seen?.startles ?: 0
     private var seenBlinks = seen?.blinks ?: 0
     private var seenWakes = seen?.wakes ?: 0
     private var seenGlances = seen?.glances ?: 0
-    private var seenSnaps = seen?.snaps ?: 0
-
-    /** Snaps from the controller this motion has applied (see [FairyScreen]). */
-    val snapsSeen: Int get() = seenSnaps
     private var startleT = -1f
     private var blinkT = -1f
     private var nextBlink = 1500f + random.nextFloat() * 3000f
@@ -227,18 +195,10 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
         private set
     var pupil = basePupil
         private set
-    var lid = baseLid
+    var lid = 0f
         private set
 
     fun advance(dt: Float, presence: FairyPresence, input: FairyEyeInput) {
-        val drowsy = input.drowsy.coerceIn(0f, 1f)
-        if (input.snaps != seenSnaps) {
-            seenSnaps = input.snaps
-            baseLid = restingLid(drowsy)
-            basePupil = restingPupil(drowsy, input.asleep)
-            driftScale = if (input.asleep) 0f else 1f
-            if (input.asleep) gaze = Offset.Zero
-        }
         if (input.wakes != seenWakes) {
             seenWakes = input.wakes
             startleT = 0f
@@ -281,7 +241,7 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
             target = Offset.Zero
             tau = SLEEP_SETTLE_MS
         } else {
-            advanceGaze(dt, presence, input, drowsy)
+            advanceGaze(dt, presence, input)
         }
         gaze += (target - gaze) * (1f - exp(-dt / tau))
         driftT += dt
@@ -294,29 +254,20 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
         // Pupil: mood size times the startle dip.
         val mood = when {
             input.asleep -> SLEEP_PUPIL
-            drowsy > 0f -> drowsyPupil(drowsy)
             presence == FairyPresence.THINKING -> 1.08f
             else -> 1f
         }
         basePupil += (mood - basePupil) * (1f - exp(-dt / PUPIL_EASE_MS))
         pupil = basePupil * startleScale(startleT)
 
-        // Lid: drowsy droop plus blinks (slow ones in standby); a startle snaps it open.
-        val lidTarget = if (startleT >= 0f) 0f else restingLid(drowsy)
-        val lidTau = when {
-            startleT >= 0f -> 60f
-            lidTarget < baseLid -> LID_LIFT_MS
-            else -> LID_EASE_MS
-        }
-        baseLid += (lidTarget - baseLid) * (1f - exp(-dt / lidTau))
-        val blink = advanceBlink(dt, if (input.asleep) 1f else drowsy)
-        lid = baseLid + (1f - baseLid) * blink
+        // Lid: blinks only (slow ones in stand-by); a startle holds the eye wide open.
+        lid = advanceBlink(dt, input.asleep)
         gazeX = gaze.x + drift.x + shake.x
         gazeY = gaze.y + drift.y + shake.y
     }
 
     /** Picks this frame's gaze target: script > finger > glance > attention > wander. */
-    private fun advanceGaze(dt: Float, presence: FairyPresence, input: FairyEyeInput, drowsy: Float) {
+    private fun advanceGaze(dt: Float, presence: FairyPresence, input: FairyEyeInput) {
         if (scriptIndex >= 0) {
             target = ConfusedScan[scriptIndex].first
             tau = SACCADE_TAU_MS
@@ -371,18 +322,13 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
             fixationLeft = 0f
         }
         fixationLeft -= dt
-        if (fixationLeft <= 0f) pickFixation(presence, drowsy)
+        if (fixationLeft <= 0f) pickFixation(presence)
     }
 
-    private fun pickFixation(presence: FairyPresence, drowsy: Float) {
+    private fun pickFixation(presence: FairyPresence) {
         tau = SACCADE_TAU_MS
         val r = random.nextFloat()
         when {
-            drowsy > 0.5f -> {
-                // Heavy-eyed: settle low and stay there.
-                target = Offset(range(-0.5f, 0.5f), range(0.6f, 1.1f))
-                fixationLeft = range(3000f, 6000f)
-            }
             presence == FairyPresence.THINKING -> {
                 // Searching: up-left, up-right, now and then a glance back.
                 target = if (r < 0.2f) {
@@ -418,7 +364,7 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
     }
 
     /** Blink closure 0..1 for this frame; schedules the next blink. */
-    private fun advanceBlink(dt: Float, drowsy: Float): Float {
+    private fun advanceBlink(dt: Float, asleep: Boolean): Float {
         if (blinkT >= 0f) {
             blinkT += dt
             val closure = blinkClosure(blinkT)
@@ -436,9 +382,8 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
         nextBlink -= dt
         if (nextBlink <= 0f) {
             blinkT = 0f
-            val drowsyBlink = drowsy > 0.5f
-            nextBlink = if (drowsyBlink) range(7000f, 12000f) else range(3000f, 7000f)
-            if (!drowsyBlink && random.nextFloat() < DOUBLE_BLINK_CHANCE) pendingDouble = true
+            nextBlink = if (asleep) range(7000f, 12000f) else range(3000f, 7000f)
+            if (!asleep && random.nextFloat() < DOUBLE_BLINK_CHANCE) pendingDouble = true
         }
         return 0f
     }
