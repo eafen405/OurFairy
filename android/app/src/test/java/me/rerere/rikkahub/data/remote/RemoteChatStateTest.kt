@@ -43,6 +43,20 @@ class RemoteChatStateTest {
         override suspend fun stop(token: String, sessionId: String) { stopped++ }
     }
 
+    @Test fun `a new binding holds the reminder gate until its first projection`() = runTest {
+        val backend = Backend()
+        val state = RemoteChatState(backend, backgroundScope, MemoryChatSyncStore(), "https://fairy")
+        state.bind("alice", "s1", 1)
+        // The observer coroutine has not been dispatched yet; an absent answer must not read as
+        // "answered with nothing owed" to reception's backlog gate.
+        assertTrue("a binding whose observer has not run has not answered", state.snapshot.value.isCatchingUp)
+        runCurrent()
+        backend.events.getValue("alice/s1").emit(projection("s1", 1))
+        runCurrent()
+        runCurrent()
+        assertFalse("the first settled projection answers the gate", state.snapshot.value.isCatchingUp)
+    }
+
     @Test fun `stream snapshots replace cumulative text and pure terminal state enables rich text`() = runTest {
         val backend = Backend()
         val state = RemoteChatState(backend, backgroundScope, MemoryChatSyncStore(), "https://fairy")

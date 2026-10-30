@@ -322,6 +322,12 @@
 | [267-retire-sessions-destination](267-retire-sessions-destination/README.md) | #267 删除 `Screen.Sessions`、catalog 条目与空会话对话页装配：`FairyConversationPage` 只接受真实 `sessionId`，七个目的地仍由同一张表驱动；旧 `route="sessions"` 按未知路由回退 `[Home]`（`FairyLastLocationTest` 与零网络 `SessionsColdStartTest` 固定），冷启动不打开浮层、不显示错误页；`android/GLOSSARY.md` 新增「会话列表浮层」 |
 | [258-review](258-review/README.md) | spec #258 收口两轴评审修复：标题栏改传 `OwnedSession.displayTitle`，控制台、列表行与标题栏共用同一条未命名占位并补窄屏大字长标题用例；`archivedSelectionId` 增加页面消费与恢复清除，消除归档后恢复会话又被弹回主会话的路径；`SessionsSnapshot.session(id)` 收拢行查询；浮层参数改名 `standingSessionId` 并记录两个入口的重选语义；按「声称须可执行」删除或收窄 grep 无法落实的结构声称 |
 
+## Android 会话接收（规格 #259）
+
+| 目录 | 内容 |
+| --- | --- |
+| [259-receive-decoupling](259-receive-decoupling/README.md) | #269 提醒欠账改为按账号与会话键读取持久 ChatSyncRecord，无活运行时也能发现与消费（消费规则只在 ChatSyncStore 一处，ChatSyncKey 只保留一种规范形态），停止观察不消费，绑定在首个投影前保持“未回答”；#268 新增 6 会话组合负载（5 个 200 条历史 + 1 个 232,703 字符 / 128 字符 / 20 ms 流式）经生产 RemoteReceiveState/RemoteChatState 记录连接、堆、接收至状态/帧与主线程指标，结果独立命名为 multi-session，宿主测试钉住声明与 #74 stream 正文；#270 没有同设备多会话数据，未做运行时释放或调度改动；设备三轮基线与真机通知未执行 |
+
 ## 界面微调（#215/#217/#218/#239/#255）
 
 | 目录 | 内容 |
