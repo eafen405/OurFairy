@@ -72,6 +72,7 @@ object FairyDestinations {
             onOpen = actions.push,
             session = session,
             receive = receive,
+            fairy = fairy,
         )
     }
 
@@ -228,6 +229,7 @@ object FairyDestinations {
             sessionId = sessionId,
             onBack = { actions.reset(listOf(Screen.Home)) },
             receive = receive,
+            fairy = fairy,
             onOpenConversation = { id -> actions.replace(Screen.Conversation(id)) },
             onSettings = { actions.push(Screen.Settings) },
         )
