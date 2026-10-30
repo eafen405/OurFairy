@@ -99,7 +99,9 @@ class FairyPagesTest {
         override suspend fun read(token: String, sessionId: String): OwnedSession {
             readGate?.await()
             if (sessionId == "missing") throw IdentityRefused(404, "session/not-found", "会话已不存在")
-            return OwnedSession(sessionId, primary = sessionId == listedSessions.primarySessionId)
+            // The backend answers with the row the list would return, title included.
+            return listedSessions.sessions.firstOrNull { it.id == sessionId }
+                ?: OwnedSession(sessionId, primary = sessionId == listedSessions.primarySessionId)
         }
         override suspend fun rename(token: String, sessionId: String, title: String): OwnedSession {
             // The backend answers with the row the list would return; this fake
@@ -615,34 +617,48 @@ class FairyPagesTest {
         var destination: Screen? = null
         home { destination = it }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
+        // The console names the current session by its own row's title; the
+        // opaque id is never a user-readable name.
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
+        compose.onNodeWithText("main").assertDoesNotExist()
         compose.runOnIdle { receive.owned.select("other") }
         compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
         screenshot("home-selected")
 
-        // The console still reports the opaque current-session id; the drawer is
-        // where the ticket replaces it with the session's title.
-        compose.onNodeWithText("other").assertIsDisplayed()
+        compose.onNodeWithTag("console-session-title").assertTextEquals("另一个会话")
+        compose.onNodeWithText("other").assertDoesNotExist()
         compose.onNodeWithText("进入会话").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(Screen.Conversation("other"), destination) }
     }
 
-    @Test fun `home without an enterable session opens the session list`() {
+    @Test fun `home without an enterable session opens the shared list in place`() {
         listedSessions = OwnedSessions(emptyList(), null)
         var destination: Screen? = null
         home { destination = it }
 
-        compose.onNodeWithText("—").assertIsDisplayed()
+        compose.onNodeWithTag("console-session-title").assertTextEquals("—")
         compose.onNodeWithText("0").assertIsDisplayed()
         compose.onNodeWithText("进入会话").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(Screen.Sessions, destination) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        // The list is an overlay on the console, not the empty-session
+        // conversation destination it used to push.
+        compose.onNodeWithContentDescription("关闭会话列表").assertIsDisplayed()
+        compose.onNodeWithText("暂无会话").assertIsDisplayed()
+        compose.runOnIdle { assertNull("打开会话列表不是导航", destination) }
     }
 
-    @Test fun `home opens all sessions directly with their real count`() {
+    @Test fun `home opens all sessions in place with their real count`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
+        var navigations = 0
         show {
-            DestinationHost(destination) { destination = it }
+            DestinationHost(destination) {
+                destination = it
+                navigations += 1
+            }
         }
 
         compose.onNodeWithText("全部会话").performScrollTo()
@@ -654,14 +670,92 @@ class FairyPagesTest {
         // The row is named by the session's own title. The ordinal ("会话 1") and
         // the opaque id are what the drawer used to show instead, so both must be
         // gone; the main-session binding survives as a marker beside the title.
-        compose.onNodeWithText("主会话标题").assertIsDisplayed()
+        // The console behind the list names the current session too, so the title
+        // is on screen twice and both read the same row.
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
+        compose.onAllNodesWithText("主会话标题").assertCountEquals(2)
         compose.onNodeWithText("另一个会话").assertIsDisplayed()
         compose.onNodeWithText("主会话").assertIsDisplayed()
         compose.onNodeWithText("会话 1").assertDoesNotExist()
         compose.onNodeWithText("会话 2").assertDoesNotExist()
         compose.onNodeWithText("main").assertDoesNotExist()
         compose.onNodeWithText("other").assertDoesNotExist()
-        compose.runOnIdle { assertEquals(Screen.Sessions, destination) }
+        // Opening the list must not push the old session-list destination (or any
+        // other) onto the navigation stack.
+        compose.runOnIdle {
+            assertEquals("打开会话列表不改变当前页面", Screen.Home, destination)
+            assertEquals("打开会话列表不触发任何导航", 0, navigations)
+        }
+    }
+
+    @Test fun `an untitled current session shows the list's placeholder on the console`() {
+        listedSessions = OwnedSessions(
+            listOf(
+                OwnedSession("main", primary = true),
+                OwnedSession("other", title = "另一个会话"),
+            ),
+            "main",
+        )
+        var destination: Screen? = null
+        home { destination = it }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+
+        // The console's current-session line and the list rows share one
+        // placeholder rule, so the unnamed current session is named 新会话 in
+        // both places and the opaque id appears in neither.
+        compose.onNodeWithTag("console-session-title").assertTextEquals("新会话")
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onAllNodesWithText("新会话").assertCountEquals(2)
+        compose.onAllNodesWithText("main").assertCountEquals(0)
+        compose.runOnIdle { assertNull(destination) }
+    }
+
+    @Test fun `closing the shared list leaves the console where it was`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        var navigations = 0
+        show {
+            DestinationHost(destination) {
+                destination = it
+                navigations += 1
+            }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("关闭会话列表").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
+        compose.onNodeWithText("进入会话").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("全部会话").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals("关闭浮层后仍在控制台", Screen.Home, destination)
+            assertEquals("关闭浮层不触发任何导航", 0, navigations)
+        }
+    }
+
+    @Test fun `selecting a row in the console list opens that conversation`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        show {
+            DestinationHost(destination) { destination = it }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("另一个会话").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle { assertEquals(Screen.Conversation("other"), destination) }
+        compose.onNodeWithContentDescription("切换会话").assertIsDisplayed()
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
     }
 
     @Test fun `an untitled session shows a placeholder, never its opaque id`() {
@@ -690,10 +784,11 @@ class FairyPagesTest {
     fun `home keeps long content bounded and actions reachable on narrow screens`() {
         RuntimeEnvironment.setFontScale(1.3f)
         val longName = "长用户名".repeat(12)
+        val longTitle = "很长的会话标题" + "会占满整行需要截断".repeat(8)
         val longSession = "session-" + "0123456789abcdef".repeat(4)
         user = IdentityUser(2, longName)
         listedSessions = OwnedSessions(
-            listOf(OwnedSession("main", primary = true), OwnedSession(longSession)), "main",
+            listOf(OwnedSession("main", primary = true), OwnedSession(longSession, title = longTitle)), "main",
         )
         var destination: Screen? = null
         home { destination = it }
@@ -714,9 +809,36 @@ class FairyPagesTest {
             )
         }
         assertBounded(longName)
-        assertBounded(longSession)
+        // The console names the session with the row's title, bounded by the card.
+        compose.onNodeWithTag("console-session-title").assertTextEquals(longTitle)
+        val consoleTitle = compose.onNodeWithTag("console-session-title")
+            .performScrollTo().assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "Console title exceeds the ${viewport.width}px viewport: $consoleTitle",
+            consoleTitle.left >= viewport.left && consoleTitle.right <= viewport.right,
+        )
+        // The opaque id is not the current session's name on the console.
+        compose.onAllNodesWithText(longSession).assertCountEquals(0)
+
+        // The same long title in the shared list's row is bounded too: the row
+        // ellipsizes instead of pushing the list past the narrow viewport.
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        val titled = compose.onAllNodesWithText(longTitle).fetchSemanticsNodes()
+        assertEquals("控制台与列表行都显示同一个标题", 2, titled.size)
+        titled.forEach { node ->
+            assertTrue(
+                "List/console title exceeds the ${viewport.width}px viewport: ${node.boundsInRoot}",
+                node.boundsInRoot.left >= viewport.left && node.boundsInRoot.right <= viewport.right,
+            )
+        }
+        compose.onNodeWithContentDescription("关闭会话列表").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
         compose.onNodeWithText("全部会话").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("设置").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("console-settings").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("进入会话").performScrollTo()
         screenshot("home-narrow-long")
         compose.onNodeWithText("进入会话").performClick()
@@ -746,9 +868,9 @@ class FairyPagesTest {
         compose.onNodeWithText("agent-two").assertIsDisplayed()
         compose.onNodeWithText("#2").assertIsDisplayed()
         compose.onNodeWithText("AGENT").assertIsDisplayed()
-        compose.onNodeWithText("main").assertIsDisplayed()
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
         screenshot("home")
-        compose.onNodeWithText("设置").performScrollTo().performClick()
+        compose.onNodeWithTag("console-settings").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithText("账号").assertIsDisplayed()
         compose.onNodeWithText("退出登录").assertIsDisplayed()
@@ -806,11 +928,15 @@ class FairyPagesTest {
         screenshot("agents")
     }
 
-    private fun conversation(initial: String = "main", eye: FairyEyeController? = null) {
+    private fun conversation(
+        initial: String = "main",
+        eye: FairyEyeController? = null,
+        onOpen: (String) -> Unit = {},
+    ) {
         var target by mutableStateOf(initial)
         show {
             FairyConversationPage(target, {}, receive, fairy, eye = eye,
-                onOpenConversation = { target = it }, onSettings = {})
+                onOpenConversation = { target = it; onOpen(it) }, onSettings = {})
         }
     }
 
@@ -1138,8 +1264,12 @@ class FairyPagesTest {
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
     }
 
-    @Test fun `selected session can still be opened from the session list`() {
-        conversation()
+    @Test fun `selecting the open session in the list neither navigates nor rebuilds`() {
+        val opened = mutableListOf<String>()
+        conversation(onOpen = opened::add)
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
         compose.onNodeWithText("发送消息…").performTextInput("保留草稿")
         compose.onNodeWithContentDescription("切换会话").performClick()
         compose.mainClock.advanceTimeBy(500)
@@ -1149,7 +1279,12 @@ class FairyPagesTest {
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
         compose.onNodeWithText("主会话").assertIsNotDisplayed()
         compose.onNodeWithText("保留草稿").assertIsDisplayed()
-        compose.runOnIdle { assertEquals("main", receive.owned.snapshot.value.selectedId) }
+        compose.runOnIdle {
+            assertEquals("main", receive.owned.snapshot.value.selectedId)
+            // Selecting the session the page already stands in is a close, not a
+            // navigation: the page keeps its draft and its conversation.
+            assertEquals("选择当前会话不得触发导航", emptyList<String>(), opened)
+        }
     }
 
     @Test fun `drawer switches and creates conversations`() {
