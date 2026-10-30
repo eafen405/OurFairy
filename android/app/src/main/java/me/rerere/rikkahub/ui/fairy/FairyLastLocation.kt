@@ -2,44 +2,50 @@ package me.rerere.rikkahub.ui.fairy
 
 import android.content.Context
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.destination.FairyDestinations
 
-/** Records the product destination restored after account sign-in. */
+/**
+ * Stores where the user was standing, so a later cold start can return there.
+ *
+ * This class is only the file: it owns the preferences and the two keys, and it
+ * writes or reads exactly what [FairyDestinations] says a destination's
+ * coordinates are. Which pages are remembered, under which name, and which stack
+ * a name reopens are the catalog's decisions.
+ */
 class FairyLastLocation(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    /** Record where the user is standing. Called on every accepted destination. */
+    /**
+     * Record where the user is standing.
+     *
+     * [FairyDestinations.restingPlaceOf] answers null for a page that is not a
+     * place to return to — the credential pages — so such a page leaves the file
+     * on the last place the user could actually be returned to.
+     */
     fun record(screen: Screen) {
-        val (route, conversation) = when (screen) {
-            is Screen.Home -> "home" to null
-            is Screen.Sessions -> "sessions" to null
-            is Screen.Settings -> "settings" to null
-            is Screen.Conversation -> "conversation" to screen.sessionId
-            is Screen.Gateway -> "gateway" to null
-            else -> return
-        }
-        prefs.edit().putString(KEY_ROUTE, route).putString(KEY_CONVERSATION, conversation).apply()
+        val place = FairyDestinations.restingPlaceOf(screen) ?: return
+        prefs.edit()
+            .putString(KEY_ROUTE, place.route)
+            .putString(KEY_CONVERSATION, place.conversation)
+            .apply()
     }
 
     /**
-     * The stack a cold start should open once the identity is restored.
+     * The stack a cold start should open, as the catalog's restore policy says.
      *
-     * Sign-in is not remembered: the landing page is decided by the credential.
-     * The conversation page authenticates a restored target and offers another
-     * session when that target is no longer available.
+     * The two stored strings are handed over verbatim: a name this version does
+     * not know, and a conversation coordinate that is absent or blank, are the
+     * catalog's [me.rerere.rikkahub.ui.destination.UNKNOWN_LANDING], not a
+     * fallback invented here.
      */
-    fun restoredStack(): List<Screen> = when (prefs.getString(KEY_ROUTE, null)) {
-        "sessions" -> listOf(Screen.Home, Screen.Sessions)
-        "settings" -> listOf(Screen.Home, Screen.Settings)
-        "gateway" -> listOf(Screen.Home, Screen.Settings, Screen.Gateway)
-        "conversation" -> prefs.getString(KEY_CONVERSATION, null)
-            ?.takeIf { it.isNotBlank() }
-            ?.let { listOf(Screen.Home, Screen.Conversation(it)) }
-            ?: listOf(Screen.Home)
-        else -> listOf(Screen.Home)
-    }
+    fun restoredStack(): List<Screen> = FairyDestinations.resumedStack(
+        route = prefs.getString(KEY_ROUTE, null),
+        conversation = prefs.getString(KEY_CONVERSATION, null),
+    )
 
     private companion object {
+        /** Kept from the version before the catalog: an upgrade reads this same file. */
         const val FILE = "fairy_last_location"
         const val KEY_ROUTE = "route"
         const val KEY_CONVERSATION = "conversation"

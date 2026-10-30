@@ -49,6 +49,10 @@ import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DisplayPreferences
 import me.rerere.rikkahub.data.remote.*
+import me.rerere.rikkahub.ui.destination.Content
+import me.rerere.rikkahub.ui.destination.DestinationActions
+import me.rerere.rikkahub.ui.destination.DestinationPageScope
+import me.rerere.rikkahub.ui.destination.FairyDestinations
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
 import me.rerere.rikkahub.ui.identity.IdentitySignInPage
 import org.junit.After
@@ -180,8 +184,108 @@ class FairyPagesTest {
         }
     }
 
+    /**
+     * The page the user stands on, assembled by the production catalog.
+     *
+     * This file starts no Koin: the catalog is handed this test's own account,
+     * fakes and interaction module exactly as the activity hands it the
+     * container's. `push` and `replace` stand on their target; `pop` returns to
+     * the console every fixture below starts from; `reset` stands on the last
+     * page of its stack.
+     */
+    @Composable
+    private fun DestinationHost(destination: Screen, onNavigate: (Screen) -> Unit) {
+        val scope = DestinationPageScope(
+            actions = DestinationActions(
+                push = onNavigate,
+                replace = onNavigate,
+                pop = { onNavigate(Screen.Home) },
+                reset = { stack -> onNavigate(stack.last()) },
+                identityCompleted = {},
+            ),
+            session = account,
+            receive = receive,
+            identityBackend = identityBackend,
+            gatewayBackend = gatewayBackend,
+            impressionBackend = impressionBackend,
+            fairy = fairy,
+        )
+        FairyDestinations.destinationOf(destination).Content(destination, scope)
+    }
+
+    /** How many times the gateway page asked its backend, so the hand-off is observable. */
+    private var gatewayReads = 0
+
+    /** How many times the impression page asked its backend. */
+    private var impressionReads = 0
+
+    /** The shared selection the gateway page reads; nothing here is editable. */
+    private val gatewayBackend = object : GatewayBackend {
+        override suspend fun read(token: String): GatewayConfig {
+            gatewayReads += 1
+            return GatewayConfig(
+                selection = GatewaySelection("minimax-cn", "MiniMax-M3.1-Flash"),
+                asr = GatewayAsr(credential = GatewayCredential(ref = "VOICE_API_KEY")),
+            )
+        }
+        override suspend fun select(token: String, selection: GatewaySelection) = error("not used")
+        override suspend fun saveRoute(token: String, route: GatewayRouteDraft) = error("not used")
+        override suspend fun deleteRoute(token: String, provider: String) = error("not used")
+        override suspend fun saveAsr(token: String, asr: GatewayAsrDraft) = error("not used")
+        override suspend fun saveCompaction(token: String, compaction: GatewayCompactionDraft) = error("not used")
+        override suspend fun saveMaintenance(token: String, maintenance: GatewayMaintenanceDraft) = error("not used")
+    }
+
+    /** The account's own impression, already written. */
+    private val impressionBackend = object : ImpressionBackend {
+        override suspend fun read(token: String): Impression {
+            impressionReads += 1
+            return Impression(content = "本人印象")
+        }
+        override suspend fun edit(token: String, content: String) = Unit
+    }
+
+    /** Show [initial], following its own navigation into this test's state. */
+    private fun destination(initial: Screen, onNavigate: (Screen) -> Unit = {}) {
+        var current by mutableStateOf(initial)
+        show {
+            DestinationHost(current) { next ->
+                current = next
+                onNavigate(next)
+            }
+        }
+    }
+
+    /**
+     * The console, optionally with a test-owned eye controller.
+     *
+     * The eye is a page-internal seam the catalog does not carry — production
+     * leaves it null and the page remembers one — so only the tests that observe
+     * its output assemble the page directly.
+     */
     private fun home(eye: FairyEyeController? = null, onOpen: (Screen) -> Unit) {
-        show { FairyConsolePage(onOpen, account, receive, fairy, eye = eye) }
+        if (eye == null) destination(Screen.Home, onOpen)
+        else show { FairyConsolePage(onOpen, account, receive, fairy, eye = eye) }
+    }
+
+    @Test fun `the gateway composes through the catalog with no container`() {
+        // The page used to reach into Koin for its backend; the catalog now hands
+        // it the one its scope carries, so this test assembles it with a fake and
+        // no container at all — and the fake proves the hand-off happened.
+        destination(Screen.Gateway)
+        compose.waitForIdle()
+
+        compose.onNodeWithText(RuntimeEnvironment.getApplication().getString(me.rerere.rikkahub.R.string.gateway_explain))
+            .assertExists()
+        compose.runOnIdle { assertEquals("the gateway page read the scope's backend", 1, gatewayReads) }
+    }
+
+    @Test fun `the impression composes through the catalog with no container`() {
+        destination(Screen.Impression)
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("impression_field").assertExists()
+        compose.runOnIdle { assertEquals("the impression page read the scope's backend", 1, impressionReads) }
     }
 
     @Test fun `idle line sits below the fairy screen`() {
@@ -242,13 +346,7 @@ class FairyPagesTest {
         updates["main"] = activity("main", 2, listOf(1))
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (val target = destination) {
-                is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, {}, receive, fairy,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
-            }
+            DestinationHost(destination) { destination = it }
         }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
         compose.mainClock.advanceTimeBy(1_000)
@@ -277,13 +375,7 @@ class FairyPagesTest {
         updates["main"] = activity("main", 0)
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (val target = destination) {
-                is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, {}, receive, fairy,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
-            }
+            DestinationHost(destination) { destination = it }
         }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
         compose.mainClock.advanceTimeBy(1_000)
@@ -309,13 +401,7 @@ class FairyPagesTest {
         updates["other"] = activity("other", 2, listOf(1))
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (val target = destination) {
-                is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, {}, receive, fairy,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
-            }
+            DestinationHost(destination) { destination = it }
         }
         compose.waitUntil { receive.runtimes.value.keys.containsAll(listOf("main", "other")) }
         compose.mainClock.advanceTimeBy(1_000)
@@ -372,13 +458,7 @@ class FairyPagesTest {
         updates["main"] = activity("main", 2, listOf(1))
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (val target = destination) {
-                is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, {}, receive, fairy,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
-            }
+            DestinationHost(destination) { destination = it }
         }
         compose.waitUntil { fairy.state.value.window.presence == FairyPresence.THINKING }
         compose.mainClock.advanceTimeBy(1_000)
@@ -457,13 +537,7 @@ class FairyPagesTest {
     @Test fun `home dozes off and the conversation page carries the standby`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (val target = destination) {
-                is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, { destination = Screen.Home }, receive, fairy,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
-            }
+            DestinationHost(destination) { destination = it }
         }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
         ShadowSystemClock.advanceBy(Duration.ofMillis(SLEEP_AT_MS + 1_000))
@@ -503,13 +577,7 @@ class FairyPagesTest {
     @Test fun `an unfinished home line is settled instead of replayed after a page switch`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (val target = destination) {
-                is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, { destination = Screen.Home }, receive, fairy,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
-            }
+            DestinationHost(destination) { destination = it }
         }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
         ShadowSystemClock.advanceBy(Duration.ofMillis(FIRST_LINE_MS + 1_000))
@@ -574,18 +642,7 @@ class FairyPagesTest {
     @Test fun `home opens all sessions directly with their real count`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (val target = destination) {
-                Screen.Home -> FairyConsolePage({ destination = it }, account, receive, fairy)
-                Screen.Sessions -> FairyConversationPage(
-                    null, { destination = Screen.Home }, receive, fairy,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, { destination = Screen.Home }, receive, fairy,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                else -> error("Unexpected destination: $target")
-            }
+            DestinationHost(destination) { destination = it }
         }
 
         compose.onNodeWithText("全部会话").performScrollTo()
@@ -1072,13 +1129,7 @@ class FairyPagesTest {
     @Test fun `home opens the current conversation with a visible composer`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
-            when (val target = destination) {
-                is Screen.Conversation -> FairyConversationPage(
-                    target.sessionId, {}, receive, fairy,
-                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
-                )
-                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
-            }
+            DestinationHost(destination) { destination = it }
         }
         compose.onNodeWithText("进入会话").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(600)

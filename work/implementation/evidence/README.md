@@ -296,6 +296,14 @@
 | --- | --- |
 | [repo-cleanup](repo-cleanup/README.md) | CLEAN-01～CLEAN-08：related 门禁读取测试文件自写的 `@covers backend/<package>` 声明（12 个套件，delivery/speech/memory/groups/search 选择从 0–1 个变为 3–5 个）；`specs:status` 用一条 `specOfDirectory` 规则从 `published.json.parent` 或 README 父规格声明识别命名票目录、按 ref 树判定副本（#240 copies MISSING→ok，同时多出 #23 一行）；文档入口补登 #240 规格、术语覆盖记忆上下文、无状态头按目录档位、domain.md 换真实路径，并补登 14 个漏登证据目录（改为描述文件派生）；基准 history/observer 数量收敛到 `scripts/bench-workload.ts`、门禁 cell 由笛卡尔积派生；记忆维护 15/6、5–50、3–24 收敛到 `backend/memory/src/maintenance-policy.ts` 并由记忆 Config、运行期校验与网关共同消费（网关经包导出子路径运行时导入）；删除三处 Android 快照残留（423→422 tests）；本机回收 1,400,108,172 B 可再生产物。最终门禁 `npm test` 425/425、`combo:verify` 三行 ok、Android `test lintDebug` 422 tests/0 failures（集成 worktree 从零产物冷构建）、`evidence-index --check` current；未推送、未合 main，Spec 轴评审因两次中断未完成。CLEAN-09 追加：19 个既有套件补 30 行 `@covers` 声明（声明文件 12 → 27），补齐 attachments/chat/gateway/groups/identity/delivery/sessions/search/speech 的单向关联（attachments 4→12、chat 14→20、gateway 2→7、groups 4→8、identity 9→11、delivery 4→6、sessions 4→6、search 3→5、speech 2→4、memory 7→8），逐包探针脚本随目录保留 |
 
+## Android 目的地拓扑（规格 #257）
+
+| 目录 | 内容 |
+| --- | --- |
+| [257-263-destination-catalog](257-263-destination-catalog/README.md) | #263 建立静态目的地 catalog：`ui/destination/FairyDestination.kt` 声明 route / access / restore / page 四项，`FairyDestinations.kt` 是唯一一张表；首页、设置、网关、印象的装配、准入与恢复都改读它，`contentKey` 换成可进 Bundle 的 String，印象页首次获得冷启动恢复（首页、设置、印象）。完整性靠对 `Screen` 的穷尽 `when` 在编译期强制登记，未引入 kotlin-reflect |
+| [257-264-migrate-all](257-264-migrate-all/README.md) | #264 把登录、注册、会话、会话列表四个剩余目的地并入同一张表：`page` 变为非空并接收 `Screen`（会话页从 key 取 sessionId），`assembles()` 与 `RouteActivity` 的第二条 entry 分支删除，`NavEntry` 构造移入 `entryOf`；删除 `IdentityAccessPolicy` / `IdentityDestination` / `toIdentityDestination` 与两个手抄映射测试，`IdentityScope` 保留为身份事实；通知落点改用 `resumedStack(CONVERSATION_ROUTE, sessionId)`；`FairyPagesTest` 的三块手抄 `when` 与两个装配 helper 改为经 catalog 装配。表驱动测试覆盖八个目的地 × 四种身份（含未登录但残留 admin 位）、八条恢复策略与完整性 |
+| [257-review](257-review/README.md) | spec #257 收口两轴评审（Standards + Spec）与修复：`destinationOf` 改为持有穷尽 `when` 直接返回目的地，把「登记一次」变成构造期保障；删掉两处自证断言并把恢复期望改为写死的表；`FairyPagesTest` 剩余的自建导航器改走 catalog；设计记录补写 §9。后端全量 `npm test` 因 profile 安装取包超时未取绿，`main` 上同样复现 |
+
 ## Android Fairy 互动：统一存在感、反应与台词编排（规格 #256）
 
 | 目录 | 内容 |
