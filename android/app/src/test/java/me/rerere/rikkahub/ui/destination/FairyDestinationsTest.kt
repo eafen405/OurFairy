@@ -35,7 +35,6 @@ class FairyDestinationsTest {
         Admission(Screen.SignIn, visitor = true, agent = false, phaethon = false, staleAdmin = true),
         Admission(Screen.Register, visitor = true, agent = false, phaethon = false, staleAdmin = true),
         Admission(Screen.Home, visitor = false, agent = true, phaethon = true, staleAdmin = false),
-        Admission(Screen.Sessions, visitor = false, agent = true, phaethon = true, staleAdmin = false),
         Admission(Screen.Conversation("s-1"), visitor = false, agent = true, phaethon = true, staleAdmin = false),
         Admission(Screen.Settings, visitor = false, agent = true, phaethon = true, staleAdmin = false),
         Admission(Screen.Gateway, visitor = false, agent = false, phaethon = true, staleAdmin = false),
@@ -95,7 +94,6 @@ class FairyDestinationsTest {
         Restore(Screen.Register, stack = null),
         Restore(Screen.Home, stack = listOf(Screen.Home)),
         Restore(Screen.Settings, stack = listOf(Screen.Home, Screen.Settings)),
-        Restore(Screen.Sessions, stack = listOf(Screen.Home, Screen.Sessions)),
         Restore(
             Screen.Conversation("s-1"),
             conversation = "s-1",
@@ -207,7 +205,7 @@ class FairyDestinationsTest {
             routes.toSet(),
             screens.map(FairyDestinations::routeOf).toSet(),
         )
-        assertEquals("the product has eight destinations", 8, routes.size)
+        assertEquals("the product has seven destinations", 7, routes.size)
     }
 
     /**
@@ -221,7 +219,6 @@ class FairyDestinationsTest {
         Screen.SignIn,
         Screen.Register,
         Screen.Home,
-        Screen.Sessions,
         Screen.Conversation("s-1"),
         Screen.Settings,
         Screen.Gateway,

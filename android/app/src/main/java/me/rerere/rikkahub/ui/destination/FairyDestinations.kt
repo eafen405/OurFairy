@@ -76,14 +76,6 @@ object FairyDestinations {
         )
     }
 
-    private val sessions = FairyDestination(
-        route = "sessions",
-        access = DestinationAccess.SignedIn,
-        restore = DestinationRestore.Resume(listOf(Screen.Home, Screen.Sessions)),
-    ) {
-        conversationPage(sessionId = null)
-    }
-
     private val conversation = FairyDestination(
         route = CONVERSATION_ROUTE,
         access = DestinationAccess.SignedIn,
@@ -125,7 +117,7 @@ object FairyDestinations {
 
     /** Every destination the product has, in the order the table declares them. */
     val entries: List<FairyDestination> = listOf(
-        signIn, register, home, sessions, conversation, settings, gateway, impression,
+        signIn, register, home, conversation, settings, gateway, impression,
     )
 
     /**
@@ -141,7 +133,6 @@ object FairyDestinations {
         Screen.SignIn -> signIn
         Screen.Register -> register
         Screen.Home -> home
-        Screen.Sessions -> sessions
         is Screen.Conversation -> conversation
         Screen.Settings -> settings
         Screen.Gateway -> gateway
@@ -218,13 +209,13 @@ object FairyDestinations {
     }
 
     /**
-     * The conversation page, for both a named conversation and the session list.
+     * The conversation page, for a conversation routed to a real session.
      *
-     * The two destinations share the page and differ only in whether a session
-     * is open, so their navigation is declared once here.
+     * The session list is this page's overlay, so it is opened here rather than
+     * assembled as a page of its own; its navigation is declared once.
      */
     @Composable
-    private fun DestinationPageScope.conversationPage(sessionId: String?) {
+    private fun DestinationPageScope.conversationPage(sessionId: String) {
         FairyConversationPage(
             sessionId = sessionId,
             onBack = { actions.reset(listOf(Screen.Home)) },
