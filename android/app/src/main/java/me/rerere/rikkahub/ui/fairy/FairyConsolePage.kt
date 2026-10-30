@@ -19,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -27,13 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -43,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
@@ -71,9 +64,14 @@ fun FairyConsolePage(
     session: me.rerere.rikkahub.data.remote.AccountSession = koinInject(),
     receive: RemoteReceiveState = koinInject(),
     fairy: FairyInteraction = koinInject(),
+    /**
+     * The page's eye controller. A test can inject one and observe its real output
+     * (`pointer`, `glances`, `blinks`); production leaves it null and the page remembers one.
+     */
+    eye: FairyEyeController? = null,
 ) {
     val baseTokens = LocalFairyTokens.current
-    val eye = remember { FairyEyeController(asleep = fairy.state.value.asleep) }
+    val pageEye = eye ?: remember { FairyEyeController(asleep = fairy.state.value.asleep) }
     val identity by session.identity.collectAsStateWithLifecycle()
     val owned by receive.owned.snapshot.collectAsStateWithLifecycle()
     val interaction by fairy.state.collectAsStateWithLifecycle()
@@ -87,52 +85,14 @@ fun FairyConsolePage(
     val tokens = baseTokens
 
     // The page only supplies the beat; 待机 and 台词 live in the module (and outlive this page).
+    // Leaving settles the transient presentation through the shared host's lifecycle observer.
     LaunchedEffect(running, speaks, asleep) {
-        if (!running) {
-            fairy.pageExit()
-            return@LaunchedEffect
-        }
-        if (!speaks || asleep) return@LaunchedEffect
+        if (!running || !speaks || asleep) return@LaunchedEffect
         while (true) {
             delay(TICK_MS)
             fairy.tick()
         }
     }
-    // The controller is the page's own transient eye state; the continuous 待机 lives in the module.
-    LaunchedEffect(asleep) { eye.asleep = asleep }
-    // Coming back to the foreground presents the current session's facts as they are right now —
-    // read from its runtime, not from this composition, which did not run while away — and settles
-    // whatever arrived in the meantime instead of replaying it. Leaving settles the transient
-    // presentation.
-    DisposableEffect(lifecycleOwner, fairy, receive) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_START -> {
-                    val sessionId = receive.owned.snapshot.value.currentSessionId()
-                    val current = sessionId?.let(receive::stateForSession)?.snapshot?.value
-                    fairy.foregrounded(
-                        sessionId?.let(::FairyInteractionContext),
-                        current?.fairyFacts(),
-                    )
-                }
-                Lifecycle.Event.ON_STOP -> fairy.pageExit()
-                else -> Unit
-            }
-        }
-        lifecycleOwner.addObserver(observer)
-        onDispose { lifecycleOwner.removeObserver(observer) }
-    }
-    DisposableEffect(fairy) { onDispose { fairy.pageExit() } }
-    val origin = remember { floatArrayOf(0f, 0f) }
-    val bounds = remember { floatArrayOf(0f, 0f) }
-    // New events glance at the page's content; the console has no composer of its own, so a SENT
-    // reaction (which only a conversation page can produce) has no target here.
-    FairyEyeReactions(
-        reaction = interaction.reaction,
-        eye = eye,
-        composer = { null },
-        content = { Offset(origin[0] + bounds[0] / 2f, origin[1] + bounds[1] * 0.55f) },
-    )
     // 当前会话: the reader's last choice, else the account's main session. Home presents only this
     // one session — its runtime, its connection, its activity — never a union over the account.
     val currentSessionId = owned.currentSessionId()
@@ -144,10 +104,19 @@ fun FairyConsolePage(
         currentRuntime?.snapshot ?: flowOf(null)
     }.collectAsStateWithLifecycle(null)
     val currentFacts = currentSnapshot?.fairyFacts()
-    val window = fairy.window(currentFacts)
-    LaunchedEffect(fairy, currentSessionId, currentFacts) {
-        fairy.show(currentSessionId?.let(::FairyInteractionContext), currentFacts)
-    }
+    // 当前表现 comes from the module snapshot, not from a second derivation here. The host reports
+    // this frame's facts and, when the page returns, reads the current runtime for the same session.
+    val host = rememberFairyPageHost(
+        fairy = fairy,
+        receive = receive,
+        currentSessionId = { receive.owned.snapshot.value.currentSessionId() },
+        context = currentSessionId?.let(::FairyInteractionContext),
+        facts = currentFacts,
+        eye = pageEye,
+        composer = { null },
+        content = { it.at(0.5f, 0.55f) },
+    )
+    val window = interaction.window
     CompositionLocalProvider(LocalFairyTokens provides tokens) {
         Box(
             Modifier
@@ -158,24 +127,7 @@ fun FairyConsolePage(
             Column(
                 Modifier
                     .fillMaxSize()
-                    .onGloballyPositioned {
-                        origin[0] = it.positionInRoot().x
-                        origin[1] = it.positionInRoot().y
-                        bounds[0] = it.size.width.toFloat()
-                        bounds[1] = it.size.height.toFloat()
-                    }
-                    .pointerInput(eye) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Final)
-                                val touch = event.changes.firstOrNull { it.pressed }
-                                eye.lookAt(touch?.let { Offset(origin[0] + it.position.x, origin[1] + it.position.y) })
-                                if (touch != null && fairy.touch()) {
-                                    eye.wake(confused = true)
-                                }
-                            }
-                        }
-                    }
+                    .then(host.modifier)
                     .statusBarsPadding()
                     .navigationBarsPadding()
                     .verticalScroll(rememberScrollState())
@@ -190,7 +142,7 @@ fun FairyConsolePage(
                         eyeSize = 112.dp,
                         speechPulse = interaction.speechPulse,
                         hud = true,
-                        eye = eye,
+                        eye = pageEye,
                         hudStatus = if (asleep) "SLEEP" else null,
                         modifier = Modifier.fillMaxWidth().height(208.dp).testTag("fairy-console-screen"),
                     )

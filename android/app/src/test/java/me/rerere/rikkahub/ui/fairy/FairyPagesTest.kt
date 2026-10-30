@@ -30,6 +30,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.Lifecycle
@@ -37,6 +38,7 @@ import java.io.File
 import java.time.Duration
 import android.graphics.Bitmap
 import android.os.SystemClock
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -83,12 +85,15 @@ class FairyPagesTest {
     private var createdSession = OwnedSession("created")
     /** How many times the account's list was read, so a re-read is observable. */
     private var listReads = 0
+    /** When set, a session read does not answer until this completes (a page still opening). */
+    private var readGate: CompletableDeferred<Unit>? = null
     private val sessions = object : SessionBackend {
         override suspend fun list(token: String, archived: Boolean): OwnedSessions {
             listReads += 1
             return listedSessions
         }
         override suspend fun read(token: String, sessionId: String): OwnedSession {
+            readGate?.await()
             if (sessionId == "missing") throw IdentityRefused(404, "session/not-found", "会话已不存在")
             return OwnedSession(sessionId, primary = sessionId == listedSessions.primarySessionId)
         }
@@ -175,8 +180,8 @@ class FairyPagesTest {
         }
     }
 
-    private fun home(onOpen: (Screen) -> Unit) {
-        show { FairyConsolePage(onOpen, account, receive, fairy) }
+    private fun home(eye: FairyEyeController? = null, onOpen: (Screen) -> Unit) {
+        show { FairyConsolePage(onOpen, account, receive, fairy, eye = eye) }
     }
 
     @Test fun `idle line sits below the fairy screen`() {
@@ -233,17 +238,34 @@ class FairyPagesTest {
         ),
     )
 
-    @Test fun `home presents the current session's live state instead of standby`() {
+    @Test fun `home and the conversation page show a working session, never standby`() {
         updates["main"] = activity("main", 2, listOf(1))
-        home {}
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        show {
+            when (val target = destination) {
+                is Screen.Conversation -> FairyConversationPage(
+                    target.sessionId, {}, receive, fairy,
+                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
+                )
+                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
+            }
+        }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
 
+        // The page, not just the module: home must not draw the stand-by overlay for a working
+        // current session, and the conversation page must render the same presence as a subtitle.
+        compose.onNodeWithText("TAP TO WAKE").assertDoesNotExist()
+        compose.onNodeWithText("进入会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("正在思考…").assertIsDisplayed()
+        compose.onNodeWithTag("fairy-screen-overlay").assertIsDisplayed()
         compose.runOnIdle {
             assertEquals(FairyInteractionContext("main"), fairy.state.value.context)
             assertEquals(
-                "主会话正在执行时，首页必须显示思考而不是固定的待机",
+                "主会话正在执行时，页面必须呈现思考而不是固定的待机",
                 FairyPresence.THINKING,
                 fairy.state.value.window.presence,
             )
@@ -251,13 +273,28 @@ class FairyPagesTest {
         }
     }
 
-    @Test fun `home presents unknown activity as linking, never as standby`() {
+    @Test fun `home and the conversation page show unknown activity as linking, never as standby`() {
         updates["main"] = activity("main", 0)
-        home {}
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        show {
+            when (val target = destination) {
+                is Screen.Conversation -> FairyConversationPage(
+                    target.sessionId, {}, receive, fairy,
+                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
+                )
+                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
+            }
+        }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
 
+        compose.onNodeWithText("TAP TO WAKE").assertDoesNotExist()
+        compose.onNodeWithText("进入会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("同步中…").assertIsDisplayed()
+        compose.onNodeWithText("已连接").assertDoesNotExist()
         compose.runOnIdle {
             assertEquals(
                 "活动未知不能被显示成安静",
@@ -267,10 +304,19 @@ class FairyPagesTest {
         }
     }
 
-    @Test fun `home follows only the current session, not the rest of the account`() {
-        // Another session is working; the current one is quiet. Home must show its own session.
+    @Test fun `home follows only the current session's visible current appearance`() {
+        // Another session is working; the current one is quiet. Home must present its own session.
         updates["other"] = activity("other", 2, listOf(1))
-        home {}
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        show {
+            when (val target = destination) {
+                is Screen.Conversation -> FairyConversationPage(
+                    target.sessionId, {}, receive, fairy,
+                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
+                )
+                else -> FairyConsolePage({ destination = it }, account, receive, fairy)
+            }
+        }
         compose.waitUntil { receive.runtimes.value.keys.containsAll(listOf("main", "other")) }
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
@@ -284,11 +330,19 @@ class FairyPagesTest {
         compose.waitForIdle()
         compose.runOnIdle {
             assertEquals(
-                "切到正在执行的会话后，首页显示的是这个会话的思考",
+                "切到正在执行的会话后，首页呈现的是这个会话的思考",
                 FairyPresence.THINKING,
                 fairy.state.value.window.presence,
             )
         }
+
+        // The visible claim: the page of the newly current session shows the working state, not
+        // the quiet session's connected state.
+        compose.onNodeWithText("进入会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("正在思考…").assertIsDisplayed()
+        compose.onNodeWithText("已连接").assertDoesNotExist()
     }
 
     @Test fun `an account switch stops the old sessions from driving home`() {
@@ -311,9 +365,10 @@ class FairyPagesTest {
                 fairy.state.value.window.presence,
             )
         }
+        compose.onNodeWithText("TAP TO WAKE").assertDoesNotExist()
     }
 
-    @Test fun `home and the conversation page present the same state for the same session`() {
+    @Test fun `home and the conversation page render the same current appearance for one session`() {
         updates["main"] = activity("main", 2, listOf(1))
         var destination by mutableStateOf<Screen>(Screen.Home)
         show {
@@ -334,6 +389,10 @@ class FairyPagesTest {
         compose.waitForIdle()
         compose.runOnIdle { assertEquals(Screen.Conversation("main"), destination) }
 
+        // The page-visible result of the same module answer: the conversation bar's subtitle and
+        // the opened eye screen, not only the module's own state.
+        compose.onNodeWithText("正在思考…").assertIsDisplayed()
+        compose.onNodeWithTag("fairy-screen-overlay").assertIsDisplayed()
         compose.runOnIdle {
             assertEquals(FairyInteractionContext("main"), fairy.state.value.context)
             assertEquals(
@@ -342,6 +401,57 @@ class FairyPagesTest {
                 fairy.state.value.window.presence,
             )
         }
+    }
+
+    @Test fun `the conversation page renders the module's appearance while its facts are missing`() {
+        // The page is the destination of a page change for a session whose runtime it has not
+        // read yet. The module test fixes the rule that this frame keeps the previous page's
+        // appearance; here the page must render that snapshot instead of deriving UNKNOWN.
+        listedSessions = OwnedSessions(
+            listOf(OwnedSession("other", primary = true, title = "另一个会话")),
+            "other",
+        )
+        updates["main"] = activity("main", 2, listOf(1))
+        val gate = CompletableDeferred<Unit>()
+        readGate = gate
+        show {
+            FairyConversationPage("main", {}, receive, fairy, onOpenConversation = {}, onSettings = {})
+        }
+        // The list has arrived; the routed session's own read is held at the gate, so the page
+        // stays in its opening frame with no facts.
+        compose.waitUntil { receive.owned.snapshot.value.sessions.isNotEmpty() }
+        compose.runOnIdle {
+            fairy.show(
+                FairyInteractionContext("main"),
+                FairyRemoteFacts(
+                    connected = true,
+                    activityStatus = 2,
+                    activityReasons = listOf(1),
+                    transcript = FairyTranscript(0),
+                ),
+            )
+        }
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+
+        compose.onAllNodesWithText("正在打开会话…").onFirst().assertIsDisplayed()
+        // The opened eye screen is visible because the page renders the module's awaiting-reply
+        // state; a page that re-derived UNKNOWN from its missing facts would fold it.
+        compose.onNodeWithTag("fairy-screen-overlay").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(FairyInteractionContext("main"), fairy.state.value.context)
+            assertEquals(
+                "对话页拿到事实之前应沿用上一页的当前表现",
+                FairyPresence.THINKING,
+                fairy.state.value.window.presence,
+            )
+            assertTrue(fairy.state.value.window.awaitingReply)
+        }
+
+        gate.complete(Unit)
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("正在思考…").assertIsDisplayed()
     }
 
     @Test fun `home dozes off and the conversation page carries the standby`() {
@@ -639,10 +749,10 @@ class FairyPagesTest {
         screenshot("agents")
     }
 
-    private fun conversation(initial: String = "main") {
+    private fun conversation(initial: String = "main", eye: FairyEyeController? = null) {
         var target by mutableStateOf(initial)
         show {
-            FairyConversationPage(target, {}, receive, fairy,
+            FairyConversationPage(target, {}, receive, fairy, eye = eye,
                 onOpenConversation = { target = it }, onSettings = {})
         }
     }
@@ -753,7 +863,7 @@ class FairyPagesTest {
         }
     }
 
-    @Test fun `the module's reaction reaches the page's eye once`() {
+    @Test fun `the eye mapping plays each reaction kind once and never replays a recomposition`() {
         val eye = FairyEyeController()
         var reaction by mutableStateOf<FairyReaction?>(null)
         var recompositions by mutableStateOf(0)
@@ -790,6 +900,72 @@ class FairyPagesTest {
         compose.waitForIdle()
         assertEquals("重组不得重演同一次反应", 3, eye.glances)
         assertEquals("重组不得重演同一次眨眼", 1, eye.blinks)
+    }
+
+    @Test fun `a delivery reaches the conversation page's own eye once`() {
+        // The real seam: module observation → page → injected eye. #262's evidence cites this
+        // test for page wiring; the mapping test above only proves the page-side mapping itself.
+        val eye = FairyEyeController()
+        updates["main"] = activity("main", 1)
+        conversation(eye = eye)
+        compose.waitUntil { fairy.state.value.context == FairyInteractionContext("main") }
+        compose.waitUntil { receive.selectedChat.value?.snapshot?.value?.storageReady == true }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("建立基线时不演", 0, eye.glances) }
+
+        compose.runOnIdle { updates.getValue("main").value = delivered("main", 1, version = 1) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals("投递经页面的眼睛演一次", 1, eye.glances)
+            assertEquals(FairyReactionKind.DELIVERY, fairy.state.value.reaction?.kind)
+        }
+        compose.onNodeWithText("delivered1").assertIsDisplayed()
+    }
+
+    @Test fun `dragging either fairy page moves that page's eye`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        val homeEye = FairyEyeController()
+        val conversationEye = FairyEyeController()
+        show {
+            when (val target = destination) {
+                is Screen.Conversation -> FairyConversationPage(
+                    target.sessionId, {}, receive, fairy, eye = conversationEye,
+                    onOpenConversation = { destination = Screen.Conversation(it) }, onSettings = {},
+                )
+                else -> FairyConsolePage({ destination = it }, account, receive, fairy, eye = homeEye)
+            }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+
+        var homePointed = false
+        compose.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(40f, 20f))
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { homePointed = homeEye.pointer.isSpecified }
+        compose.runOnIdle { assertTrue("首页拖动后眼睛跟随手指", homePointed) }
+        compose.onRoot().performTouchInput { up() }
+
+        compose.mainClock.autoAdvance = true
+        compose.runOnIdle { destination = Screen.Conversation("main") }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+
+        var conversationPointed = false
+        compose.onRoot().performTouchInput {
+            down(center)
+            moveBy(Offset(-30f, 25f))
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { conversationPointed = conversationEye.pointer.isSpecified }
+        compose.runOnIdle { assertTrue("对话页拖动后眼睛跟随手指", conversationPointed) }
+        compose.onRoot().performTouchInput { up() }
+        // The gesture observer is observational: the composer is still reachable afterwards.
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
     }
 
     @Test fun `a model title arriving after the reply re-reads the list and reaches the bar`() {

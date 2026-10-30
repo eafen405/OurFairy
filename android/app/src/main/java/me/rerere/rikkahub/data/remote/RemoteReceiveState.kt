@@ -52,8 +52,9 @@ class RemoteReceiveState(
      * [stateForSession] answers the same question for one id in one read; this flow is what makes
      * that answer observable, so a page that presents a session can re-read it when the runtime
      * appears or is retired instead of depending on which collector the list happened to notify
-     * first. It is keyed by session id because that is how a page names what it presents; it is
-     * not a view of the account's sessions in aggregate, and nothing here derives one.
+     * first. It is keyed by session id because that is how a page names what it presents. Each
+     * value belongs to that one session: the interaction module and the pages read only the
+     * session they are presenting, and nothing here derives an account-level activity summary.
      */
     val runtimes: StateFlow<Map<String, RemoteChatState>> = mutableRuntimes.asStateFlow()
     private var token: String? = null

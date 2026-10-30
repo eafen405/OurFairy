@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.fairy
 
 import me.rerere.rikkahub.data.remote.RemoteChatSnapshot
+import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.data.remote.SessionsSnapshot
 import me.rerere.rikkahub.data.remote.newestFairyOutput
 
@@ -14,6 +15,20 @@ import me.rerere.rikkahub.data.remote.newestFairyOutput
  * yet. The conversation page presents the id it was routed with instead.
  */
 internal fun SessionsSnapshot.currentSessionId(): String? = selectedId ?: primarySessionId
+
+/**
+ * The facts of one session's runtime as they are right now, or null when that runtime does not
+ * exist yet or currently describes another session.
+ *
+ * This is the one read the page host uses when a page returns to the foreground (and the one a
+ * page would use for any out-of-composition read): the same session check as the composition,
+ * without trusting a stale composition. The session id is the only key; the runtime itself and
+ * its snapshot stay the authority.
+ */
+internal fun RemoteReceiveState.factsForSession(sessionId: String?): FairyRemoteFacts? {
+    val runtime = sessionId?.let(::stateForSession) ?: return null
+    return runtime.snapshot.value.takeIf { it.sessionId == sessionId }?.fairyFacts()
+}
 
 /**
  * Read one session's [RemoteChatSnapshot] as the facts Fairy 互动 answers 当前表现 and reactions

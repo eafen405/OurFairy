@@ -142,11 +142,12 @@ private val UNKNOWN = FairyWindowState(presence = FairyPresence.CONNECTING)
  * Fairy 互动: the single owner of 当前表现, 屏幕待机, 台词选择, 最近台词记忆 and the transient
  * reactions real events ask for.
  *
- * A page renders [window] with the facts of the session it is showing, records that it did so with
- * [show], pulses [tick] while the screen is visible, reports what the reader does with [touch], and
- * reports a send with [sent] and a return to the foreground with [foregrounded]. It never
- * synthesizes a presence of its own, keeps a second copy of these facts, or presents a session it
- * is not showing.
+ * A page records what it is presenting — its context and the session's facts — with [show], and
+ * renders the resulting [state] (including [FairyInteractionState.window]); it never synthesizes a
+ * presentation of its own. It pulses [tick] while the screen is visible, reports what the reader
+ * does with [touch], reports a send with [sent], and reports a return to the foreground with
+ * [foregrounded]. The page keeps no second copy of these facts and presents no session it is not
+ * showing.
  *
  * The continuous state — 当前表现, [FairyInteractionState.asleep] and the line memory — outlives a
  * page. The transient state — an unfinished [FairyInteractionState.caption], an unshown
@@ -200,6 +201,13 @@ class FairyInteraction(
     private var reactionSeq = 0L
 
     /**
+     * Numbers the presentations [show] records. A page keeps the number of its own latest
+     * presentation, so [pageExit] can tell whose page is still presenting when two pages overlap
+     * during navigation.
+     */
+    private var presentationSeq = 0L
+
+    /**
      * Whether the current context has presented facts at all. A context can be recorded with no
      * facts yet (its runtime is not settled); the first facts that arrive are still a baseline —
      * they are the session's history, not news — even though the context itself is unchanged.
@@ -236,8 +244,10 @@ class FairyInteraction(
      * from the same facts; deriving them anywhere else would be a second rule over those inputs.
      * No facts — no runtime for this session yet — is the unknown presentation, not IDLE.
      *
-     * It is pure and cheap, and reads nothing it was not handed, so a page renders it from the
-     * facts it already holds for the session it is drawing. 待机, 台词 and the clock are not read.
+     * It is pure and cheap, and reads nothing it was not handed. It is the one synthesis rule:
+     * [show] uses it, and tests ask it directly. Pages do not call it — they render the window in
+     * [state], which is the same answer once [show] has recorded it. 待机, 台词 and the clock are
+     * not read.
      */
     fun window(facts: FairyRemoteFacts?): FairyWindowState {
         if (facts == null) return UNKNOWN
@@ -260,22 +270,28 @@ class FairyInteraction(
 
     /**
      * Record that the app is presenting [context] with [facts], or with none while that session
-     * has no runtime yet.
+     * has no runtime yet. Returns this presentation's number, which the page passes back to
+     * [pageExit] so an exit from a page that has already been replaced cannot settle the new one.
      *
      * A different context starts a fresh interaction: its facts, its 当前表现 and the screen's
      * 待机 and 台词 are replaced wholesale, so the previous context's state cannot survive into
-     * the new one. The same context only replaces its facts, which is what keeps 待机 and the line
-     * memory continuous across a page change.
+     * the new one. A null context is the signed-out presentation and is always unknown. The same
+     * context only replaces its facts, which is what keeps 待机 and the line memory continuous
+     * across a page change; while it has no facts yet (the first frame of the new page), it keeps
+     * the facts and 当前表现 already held, so the change does not flicker through unknown.
      *
      * A presentation that was not being watched — the first one for a context, or the first after
      * [pageExit] / [foregrounded] — settles the events it contains without playing them; only a
-     * change observed while presenting produces a [FairyInteractionState.reaction].
+     * change observed while presenting produces a [FairyInteractionState.reaction]. Only a
+     * presentation that actually carries facts ends the unwatched state: a page that returned
+     * before its runtime existed stays unwatched until the first facts arrive.
      */
-    fun show(context: FairyInteractionContext?, facts: FairyRemoteFacts?) {
+    fun show(context: FairyInteractionContext?, facts: FairyRemoteFacts?): Long {
         if (!presented) {
             presented = true
             idleSince = now()
         }
+        val presentation = ++presentationSeq
         val held = mutable.value
         val nextWindow = window(facts)
         if (held.context != context) {
@@ -285,13 +301,25 @@ class FairyInteraction(
             hasPresentedFacts = facts != null
             observe(context, facts, react = false)
             publish(FairyInteractionState(context, facts, nextWindow))
-            return
+            return presentation
+        }
+        // A page that has the same context but no facts yet (a runtime it has not read) is the
+        // transition frame between two pages: keep the facts and 当前表现 the previous page was
+        // showing. The presentation is still unwatched until it does have facts, so the first
+        // facts it reads are the baseline, not news. A null context is not a page transition: it
+        // is signed out, and stays unknown even when the next frame has no facts either.
+        if (facts == null) {
+            if (context == null) publish(FairyInteractionState())
+            return presentation
         }
         // The first facts of a context are its history even when the context was recorded earlier
         // with none (a runtime that had not settled yet); they update 当前表现 but play nothing.
-        val firstFacts = facts != null && !hasPresentedFacts
-        if (facts != null) hasPresentedFacts = true
+        val firstFacts = !hasPresentedFacts
+        hasPresentedFacts = true
         val react = !catchingUp && !firstFacts
+        // Only a presentation that actually carried facts settles the events it contains. A page
+        // that returned while its runtime did not exist yet stays unwatched until the first facts
+        // arrive, so what happened while away is settled instead of replayed.
         catchingUp = false
         val observation = observe(context, facts, react, nextWindow)
         publish(
@@ -302,6 +330,7 @@ class FairyInteraction(
                 speechPulse = held.speechPulse + if (observation.pulse) 1 else 0,
             ),
         )
+        return presentation
     }
 
     /**
@@ -325,11 +354,11 @@ class FairyInteraction(
      * the events they contain and update 当前表现, while the continuous state (待机, 当前表现, the
      * line memory) stays. Only a change after this presentation produces a reaction.
      */
-    fun foregrounded(context: FairyInteractionContext?, facts: FairyRemoteFacts?) {
+    fun foregrounded(context: FairyInteractionContext?, facts: FairyRemoteFacts?): Long {
         val held = mutable.value
         if (held.reaction != null) publish(held.copy(reaction = null))
         catchingUp = true
-        show(context, facts)
+        return show(context, facts)
     }
 
     /**
@@ -385,16 +414,23 @@ class FairyInteraction(
     }
 
     /**
-     * Settle the presenting page's transient state: an unfinished line and an unshown reaction are
-     * dropped, and the next presentation is marked as unwatched (see [catchingUp]) — they do not
-     * queue for, or replay on, the next page. The continuous state
+     * Settle the presenting page's transient state: an unfinished line, an unshown reaction and
+     * the speaking pulse are dropped, and the next presentation is marked as unwatched (see
+     * [catchingUp]) — they do not queue for, or replay on, the next page. The continuous state
      * ([FairyInteractionState.asleep], 当前表现, the line memory) stays where it is.
+     *
+     * [presentation] is the number [show] returned for this page's latest presentation. A page
+     * that has already been replaced (another page presented after it) passes an older number
+     * and is ignored: its exit must not clear the incoming page's reaction or silence its next
+     * event. Passing null settles whatever is current, for callers that have no presentation of
+     * their own.
      */
-    fun pageExit() {
+    fun pageExit(presentation: Long? = null) {
+        if (presentation != null && presentation < presentationSeq) return
         catchingUp = true
         val held = mutable.value
-        if (held.caption != null || held.reaction != null) {
-            publish(held.copy(caption = null, reaction = null))
+        if (held.caption != null || held.reaction != null || held.speechPulse != 0) {
+            publish(held.copy(caption = null, reaction = null, speechPulse = 0))
         }
     }
 

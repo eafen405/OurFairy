@@ -22,7 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -33,16 +32,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -60,6 +51,11 @@ fun FairyConversationPage(
     onBack: () -> Unit,
     receive: RemoteReceiveState = koinInject(),
     fairy: FairyInteraction = koinInject(),
+    /**
+     * The page's eye controller. A test can inject one and observe its real output
+     * (`pointer`, `glances`, `blinks`); production leaves it null and the page remembers one.
+     */
+    eye: FairyEyeController? = null,
     onOpenConversation: (String) -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -69,45 +65,10 @@ fun FairyConversationPage(
     val chat = selectedChat?.snapshot?.collectAsStateWithLifecycle()?.value
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val pageEye = eye ?: remember { FairyEyeController(asleep = fairy.state.value.asleep) }
     // The page owns the eye's transient animation; the continuous 待机 comes from the module so a
     // screen already asleep on home is found asleep here too, and a touch wakes the same state.
     val interaction by fairy.state.collectAsStateWithLifecycle()
-    val eye = remember { FairyEyeController(asleep = fairy.state.value.asleep) }
-    LaunchedEffect(interaction.asleep) { eye.asleep = interaction.asleep }
-    DisposableEffect(fairy) { onDispose { fairy.pageExit() } }
-    // Coming back to the foreground presents the routed session's facts as they are right now —
-    // read from its runtime, not from this composition, which did not run while away — and settles
-    // whatever arrived in the meantime instead of replaying it. Leaving settles the transient
-    // presentation.
-    val lifecycleOwner = LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycleOwner, fairy, receive, sessionId) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_START -> {
-                    val runtime = sessionId?.let(receive::stateForSession)
-                    val current = runtime?.snapshot?.value?.takeIf { it.sessionId == sessionId }
-                    fairy.foregrounded(
-                        sessionId?.let(::FairyInteractionContext),
-                        current?.fairyFacts(),
-                    )
-                }
-                Lifecycle.Event.ON_STOP -> fairy.pageExit()
-                else -> Unit
-            }
-        }
-        lifecycleOwner.addObserver(observer)
-        onDispose { lifecycleOwner.removeObserver(observer) }
-    }
-    val origin = remember { floatArrayOf(0f, 0f) }
-    val bounds = remember { floatArrayOf(0f, 0f) }
-    // The module names the stimulus; this page maps it to the eye response. A send glances toward
-    // the composer, new output or a delivery toward the transcript, and a finished run blinks.
-    FairyEyeReactions(
-        reaction = interaction.reaction,
-        eye = eye,
-        composer = { Offset(origin[0] + bounds[0] / 2f, origin[1] + bounds[1]) },
-        content = { Offset(origin[0] + bounds[0] / 2f, origin[1] + bounds[1] * 0.55f) },
-    )
     var opening by remember(sessionId) { mutableStateOf(true) }
     var failed by remember(sessionId) { mutableStateOf(false) }
     var retry by remember(sessionId) { mutableIntStateOf(0) }
@@ -135,13 +96,25 @@ fun FairyConversationPage(
     val session = sessions.sessions.firstOrNull { it.id == sessionId }
     // 当前表现 comes from the interaction module and from this session's facts only. The route
     // says which session this page presents even before it settles; until then it has no facts,
-    // which the module answers as the unknown presentation — never the previous session's. Keeping
-    // the routed id (instead of presenting nothing while opening) is what lets the continuous
-    // 待机 and 当前表现 cross from the console into this page for the same session.
+    // and the module keeps the previous page's current appearance instead of flickering through
+    // the unknown presentation. Keeping the routed id (instead of presenting nothing while
+    // opening) is what lets the continuous 待机 and 当前表现 cross from the console into this page
+    // for the same session.
     val context = sessionId?.let(::FairyInteractionContext)
     val facts = snapshot?.fairyFacts()
-    val window = fairy.window(facts)
-    LaunchedEffect(fairy, context, facts) { fairy.show(context, facts) }
+    // The page renders the module's snapshot; it never derives 当前表现 itself. The shared host
+    // reports this frame's facts and, on a return, reads the routed session's current runtime.
+    val host = rememberFairyPageHost(
+        fairy = fairy,
+        receive = receive,
+        currentSessionId = { sessionId },
+        context = context,
+        facts = facts,
+        eye = pageEye,
+        composer = { it.at(0.5f, 1f) },
+        content = { it.at(0.5f, 0.55f) },
+    )
+    val window = interaction.window
     val screenOpen = rememberFairyScreenOpen(window)
     val tokens = LocalFairyTokens.current
     val failure = sessions.failure?.let {
@@ -195,25 +168,7 @@ fun FairyConversationPage(
         Box(
             Modifier
                 .fillMaxSize()
-                .onGloballyPositioned {
-                    origin[0] = it.positionInRoot().x
-                    origin[1] = it.positionInRoot().y
-                    bounds[0] = it.size.width.toFloat()
-                    bounds[1] = it.size.height.toFloat()
-                }
-                // Observational only (Final pass, never consumed): fingers still reach the list,
-                // the composer and the bar. The module answers whether a touch woke a sleeping
-                // screen; the page maps that answer to the eye's own reaction.
-                .pointerInput(eye) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Final)
-                            val touch = event.changes.firstOrNull { it.pressed }
-                            eye.lookAt(touch?.let { Offset(origin[0] + it.position.x, origin[1] + it.position.y) })
-                            if (touch != null && fairy.touch()) eye.wake(confused = true)
-                        }
-                    }
-                },
+                .then(host.modifier),
         ) {
             FairyBackground(watermark = false)
             FairyConversationSurface(screenOpen = screenOpen) {
@@ -246,7 +201,7 @@ fun FairyConversationPage(
             }
             FairyWindowTopBar(
                 window = window,
-                eye = eye,
+                eye = pageEye,
                 title = session?.title,
                 speechPulse = interaction.speechPulse,
                 screenOpen = screenOpen,
