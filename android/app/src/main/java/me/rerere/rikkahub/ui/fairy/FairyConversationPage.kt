@@ -50,6 +50,12 @@ fun FairyConversationPage(
     sessionId: String?,
     onBack: () -> Unit,
     receive: RemoteReceiveState = koinInject(),
+    fairy: FairyInteraction = koinInject(),
+    /**
+     * The page's eye controller. A test can inject one and observe its real output
+     * (`pointer`, `glances`, `blinks`); production leaves it null and the page remembers one.
+     */
+    eye: FairyEyeController? = null,
     onOpenConversation: (String) -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -59,6 +65,10 @@ fun FairyConversationPage(
     val chat = selectedChat?.snapshot?.collectAsStateWithLifecycle()?.value
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val pageEye = eye ?: remember { FairyEyeController(asleep = fairy.state.value.asleep) }
+    // The page owns the eye's transient animation; the continuous 待机 comes from the module so a
+    // screen already asleep on home is found asleep here too, and a touch wakes the same state.
+    val interaction by fairy.state.collectAsStateWithLifecycle()
     var opening by remember(sessionId) { mutableStateOf(true) }
     var failed by remember(sessionId) { mutableStateOf(false) }
     var retry by remember(sessionId) { mutableIntStateOf(0) }
@@ -84,7 +94,27 @@ fun FairyConversationPage(
     // The open session's row, the same one the drawer renders: its title is what
     // the bar shows.
     val session = sessions.sessions.firstOrNull { it.id == sessionId }
-    val window = snapshot?.fairyWindow() ?: FairyWindowState(presence = FairyPresence.CONNECTING)
+    // 当前表现 comes from the interaction module and from this session's facts only. The route
+    // says which session this page presents even before it settles; until then it has no facts,
+    // and the module keeps the previous page's current appearance instead of flickering through
+    // the unknown presentation. Keeping the routed id (instead of presenting nothing while
+    // opening) is what lets the continuous 待机 and 当前表现 cross from the console into this page
+    // for the same session.
+    val context = sessionId?.let(::FairyInteractionContext)
+    val facts = snapshot?.fairyFacts()
+    // The page renders the module's snapshot; it never derives 当前表现 itself. The shared host
+    // reports this frame's facts and, on a return, reads the routed session's current runtime.
+    val host = rememberFairyPageHost(
+        fairy = fairy,
+        receive = receive,
+        currentSessionId = { sessionId },
+        context = context,
+        facts = facts,
+        eye = pageEye,
+        composer = { it.at(0.5f, 1f) },
+        content = { it.at(0.5f, 0.55f) },
+    )
+    val window = interaction.window
     val screenOpen = rememberFairyScreenOpen(window)
     val tokens = LocalFairyTokens.current
     val failure = sessions.failure?.let {
@@ -135,7 +165,11 @@ fun FairyConversationPage(
             }
         },
     ) {
-        Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .then(host.modifier),
+        ) {
             FairyBackground(watermark = false)
             FairyConversationSurface(screenOpen = screenOpen) {
                 if (settled && selectedChat != null) {
@@ -143,6 +177,7 @@ fun FairyConversationPage(
                         RemoteChatPanel(
                             state = selectedChat,
                             onReconnect = receive::resumeObservation,
+                            onSendAccepted = fairy::sent,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -166,7 +201,9 @@ fun FairyConversationPage(
             }
             FairyWindowTopBar(
                 window = window,
+                eye = pageEye,
                 title = session?.title,
+                speechPulse = interaction.speechPulse,
                 screenOpen = screenOpen,
                 subtitle = when {
                     opening -> "正在打开会话…"
@@ -212,19 +249,3 @@ private fun FairyConversationSurface(
     }
 }
 
-internal fun RemoteChatSnapshot.fairyWindow(): FairyWindowState {
-    val working = activity.status == 2
-    val hasOutput = !projection?.attempt?.text.isNullOrBlank()
-    return FairyWindowState(
-        presence = when {
-            connecting -> FairyPresence.CONNECTING
-            !connected -> FairyPresence.OFFLINE
-            activity.status == 0 -> FairyPresence.CONNECTING
-            working && hasOutput -> FairyPresence.SPEAKING
-            working -> FairyPresence.THINKING
-            else -> FairyPresence.IDLE
-        },
-        expanded = connected && projection != null && projection.messages.isEmpty() && !hasOutput,
-        awaitingReply = working && 1 in activity.reasons && !hasOutput,
-    )
-}

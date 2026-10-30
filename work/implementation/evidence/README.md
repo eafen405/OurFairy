@@ -304,6 +304,15 @@
 | [257-264-migrate-all](257-264-migrate-all/README.md) | #264 把登录、注册、会话、会话列表四个剩余目的地并入同一张表：`page` 变为非空并接收 `Screen`（会话页从 key 取 sessionId），`assembles()` 与 `RouteActivity` 的第二条 entry 分支删除，`NavEntry` 构造移入 `entryOf`；删除 `IdentityAccessPolicy` / `IdentityDestination` / `toIdentityDestination` 与两个手抄映射测试，`IdentityScope` 保留为身份事实；通知落点改用 `resumedStack(CONVERSATION_ROUTE, sessionId)`；`FairyPagesTest` 的三块手抄 `when` 与两个装配 helper 改为经 catalog 装配。表驱动测试覆盖八个目的地 × 四种身份（含未登录但残留 admin 位）、八条恢复策略与完整性 |
 | [257-review](257-review/README.md) | spec #257 收口两轴评审（Standards + Spec）与修复：`destinationOf` 改为持有穷尽 `when` 直接返回目的地，把「登记一次」变成构造期保障；删掉两处自证断言并把恢复期望改为写死的表；`FairyPagesTest` 剩余的自建导航器改走 catalog；设计记录补写 §9。后端全量 `npm test` 因 profile 安装取包超时未取绿，`main` 上同样复现 |
 
+## Android Fairy 互动：统一存在感、反应与台词编排（规格 #256）
+
+| 目录 | 内容 |
+| --- | --- |
+| [260-unified-presence](260-unified-presence/README.md) | #260 新建进程级 `FairyInteraction` deep module（纯 Kotlin，装配层注入 `SystemClock::uptimeMillis` 与 `Random.Default`）统一 Fairy 当前表现：对话页私有的六分支 `fairyWindow()` 收进 `window(facts)`，首页按 `selectedId ?: primarySessionId` 只观察当前会话（缺省回退主会话），页面不再各自合成 presence；活动未知沿用 `RemoteChatSnapshot.activity` 的既有答案（unknown ≠ quiet，module 拿不到原始事件）；`RemoteReceiveState.chats` 内存 map 改为可观察 `runtimes: StateFlow<Map<String, RemoteChatState>>`，首页能跟随当前会话运行时的出现/退役；`Impression`/`Gateway` 的 presence 调用收口；新增 20 个纯 JUnit 用例与 5 个页面接线用例 |
+| [261-interaction-continuity](261-interaction-continuity/README.md) | #261 屏幕待机、台词选择与最近台词记忆收进同一 module：`tick()`/`touch(): Boolean`/`captionFinished()`/`pageExit()`，45s 首句、60–90s 下一句、180s 待机由 module 判定，待机只在控制台进入而状态跨页保留（对话页呈现同一 `asleep` 并经 module 唤醒，GLOSSARY 同步）；`FairyUiMemory` 实现窄接口 `FairyLineMemory` 成为唯一记忆；按「原来零调用方 → 已删」删除 `chatPool`/`CHAT_AVOID`、`FairyCaption(compact)`、`sleepNow`、整条 `drowsy`/`snaps` 路径与无生产者的 `FairyWindowState.eye`；对话页首次拥有 `FairyEyeController`；32 个 module 用例 + 2 个页面用例（待机跨页、离页不补播） |
+| [262-fairy-reactions](262-fairy-reactions/README.md) | #262 真实事件触发反应：本地发送经 `sent(requestId)` 只给短暂注意反应、不伪造后端 THINKING；Fairy 输出/投递/完成经 `fairyFacts()` 的 `newestFairyOutput().seq`/`delivery`/`completed`，用只增的 `(sessionId,seq)`、`(episodeId,seq)`、`(episodeId,finishedSeq)`、`requestId` 去重，活动未知时不算事件；`foregrounded(context, facts)` 以运行时当前快照为基线、不补播后台积压的事件；`FairyEyeReactions` 把 SENT/OUTPUT/DELIVERY/COMPLETED 映射到既有眼睛；删除零调用方 `attend`/`startle`，`glanceAt`/`blink` 接真实事件，`speechPulse` 改由 module 生产、SPEAKING 新输出才脉冲；53 个 module 用例 + 4 个页面用例（含 ActivityScenario 前后台与 Reduced Motion） |
+| [256-review-fixes](256-review-fixes/README.md) | #256 收口两轴评审修复：页面改渲染 module 快照的 `window`（同一上下文无事实的过渡帧沿用上一页表现，换会话/登出仍为未知）；`pageExit` 结算 caption/reaction/speechPulse 并按呈现号忽略过期离页；回前台无事实时保持未观察直到第一份事实到达；待机中的视线反应当下播放、不排队到醒来；`retryPending()` 返回是否真正受理、panel 只在受理时上报；抽出 `FairyPageHost` 共用眼睛/待机同步/生命周期/手势/反应接线；恢复「存在感」词条并删除 #257 词；页面 seam 补可见结果、可注入眼睛与手势断言；最终 Android `test lintDebug assembleDebug` 52 suites/427 tests/0 failures/0 lint errors、3 个 debug APK，根 `npm test` 430/430；真机验收未执行 |
+
 ## 界面微调（#215/#217/#218/#239/#255）
 
 | 目录 | 内容 |
