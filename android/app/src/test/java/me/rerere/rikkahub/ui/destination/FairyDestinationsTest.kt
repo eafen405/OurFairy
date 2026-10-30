@@ -182,22 +182,24 @@ class FairyDestinationsTest {
     }
 
     @Test
-    fun `every destination is declared once, and its name resolves back to it`() {
+    fun `every screen resolves to a destination the table enumerates`() {
         val routes = FairyDestinations.entries.map { it.route }
         assertEquals("a stored name identifies exactly one destination", routes.size, routes.toSet().size)
 
+        // This is the assertion that catches a screen whose destination exists
+        // but was left out of the enumeration: `destinationOf` would still answer,
+        // while a cold start could never be handed the name it stores.
         val screens = allScreens()
         for (screen in screens) {
             val destination = FairyDestinations.destinationOf(screen)
-            assertEquals(
-                "${screen.route()} resolves to its own route",
-                screen.route(),
-                FairyDestinations.routeOf(screen),
+            assertTrue(
+                "${screen.route()} is not enumerated in entries, so no stored name reaches it",
+                FairyDestinations.entries.any { it === destination },
             )
             assertEquals(
-                "${screen.route()}'s name resolves back to a declared destination",
-                true,
-                FairyDestinations.entries.any { it === destination },
+                "${screen.route()}'s destination stores the name the screen reports",
+                destination.route,
+                FairyDestinations.routeOf(screen),
             )
         }
         assertEquals(
@@ -213,7 +215,7 @@ class FairyDestinationsTest {
      *
      * This list is not the completeness guard — `destinationOf`'s exhaustive
      * `when` is, because a new subtype fails to compile there — but it is the
-     * list the route-set claim above reads.
+     * list the enumeration claim above reads.
      */
     private fun allScreens(): List<Screen> = listOf(
         Screen.SignIn,

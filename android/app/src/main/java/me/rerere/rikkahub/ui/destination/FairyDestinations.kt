@@ -130,11 +130,22 @@ object FairyDestinations {
     /**
      * The destination [screen] is.
      *
-     * The `when` is exhaustive over [Screen]: a new subtype is a compile error
-     * here until it names its route, which is what makes "declared once" hold
-     * without a runtime scan.
+     * This `when` is exhaustive over [Screen] and answers with the destination
+     * itself, so a new subtype is a compile error here until it names one — and a
+     * destination cannot be constructed without its access, its restore policy
+     * and its page. That is what makes "declared once" hold without a runtime
+     * scan, rather than a route string that a second list might disagree with.
      */
-    fun destinationOf(screen: Screen): FairyDestination = entryNamed(routeOf(screen))
+    fun destinationOf(screen: Screen): FairyDestination = when (screen) {
+        Screen.SignIn -> signIn
+        Screen.Register -> register
+        Screen.Home -> home
+        Screen.Sessions -> sessions
+        is Screen.Conversation -> conversation
+        Screen.Settings -> settings
+        Screen.Gateway -> gateway
+        Screen.Impression -> impression
+    }
 
     /** The destination the top of the stack is, or null for an empty stack. */
     fun destinationOrNull(screen: Screen?): FairyDestination? = screen?.let(::destinationOf)
@@ -149,16 +160,7 @@ object FairyDestinations {
      * Never renamed: an upgrade reads the names already written by the version
      * before it, so a destination that outlives a rename keeps its first name.
      */
-    fun routeOf(screen: Screen): String = when (screen) {
-        Screen.SignIn -> signIn.route
-        Screen.Register -> register.route
-        Screen.Home -> home.route
-        Screen.Sessions -> sessions.route
-        is Screen.Conversation -> conversation.route
-        Screen.Settings -> settings.route
-        Screen.Gateway -> gateway.route
-        Screen.Impression -> impression.route
-    }
+    fun routeOf(screen: Screen): String = destinationOf(screen).route
 
     /**
      * The `contentKey` a navigation entry for [screen] carries.
@@ -203,7 +205,7 @@ object FairyDestinations {
      * [UNKNOWN_LANDING] by name.
      */
     fun resumedStack(route: String?, conversation: String?): List<Screen> {
-        val destination = entries.firstOrNull { it.route == route } ?: return UNKNOWN_LANDING
+        val destination = destinationByRoute(route) ?: return UNKNOWN_LANDING
         return when (val restore = destination.restore) {
             DestinationRestore.Never -> UNKNOWN_LANDING
             is DestinationRestore.Resume -> restore.stack
@@ -231,7 +233,15 @@ object FairyDestinations {
         )
     }
 
-    private fun entryNamed(route: String): FairyDestination = entries.first { it.route == route }
+    /**
+     * The destination stored under [route], or null for a name this version
+     * does not know.
+     *
+     * The only route-to-destination lookup: [entries] is an enumeration, and a
+     * stored name is resolved here so a rename cannot leave two answers.
+     */
+    private fun destinationByRoute(route: String?): FairyDestination? =
+        route?.let { stored -> entries.firstOrNull { it.route == stored } }
 }
 
 /** Render this destination's page for [screen] with the scope its host assembled. */

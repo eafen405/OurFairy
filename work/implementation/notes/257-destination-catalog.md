@@ -24,8 +24,8 @@ class FairyDestination(
     val access: DestinationAccess,
     /** 冷启动是否回到它、回到哪个栈；`Never` 必须写出，不允许省略。 */
     val restore: DestinationRestore,
-    /** 页面装配。 */
-    val page: @Composable DestinationPageScope.() -> Unit,
+    /** 页面装配；接收 `Screen` 因为会话页的编号只能从 key 来。 */
+    val page: @Composable DestinationPageScope.(Screen) -> Unit,
 )
 
 sealed interface DestinationAccess {
@@ -40,6 +40,11 @@ sealed interface DestinationRestore {
     data object Never : DestinationRestore
     /** 冷启动恢复到的栈，末项是本目的地。 */
     data class Resume(val stack: List<Screen>) : DestinationRestore
+    /**
+     * 会话的栈取决于上次存下的会话编号，固定栈表达不了：`prefix` 是会话页之上的
+     * 全部页面，会话页本身由坐标补上。
+     */
+    data class ResumeConversation(val prefix: List<Screen>) : DestinationRestore
 }
 ```
 
@@ -70,9 +75,11 @@ fake `session` / `receive` / `identityBackend`（就是 `FairyPagesTest` 已有�
 
 ## 3. 完整性与显式策略
 
-- `destinationOf(screen: Screen)` 对 `sealed interface Screen` 写**无 `else`** 的 `when`。
-  新增 `Screen` 子类型 → **编译失败**。这是「登记一次」的执行机制（本机无 `kotlin-reflect`，
-  `sealedSubclasses` 不可用，不要引入该依赖）。
+- `destinationOf(screen: Screen)` 对 `sealed interface Screen` 写**无 `else`** 的 `when`，并**直接
+  返回目的地对象**。新增 `Screen` 子类型 → **编译失败**；而目的地对象构造时三项策略都是必填参数，
+  所以「登记一次」是构造期保障，不是靠 route 字符串与另一张表对得上（本机无 `kotlin-reflect`，
+  `sealedSubclasses` 不可用，不要引入该依赖）。`entries` 只负责枚举，route → 目的地只有一处查找
+  （`resumedStack` 用的那个）。
 - `DestinationRestore` / `DestinationAccess` 都是密封类型且无 `null`：少写一个策略编译不过。
 - 表驱动测试断言编译器管不到的三条：`route` 两两不同；`Resume.stack` 非空且**末项等于该目的地**；
   一个 `Resume` 目的地的栈里不允许出现 `Never` 目的地（登录、注册不能出现在恢复栈里）。
@@ -149,3 +156,20 @@ fake `session` / `receive` / `identityBackend`（就是 `FairyPagesTest` 已有�
 - 完整性测试补齐：八个目的地 × 三种身份的表驱动准入、八条恢复策略、以及「`entries` 覆盖
   `Screen` 的全部子类型」——最后一条由 `destinationOf` 的穷尽 `when` 编译期保证，测试只断言
   `entries` 的 route 集合与「每个样本都能解析回自己」。
+
+## 9. 收口评审后的修正（两轴评审发现）
+
+- **`destinationOf` 改成持有穷尽 `when`**（原先是 `routeOf` 持有、`destinationOf` 再按 route 回查）。
+  原写法里「新目的地漏登记」只会在运行期以 `NoSuchElementException` 出现，与文档声称的编译期保障不符。
+  现在目的地对象由 `when` 直接返回，而它的三项策略都是必填构造参数。
+- **route → 目的地只有一处查找**：`resumedStack` 用的私有 `destinationByRoute`。`entries` 只做枚举。
+- **两处测试去掉了自证**：`FairyDestinationsTest` 里 `routeOf(x) == routeOf(x)` 与「从 `entries` 取出的
+  对象在 `entries` 里」两条断言删掉，换成「每个 `Screen` 样本解析到的目的地确实被 `entries` 枚举」
+  （`destinationOf` 改成 `when` 之后这条才有意义）；`FairyLastLocationTest` 的恢复栈期望改为写死的表，
+  不再用被测函数自己算期望。
+- **`FairyPagesTest` 里两个自建 `var target` 导航器**改为走 catalog 的 `destination(...)`，断言改判
+  目的地本身；仍直接渲染 `FairySettingsPage` 的用例保留——它们注入 `updateContent`/`onOpenImpression`
+  这类页面自有参数，不承担路由职责。
+- **已知且不改的边界**：`Gateway`/`Impression` 页仍从 Koin 取自己的 backend（scope 只带 `identityBackend`），
+  所以「八个目的地都能在无容器环境装配」不成立；`page` 是必填字段，但一个空 lambda 仍是合法实现，
+  「缺少页面装配」只保证到构造期，测试无法判定页面内容是否为空。

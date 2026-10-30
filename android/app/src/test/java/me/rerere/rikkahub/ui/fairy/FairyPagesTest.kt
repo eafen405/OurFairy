@@ -557,11 +557,8 @@ class FairyPagesTest {
 
     @Test fun `creating an existing empty conversation enters it without adding a row`() {
         createdSession = OwnedSession("other", title = "复用会话")
-        var target by mutableStateOf("main")
-        show {
-            FairyConversationPage(target, {}, receive,
-                onOpenConversation = { target = it }, onSettings = {})
-        }
+        var followed: Screen? = null
+        destination(Screen.Conversation("main")) { followed = it }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
         compose.onNodeWithContentDescription("切换会话").performClick()
         compose.mainClock.advanceTimeBy(500)
@@ -576,7 +573,7 @@ class FairyPagesTest {
                 "新建会话应复用已存在的空会话，实际多出了 ${snapshot.sessions.map { it.id }}",
                 snapshot.sessions.none { it.id == "created" },
             )
-            assertEquals("other", target)
+            assertEquals(Screen.Conversation("other"), followed)
         }
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
         compose.onNodeWithText("会话不可用").assertDoesNotExist()
@@ -599,17 +596,14 @@ class FairyPagesTest {
 
     @Test fun `archiving a session opened before its list row arrives follows main`() {
         listedSessions = OwnedSessions(emptyList(), "main")
-        var target by mutableStateOf("other")
-        show {
-            FairyConversationPage(target, {}, receive,
-                onOpenConversation = { target = it }, onSettings = {})
-        }
+        var followed: Screen? = null
+        destination(Screen.Conversation("other")) { followed = it }
         compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
         compose.runOnIdle { receive.owned.archive("other") }
         compose.waitUntil { receive.owned.snapshot.value.selectedId == "main" }
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
-        compose.runOnIdle { assertEquals("main", target) }
+        compose.runOnIdle { assertEquals(Screen.Conversation("main"), followed) }
     }
 
     @Test fun `conversation observes thinking changes without moving the composer`() {

@@ -157,7 +157,7 @@ class SettingsColdStartTest {
     @get:Rule val compose = createAndroidComposeRule<RouteActivity>()
 
     @Test
-    fun `a stored settings location reopens home then settings`() {
+    fun `a stored settings location reopens the settings page`() {
         compose.mainClock.autoAdvance = false
         // The CRT bookend plays before the page is reachable.
         repeat(8) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }

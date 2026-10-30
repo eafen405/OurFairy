@@ -302,6 +302,7 @@
 | --- | --- |
 | [257-263-destination-catalog](257-263-destination-catalog/README.md) | #263 建立静态目的地 catalog：`ui/destination/FairyDestination.kt` 声明 route / access / restore / page 四项，`FairyDestinations.kt` 是唯一一张表；首页、设置、网关、印象的装配、准入与恢复都改读它，`contentKey` 换成可进 Bundle 的 String，印象页首次获得冷启动恢复（首页、设置、印象）。完整性靠对 `Screen` 的穷尽 `when` 在编译期强制登记，未引入 kotlin-reflect |
 | [257-264-migrate-all](257-264-migrate-all/README.md) | #264 把登录、注册、会话、会话列表四个剩余目的地并入同一张表：`page` 变为非空并接收 `Screen`（会话页从 key 取 sessionId），`assembles()` 与 `RouteActivity` 的第二条 entry 分支删除，`NavEntry` 构造移入 `entryOf`；删除 `IdentityAccessPolicy` / `IdentityDestination` / `toIdentityDestination` 与两个手抄映射测试，`IdentityScope` 保留为身份事实；通知落点改用 `resumedStack(CONVERSATION_ROUTE, sessionId)`；`FairyPagesTest` 的三块手抄 `when` 与两个装配 helper 改为经 catalog 装配。表驱动测试覆盖八个目的地 × 四种身份（含未登录但残留 admin 位）、八条恢复策略与完整性 |
+| [257-review](257-review/README.md) | spec #257 收口两轴评审（Standards + Spec）与修复：`destinationOf` 改为持有穷尽 `when` 直接返回目的地，把「登记一次」变成构造期保障；删掉两处自证断言并把恢复期望改为写死的表；`FairyPagesTest` 剩余的自建导航器改走 catalog；设计记录补写 §9。后端全量 `npm test` 因 profile 安装取包超时未取绿，`main` 上同样复现 |
 
 ## 界面微调（#215/#217/#218/#239/#255）
 

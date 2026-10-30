@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.fairy
 
 import android.app.Application
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.destination.DestinationRestore
 import me.rerere.rikkahub.ui.destination.FairyDestinations
 import me.rerere.rikkahub.ui.destination.UNKNOWN_LANDING
 import org.junit.Assert.assertEquals
@@ -47,29 +48,27 @@ class FairyLastLocationTest {
 
     @Test
     fun `every destination the catalog can resume is written and read back to the same stack`() {
+        // The expectation is written out rather than computed from the catalog: a
+        // test that asks the functions under test what to expect proves only that
+        // they agree with themselves.
         val resumable = listOf(
-            Screen.Home,
-            Screen.Settings,
-            Screen.Gateway,
-            Screen.Impression,
-            Screen.Sessions,
-            Screen.Conversation("main"),
+            Triple(Screen.Home, "home", listOf(Screen.Home)),
+            Triple(Screen.Settings, "settings", listOf(Screen.Home, Screen.Settings)),
+            Triple(Screen.Sessions, "sessions", listOf(Screen.Home, Screen.Sessions)),
+            Triple(Screen.Gateway, "gateway", listOf(Screen.Home, Screen.Settings, Screen.Gateway)),
+            Triple(Screen.Impression, "impression", listOf(Screen.Home, Screen.Settings, Screen.Impression)),
+            Triple(Screen.Conversation("main"), "conversation", listOf(Screen.Home, Screen.Conversation("main"))),
         )
-        for (screen in resumable) {
+        for ((screen, route, stack) in resumable) {
             location().record(screen)
-            assertEquals(
-                "recording $screen stores the catalog's route",
-                FairyDestinations.restingPlaceOf(screen)?.route,
-                stored().first,
-            )
-            assertEquals(
-                "$screen reopens the stack the catalog declares",
-                FairyDestinations.restingPlaceOf(screen)?.let {
-                    FairyDestinations.resumedStack(it.route, it.conversation)
-                },
-                location().restoredStack(),
-            )
+            assertEquals("recording $screen stores its own route", route, stored().first)
+            assertEquals("$screen reopens the stack the product enters it through", stack, location().restoredStack())
         }
+        assertEquals(
+            "every destination the catalog calls resumable has a row above",
+            FairyDestinations.entries.filter { it.restore != DestinationRestore.Never }.map { it.route }.toSet(),
+            resumable.map { it.second }.toSet(),
+        )
     }
 
     @Test
