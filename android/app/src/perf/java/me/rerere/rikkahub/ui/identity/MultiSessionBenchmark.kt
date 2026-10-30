@@ -56,7 +56,9 @@ internal data class MultiSessionWorkload(
                 "sessions", "historySessions", "historyMessages",
                 "streamingSessions", "replyChars", "chunkChars", "intervalMillis",
             )
-            require(declared.keys == known) { "多会话负载声明了未知或缺失的键：${declared.keys - known}" }
+            require(declared.keys == known) {
+                "多会话负载声明的键必须恰好是 $known；实际为 ${declared.keys}"
+            }
             val workload = MultiSessionWorkload(
                 sessions = int("sessions"),
                 historySessions = int("historySessions"),
@@ -69,7 +71,13 @@ internal data class MultiSessionWorkload(
             require(workload.sessions == workload.historySessions + workload.streamingSessions) {
                 "组合负载的会话数必须等于带历史会话数与流式会话数之和"
             }
-            require(workload.streamingSessions >= 1) { "组合负载至少要有一个持续流式会话" }
+            // The benchmark routes exactly one streaming primary; accepting a different count
+            // would wait for runtimes the backend never creates and write a binding-failure run
+            // instead of the declared workload.
+            require(workload.streamingSessions == 1) {
+                "组合负载当前只支持一个持续流式会话；声明的 streamingSessions 为 ${workload.streamingSessions}"
+            }
+            require(workload.historySessions > 0) { "组合负载必须至少有一个带历史的会话" }
             require(workload.historyMessages > 0 && workload.replyChars > 0) {
                 "组合负载必须同时带历史与流式正文"
             }

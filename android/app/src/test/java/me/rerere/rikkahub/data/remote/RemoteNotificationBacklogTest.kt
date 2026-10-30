@@ -50,7 +50,9 @@ class RemoteNotificationBacklogTest {
         }
     }
 
-    private class Sessions(private val ids: List<String> = listOf("main")) : SessionBackend {
+    private class Sessions(ids: List<String> = listOf("main")) : SessionBackend {
+        private var ids = ids
+        fun setIds(next: List<String>) { ids = next }
         override suspend fun list(token: String, archived: Boolean) = OwnedSessions(
             ids.map { OwnedSession("$token-$it", primary = it == ids.first()) },
             "$token-${ids.first()}",
@@ -206,6 +208,80 @@ class RemoteNotificationBacklogTest {
         assertTrue("a session outside the account's list has no reminder", harness.platform.alerts.isEmpty())
         assertTrue("and its record is left exactly as it was",
             harness.store.load(ChatSyncKey("https://fairy", 1, "alice-archived")).notificationOwed)
+    }
+
+    /**
+     * A live runtime names the record it commits; reception does not rebuild the key from its own
+     * fallback endpoint while that runtime exists. A mismatch must not hide the owed episode.
+     */
+    @Test fun `a live runtime's own key names its debt`() = runTest {
+        val harness = Harness()
+        val key = ChatSyncKey("https://elsewhere", 1, "alice-main")
+        harness.store.seed(key, ChatSyncRecord(0, true, notificationThrough = 1,
+            notificationEpisodeId = "alice-main/1", notificationOwed = true))
+        val receiver = RemoteReceiveState(
+            Sessions(), backgroundScope,
+            { settle -> RemoteChatState(harness.chats, backgroundScope, harness.store, "https://elsewhere", settleReminders = settle) },
+            harness.platform, { harness.platform.enabled }, harness.store, "https://fallback",
+        )
+        receiver.bind("alice", 1); runCurrent()
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+
+        assertEquals(1, harness.platform.alerts.size)
+        assertEquals("alice-main", harness.platform.alerts.single().first.sessionId)
+        assertFalse("the runtime's record is retired", harness.store.load(key).notificationOwed)
+        assertTrue("the fallback endpoint has no record to spend",
+            harness.store.load(ChatSyncKey("https://fallback", 1, "alice-main")).notificationOwed.not())
+    }
+
+    /**
+     * The no-runtime branch is reached the only way production can reach it: the session leaves
+     * the list while its record is being read. Settlement still spends the ledger's debt and the
+     * preview falls back because the runtime that could have supplied one is gone.
+     */
+    @Test fun `a session removed during the scan settles its debt without a runtime`() = runTest {
+        val harness = Harness()
+        // Other is read first, so main can leave the list before the scan reaches its record.
+        val sessions = Sessions(listOf("other", "main"))
+        val key = ChatSyncKey("https://fairy", 1, "alice-main")
+        harness.store.seed(key, ChatSyncRecord(0, true, notificationThrough = 1,
+            notificationEpisodeId = "alice-main/1", notificationOwed = true))
+        val loadGate = CompletableDeferred<Unit>()
+        var gateConsumed = false
+        // Only the receiver's ledger read is gated; the runtime keeps using the same store directly,
+        // so the scan can be suspended without freezing the session that is being observed.
+        val gated = object : ChatSyncStore {
+            override suspend fun load(key: ChatSyncKey): ChatSyncRecord {
+                if (!gateConsumed) { gateConsumed = true; loadGate.await() }
+                return harness.store.load(key)
+            }
+            override suspend fun save(key: ChatSyncKey, record: ChatSyncRecord) = harness.store.save(key, record)
+        }
+        val receiver = RemoteReceiveState(
+            sessions, backgroundScope,
+            { settle -> RemoteChatState(harness.chats, backgroundScope, harness.store, "https://fairy", settleReminders = settle) },
+            harness.platform, { harness.platform.enabled }, gated, "https://fairy",
+        )
+        receiver.bind("alice", 1); runCurrent()
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+        harness.chats.updates.getValue("alice-other").emit(
+            deliveryProjection(1).copy(sessionId = "alice-other", activity = RemoteActivity()),
+        ); runCurrent()
+        assertTrue("the scan reached the ledger and is waiting on the first record", gateConsumed)
+        assertTrue("nothing is published before the record is read", harness.platform.alerts.isEmpty())
+
+        sessions.setIds(listOf("other"))
+        receiver.owned.refresh(); runCurrent()
+        loadGate.complete(Unit); runCurrent()
+
+        assertEquals(1, harness.platform.alerts.size)
+        assertEquals("alice-main", harness.platform.alerts.single().first.sessionId)
+        assertEquals("Fairy 已完成本次活动", harness.platform.alerts.single().second)
+        assertFalse("the ledger's debt is retired without a runtime", harness.store.load(key).notificationOwed)
     }
 
     /**

@@ -207,3 +207,38 @@
   `main`。
 - 未执行：目标设备三轮基线、真机通知、真实进程重启。
 
+## 合入 `main` 前的集成收口（2026-10-30）
+
+`main` 当时含已落地的 #256/#257/#258；`integration/spec-259` 在 `a20c91f0ea` 合入 `main`
+（merge-base `f5ba6be2`）。冲突只在 `RemoteReceiveState` 与证据索引：保留 main 的
+`runtimes: StateFlow<Map<String, RemoteChatState>>` 与 `mutableSelected` 读取方式，同时保留 259
+的持久账本读取/消费、列表到达也扫账本和观察停止检查；没有回退任一方的可观察行为。
+
+合并后两轴评审（Standards / Spec）的遗留问题回到所属模块修复：
+
+- 有活运行时用运行时自己的 `recordKey` 读取和消费欠账；receiver 的 endpoint 只覆盖运行时已退休
+  的窗口，并新增 `a live runtime's own key names its debt`。
+- 新增 `a session removed during the scan settles its debt without a runtime`：在扫描读账本时移除
+  会话，覆盖无运行时结算、通用预览与领取后消费。正常生命周期仍为每个列出会话创建运行时，这是
+  该分支在正常路径上唯一可复现的竞态；证据不再声称存在「列出但从未创建运行时」的常规路径。
+- 撤回已失效 claim 的路径改走 `ChatSyncStore.consumeReminder`，消费事实不再有第二条直接写
+  `notificationOwed` 的路径。
+- `MultiSessionWorkload.parse` 拒绝 `streamingSessions != 1` 与 `historySessions == 0`；声明变更
+  会先让解析失败，而不是跑出一轮 binding-failure 结果。
+- 证据中「绑定失败也写结果」改为代码路径说明，不再列在已执行的设备结果下。
+
+### 最终门禁（本 tip）
+
+- `android/`：`./gradlew test lintDebug` → `BUILD SUCCESSFUL`；57 suites / 477 tests /
+  0 failures，`lintDebug` 0 errors。
+- `android/`：`./gradlew :app:assemblePerf` → `BUILD SUCCESSFUL`；三份 perf APK 重新产出，
+  universal 8,737,735 字节（14:22:54）。
+- `npm test` → 430 tests / pass 430 / fail 0。
+- `npm run combo:verify` → 三行 ok（ourfairy 基于 main，dsh `d80522d276`，android source
+  `460109d1`）。
+- 未执行：目标设备三轮基线、真机通知、真实进程重启。
+- 仍只在 perf 构建编译的 `MultiSessionWorkload.parse` 错误分支没有宿主单测；声明文件本身由
+  `RemotePresentationBaselineTest` 钉住。
+
+本 tip 合入 `main` 后关闭 #259。
+

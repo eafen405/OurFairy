@@ -127,6 +127,15 @@ class RemoteChatState(
 ) {
     private val mutable = MutableStateFlow(RemoteChatSnapshot())
     val snapshot: StateFlow<RemoteChatSnapshot> = mutable.asStateFlow()
+
+    /**
+     * The durable key this runtime commits under, or null while unbound.
+     *
+     * Reception reads a live session's debt with this key rather than rebuilding it from its own
+     * endpoint parameter, so the record the runtime settles and the record reception scans cannot
+     * name different keys.
+     */
+    internal val recordKey: ChatSyncKey? get() = key
     private var token: String? = null
     private var key: ChatSyncKey? = null
     private var epoch = 0L
@@ -375,8 +384,9 @@ class RemoteChatState(
                     // A detach or rebind landed while the claim was being persisted. The consumption
                     // above stays (it is durable progress on this log), but the reminder must not
                     // outlive the binding that claimed it: retiring it here is what keeps a rebind
-                    // from replaying a sound the user never saw.
-                    update(selected) { if (it.notificationOwed) it.copy(notificationOwed = false) else it }
+                    // from replaying a sound the user never saw. Use the same store rule reception
+                    // uses so this is not a second write path for the consumed fact.
+                    consumeReminder(selected)
                     return@launch
                 }
                 mutable.value = mutable.value.copy(
