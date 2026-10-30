@@ -12,15 +12,10 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,7 +23,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,13 +30,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.RemoteChatSnapshot
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.data.remote.SessionsSnapshot
-import me.rerere.rikkahub.ui.identity.IdentitySessionList
 import me.rerere.rikkahub.ui.identity.RemoteChatPanel
+import me.rerere.rikkahub.ui.identity.SessionListOverlay
+import me.rerere.rikkahub.ui.identity.rememberSessionListOverlayState
 import org.koin.compose.koinInject
 
 @Composable
@@ -63,8 +57,7 @@ fun FairyConversationPage(
     val selected by receive.selectedChat.collectAsStateWithLifecycle()
     val selectedChat = selected
     val chat = selectedChat?.snapshot?.collectAsStateWithLifecycle()?.value
-    val drawer = rememberDrawerState(DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
+    val overlay = rememberSessionListOverlayState()
     val pageEye = eye ?: remember { FairyEyeController(asleep = fairy.state.value.asleep) }
     // The page owns the eye's transient animation; the continuous 待机 comes from the module so a
     // screen already asleep on home is found asleep here too, and a touch wakes the same state.
@@ -80,7 +73,7 @@ fun FairyConversationPage(
         val ready = receive.owned.snapshot.first { !it.loading }
         if (sessionId == null) {
             opening = false
-            drawer.open()
+            overlay.open()
         } else {
             val alreadySelected = ready.failure == null && ready.selectedId == sessionId &&
                 ready.sessions.any { it.id == sessionId }
@@ -137,33 +130,19 @@ fun FairyConversationPage(
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawer,
-        gesturesEnabled = drawer.isOpen,
-        drawerContent = {
-            ModalDrawerSheet(
-                modifier = Modifier.widthIn(max = 320.dp),
-                drawerContainerColor = tokens.panelOpaque,
-                drawerContentColor = tokens.textPrimary,
-            ) {
-                IdentitySessionList(
-                    state = receive.owned,
-                    onOpen = { id ->
-                        scope.launch {
-                            drawer.close()
-                            if (id != sessionId) onOpenConversation(id)
-                            else if (!settled) retry++
-                        }
-                    },
-                    onClose = { scope.launch { drawer.close() } },
-                    onHome = onBack,
-                    onSettings = { scope.launch { drawer.close(); onSettings() } },
-                    // A row is stopped by its own id, not by whichever session
-                    // is open: every listed session has its own runtime here.
-                    stopReply = { id -> receive.stopReply(id) },
-                )
-            }
-        },
+    SessionListOverlay(
+        state = overlay,
+        sessions = receive.owned,
+        currentSessionId = sessionId,
+        onOpenSession = onOpenConversation,
+        onHome = onBack,
+        onSettings = onSettings,
+        // Re-selecting the session this page already stands in is not a
+        // navigation: a page that has not settled yet retries its opening.
+        onReselectCurrent = { if (!settled) retry++ },
+        // A row is stopped by its own id, not by whichever session is open:
+        // every listed session has its own runtime here.
+        stopReply = receive::stopReply,
     ) {
         Box(
             Modifier
@@ -194,7 +173,7 @@ fun FairyConversationPage(
                         )
                         if (!opening) {
                             TextButton(onClick = { retry++ }) { Text("重试") }
-                            TextButton(onClick = { scope.launch { drawer.open() } }) { Text("选择会话") }
+                            TextButton(onClick = overlay::open) { Text("选择会话") }
                         }
                     }
                 }
@@ -216,7 +195,7 @@ fun FairyConversationPage(
                     else -> "已连接"
                 },
                 onNavigateBack = onBack,
-                onOpenSessions = { scope.launch { drawer.open() } },
+                onOpenSessions = overlay::open,
                 moreMenuContent = { dismiss ->
                     DropdownMenuItem(text = { Text("首页") }, onClick = { dismiss(); onBack() })
                     DropdownMenuItem(text = { Text("设置") }, onClick = { dismiss(); onSettings() })
