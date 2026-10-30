@@ -37,14 +37,27 @@
 | --- | --- |
 | `./gradlew test lintDebug` | BUILD SUCCESSFUL 2m10s；**52 套件 / 364 用例 / 0 失败 / 0 错误**；lint `severity="Error"` 计数 0 |
 | `npm run combo:verify` | 组合校验通过（本仓库、dsh、客户端来源三行全 ok） |
-| `npm test`（后端全量） | **未通过**：421 通过 / 9 失败，9 条全是 profile 安装阶段的 `corepack`/`pnpm` 取包超时（`ConnectTimeoutError` 到 npm registry）。同一文件在 `main` 检出上以完全相同方式卡住，见下 |
+| `npm test`（后端全量） | **通过**：430 通过 / 0 失败（见下方「后端全量」一节的时间线） |
+
+## 后端全量：先红后绿
+
+同一台机器上，`npm test` 在收口期间三次失败、一次通过，失败面每次都相同：
+
+| 时刻 | 结果 | 失败面 |
+| --- | --- | --- |
+| 修复前（#263 提交门禁） | 41 失败 | profile 安装阶段 `corepack` 取 pnpm 超时 |
+| 修复前（重试） | 9 失败 | 同上，`ConnectTimeoutError` 到 npm registry |
+| 修复后（重启前） | 9 失败 | 同上 |
+| **重启后** | **430 通过 / 0 失败** | —— |
+
+失败的原因是「测试复制出的仓库没有 `.corepack` 缓存 → corepack 现取 pnpm → 到 npm registry 的连接
+10s 超时」，属本机网络状况；`tests/bundle-packages.test.mjs` 在 `main`（`716c20d2bf`）检出上以完全
+相同的方式挂起（7 分钟 0 用例、进程用户态时间 0.09s），所以它不是本 spec 引入的。重启后网络恢复，
+全量通过。结论：后端面与本 spec 无关，且最终集成状态是绿的。
 
 ## 未执行项
 
-- **后端全量 `npm test` 未取得绿色。** 失败面全部是「测试复制出的仓库没有 `.corepack` 缓存 → corepack 现取 pnpm →
-  到 npm registry 的连接 10s 超时」。这不是本 spec 引入的：本 spec 只改 `android/`，且
-  `tests/bundle-packages.test.mjs` 在 `main`（`716c20d2bf`）检出上同样挂起（7 分钟 0 用例、
-  进程用户态时间 0.09s）。重试三次结果不一致（41 → 9 → 9 条），属网络抖动。
+
 - **Activity 级通知定位用例未写**（见 Spec 轴）。
 - **真机未验收**：结论止于 Robolectric（SDK 35）与 `lintDebug`。
 - **saved-state 行为未做 UI 级验证**：`contentKey` 的实例区分只有取值断言。
