@@ -54,7 +54,6 @@ class FairyLastLocationTest {
         val resumable = listOf(
             Triple(Screen.Home, "home", listOf(Screen.Home)),
             Triple(Screen.Settings, "settings", listOf(Screen.Home, Screen.Settings)),
-            Triple(Screen.Sessions, "sessions", listOf(Screen.Home, Screen.Sessions)),
             Triple(Screen.Gateway, "gateway", listOf(Screen.Home, Screen.Settings, Screen.Gateway)),
             Triple(Screen.Impression, "impression", listOf(Screen.Home, Screen.Settings, Screen.Impression)),
             Triple(Screen.Conversation("main"), "conversation", listOf(Screen.Home, Screen.Conversation("main"))),
@@ -89,6 +88,18 @@ class FairyLastLocationTest {
         prefs.edit().putString("route", "moved_away").putString("conversation", "main").apply()
 
         assertEquals(UNKNOWN_LANDING, location().restoredStack())
+    }
+
+    @Test
+    fun `a stored session-list location from the previous version lands on the console`() {
+        // The session list used to be a destination stored as "sessions". An
+        // upgrade still finds that name in the file; it is no longer a place, so
+        // the cold start opens the console instead of crashing or forcing the
+        // overlay open.
+        val prefs = application.getSharedPreferences("fairy_last_location", Application.MODE_PRIVATE)
+        prefs.edit().putString("route", "sessions").putString("conversation", "main").apply()
+
+        assertEquals(listOf(Screen.Home), location().restoredStack())
     }
 
     @Test

@@ -41,7 +41,7 @@ import org.koin.compose.koinInject
 
 @Composable
 fun FairyConversationPage(
-    sessionId: String?,
+    sessionId: String,
     onBack: () -> Unit,
     receive: RemoteReceiveState = koinInject(),
     fairy: FairyInteraction = koinInject(),
@@ -69,19 +69,13 @@ fun FairyConversationPage(
     LaunchedEffect(sessionId, retry) {
         opening = true
         failed = false
-        if (sessionId == null && retry > 0) receive.owned.refresh()
         val ready = receive.owned.snapshot.first { !it.loading }
-        if (sessionId == null) {
-            opening = false
-            overlay.open()
-        } else {
-            val alreadySelected = ready.failure == null && ready.selectedId == sessionId &&
-                ready.sessions.any { it.id == sessionId }
-            failed = !alreadySelected && !receive.openSession(sessionId)
-            opening = false
-        }
+        val alreadySelected = ready.failure == null && ready.selectedId == sessionId &&
+            ready.sessions.any { it.id == sessionId }
+        failed = !alreadySelected && !receive.openSession(sessionId)
+        opening = false
     }
-    val settled = !opening && !failed && sessionId != null &&
+    val settled = !opening && !failed &&
         sessions.selectedId == sessionId && chat?.sessionId == sessionId
     val snapshot = chat.takeIf { settled }
     // The open session's row, the same one the drawer renders: its title is what
@@ -93,7 +87,7 @@ fun FairyConversationPage(
     // the unknown presentation. Keeping the routed id (instead of presenting nothing while
     // opening) is what lets the continuous 待机 and 当前表现 cross from the console into this page
     // for the same session.
-    val context = sessionId?.let(::FairyInteractionContext)
+    val context = FairyInteractionContext(sessionId)
     val facts = snapshot?.fairyFacts()
     // The page renders the module's snapshot; it never derives 当前表现 itself. The shared host
     // reports this frame's facts and, on a return, reads the routed session's current runtime.
@@ -121,7 +115,7 @@ fun FairyConversationPage(
     // archive was refused keeps showing "会话不可用" instead of navigating.
     LaunchedEffect(sessionId, sessions.archivedSelectionId, sessions.selectedId) {
         val followed = sessions.selectedId
-        if (sessionId != null && sessions.archivedSelectionId == sessionId &&
+        if (sessions.archivedSelectionId == sessionId &&
             followed != null && followed != sessionId
         ) {
             onOpenConversation(followed)
