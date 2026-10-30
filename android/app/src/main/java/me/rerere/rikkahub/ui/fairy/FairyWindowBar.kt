@@ -130,11 +130,12 @@ fun FairyWindowTopBar(
      */
     eye: FairyEyeController? = null,
     /**
-     * The open session's own name. A session with no name yet keeps the product
-     * nameplate as the bar's first line; a named one shows its name there and
-     * keeps the nameplate as the small tag, so the bar names what the reader is
-     * looking at without losing Fairy's identity. The value is the session row
-     * the list shows — one source for both surfaces.
+     * The open session's own display name. The conversation page passes the
+     * session row's `displayTitle`, so an untitled session reads the list's
+     * placeholder here too; a caller that passes a blank title keeps the product
+     * nameplate as the bar's first line, and a named one shows its name there
+     * and keeps the nameplate as the small tag. The value is the session row the
+     * list shows — one source for both surfaces.
      */
     title: String? = null,
     subtitleLeading: (@Composable () -> Unit)? = null,

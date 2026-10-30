@@ -55,11 +55,20 @@ internal fun rememberSessionListOverlayState(): SessionListOverlayState {
  * The one session list both the console and a conversation open.
  *
  * The overlay owns opening, closing and what a row selection means; the page
- * supplies only what to do next. A row that is already the page's current
- * session closes the list without calling [onOpenSession] — the page keeps
- * standing where it was instead of rebuilding itself. [onReselectCurrent] is
- * for a page that has a use for that same row (the conversation page retries an
- * opening that has not settled); everything else is a plain close.
+ * supplies only what to do next. [standingSessionId] is the session the page
+ * already presents, or null when it presents none. A row that is already that
+ * session closes the list without calling [onOpenSession] — a page that already
+ * presents a session keeps standing where it was instead of rebuilding itself.
+ * [onReselectStanding] is for such a page to use that same row (the conversation
+ * page retries an opening that has not settled); everything else is a plain
+ * close.
+ *
+ * The console passes null: it is not itself standing in a conversation, so every
+ * row — the current one included — opens that conversation. That is the
+ * deliberate split between the two entry points: #265 requires one list module
+ * with the same close and selection behavior, while user story 6 (re-selecting
+ * the current session must not rebuild the page) only applies to a page that
+ * already presents that session.
  *
  * [content] is the page behind the list. It stays composed whether the list is
  * open or closed, so the page keeps its state while the reader browses.
@@ -69,11 +78,11 @@ internal fun SessionListOverlay(
     state: SessionListOverlayState,
     sessions: OwnedSessionState,
     /** The session the page is standing in; null when it is not standing in one. */
-    currentSessionId: String?,
+    standingSessionId: String?,
     onOpenSession: (String) -> Unit,
     onHome: () -> Unit,
     onSettings: () -> Unit,
-    onReselectCurrent: () -> Unit = {},
+    onReselectStanding: () -> Unit = {},
     stopReply: suspend (String) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
@@ -91,7 +100,7 @@ internal fun SessionListOverlay(
                     state = sessions,
                     onOpen = { id ->
                         state.close()
-                        if (id == currentSessionId) onReselectCurrent() else onOpenSession(id)
+                        if (id == standingSessionId) onReselectStanding() else onOpenSession(id)
                     },
                     onClose = state::close,
                     onHome = {

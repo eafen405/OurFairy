@@ -34,6 +34,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.RemoteChatSnapshot
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.data.remote.SessionsSnapshot
+import me.rerere.rikkahub.data.remote.displayTitle
 import me.rerere.rikkahub.ui.identity.RemoteChatPanel
 import me.rerere.rikkahub.ui.identity.SessionListOverlay
 import me.rerere.rikkahub.ui.identity.rememberSessionListOverlayState
@@ -78,9 +79,10 @@ fun FairyConversationPage(
     val settled = !opening && !failed &&
         sessions.selectedId == sessionId && chat?.sessionId == sessionId
     val snapshot = chat.takeIf { settled }
-    // The open session's row, the same one the drawer renders: its title is what
-    // the bar shows.
-    val session = sessions.sessions.firstOrNull { it.id == sessionId }
+    // The open session's row, the same one the drawer renders: its display title
+    // is what the bar shows, so an untitled session reads the list's placeholder
+    // here too instead of falling back to the Fairy nameplate.
+    val session = sessions.session(sessionId)
     // 当前表现 comes from the interaction module and from this session's facts only. The route
     // says which session this page presents even before it settles; until then it has no facts,
     // and the module keeps the previous page's current appearance instead of flickering through
@@ -109,15 +111,18 @@ fun FairyConversationPage(
     }
     // The session state owns the archive-follow rule: when the reader archives
     // the session this page is standing in, it publishes that very id together
-    // with the selection it moved to. The page follows only that explicit fact.
-    // It does not remember that the route once existed and cannot tell why a
-    // list changed, so a target that was never ours, has expired or whose
-    // archive was refused keeps showing "会话不可用" instead of navigating.
+    // with the selection it moved to. The page follows only that explicit fact,
+    // and then consumes it: the fact describes one archive, not a state the page
+    // should keep answering. It does not remember that the route once existed and
+    // cannot tell why a list changed, so a target that was never ours, has
+    // expired or whose archive was refused keeps showing "会话不可用" instead of
+    // navigating.
     LaunchedEffect(sessionId, sessions.archivedSelectionId, sessions.selectedId) {
         val followed = sessions.selectedId
         if (sessions.archivedSelectionId == sessionId &&
             followed != null && followed != sessionId
         ) {
+            receive.owned.clearArchiveFollow()
             onOpenConversation(followed)
         }
     }
@@ -125,15 +130,13 @@ fun FairyConversationPage(
     SessionListOverlay(
         state = overlay,
         sessions = receive.owned,
-        currentSessionId = sessionId,
+        standingSessionId = sessionId,
         onOpenSession = onOpenConversation,
         onHome = onBack,
         onSettings = onSettings,
         // Re-selecting the session this page already stands in is not a
         // navigation: a page that has not settled yet retries its opening.
-        onReselectCurrent = { if (!settled) retry++ },
-        // A row is stopped by its own id, not by whichever session is open:
-        // every listed session has its own runtime here.
+        onReselectStanding = { if (!settled) retry++ },
         stopReply = receive::stopReply,
     ) {
         Box(
@@ -173,7 +176,7 @@ fun FairyConversationPage(
             FairyWindowTopBar(
                 window = window,
                 eye = pageEye,
-                title = session?.title,
+                title = session?.displayTitle,
                 speechPulse = interaction.speechPulse,
                 screenOpen = screenOpen,
                 subtitle = when {

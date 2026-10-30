@@ -29,17 +29,17 @@
 
 | 文件 | 改动 |
 | --- | --- |
-| [`OwnedSessionState.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/data/remote/OwnedSessionState.kt) | `SessionsSnapshot` 新增 `archivedSelectionId`；`archive()` 计算当时当前会话与归档后的选择，只对“当前会话被接受归档且选择确实移动”的情况发布事实；`joined(stand = true)`（`bind`/`select`/`read`/`create`/`returnToPrimary`）清除事实，`refresh`/`rename`/`restore` 保留事实。 |
+| [`OwnedSessionState.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/data/remote/OwnedSessionState.kt) | `SessionsSnapshot` 新增 `archivedSelectionId`；`archive()` 计算当时当前会话与归档后的选择，只对“当前会话被接受归档且选择确实移动”的情况发布事实；`joined(stand = true)`（`select`/`read`/`create`/`returnToPrimary`）清除事实，`bind` 因账号变化整体置空，`refresh`/`rename` 保留事实，`restore` 在恢复事实所指会话时清除（spec #258 复核修复；同时新增 `clearArchiveFollow()` 供跟随后消费）。 |
 | [`FairyConversationPage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConversationPage.kt) | 删除页内 `standing` 闩锁与列表消失推断；`LaunchedEffect` 只响应 `archivedSelectionId` 与 `selectedId`。 |
-| [`FairyConsolePage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConsolePage.kt) | 浮层传 `currentSessionId = null` 并注明原因：控制台不在会话中，所有行都进入对应对话（用户故事 5）。 |
+| [`FairyConsolePage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConsolePage.kt) | 浮层传 `standingSessionId = null` 并注明原因：控制台不在会话中，所有行都进入对应对话（用户故事 5）。 |
 | [`IdentitySessionList.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/identity/IdentitySessionList.kt) | 首页/设置入口加 `session-list-home` / `session-list-settings` testTag，供两个入口的浮层测试定位（控制台页面上另有同名“设置”按钮）。 |
 
 测试：
 
 | 文件 | 覆盖 |
 | --- | --- |
-| [`OwnedSessionStateTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/data/remote/OwnedSessionStateTest.kt) | 归档当前会话发布事实并移到主会话；归档非当前会话不发布；拒绝归档不发布且状态不变；刷新/改名/恢复保留事实；显式 `read`/`select` 清除；换账号 `bind` 清除。 |
-| [`FairyPagesTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/ui/fairy/FairyPagesTest.kt) | 对话页归档当前会话后经状态事实跟随主会话并显示主会话标题；归档别的会话不导航；列表自行移除不是归档、页面不跟随且仍显示“会话不可用”；改名同步标题栏与行；`unavailable restored conversation...` 保留。控制台浮层：当前行也进入对话；归档视图显示归档行并可恢复、恢复后控制台标题/选择不变；改名同步控制台标题与行；首页只关浮层、设置进入设置页；行上重命名/删除入口齐全。 |
+| [`OwnedSessionStateTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/data/remote/OwnedSessionStateTest.kt) | 归档当前会话发布事实并移到主会话；归档非当前会话不发布；拒绝归档不发布且状态不变；刷新/改名保留事实；显式 `read`/`select`/`create`/`returnToPrimary` 清除；换账号 `bind` 清除；spec #258 复核补：页面消费 `clearArchiveFollow()` 清除、`restore` 恢复事实所指会话清除而恢复别的会话保留。 |
+| [`FairyPagesTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/ui/fairy/FairyPagesTest.kt) | 对话页归档当前会话后经状态事实跟随主会话并显示主会话标题；归档别的会话不导航；列表自行移除不是归档、页面不跟随且仍显示“会话不可用”；改名同步标题栏与行；`unavailable restored conversation...` 保留；spec #258 复核补：跟随后事实已消费，再恢复并打开该会话不会被弹回主会话。控制台浮层：当前行也进入对话；归档视图显示归档行并可恢复、恢复后控制台标题/选择不变；改名同步控制台标题与行；首页只关浮层、设置进入设置页；行上重命名/删除入口齐全。 |
 
 ## 关键决定
 
@@ -47,14 +47,16 @@
 目标选择仍由既有 `selectedId` 提供，没有第二份选择权威。拒绝归档、归档非当前会话与列表自然
 变化都不写该字段。
 
-**刷新/改名/恢复保留事实。** `RemoteReceiveState.refreshTitles` 会在标题事件后重读列表，可能落在
-`archive()` 与页面响应之间；若刷新清除事实，页面会误显示“会话不可用”。因此只有显式选择移动
-（`bind`/`select`/`read`/`create`/`returnToPrimary`）与后续归档会释放事实，`refresh`/`rename`/
-`restore` 的 `joined(stand = false)` 保留它。页面跟随到的新 route 通常已 selected、不再发
-`read`，事实会保留到下一次显式选择；现有入口在归档后不再提供该会话的行，故不会二次触发。
+**刷新/改名保留事实，恢复命名会话时清除（复核修正）。** `RemoteReceiveState.refreshTitles` 会在
+标题事件后重读列表，可能落在 `archive()` 与页面响应之间；若刷新清除事实，页面会误显示“会话不可用”。
+因此 `refresh`/`rename` 保留事实，显式选择移动（`select`/`read`/`create`/`returnToPrimary`）与后续
+归档会释放事实。本票交付时 `restore` 也保留事实，留下“跟随后事实常驻、恢复再打开该会话被弹回主
+会话”的缺陷；spec #258 复核修复改为：页面跟随后调用 `clearArchiveFollow()` 消费事实，`restore()`
+在恢复事实所指会话时也清除（恢复别的会话仍保留）。见
+[`258-review`](../258-review/README.md)。
 
 **控制台当前行也进入会话。** 浮层原来的“重选当前行只关闭”是对话页保留草稿/阅读位置的规则。
-控制台本身不是会话页，按用户故事 5 应进入所选会话，所以控制台传 `currentSessionId = null`；
+控制台本身不是会话页，按用户故事 5 应进入所选会话，所以控制台传 `standingSessionId = null`；
 对话页仍传自己的 `sessionId`，它原有的重选不重建行为不变。
 
 **测试替身按后端行为维护两份列表。** `FairyPagesTest` 的 `SessionBackend` 现在真正把归档行移到
@@ -82,9 +84,9 @@
 
 ## 未完成项 / 风险
 
-- `archivedSelectionId` 是快照事实而非一次性事件，刷新/改名/恢复按上述理由保留它。若将来出现
-  “归档后直接重新打开同一归档会话路由”的入口，页面会把它当作刚归档并跟随；当前归档后该行已从
-  默认列表移除，现有入口无法产生该路由。
+- 本票交付时 `archivedSelectionId` 是常驻快照事实而非一次性事件，跟随后不消费，恢复同一归档会话后
+  再打开会被误判为“刚归档并跟随”。该风险已在 spec #258 复核修复中消除：页面跟随后消费事实，
+  `restore()` 恢复事实所指会话时清除；见 [`258-review`](../258-review/README.md)。
 - `Screen.Sessions`、catalog 的 sessions 条目与 `sessionId == null` 兼容路径按票面保留，由 #267
   删除；本票未改其测试。
 - 浮层首页/设置按钮新增 testTag 仅为测试定位，不改变用户可见行为。

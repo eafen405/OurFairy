@@ -909,17 +909,53 @@ class FairyPagesTest {
             ),
             "main",
         )
-        conversation()
+        conversation("unnamed-7f3a9c1b")
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "unnamed-7f3a9c1b" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
         compose.onNodeWithContentDescription("切换会话").performClick()
         compose.mainClock.advanceTimeBy(500)
 
-        // The named row shows its title; the titled backend row is not the only
-        // shape, so the unnamed one shows the placeholder rather than its id.
-        // The drawer row and the bar name the open session, so its title is
-        // deliberately on screen twice.
-        compose.onAllNodesWithText("主会话标题").assertCountEquals(2)
-        compose.onAllNodesWithText("新会话").assertCountEquals(1)
+        // The open session is untitled, so the title bar's first line and its
+        // drawer row read one placeholder rule; the named session's row keeps
+        // its title. The opaque id is never a displayed name.
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("新会话")
+        compose.onAllNodesWithText("新会话").assertCountEquals(2)
+        compose.onAllNodesWithText("主会话标题").assertCountEquals(1)
         compose.onAllNodesWithText("unnamed-7f3a9c1b").assertCountEquals(0)
+    }
+
+    @Test
+    @Config(qualifiers = "zh-rCN-w320dp-h640dp", fontScale = 1.3f)
+    fun `the conversation bar keeps a long title inside a narrow large-font viewport`() {
+        val longTitle = "很长的会话标题" + "会占满整行需要截断".repeat(8)
+        val longSession = "session-" + "0123456789abcdef".repeat(4)
+        listedSessions = OwnedSessions(
+            listOf(
+                OwnedSession("main", primary = true, title = "主会话标题"),
+                OwnedSession(longSession, title = longTitle),
+            ),
+            "main",
+        )
+        conversation(longSession)
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == longSession }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = true
+
+        // The bar names the session it presents, ellipsized inside the bar's
+        // name column: a long title must not push the bar or the page past the
+        // narrow viewport, and the opaque id is never what the reader sees.
+        val viewport = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val bar = compose.onNodeWithTag("fairy-window-title")
+            .assertTextEquals(longTitle)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "Conversation bar exceeds the ${viewport.width}px viewport: $bar",
+            bar.left >= viewport.left && bar.right <= viewport.right &&
+                bar.top >= viewport.top && bar.bottom <= viewport.bottom,
+        )
+        compose.onAllNodesWithText(longSession).assertCountEquals(0)
     }
 
     @Test
@@ -1511,6 +1547,54 @@ class FairyPagesTest {
         compose.runOnIdle { assertEquals("main", target) }
         // The followed page names main from the same row the list and console read.
         compose.onNodeWithTag("fairy-window-title").assertTextEquals("主会话标题")
+    }
+
+    @Test fun `restoring a session after following an archive opens it instead of bouncing to main`() {
+        listedSessions = OwnedSessions(
+            listOf(
+                OwnedSession("main", primary = true, title = "主会话标题"),
+                OwnedSession("other", title = "另一个会话"),
+            ),
+            "main",
+        )
+        var target by mutableStateOf("other")
+        show {
+            FairyConversationPage(target, {}, receive, fairy,
+                onOpenConversation = { target = it }, onSettings = {})
+        }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle { receive.owned.archive("other") }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "main" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals("main", target)
+            // The page that followed consumed its one archive fact; it is not a
+            // latch that outlives the navigation it caused.
+            assertNull(receive.owned.snapshot.value.archivedSelectionId)
+        }
+
+        // A later restore brings the same session back. Opening it must present
+        // that session, not replay the consumed archive move to main.
+        compose.runOnIdle { receive.owned.restore("other") }
+        compose.waitUntil { receive.owned.snapshot.value.sessions.any { it.id == "other" } }
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("切换会话").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("另一个会话").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals("other", target)
+            assertEquals("other", receive.owned.snapshot.value.selectedId)
+        }
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("另一个会话")
     }
 
     @Test fun `archiving another session while standing somewhere does not navigate`() {

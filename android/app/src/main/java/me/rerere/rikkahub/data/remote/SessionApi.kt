@@ -43,8 +43,9 @@ data class OwnedSession(
 /**
  * The product's name for a session the backend has not titled yet.
  *
- * It is the one placeholder every surface uses, so an unnamed session reads the
- * same in the list and on the console instead of one of them falling back to the
+ * The console's current-session line, the session-list rows and the conversation
+ * title bar all render [OwnedSession.displayTitle], so an unnamed session reads
+ * the same in those three places instead of any of them falling back to the
  * opaque [OwnedSession.id].
  */
 const val UNTITLED_SESSION_TITLE: String = "新会话"
