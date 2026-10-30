@@ -6,6 +6,7 @@ import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.GatewayBackend
 import me.rerere.rikkahub.data.remote.IdentityBackend
 import me.rerere.rikkahub.data.remote.ImpressionBackend
+import me.rerere.rikkahub.ui.fairy.FairyInteraction
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.ui.identity.IdentityScope
 
@@ -106,4 +107,5 @@ class DestinationPageScope(
     val identityBackend: IdentityBackend,
     val gatewayBackend: GatewayBackend,
     val impressionBackend: ImpressionBackend,
+    val fairy: FairyInteraction,
 )
