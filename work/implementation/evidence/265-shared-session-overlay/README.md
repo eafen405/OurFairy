@@ -20,9 +20,9 @@
 
 | 文件 | 改动 |
 | --- | --- |
-| [`SessionListOverlay.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/identity/SessionListOverlay.kt)（新） | `SessionListOverlayState` 持有 `DrawerState` 与 `CoroutineScope`，`open()` / `close()` 直接驱动抽屉，`isOpen` 由 `drawer.isOpen` 派生，没有第二份布尔状态；`SessionListOverlay` 组合 `ModalNavigationDrawer` + 既有 `IdentitySessionList`，行选择统一为「关闭后转发」：选中 `currentSessionId` 只关闭（可回调 `onReselectCurrent`），其他会话才回调页面导航。 |
+| [`SessionListOverlay.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/identity/SessionListOverlay.kt)（新） | `SessionListOverlayState` 持有 `DrawerState` 与 `CoroutineScope`，`open()` / `close()` 直接驱动抽屉，`isOpen` 由 `drawer.isOpen` 派生，没有第二份布尔状态；`SessionListOverlay` 组合 `ModalNavigationDrawer` + 既有 `IdentitySessionList`，行选择统一为「关闭后转发」：选中页面的 standing 会话只关闭（可回调 `onReselectStanding`），其他会话才回调页面导航（参数名在 spec #258 复核中收敛为 `standingSessionId` / `onReselectStanding`）。 |
 | [`FairyConsolePage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConsolePage.kt) | 「全部会话」与无当前会话时的「进入会话」调用 `overlay.open()`；有当前会话时仍 `onOpen(Screen.Conversation(id))`。`ConsoleInfoCard` 的 `CURRENT SESSION` 从 opaque id 改为同一 `owned` 快照行的 `displayTitle`；新增 `console-session-title` testTag。 |
-| [`FairyConversationPage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConversationPage.kt) | 删除页内私有 `ModalNavigationDrawer` / `rememberDrawerState` 接线，改用同一 `SessionListOverlay`；`currentSessionId = sessionId`，当前行重选仍只在未 settled 时 `retry++`。`sessionId == null` 的兼容路径保留，就绪后打开同一浮层。 |
+| [`FairyConversationPage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConversationPage.kt) | 删除页内私有 `ModalNavigationDrawer` / `rememberDrawerState` 接线，改用同一 `SessionListOverlay`；`standingSessionId = sessionId`，当前行重选仍只在未 settled 时 `retry++`。`sessionId == null` 的兼容路径保留，就绪后打开同一浮层。 |
 | [`SessionApi.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/data/remote/SessionApi.kt) | 新增 `UNTITLED_SESSION_TITLE` 与 `OwnedSession.displayTitle`，作为未命名会话显示占位的唯一规则。 |
 | [`IdentitySessionList.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/identity/IdentitySessionList.kt) | 默认行、归档行与归档确认文案改用 `session.displayTitle`。 |
 
@@ -44,9 +44,12 @@
 **控制台的「首页」入口只关闭浮层。** 控制台本身就是 `Screen.Home`，catalog 的 `onOpen` 是 push；
 从浮层再 push 一个 Home 会制造重复返回栈项。对话页仍传 `onBack`，设置仍导航到 `Screen.Settings`。
 
-**标题栏未改。** `FairyWindowTopBar` 对空标题的既有规则是保留 Fairy 名牌（`fairy_nameplate`），
-与列表/控制台的「新会话」占位不是同一条规则；票面只要求在已做等价处理时统一，因此本票不改标题栏，
-避免把名牌行为换成占位名。控制台与列表行已共享 `OwnedSession.displayTitle`。
+**标题栏当时未改，spec #258 复核已统一。** 本票交付时 `FairyWindowTopBar` 对空标题的既有规则是
+保留 Fairy 名牌（`fairy_nameplate`），与列表/控制台的「新会话」占位不是同一条规则；票面只要求在
+已做等价处理时统一，因此本票未改标题栏，避免把名牌行为换成占位名。spec #258 的两轴复核认定规格
+258 明确要求“控制台、浮层和标题栏统一显示会话标题”，复核修复让对话页改传
+`session?.displayTitle`：未命名会话在标题栏也显示「新会话」；见
+[`258-review`](../258-review/README.md)。控制台与列表行自本票起共享 `OwnedSession.displayTitle`。
 
 **测试替身按后端行为返回带标题的行。** 原 `read` 替身总是返回无标题的 `OwnedSession`，选择会话后
 会把列表里的标题覆盖掉；本票让 `read` 先返回 `listedSessions` 中的同一行（后端 `read`/`select`
@@ -73,5 +76,5 @@
 - 控制台浮层的「首页」只关闭浮层（已在「关键决定」说明）；若产品希望它回退到根 Home，需要在
   catalog 增加 pop-to-home 动作，超出本票。
 - 归档当前会话后的跟随规则仍是页面现有的 `standing` 闩锁（#266 范围），本票未改。
-- 标题栏对未命名会话仍显示 Fairy 名牌，与控制台/列表的「新会话」占位不同；按票面「仅在已做等价
-  处理时统一」保留。
+- 交付时标题栏对未命名会话仍显示 Fairy 名牌，与控制台/列表的「新会话」占位不同；该差异已在
+  spec #258 复核修复中统一（见 [`258-review`](../258-review/README.md)）。

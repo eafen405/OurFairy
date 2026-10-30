@@ -10,8 +10,10 @@
 
 ## 结果
 
-- 生产代码不再有第二份会话列表路径：全仓库只剩 `FairyConsolePage` 与 `FairyConversationPage`
-  两个页面组合同一个 `SessionListOverlay`，浮层内部是唯一的 `IdentitySessionList`。
+- 生产代码里 `FairyConsolePage` 与 `FairyConversationPage` 都组合共享的 `SessionListOverlay`，
+  浮层内部组合 `IdentitySessionList`，没有独立的会话列表页面。测试也直接组合
+  `IdentitySessionList`（`IdentitySessionListTest`），所以“只由浮层组合”不是全仓库事实；该结构
+  没有可执行检查，本证据不把它当作单一拓扑的保证。
 - `FairyConversationPage` 只接受非空 `sessionId`：删除 `sessionId == null` 的自动打开浮层分支、
   `null && retry > 0` 的刷新、`settled` / 归档跟随 / 互动上下文中的空值分支。不可用目标仍显示
   “会话不可用”，正文保留“重试”和“选择会话”（打开同一浮层）。
@@ -68,8 +70,8 @@
 | `git merge integration/spec-258` | `Already up to date.`（基线 `b8b9ea02b7` 已是集成分支 tip）。 |
 
 `grep -rn "Screen.Sessions" android/app/src` 与 `grep -rn "data object Sessions" android/app/src`
-均无输出；`IdentitySessionList(` 只由 `SessionListOverlay` 组合，`SessionListOverlay(` 只由控制台与
-对话页组合。
+均无输出。`IdentitySessionList(` 在生产代码里只由 `SessionListOverlay` 组合；测试
+`IdentitySessionListTest` 直接组合它。这两条是 grep 读到的事实，不是可执行的结构保证。
 
 ## 未完成项 / 风险
 
