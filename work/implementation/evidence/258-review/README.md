@@ -56,13 +56,22 @@ settled 后重建，这是用户故事 6。两者共用同一个 `SessionListOve
 - `eb8852d15f` refactor(#258): 收敛会话行查询与浮层 standing 参数
 - 本目录提交：评审证据与 #265/#266/#267 证据措辞修正
 
+## 最终门禁（集成 tip）
+
+在 `integration/spec-258` 上（代码 tip `87b40f02b9`，证据登记提交 `e35d5f116e`）主动重跑，
+不引用提交钩子的结果：
+
+| 命令 | 结果 |
+| --- | --- |
+| `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug` | BUILD SUCCESSFUL（3m45s）；`testDebugUnitTest` 56 个测试套件 / 467 个用例 / 0 失败 / 0 错误 / 0 跳过；`lintDebug` 通过，0 Error（30 Warning）。 |
+| `npm test` | 430 通过 / 0 失败 / 0 跳过（11 suites）。 |
+| `npm run combo:verify` | 三行 ok：ourfairy 基于集成分支、dsh 锁定提交一致、Android 来源声明一致。 |
+
 ## 未完成项 / 未运行
 
 - 未做真机验收（无设备）。
 - 未跑 `assembleDebug` / `assembleRelease`：本次只改 Compose 页面、状态 module、注释与证据，
   不新增依赖或打包输入。
-- 根 `npm test` 与 `combo:verify` 只由提交钩子自动运行，本步未主动重跑；最终以客户端门禁与
-  钩子结果为准。
 - 没有发现项被有意保留不改。#267 的结构声称不是补测试，而是按
   [`CODING_STANDARDS.md`](../../../../CODING_STANDARDS.md)「声称须可执行」删除：`IdentitySessionList`
   在测试中本来就直接组合，生产侧也没有能让第二条组合路径不可能出现的接缝。
