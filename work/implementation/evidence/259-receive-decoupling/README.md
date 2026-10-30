@@ -139,8 +139,9 @@
   `presentation/multi-session.md` 与 `presentation/workload.md`。
 - `python3 scripts/measure-presentation.py --help` 列出
   `{history,single,format,stream,burst,multi-session,all}`，组合场景走独立活动与结果文件。
-- 绑定失败的轮次也会写自己的结果文件（`allSessionsSettled=false` 与
-  `receptionBindingFailure`），不会只剩脚本超时；构建与宿主测试**不**构成设备基线。
+- 绑定失败路径（`allSessionsSettled=false` 与 `receptionBindingFailure`）会写自己的结果
+  文件，不会只剩脚本超时；这是代码路径，**未**在设备轮次中执行，构建与宿主测试也**不**构成
+  设备基线。
 
 ### 设备轮次：未执行，基线未建立
 
