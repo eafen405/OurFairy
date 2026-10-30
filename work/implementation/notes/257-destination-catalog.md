@@ -170,6 +170,8 @@ fake `session` / `receive` / `identityBackend`（就是 `FairyPagesTest` 已有�
 - **`FairyPagesTest` 里两个自建 `var target` 导航器**改为走 catalog 的 `destination(...)`，断言改判
   目的地本身；仍直接渲染 `FairySettingsPage` 的用例保留——它们注入 `updateContent`/`onOpenImpression`
   这类页面自有参数，不承担路由职责。
-- **已知且不改的边界**：`Gateway`/`Impression` 页仍从 Koin 取自己的 backend（scope 只带 `identityBackend`），
-  所以「八个目的地都能在无容器环境装配」不成立；`page` 是必填字段，但一个空 lambda 仍是合法实现，
-  「缺少页面装配」只保证到构造期，测试无法判定页面内容是否为空。
+- **页面不再向容器伸手**：`Gateway`/`Impression` 的 `koinInject()` 默认值删掉，两个 backend 由
+  `DestinationPageScope` 携带、`RouteActivity` 注入，因此八个目的地都能在无容器环境装配。
+  `page` 仍是必填字段，但一个空 lambda 是合法实现——「缺少页面装配」只保证到构造期，测试判定不了内容为空。
+- **通知落点有 Activity 级用例**：`NotificationColdStartTest` 覆盖「就绪后送达」与「就绪前送达（排队后 drain）」
+  两条路径；`handleIntent` 因此是 `internal`。

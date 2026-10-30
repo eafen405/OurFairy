@@ -44,7 +44,6 @@ import me.rerere.rikkahub.ui.fairy.FairyPresence
 import me.rerere.rikkahub.ui.fairy.FairyWindowBarHeight
 import me.rerere.rikkahub.ui.fairy.FairyWindowState
 import me.rerere.rikkahub.ui.fairy.FairyWindowTopBar
-import org.koin.compose.koinInject
 
 /**
  * The user's own impression: one multi-line plain-text field and a whole-body
@@ -65,8 +64,8 @@ import org.koin.compose.koinInject
 @Composable
 fun ImpressionPage(
     onBack: () -> Unit,
-    session: AccountSession = koinInject(),
-    backend: ImpressionBackend = koinInject(),
+    session: AccountSession,
+    backend: ImpressionBackend,
 ) {
     val identity by session.identity.collectAsStateWithLifecycle()
     val token = identity?.token

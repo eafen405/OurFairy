@@ -183,8 +183,42 @@ class FairyPagesTest {
             session = account,
             receive = receive,
             identityBackend = identityBackend,
+            gatewayBackend = gatewayBackend,
+            impressionBackend = impressionBackend,
         )
         FairyDestinations.destinationOf(destination).Content(destination, scope)
+    }
+
+    /** How many times the gateway page asked its backend, so the hand-off is observable. */
+    private var gatewayReads = 0
+
+    /** How many times the impression page asked its backend. */
+    private var impressionReads = 0
+
+    /** The shared selection the gateway page reads; nothing here is editable. */
+    private val gatewayBackend = object : GatewayBackend {
+        override suspend fun read(token: String): GatewayConfig {
+            gatewayReads += 1
+            return GatewayConfig(
+            selection = GatewaySelection("minimax-cn", "MiniMax-M3.1-Flash"),
+            asr = GatewayAsr(credential = GatewayCredential(ref = "VOICE_API_KEY")),
+            )
+        }
+        override suspend fun select(token: String, selection: GatewaySelection) = error("not used")
+        override suspend fun saveRoute(token: String, route: GatewayRouteDraft) = error("not used")
+        override suspend fun deleteRoute(token: String, provider: String) = error("not used")
+        override suspend fun saveAsr(token: String, asr: GatewayAsrDraft) = error("not used")
+        override suspend fun saveCompaction(token: String, compaction: GatewayCompactionDraft) = error("not used")
+        override suspend fun saveMaintenance(token: String, maintenance: GatewayMaintenanceDraft) = error("not used")
+    }
+
+    /** The account's own impression, already written. */
+    private val impressionBackend = object : ImpressionBackend {
+        override suspend fun read(token: String): Impression {
+            impressionReads += 1
+            return Impression(content = "本人印象")
+        }
+        override suspend fun edit(token: String, content: String) = Unit
     }
 
     /** Show [initial], following its own navigation into this test's state. */
@@ -200,6 +234,26 @@ class FairyPagesTest {
 
     private fun home(onOpen: (Screen) -> Unit) {
         destination(Screen.Home, onOpen)
+    }
+
+    @Test fun `the gateway composes through the catalog with no container`() {
+        // The page used to reach into Koin for its backend; the catalog now hands
+        // it the one its scope carries, so this test assembles it with a fake and
+        // no container at all — and the fake proves the hand-off happened.
+        destination(Screen.Gateway)
+        compose.waitForIdle()
+
+        compose.onNodeWithText(RuntimeEnvironment.getApplication().getString(me.rerere.rikkahub.R.string.gateway_explain))
+            .assertExists()
+        compose.runOnIdle { assertEquals("the gateway page read the scope's backend", 1, gatewayReads) }
+    }
+
+    @Test fun `the impression composes through the catalog with no container`() {
+        destination(Screen.Impression)
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("impression_field").assertExists()
+        compose.runOnIdle { assertEquals("the impression page read the scope's backend", 1, impressionReads) }
     }
 
     @Test fun `idle line sits below the fairy screen`() {

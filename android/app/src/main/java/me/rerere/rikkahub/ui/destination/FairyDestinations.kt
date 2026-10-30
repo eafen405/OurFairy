@@ -111,7 +111,7 @@ object FairyDestinations {
         access = DestinationAccess.Admin,
         restore = DestinationRestore.Resume(listOf(Screen.Home, Screen.Settings, Screen.Gateway)),
     ) {
-        GatewayPage(onBack = actions.pop, session = session)
+        GatewayPage(onBack = actions.pop, session = session, backend = gatewayBackend)
     }
 
     private val impression = FairyDestination(
@@ -119,7 +119,7 @@ object FairyDestinations {
         access = DestinationAccess.SignedIn,
         restore = DestinationRestore.Resume(listOf(Screen.Home, Screen.Settings, Screen.Impression)),
     ) {
-        ImpressionPage(onBack = actions.pop, session = session)
+        ImpressionPage(onBack = actions.pop, session = session, backend = impressionBackend)
     }
 
     /** Every destination the product has, in the order the table declares them. */
