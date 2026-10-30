@@ -25,7 +25,7 @@
 | 新增目的地缺策略时完整性测试失败 | 满足（构造期） | 三项策略为必填构造参数；`destinationOf` 的 `when` 穷尽 |
 | 页面测试不再维护手抄路由 | 部分 → 已补齐 | 三块 `when` + 两个 helper + 两个自建导航器全部改走 catalog |
 | 通知定位不绕过准入 | 满足 | `openRemoteNotification` 校验端点/用户/会话后，落点取 `resumedStack(CONVERSATION_ROUTE, id)`；闸门仍判栈顶 |
-| Activity 层验证通知定位确实用生产 catalog | **未满足** | 未加 Activity 级用例；`handleIntent` 是私有方法，证据只到「唯一调用点 + 目录测试」。记入未执行项 |
+| Activity 层验证通知定位确实用生产 catalog | **已补齐** | `NotificationColdStartTest`：真 `RouteActivity` 冷启动，通知在账号就绪后送达、以及在就绪前送达（走 `pendingIntents` 排队再 drain）两条路径，都落到会话页且设置页不再可见；`handleIntent` 因此从 private 改为 internal |
 | 会话列表本票保留并显式恢复 | 满足 | `sessions` route 与 `[Home, Sessions]` |
 | 不改页面内容、返回语义、后端权限、通知记账 | 满足 | 无后端改动；页面文件未改 |
 
@@ -55,10 +55,33 @@
 相同的方式挂起（7 分钟 0 用例、进程用户态时间 0.09s），所以它不是本 spec 引入的。重启后网络恢复，
 全量通过。结论：后端面与本 spec 无关，且最终集成状态是绿的。
 
+## 评审后的两项补齐
+
+评审留下的两条缺口已按 Lead 的决定补上（分支 `fix/257-review`）。
+
+**页面不再向容器伸手。** `GatewayPage` 与 `ImpressionPage` 的 `session` / `backend` 两个 `koinInject()`
+默认值删掉，改为必填参数；`DestinationPageScope` 因此带上 `gatewayBackend` 与 `impressionBackend`，
+`RouteActivity` 注入它们。收益不是防御，是「catalog 说一个目的地需要什么」现在说得全 —— 之前
+`identityBackend` 在 scope 里、另外两个不在，切法本身是随意的。两条新用例证明这两个页面能在**没有容器**
+的环境里装配，并且确实读到了 scope 里的替身（用调用计数断言，不是只看渲染出来）。
+
+**通知落点有了 Activity 级用例。** `NotificationColdStartTest` 用真 `RouteActivity`、生产 Koin 模块与四个
+替身，覆盖两条路径：账号就绪后送达，以及**就绪前送达**——后者进入 `pendingIntents` 队列，靠 `SideEffect`
+在 `identitySettled` 后 drain。这条队列此前零覆盖，是有状态、依赖时序、且坏了会表现为「冷启动点通知没反应」
+的那种代码。为了能从测试驱动，`handleIntent` 从 `private` 改为 `internal`（`onNewIntent` 只是转发它）。
+
+| 命令 | 结果 |
+| --- | --- |
+| `./gradlew test lintDebug`（`fix/257-review`） | BUILD SUCCESSFUL 3m19s；**53 套件 / 368 用例 / 0 失败 / 0 错误**；lint `severity="Error"` 计数 0 |
+
+新增用例 4 条：`FairyPagesTest` 的 `the gateway composes through the catalog with no container` 与
+`the impression composes through the catalog with no container`，`NotificationColdStartTest` 的
+`a notification delivered after the account settles opens its conversation` 与
+`a notification delivered before the account settles opens once it does`。
+
 ## 未执行项
 
 
-- **Activity 级通知定位用例未写**（见 Spec 轴）。
+
 - **真机未验收**：结论止于 Robolectric（SDK 35）与 `lintDebug`。
 - **saved-state 行为未做 UI 级验证**：`contentKey` 的实例区分只有取值断言。
-- **`Gateway`/`Impression` 页仍从 Koin 取 backend**，所以「八个目的地都能在无容器环境装配」不成立。

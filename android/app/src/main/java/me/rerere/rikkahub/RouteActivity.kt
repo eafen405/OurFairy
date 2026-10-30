@@ -50,7 +50,9 @@ import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.data.datastore.DisplayPreferencesStore
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
 import me.rerere.rikkahub.data.remote.AccountSession
+import me.rerere.rikkahub.data.remote.GatewayBackend
 import me.rerere.rikkahub.data.remote.IdentityBackend
+import me.rerere.rikkahub.data.remote.ImpressionBackend
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.service.AndroidRemoteNotifications
 import me.rerere.rikkahub.service.RemoteReceiveController
@@ -74,6 +76,8 @@ class RouteActivity : ComponentActivity() {
     private val accountSession by inject<AccountSession>()
     private val remoteReceiveState by inject<RemoteReceiveState>()
     private val identityBackend by inject<IdentityBackend>()
+    private val gatewayBackend by inject<GatewayBackend>()
+    private val impressionBackend by inject<ImpressionBackend>()
     private var navStack: MutableList<NavKey>? = null
     private var identityReady = false
     private val pendingIntents = ArrayDeque<Intent>()
@@ -106,7 +110,14 @@ class RouteActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    private fun handleIntent(intent: Intent) {
+    /**
+     * Route one delivered notification intent.
+     *
+     * `onNewIntent` only forwards to it, and the Activity-level test drives this
+     * directly: what a notification does when it arrives before the account has
+     * settled is only observable through this entry point.
+     */
+    internal fun handleIntent(intent: Intent) {
         if (intent.action != AndroidRemoteNotifications.ACTION_OPEN_REMOTE) return
         val backStack = navStack?.takeIf { identityReady } ?: run {
             pendingIntents.addLast(intent)
@@ -185,6 +196,8 @@ class RouteActivity : ComponentActivity() {
                             session = session,
                             receive = remoteReceiveState,
                             identityBackend = identityBackend,
+                            gatewayBackend = gatewayBackend,
+                            impressionBackend = impressionBackend,
                         )
                         NavDisplay(
                             backStack = backStack,
