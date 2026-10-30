@@ -34,6 +34,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.RemoteChatSnapshot
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.data.remote.SessionsSnapshot
+import me.rerere.rikkahub.data.remote.displayTitle
 import me.rerere.rikkahub.ui.identity.RemoteChatPanel
 import me.rerere.rikkahub.ui.identity.SessionListOverlay
 import me.rerere.rikkahub.ui.identity.rememberSessionListOverlayState
@@ -78,8 +79,9 @@ fun FairyConversationPage(
     val settled = !opening && !failed &&
         sessions.selectedId == sessionId && chat?.sessionId == sessionId
     val snapshot = chat.takeIf { settled }
-    // The open session's row, the same one the drawer renders: its title is what
-    // the bar shows.
+    // The open session's row, the same one the drawer renders: its display title
+    // is what the bar shows, so an untitled session reads the list's placeholder
+    // here too instead of falling back to the Fairy nameplate.
     val session = sessions.sessions.firstOrNull { it.id == sessionId }
     // 当前表现 comes from the interaction module and from this session's facts only. The route
     // says which session this page presents even before it settles; until then it has no facts,
@@ -173,7 +175,7 @@ fun FairyConversationPage(
             FairyWindowTopBar(
                 window = window,
                 eye = pageEye,
-                title = session?.title,
+                title = session?.displayTitle,
                 speechPulse = interaction.speechPulse,
                 screenOpen = screenOpen,
                 subtitle = when {
