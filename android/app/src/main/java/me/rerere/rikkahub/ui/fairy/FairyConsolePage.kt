@@ -102,7 +102,7 @@ fun FairyConsolePage(
     val currentSessionId = owned.currentSessionId()
     // The same row the list renders, so the console's name and the row's name are
     // one value; an unnamed session reads as the list's placeholder, never the id.
-    val currentSession = currentSessionId?.let { id -> owned.sessions.firstOrNull { it.id == id } }
+    val currentSession = owned.session(currentSessionId)
     val runtimes by receive.runtimes.collectAsStateWithLifecycle()
     val currentRuntime = currentSessionId?.let(runtimes::get)
     // Unconditional collection: the runtime may not exist yet, and a page that appeared or
@@ -131,7 +131,7 @@ fun FairyConsolePage(
             // The console is not standing in a conversation, so every row —
             // including the current one — enters that conversation. Only a page
             // that already presents a session treats re-selecting it as a close.
-            currentSessionId = null,
+            standingSessionId = null,
             onOpenSession = { id -> onOpen(Screen.Conversation(id)) },
             // The console is home already: its list's home entry only closes.
             onHome = {},

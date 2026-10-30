@@ -211,8 +211,9 @@ object FairyDestinations {
     /**
      * The conversation page, for a conversation routed to a real session.
      *
-     * The session list is this page's overlay, so it is opened here rather than
-     * assembled as a page of its own; its navigation is declared once.
+     * The session list is this page's own overlay: the page opens the shared
+     * `SessionListOverlay`; nothing in this catalog assembles it, opens it or
+     * gives it a destination of its own.
      */
     @Composable
     private fun DestinationPageScope.conversationPage(sessionId: String) {

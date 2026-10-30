@@ -82,7 +82,7 @@ fun FairyConversationPage(
     // The open session's row, the same one the drawer renders: its display title
     // is what the bar shows, so an untitled session reads the list's placeholder
     // here too instead of falling back to the Fairy nameplate.
-    val session = sessions.sessions.firstOrNull { it.id == sessionId }
+    val session = sessions.session(sessionId)
     // 当前表现 comes from the interaction module and from this session's facts only. The route
     // says which session this page presents even before it settles; until then it has no facts,
     // and the module keeps the previous page's current appearance instead of flickering through
@@ -130,15 +130,13 @@ fun FairyConversationPage(
     SessionListOverlay(
         state = overlay,
         sessions = receive.owned,
-        currentSessionId = sessionId,
+        standingSessionId = sessionId,
         onOpenSession = onOpenConversation,
         onHome = onBack,
         onSettings = onSettings,
         // Re-selecting the session this page already stands in is not a
         // navigation: a page that has not settled yet retries its opening.
-        onReselectCurrent = { if (!settled) retry++ },
-        // A row is stopped by its own id, not by whichever session is open:
-        // every listed session has its own runtime here.
+        onReselectStanding = { if (!settled) retry++ },
         stopReply = receive::stopReply,
     ) {
         Box(

@@ -117,7 +117,7 @@ class RemoteReceiveState(
     }
 
     private fun refreshTitles(sessionId: String, title: String) {
-        val listed = owned.snapshot.value.sessions.firstOrNull { it.id == sessionId } ?: return
+        val listed = owned.snapshot.value.session(sessionId) ?: return
         if (listed.title == title) return
         titleDirty = true
         if (titleRefresh?.isActive == true) return

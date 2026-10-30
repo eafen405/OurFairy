@@ -102,6 +102,22 @@ class OwnedSessionStateTest {
     }
 
     @Test
+    fun `a snapshot names the row an id points at`() {
+        val snapshot = SessionsSnapshot(
+            sessions = listOf(
+                OwnedSession(id = "main", primary = true),
+                OwnedSession(id = "other", title = "另一个会话"),
+            ),
+            selectedId = "other",
+        )
+
+        assertEquals("另一个会话", snapshot.session("other")?.displayTitle)
+        assertEquals("main", snapshot.session("main")?.id)
+        assertNull(snapshot.session("missing"))
+        assertNull(snapshot.session(null))
+    }
+
+    @Test
     fun `choosing a session shows that one as the current session`() = runTest {
         val backend = DeferredBackend()
         val state = OwnedSessionState(backend, this)

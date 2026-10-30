@@ -46,6 +46,9 @@ data class SessionsSnapshot(
     val loading: Boolean = false,
     val failure: String? = null,
 ) {
+    /** This snapshot's row for [id], or null when it lists no such session (a null id included). */
+    fun session(id: String?): OwnedSession? = id?.let { wanted -> sessions.firstOrNull { it.id == wanted } }
+
     companion object {
         /**
          * Marks "the backend could not be reached", which carries no message of
