@@ -2,6 +2,9 @@ package me.rerere.rikkahub
 
 import android.app.Application
 import android.content.Intent
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -44,8 +47,12 @@ import org.robolectric.annotation.GraphicsMode
  * The account, the endpoint and the session ownership checks live in
  * `openRemoteNotification`; what only the Activity can show is that a delivered
  * intent reaches them at the right moment — after the cold start has settled, or
- * queued until it has — and that the conversation it lands on is the one the
- * catalog says. Nothing here reaches the network.
+ * queued until it has — and that the conversation it lands on actually opens.
+ * Nothing here reaches the network.
+ *
+ * The app must report itself foreground for the chat to bind at all: reception
+ * only observes sessions while the process is at least started, and Robolectric
+ * never delivers that transition by itself.
  */
 private class NotificationCredential : CredentialStore {
     override suspend fun load(): String? = "token"
@@ -149,6 +156,19 @@ class NotificationColdStartTest {
         .putExtra(AndroidRemoteNotifications.EXTRA_ACCOUNT, 2)
         .putExtra(AndroidRemoteNotifications.EXTRA_SESSION, sessionId)
 
+    /**
+     * Report the app as foreground.
+     *
+     * Reception only observes sessions while the process is at least started
+     * (`RemoteReceiveController.reconcile`), and Robolectric never delivers that
+     * transition itself. Without it the chat is created but never bound, which is
+     * the state a user reading a conversation would never be in.
+     */
+    private fun foreground() {
+        val lifecycle = ProcessLifecycleOwner.get().lifecycle as LifecycleRegistry
+        lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+    }
+
     /** Let the cold start settle and the CRT bookend play. */
     private fun settle() {
         repeat(8) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
@@ -157,21 +177,23 @@ class NotificationColdStartTest {
     @Test
     fun `a notification delivered after the account settles opens its conversation`() {
         compose.mainClock.autoAdvance = false
+        foreground()
         settle()
         compose.onNodeWithText("退出登录").assertIsDisplayed()
 
         compose.runOnUiThread { compose.activity.handleIntent(notification("s2")) }
         repeat(6) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
 
-        // The notification lands on the conversation destination: its drawer
-        // control is there, and the settings page it interrupted is gone.
-        compose.onNodeWithContentDescription("切换会话").assertExists()
-        compose.onNodeWithText("退出登录").assertDoesNotExist()
+        // The conversation is open, not merely routed to: the composer is there
+        // and the page's "cannot open this conversation" fallback is not.
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
+        compose.onNodeWithText("暂时无法打开此会话").assertDoesNotExist()
     }
 
     @Test
     fun `a notification delivered before the account settles opens once it does`() {
         compose.mainClock.autoAdvance = false
+        foreground()
         // Nothing has composed yet: the Activity has no back stack and the
         // identity has not settled, so this intent can only be queued.
         compose.runOnUiThread { compose.activity.handleIntent(notification("s2")) }
@@ -179,7 +201,7 @@ class NotificationColdStartTest {
         settle()
         repeat(6) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
 
-        compose.onNodeWithContentDescription("切换会话").assertExists()
-        compose.onNodeWithText("退出登录").assertDoesNotExist()
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
+        compose.onNodeWithText("暂时无法打开此会话").assertDoesNotExist()
     }
 }
