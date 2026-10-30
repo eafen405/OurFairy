@@ -111,15 +111,18 @@ fun FairyConversationPage(
     }
     // The session state owns the archive-follow rule: when the reader archives
     // the session this page is standing in, it publishes that very id together
-    // with the selection it moved to. The page follows only that explicit fact.
-    // It does not remember that the route once existed and cannot tell why a
-    // list changed, so a target that was never ours, has expired or whose
-    // archive was refused keeps showing "会话不可用" instead of navigating.
+    // with the selection it moved to. The page follows only that explicit fact,
+    // and then consumes it: the fact describes one archive, not a state the page
+    // should keep answering. It does not remember that the route once existed and
+    // cannot tell why a list changed, so a target that was never ours, has
+    // expired or whose archive was refused keeps showing "会话不可用" instead of
+    // navigating.
     LaunchedEffect(sessionId, sessions.archivedSelectionId, sessions.selectedId) {
         val followed = sessions.selectedId
         if (sessions.archivedSelectionId == sessionId &&
             followed != null && followed != sessionId
         ) {
+            receive.owned.clearArchiveFollow()
             onOpenConversation(followed)
         }
     }

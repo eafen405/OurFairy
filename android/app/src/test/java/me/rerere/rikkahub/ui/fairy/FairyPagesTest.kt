@@ -1549,6 +1549,54 @@ class FairyPagesTest {
         compose.onNodeWithTag("fairy-window-title").assertTextEquals("主会话标题")
     }
 
+    @Test fun `restoring a session after following an archive opens it instead of bouncing to main`() {
+        listedSessions = OwnedSessions(
+            listOf(
+                OwnedSession("main", primary = true, title = "主会话标题"),
+                OwnedSession("other", title = "另一个会话"),
+            ),
+            "main",
+        )
+        var target by mutableStateOf("other")
+        show {
+            FairyConversationPage(target, {}, receive, fairy,
+                onOpenConversation = { target = it }, onSettings = {})
+        }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle { receive.owned.archive("other") }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "main" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals("main", target)
+            // The page that followed consumed its one archive fact; it is not a
+            // latch that outlives the navigation it caused.
+            assertNull(receive.owned.snapshot.value.archivedSelectionId)
+        }
+
+        // A later restore brings the same session back. Opening it must present
+        // that session, not replay the consumed archive move to main.
+        compose.runOnIdle { receive.owned.restore("other") }
+        compose.waitUntil { receive.owned.snapshot.value.sessions.any { it.id == "other" } }
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("切换会话").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("另一个会话").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals("other", target)
+            assertEquals("other", receive.owned.snapshot.value.selectedId)
+        }
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("另一个会话")
+    }
+
     @Test fun `archiving another session while standing somewhere does not navigate`() {
         val opened = mutableListOf<String>()
         conversation(onOpen = opened::add)
