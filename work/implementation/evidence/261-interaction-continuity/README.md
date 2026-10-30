@@ -21,10 +21,10 @@ Android `ui/fairy`：
 
 | 文件 | 职责 |
 | --- | --- |
-| [`FairyInteraction.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyInteraction.kt) | 扩展为 待机 / 台词 / 最近台词记忆 的唯一持有者：`FairyInteractionState` 增加 `asleep` 与 `caption`；窄接口 `FairyLineMemory`；`tick()`（页面 500ms 心跳，module 决定 45s 首句、60–90s 下一句、180s 待机）、`touch()`（重置空闲并回答“这次触摸是否唤醒”，唤醒由页面立刻映射为 `eye.wake(confused = true)`）、`captionFinished()`、`pageExit()`（只结算未播完台词）。`FIRST_LINE_MS` / `SLEEP_AT_MS` 随之移入 module，页面不再有自己的空闲计时 |
+| [`FairyInteraction.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyInteraction.kt) | 扩展为 待机 / 台词 / 最近台词记忆 的唯一持有者：`FairyInteractionState` 增加 `asleep` 与 `caption`；窄接口 `FairyLineMemory`；`tick()`（页面 500ms 心跳，module 决定 45s 首句、60–90s 下一句、180s 待机）、`touch()`（重置空闲并回答“这次触摸是否唤醒”，唤醒由页面立刻映射为 `eye.wake(confused = true)`）、`captionFinished()`、`pageExit(presentation)`（结算未播完台词、短暂反应与说话脉冲，并忽略已过期页面的离页）。`FIRST_LINE_MS` / `SLEEP_AT_MS` 随之移入 module，页面不再有自己的空闲计时 |
 | [`FairyLines.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyLines.kt) | `FairyUiMemory` 实现 `FairyLineMemory`；删除 `chatPool` / `CHAT_AVOID`；KDoc 改成事实（module 是唯一调用方，两页共用同一份记忆） |
-| [`FairyConsolePage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConsolePage.kt) | 删除页内的 `caption` / `asleep` / `lastTouch` / `nextLineAt` / `FairyUiMemory`；改读 `fairy.state`，每 500ms `fairy.tick()`，触摸调 `fairy.touch()` 并在返回 true 时 `eye.wake(confused = true)`；`eye.asleep` 从 module 同步；离页（含 `!running`）调 `pageExit()`；台词 `onFinished` 调 `captionFinished()` |
-| [`FairyConversationPage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConversationPage.kt) | 页面持有 `FairyEyeController` 并传给顶部两块 `FairyScreen`（此前 `window.eye` 恒为 null）；整页 `PointerEventPass.Final` 观察触摸 → `eye.lookAt` + `fairy.touch()`；`eye.asleep` 从 module 同步，离页 `pageExit()`；上下文改用路由的 sessionId（未结算时 facts 仍为 null → 未知表现） |
+| [`FairyConsolePage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConsolePage.kt) | 删除页内的 `caption` / `asleep` / `lastTouch` / `nextLineAt` / `FairyUiMemory`；改读 `fairy.state`，每 500ms `fairy.tick()`；触摸与离页由共享宿主（2026-10-30 review 修复抽出 `FairyPageHost.kt`）统一接线，离页带本页 presentation 调 `pageExit()`；台词 `onFinished` 调 `captionFinished()` |
+| [`FairyConversationPage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConversationPage.kt) | 页面持有（或由测试注入）`FairyEyeController` 并传给顶部两块 `FairyScreen`（此前 `window.eye` 恒为 null）；整页触摸跟随、`eye.asleep` 同步、离页结算与反应映射由共享宿主 `FairyPageHost.kt` 统一接线（2026-10-30 review 修复）；上下文改用路由的 sessionId（未结算时保留上一页表现，见 F1 修复） |
 | [`FairyWindowBar.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyWindowBar.kt) | `FairyWindowTopBar` 增加 `eye: FairyEyeController? = null`，两处 `FairyScreen` 改用它；`ImpressionPage` / `GatewayPage` 不传，语义不变 |
 | [`FairyWindow.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyWindow.kt) | `FairyWindowState.eye` 删除（无生产者、渲染句柄不属呈现数据）；`FairyEyeInput` 去掉 `drowsy`；静止眼姿只用 `restingPupil(asleep)` |
 | [`FairyEyeMotion.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyEyeMotion.kt) | 删除 `sleepNow`、整条 `drowsy` 路径（属性、输入、lid 缓动、重眼皮 fixation、困倦瞳孔、困倦眨眼间隔）；`restingPupil(asleep)` 简化；`snaps` 计数随 `sleepNow` 删除（见下） |
@@ -68,11 +68,12 @@ Android `ui/fairy`：
 
 **短暂眼部反应用事件返回值，不进快照。** 设计决议 §4 曾把 `reaction` 列为快照字段；本票没有把唤醒反应放进
 `StateFlow`：唤醒是对“这一次按下”的同步回答（`touch(): Boolean`），页面立即映射为 `eye.wake(confused = true)`，
-因此不存在可排队、可补播、可在页面重建时重放的反应；`pageExit()` 只需清算台词。等 #262 有真正需要“意图在
-快照里被消费”的事件时再加字段，比现在留一个无生产者的 `reaction` 更符合“不保留不可达能力”。
+因此不存在可排队、可补播、可在页面重建时重放的反应；本票的 `pageExit()` 只清算台词。等 #262 有真正需要“意图在
+快照里被消费”的事件时再加字段，比现在留一个无生产者的 `reaction` 更符合“不保留不可达能力”（#262 已加；
+2026-10-30 review 修复后 `pageExit` 同时清算 `speechPulse` 与过期页面的离页）。
 
-**空闲时钟跨页连续，离页只清算台词。** `idleSince` 在首次 `show` / 换上下文 / 触摸时重置，页面销毁不重置；
-`pageExit()` 只清 `caption`。因此离开控制台时未播完的台词不会在另一页出现，也不会在回来时补播；若空闲时间
+**空闲时钟跨页连续，离页清算短暂状态。** `idleSince` 在首次 `show` / 换上下文 / 触摸时重置，页面销毁不重置；
+`pageExit()` 清 `caption`（#262 之后也清 `reaction`，2026-10-30 review 修复起还清 `speechPulse`）。因此离开控制台时未播完的台词不会在另一页出现，也不会在回来时补播；若空闲时间
 已过 180s，回来后的第一次心跳会按既有规则进入待机（新的 sleep 台词，而不是旧台词）。
 
 **中文 locale 门槛保持原样。** 控制台仍只在 `locales[0].language == "zh"` 时启动 tick：非中文设备不播台词、

@@ -172,6 +172,37 @@ class FairyInteractionTest {
         assertTrue(module.state.value.window.awaitingReply)
     }
 
+    @Test fun `the next page's first frame keeps the presentation it has not replaced yet`() {
+        // 首页 → 对话页: the routed context is already the same session, but the new page's runtime
+        // has not answered yet (facts == null). Until it does, the page must show what the reader
+        // was just looking at, not flicker through the unknown presentation.
+        module.show(main, facts(status = 2, reasons = listOf(1)))
+        val heldFacts = module.state.value.facts
+
+        module.show(main, null)
+
+        assertEquals(
+            "同一上下文没有新事实时，当前表现保持上一页的样子",
+            FairyPresence.THINKING,
+            module.state.value.window.presence,
+        )
+        assertTrue("等待回复的窗口不会因过渡帧折叠", module.state.value.window.awaitingReply)
+        assertEquals("保留已持有的事实，过渡帧不制造未知", heldFacts, module.state.value.facts)
+    }
+
+    @Test fun `no facts reset a different context and a signed-out context to unknown`() {
+        module.show(main, facts(status = 2))
+
+        module.show(other, null)
+        assertEquals(FairyPresence.CONNECTING, module.state.value.window.presence)
+        assertNull(module.state.value.facts)
+
+        module.show(main, facts(status = 2))
+        module.show(null, null)
+        assertEquals("登出后没有上下文可延续", FairyPresence.CONNECTING, module.state.value.window.presence)
+        assertNull(module.state.value.facts)
+    }
+
     @Test fun `signing out holds nothing`() {
         module.show(main, facts(status = 2))
 
@@ -521,6 +552,21 @@ class FairyInteractionTest {
         )
     }
 
+    @Test fun `a return without facts keeps the settling guard until the first facts arrive`() {
+        // foregrounded() can read the runtime before it exists (an account switch that has not
+        // rebound yet). The return is still unwatched: the first facts it later presents are the
+        // baseline that settles what happened while away, not news to replay.
+        module.show(main, facts(status = 1))
+        module.pageExit()
+
+        module.foregrounded(main, null)
+        assertNull("回前台时尚无事实可演", module.state.value.reaction)
+
+        module.show(main, facts(status = 1, delivery = FairyDelivery("episode-1", 7)))
+        assertNull("回前台后的第一份事实仍是基线，不补演投递", module.state.value.reaction)
+        assertEquals(FairyPresence.IDLE, module.state.value.window.presence)
+    }
+
     @Test fun `coming back keeps the continuous state`() {
         module.show(main, facts(status = 1))
         tickAt(SLEEP_AT_MS)
@@ -596,6 +642,52 @@ class FairyInteractionTest {
 
         module.show(main, facts(status = 2, reasons = listOf(1), reply = "更长的文本", output = 2))
         assertEquals("同一输出不重复脉冲", 1, module.state.value.speechPulse)
+    }
+
+    @Test fun `leaving the page settles the speaking pulse instead of replaying it`() {
+        module.show(main, facts(status = 2, reasons = listOf(1), reply = "文本", output = 1))
+        module.show(main, facts(status = 2, reasons = listOf(1), reply = "更长的文本", output = 2))
+        assertEquals(1, module.state.value.speechPulse)
+
+        module.pageExit()
+        assertEquals("离页结算已经演过的说话脉冲", 0, module.state.value.speechPulse)
+
+        module.show(main, facts(status = 2, reasons = listOf(1), reply = "更长的文本", output = 2))
+        assertEquals("回页不得为已经演过的输出重播脉冲", 0, module.state.value.speechPulse)
+    }
+
+    @Test fun `a stale page exit cannot settle the next page's presentation`() {
+        // Two pages overlap for one frame while navigating: the outgoing page's last exit may run
+        // after the incoming page has presented. An exit that names an older presentation must not
+        // clear the new page's reaction or turn its next real event into a silent baseline.
+        module.show(main, facts(status = 1))
+        val outgoing = module.show(main, facts(status = 1))
+        module.show(main, facts(status = 1))
+        module.sent("send-1")
+
+        module.pageExit(outgoing)
+
+        assertNotNull("过期页面的离页不得清掉新页面的反应", module.state.value.reaction)
+        module.show(main, facts(status = 1, delivery = FairyDelivery("episode-1", 7)))
+        assertEquals(
+            "过期离页不得把新页面的下一条真实事件静默结算",
+            FairyReactionKind.DELIVERY,
+            module.state.value.reaction?.kind,
+        )
+    }
+
+    @Test fun `the current page's exit still settles the presentation`() {
+        module.show(main, facts(status = 2, reasons = listOf(1), reply = "文本", output = 1))
+        val current = module.show(
+            main,
+            facts(status = 2, reasons = listOf(1), reply = "更长的文本", output = 2),
+        )
+        module.sent("send-1")
+
+        module.pageExit(current)
+
+        assertNull("当前页面的离页仍结算台词与反应", module.state.value.reaction)
+        assertEquals(0, module.state.value.speechPulse)
     }
 
     // --- 待机与台词 (#261) -------------------------------------------------------------------

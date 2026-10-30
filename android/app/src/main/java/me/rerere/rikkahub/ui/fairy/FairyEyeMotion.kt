@@ -210,8 +210,9 @@ internal class FairyEyeMotion(seed: Int, seen: FairyEyeController? = null) {
             Offset.Zero
         }
 
-        // Standby: the gaze settles at the center and holds still.
-        val still = input.asleep && scriptIndex < 0
+        // Standby: the gaze settles at the center and holds still — except for a real glance,
+        // which is shown while dozing instead of being queued until waking.
+        val still = input.asleep && scriptIndex < 0 && glanceLeft <= 0f
         if (still) {
             target = Offset.Zero
             tau = SLEEP_SETTLE_MS

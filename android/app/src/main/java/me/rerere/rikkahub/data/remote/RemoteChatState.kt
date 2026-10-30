@@ -590,11 +590,18 @@ class RemoteChatState(
         }
         return command.requestId
     }
-    fun retryPending() {
-        val selected = key ?: return
-        val credential = token ?: return
-        val command = mutable.value.pending ?: return
-        if (!command.acceptanceUnknown || mutable.value.sending) return
+    /**
+     * Retry the pending command with its original requestId.
+     *
+     * Answers true only when this state actually took the retry: not bound, no credential, no
+     * pending command, a command whose acceptance is not unknown, or one already sending all
+     * refuse it. The caller reports the requestId only when this answers true.
+     */
+    fun retryPending(): Boolean {
+        val selected = key ?: return false
+        val credential = token ?: return false
+        val command = mutable.value.pending ?: return false
+        if (!command.acceptanceUnknown || mutable.value.sending) return false
         mutable.value = mutable.value.copy(sending = true, failure = null)
         scope.launch {
             try {
@@ -604,6 +611,7 @@ class RemoteChatState(
             catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) { commandFailure(selected, StoredChatSend(command.requestId, command.text, command.uploadIds), failure) }
         }
+        return true
     }
     private suspend fun transmit(credential: String, selected: ChatSyncKey, command: StoredChatSend) {
         if (credential != token || selected != key) return

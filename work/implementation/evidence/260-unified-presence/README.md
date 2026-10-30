@@ -27,7 +27,7 @@ Android `ui/fairy`：
 | --- | --- |
 | [`FairyInteraction.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyInteraction.kt) | 新增的 deep module：`FairyInteractionContext`（只带会话 id，不带账号）、`FairyRemoteFacts`（页面转述的只读事实）、`FairyInteractionState`、`window(facts)`（唯一的存在感合成）、`show(context, facts)`（唯一写入方）。`now: () -> Long` 与 `random: Random` 注入，当前表现两者都不读 |
 | [`FairyInteractionSources.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyInteractionSources.kt) | module 与远程协议之间仅有的两处翻译：`SessionsSnapshot.currentSessionId()`（`selectedId ?: primarySessionId`）与 `RemoteChatSnapshot.fairyFacts()`（复制 `activity` getter 的答案，不重读原始事件） |
-| [`FairyConversationPage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConversationPage.kt) | 删除页内 `fairyWindow()`；改为 `fairy.window(facts)` + `fairy.show(context, facts)`；未结算在目标会话里时上下文为 null（未知表现），不呈现上一会话 |
+| [`FairyConversationPage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConversationPage.kt) | 删除页内 `fairyWindow()`；页面改用 `fairy.show(context, facts)` 记录本帧，并渲染 module 快照里的 `window`（2026-10-30 review 修复后不再页面侧调用 `window(facts)`）；未结算在目标会话里时上下文为 null（未知表现），不呈现上一会话 |
 | [`FairyConsolePage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairyConsolePage.kt) | 不再硬编码 `FairyPresence.IDLE`：按当前会话取运行时（`receive.runtimes` → `stateForSession` 同一映射），渲染 module 的窗口并 `show` |
 | [`RemoteReceiveState.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/data/remote/RemoteReceiveState.kt) | `chats` 内存 map 改为 `runtimes: StateFlow<Map<String, RemoteChatState>>`：首页要"当前会话的运行时出现/退役"可观察，否则只能靠列表通知的先后。`stateForSession`/`stopReply`/`bind`/`stopObservation` 全部改读同一份，仍是唯一一份 |
 | [`IdentityModule.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/di/IdentityModule.kt) | `single { FairyInteraction(now = SystemClock::uptimeMillis, random = Random.Default) }`：进程级一个实例，时钟在装配层注入 |
@@ -37,7 +37,7 @@ Android `ui/fairy`：
 | 文件 | 覆盖 |
 | --- | --- |
 | [`FairyInteractionTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/ui/fairy/FairyInteractionTest.kt) | 20 个纯 JUnit 用例（无 Robolectric）：未知不是安静、连接中/离线/未知/工作的分支顺序、`expanded`/`awaitingReply`、换上下文退役旧事实、登出不留状态、同一上下文替换事实、当前会话回退主会话、`fairyFacts()` 复制快照的未知答案 |
-| [`FairyPagesTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/ui/fairy/FairyPagesTest.kt) | 5 个新增接线用例：首页显示当前会话的思考而非待机、活动未知显示连接中、只跟当前会话（另一会话在执行不影响首页）、账号切换后旧会话不再驱动首页、首页与对话页对同一会话得到同一表现 |
+| [`FairyPagesTest.kt`](../../../../android/app/src/test/java/me/rerere/rikkahub/ui/fairy/FairyPagesTest.kt) | 5 个新增接线用例：首页/对话页显示当前会话的思考而非待机、未知活动显示为同步中、只跟当前会话（另一会话在执行不影响首页）、账号切换后旧会话不再驱动首页、首页与对话页对同一会话渲染同一当前表现（2026-10-30 review 修复把 module 断言补成页面可见结果） |
 
 ## 关键决定
 
@@ -51,9 +51,10 @@ the facts of the previous one`）。
 `RemoteActivityStateTest`、`RemoteActivityTrustTest` 锁住。module 拿不到原始事件，所以它**没有能力**
 把未知变成安静；`FairyInteractionTest` 的两条用例分别固定"复制了这个答案"与"未知渲染成连接中"。
 
-**`window()` 是纯函数，`show()` 才是写入。** 页面渲染时用 `window(facts)` 立即拿到结果，不依赖 module
-的 StateFlow 是否已经追上本帧；`show()` 只负责让其余读者（#261 的待机/台词、跨页状态）看到同一份。
-一条用例用"时钟与随机源被读取就抛错"的 module 证明当前表现不依赖二者。
+**`window()` 是纯函数且是唯一合成规则，`show()` 才是写入。** `show()` 用它记录本帧；页面只渲染
+module 快照里的 `window`，不再自己调用 `window(facts)`（2026-10-30 review 修复：此前页面侧与
+`FairyInteractionState.window` 是两套路径，且同一上下文的无事实过渡帧会退回 UNKNOWN）。一条用例用
+"时钟与随机源被读取就抛错"的 module 证明当前表现不依赖二者。
 
 ## 实际跑过的命令
 

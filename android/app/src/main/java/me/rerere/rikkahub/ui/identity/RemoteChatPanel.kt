@@ -201,12 +201,10 @@ fun RemoteChatPanel(
                 onReconcile = state::reconcile,
                 onRetry = {
                     // The retried command keeps its requestId: reporting it again is how the
-                    // listener's own key makes the retry the same event. A retry the state would
-                    // refuse is not reported.
-                    if (pending.acceptanceUnknown && !snapshot.sending) {
-                        state.retryPending()
-                        onSendAccepted(pending.requestId)
-                    }
+                    // listener's own key makes the retry the same event. The state is the one that
+                    // knows whether it actually took the retry (bound, credential, pending,
+                    // unknown acceptance, not already sending); a refused retry is not reported.
+                    if (state.retryPending()) onSendAccepted(pending.requestId)
                 },
             )
         }
