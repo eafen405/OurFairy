@@ -18,6 +18,25 @@ data class SessionsSnapshot(
     val sessions: List<OwnedSession> = emptyList(),
     val primarySessionId: String? = null,
     val selectedId: String? = null,
+    /**
+     * The session just archived while it was this snapshot's current one, or
+     * null.
+     *
+     * This is the archive-follow rule's whole public answer: [OwnedSessionState.archive]
+     * publishes the archived id only when the reader was standing in that session
+     * and the archive was adopted; [selectedId] then names where the selection
+     * moved (the account's main session). A page that is showing this very id
+     * may follow [selectedId]; a target that was never listed, has expired, is
+     * not this account's, or whose archive was refused publishes nothing here,
+     * so it stays unavailable instead of being mistaken for an archive.
+     *
+     * It describes one archive, not a list read: an explicit selection move
+     * (`bind`, `select`, `read`, `create`, `returnToPrimary`) or a later archive
+     * releases it, while a refresh, a rename or a restore preserves it — the
+     * archive is still the reader's last decision even if a title check happens
+     * to re-read the list first.
+     */
+    val archivedSelectionId: String? = null,
     val loading: Boolean = false,
     val failure: String? = null,
 ) {
@@ -179,15 +198,23 @@ class OwnedSessionState(
      * The backend keeps the log and messages; the session leaves the default
      * list, so this snapshot drops the row by the same rule the backend applied.
      * A selection that was standing in the archived session moves to the
-     * account's main session, because the row it named is gone. The primary
-     * session never reaches here: the drawer has no delete entry for it and the
-     * backend refuses it, which this method leaves as the backend answered.
+     * account's main session, because the row it named is gone, and that move is
+     * published as [SessionsSnapshot.archivedSelectionId] — the explicit fact a
+     * page follows. Archiving any other session publishes no follow: the reader
+     * keeps standing where they were. The primary session never reaches here:
+     * the drawer has no delete entry for it and the backend refuses it, which
+     * this method leaves as the backend answered.
      */
     fun archive(sessionId: String) = request { token, current ->
+        val standing = current.selectedId ?: current.primarySessionId
         val archived = backend.archive(token, sessionId)
+        val next = current.selectedId?.takeIf { it != archived.id } ?: current.primarySessionId
         current.copy(
             sessions = current.sessions.filterNot { it.id == archived.id },
-            selectedId = current.selectedId?.takeIf { it != archived.id } ?: current.primarySessionId,
+            selectedId = next,
+            // Only an adopted archive of the session the reader was standing in
+            // is a follow, and only when it moved the selection somewhere else.
+            archivedSelectionId = archived.id.takeIf { standing == archived.id && next != archived.id },
         )
     }
 
@@ -209,6 +236,10 @@ class OwnedSessionState(
         },
         primarySessionId = primarySessionId ?: named.id.takeIf { named.primary },
         selectedId = if (stand) named.id else selectedId,
+        // A session the reader moved into is an explicit decision that
+        // supersedes the archive follow. A rename or a restore names a row
+        // without moving the reader, so it leaves the follow in place.
+        archivedSelectionId = if (stand) null else archivedSelectionId,
     )
 
     /**

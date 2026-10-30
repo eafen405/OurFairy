@@ -248,9 +248,9 @@ internal fun IdentitySessionList(
             }
         }
         Row(Modifier.fillMaxWidth()) {
-            TextButton(onClick = onHome) { Text("首页") }
+            TextButton(onClick = onHome, modifier = Modifier.testTag("session-list-home")) { Text("首页") }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onSettings) { Text("设置") }
+            TextButton(onClick = onSettings, modifier = Modifier.testTag("session-list-settings")) { Text("设置") }
         }
     }
     val unreachable = stringResource(R.string.identity_unreachable)

@@ -128,7 +128,10 @@ fun FairyConsolePage(
         SessionListOverlay(
             state = overlay,
             sessions = receive.owned,
-            currentSessionId = currentSessionId,
+            // The console is not standing in a conversation, so every row —
+            // including the current one — enters that conversation. Only a page
+            // that already presents a session treats re-selecting it as a close.
+            currentSessionId = null,
             onOpenSession = { id -> onOpen(Screen.Conversation(id)) },
             // The console is home already: its list's home entry only closes.
             onHome = {},
