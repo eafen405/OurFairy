@@ -70,6 +70,15 @@
 在 `identitySettled` 后 drain。这条队列此前零覆盖，是有状态、依赖时序、且坏了会表现为「冷启动点通知没反应」
 的那种代码。为了能从测试驱动，`handleIntent` 从 `private` 改为 `internal`（`onNewIntent` 只是转发它）。
 
+用例断言的是**会话真的打开了**（`发送消息` 在、页面的「暂时无法打开此会话」兜底不在），不是「路由到了就算」。
+让它成立的是一个不显然的前置条件：`RemoteReceiveController.reconcile()` 只在进程至少 STARTED 时
+`resumeObservation()`，而 Robolectric 不会自己派发这个转换 —— 结果是 chat 被创建却从未 bind，页面停在
+兜底文案。测试因此显式把 `ProcessLifecycleOwner` 推进到 STARTED；把这一行去掉，两条用例都会失败
+（实测过），所以它不是装饰。
+
+> 排查时先怀疑过 DI 版 `RemoteReceiveState` 给 `RemoteChatState` 装的 attachments/jobs/speech 三个真 backend。
+> 那个猜测是错的：这三个只在语音、附件、任务被真正调用时才碰到，`bind` 路径不经过它们。
+
 | 命令 | 结果 |
 | --- | --- |
 | `./gradlew test lintDebug`（`fix/257-review`） | BUILD SUCCESSFUL 3m19s；**53 套件 / 368 用例 / 0 失败 / 0 错误**；lint `severity="Error"` 计数 0 |
