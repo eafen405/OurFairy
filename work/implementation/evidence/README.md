@@ -313,6 +313,15 @@
 | [262-fairy-reactions](262-fairy-reactions/README.md) | #262 真实事件触发反应：本地发送经 `sent(requestId)` 只给短暂注意反应、不伪造后端 THINKING；Fairy 输出/投递/完成经 `fairyFacts()` 的 `newestFairyOutput().seq`/`delivery`/`completed`，用只增的 `(sessionId,seq)`、`(episodeId,seq)`、`(episodeId,finishedSeq)`、`requestId` 去重，活动未知时不算事件；`foregrounded(context, facts)` 以运行时当前快照为基线、不补播后台积压的事件；`FairyEyeReactions` 把 SENT/OUTPUT/DELIVERY/COMPLETED 映射到既有眼睛；删除零调用方 `attend`/`startle`，`glanceAt`/`blink` 接真实事件，`speechPulse` 改由 module 生产、SPEAKING 新输出才脉冲；53 个 module 用例 + 4 个页面用例（含 ActivityScenario 前后台与 Reduced Motion） |
 | [256-review-fixes](256-review-fixes/README.md) | #256 收口两轴评审修复：页面改渲染 module 快照的 `window`（同一上下文无事实的过渡帧沿用上一页表现，换会话/登出仍为未知）；`pageExit` 结算 caption/reaction/speechPulse 并按呈现号忽略过期离页；回前台无事实时保持未观察直到第一份事实到达；待机中的视线反应当下播放、不排队到醒来；`retryPending()` 返回是否真正受理、panel 只在受理时上报；抽出 `FairyPageHost` 共用眼睛/待机同步/生命周期/手势/反应接线；恢复「存在感」词条并删除 #257 词；页面 seam 补可见结果、可注入眼睛与手势断言；最终 Android `test lintDebug assembleDebug` 52 suites/427 tests/0 failures/0 lint errors、3 个 debug APK，根 `npm test` 430/430；真机验收未执行 |
 
+## Android 会话导航：统一会话列表浮层与当前会话事实（规格 #258）
+
+| 目录 | 内容 |
+| --- | --- |
+| [265-shared-session-overlay](265-shared-session-overlay/README.md) | #265 会话列表抽屉提升为控制台与对话页共用的 `ui/identity/SessionListOverlay.kt`：状态持有 `DrawerState` 与 `CoroutineScope`，`open()`/`close()` 直接驱动抽屉，`isOpen` 由抽屉派生，没有第二份布尔状态；控制台「全部会话」与无当前会话时的「进入会话」就地打开浮层、不导航，`CURRENT SESSION` 改显示同一 `owned` 快照行的 `displayTitle`，未命名会话与列表共用「新会话」占位；对话页改用同一浮层，旧 `Screen.Sessions` 暂留兼容 |
+| [266-archive-follow-state](266-archive-follow-state/README.md) | #266 归档跟随收进 `OwnedSessionState`：`SessionsSnapshot.archivedSelectionId` 只在归档当前会话且选择确实移动时发布，页面只响应该事实，删除 `standing` 闩锁与列表差分；跟随后消费、恢复命名会话、显式选择与账号切换清除，refresh/rename 保留，过期/无权/拒绝归档不发布；控制台浮层补齐归档视图、恢复、改名、停止回复与首页/设置入口，控制台行（含当前行）一律进入会话，对话页重选当前会话仍只关闭 |
+| [267-retire-sessions-destination](267-retire-sessions-destination/README.md) | #267 删除 `Screen.Sessions`、catalog 条目与空会话对话页装配：`FairyConversationPage` 只接受真实 `sessionId`，七个目的地仍由同一张表驱动；旧 `route="sessions"` 按未知路由回退 `[Home]`（`FairyLastLocationTest` 与零网络 `SessionsColdStartTest` 固定），冷启动不打开浮层、不显示错误页；`android/GLOSSARY.md` 新增「会话列表浮层」 |
+| [258-review](258-review/README.md) | spec #258 收口两轴评审修复：标题栏改传 `OwnedSession.displayTitle`，控制台、列表行与标题栏共用同一条未命名占位并补窄屏大字长标题用例；`archivedSelectionId` 增加页面消费与恢复清除，消除归档后恢复会话又被弹回主会话的路径；`SessionsSnapshot.session(id)` 收拢行查询；浮层参数改名 `standingSessionId` 并记录两个入口的重选语义；按「声称须可执行」删除或收窄 grep 无法落实的结构声称 |
+
 ## 界面微调（#215/#217/#218/#239/#255）
 
 | 目录 | 内容 |
