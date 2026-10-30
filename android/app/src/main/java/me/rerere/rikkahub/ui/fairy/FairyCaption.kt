@@ -6,12 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -50,13 +47,11 @@ const val CAPTION_HOLD_MS = 2500L
  * the box does not grow line by line. Reduced Motion shows the whole line
  * at once for the same total time.
  *
- * [compact] is the chat page's HUD strip under the window bar; otherwise it
- * is a dialog box with a "Fairy" name tab (console).
+ * It is the console's dialog box with a "Fairy" name tab under her screen.
  */
 @Composable
 fun FairyCaption(
     line: FairyLine,
-    compact: Boolean,
     onFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -100,29 +95,6 @@ fun FairyCaption(
     }
     val tap = Modifier.clickable(remember { MutableInteractionSource() }, indication = null) { taps.trySend(Unit) }
     val bodyStyle = MaterialTheme.typography.bodyMedium
-    if (compact) {
-        Row(
-            modifier
-                .fillMaxWidth()
-                .fairyPanel(tokens.panelShape, tokens.panelOpaque.copy(alpha = 0.94f))
-                .then(tap)
-                .animateContentSize(tween(200))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            Text(
-                "FAIRY",
-                fontFamily = tokens.telemetryFontFamily,
-                fontSize = 10.sp,
-                lineHeight = 18.sp,
-                letterSpacing = 1.5.sp,
-                color = tokens.fairyLink,
-                modifier = Modifier.fairySlant(),
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(text, style = bodyStyle.copy(fontSize = 13.sp, lineHeight = 18.sp), color = tokens.textPrimary)
-        }
-        return
-    }
     Box(modifier.fillMaxWidth().padding(top = 10.dp)) {
         Box(
             Modifier

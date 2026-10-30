@@ -340,6 +340,30 @@ class RemoteChatStateTest {
         assertNull(state.snapshot.value.pending)
     }
 
+    @Test fun `retry answers whether the command was actually accepted`() = runTest {
+        val backend = Backend().apply { failure = IdentityUnreachable(java.io.IOException("lost")) }
+        val state = RemoteChatState(backend, backgroundScope, MemoryChatSyncStore(), "https://fairy")
+        assertFalse("未绑定的会话无法受理重试", state.retryPending())
+
+        state.bind("alice", "s1", 1)
+        runCurrent()
+        state.send("hello")
+        runCurrent()
+        assertTrue(state.snapshot.value.pending!!.acceptanceUnknown)
+
+        // A lost credential still leaves the pending command on screen, but the retry is refused:
+        // the panel must not report it as an accepted send.
+        state.bind(null, "s1", 1)
+        assertFalse("没有凭据时重试没有被受理", state.retryPending())
+
+        state.bind("alice", "s1", 1)
+        backend.failure = null
+        assertTrue("真正发出的重试回答 true", state.retryPending())
+        assertFalse("已经在发送中的重试不算再次受理", state.retryPending())
+        runCurrent()
+        assertNull(state.snapshot.value.pending)
+    }
+
     @Test fun `late old account send result cannot change the new account projection`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val backend = Backend().apply { sendGate = gate }

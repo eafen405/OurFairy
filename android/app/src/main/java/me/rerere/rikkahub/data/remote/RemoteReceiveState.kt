@@ -43,7 +43,20 @@ class RemoteReceiveState(
 
     /** The observable pointer to the selected runtime; [bind] retires it with the list. */
     val selectedChat: StateFlow<RemoteChatState?> = mutableSelected.asStateFlow()
-    private val chats = mutableMapOf<String, RemoteChatState>()
+
+    private val mutableRuntimes = MutableStateFlow<Map<String, RemoteChatState>>(emptyMap())
+
+    /**
+     * The runtime each listed session has, as a map a page can follow.
+     *
+     * [stateForSession] answers the same question for one id in one read; this flow is what makes
+     * that answer observable, so a page that presents a session can re-read it when the runtime
+     * appears or is retired instead of depending on which collector the list happened to notify
+     * first. It is keyed by session id because that is how a page names what it presents. Each
+     * value belongs to that one session: the interaction module and the pages read only the
+     * session they are presenting, and nothing here derives an account-level activity summary.
+     */
+    val runtimes: StateFlow<Map<String, RemoteChatState>> = mutableRuntimes.asStateFlow()
     private var token: String? = null
     private var userShortId: Int? = null
     private var epoch = 0L
@@ -56,17 +69,24 @@ class RemoteReceiveState(
         scope.launch {
             owned.snapshot.collect { listed ->
                 val allowed = listed.sessions.map { it.id }.toSet()
-                val removed = chats.keys.filter { it !in allowed }
-                removed.forEach { chats.remove(it)?.detach() }
+                val removed = mutableRuntimes.value.keys.filter { it !in allowed }
+                removed.forEach { id ->
+                    val gone = mutableRuntimes.value[id]
+                    mutableRuntimes.value = mutableRuntimes.value - id
+                    gone?.detach()
+                }
                 if (token != null && userShortId != null) {
                     listed.sessions.forEach { session ->
-                        val chat = chats.getOrPut(session.id) { chatFactory(notifications != null) }
+                        val chat = mutableRuntimes.value[session.id]
+                            ?: chatFactory(notifications != null).also {
+                                mutableRuntimes.value = mutableRuntimes.value + (session.id to it)
+                            }
                         if (observing) chat.bind(token, session.id, userShortId)
                         chat.onSettled(::publishBacklog)
                         chat.onTitle(::refreshTitles)
                     }
                 }
-                mutableSelected.value = chats[listed.selectedId]
+                mutableSelected.value = mutableRuntimes.value[listed.selectedId]
                 if (removed.isNotEmpty()) publishBacklog()
             }
         }
@@ -87,8 +107,8 @@ class RemoteReceiveState(
         titleRefresh?.cancel()
         titleRefresh = null
         titleDirty = false
-        chats.values.forEach { it.detach() }
-        chats.clear()
+        mutableRuntimes.value.values.forEach { it.detach() }
+        mutableRuntimes.value = emptyMap()
         mutableSelected.value = null
         this.token = token
         this.userShortId = userShortId
@@ -117,7 +137,7 @@ class RemoteReceiveState(
         }
     }
 
-    fun stateForSession(sessionId: String): RemoteChatState? = chats[sessionId]
+    fun stateForSession(sessionId: String): RemoteChatState? = mutableRuntimes.value[sessionId]
 
     /**
      * Stop one listed session's reply and wait for the backend to accept it.
@@ -128,7 +148,7 @@ class RemoteReceiveState(
      * stop is itself a no-op when nothing is running.
      */
     suspend fun stopReply(sessionId: String) {
-        chats[sessionId]?.stopReply()
+        mutableRuntimes.value[sessionId]?.stopReply()
     }
 
     /** Open a route target through the account's authenticated session read. */
@@ -144,12 +164,12 @@ class RemoteReceiveState(
 
     fun stopObservation() {
         observing = false
-        chats.values.forEach { it.detach() }
+        mutableRuntimes.value.values.forEach { it.detach() }
     }
 
     fun resumeObservation() {
         observing = true
-        chats.forEach { (sessionId, chat) -> chat.bind(token, sessionId, userShortId) }
+        mutableRuntimes.value.forEach { (sessionId, chat) -> chat.bind(token, sessionId, userShortId) }
     }
 
     /**
@@ -162,11 +182,11 @@ class RemoteReceiveState(
     private fun publishBacklog() {
         val platform = notifications ?: return
         if (publishing?.isActive == true) return
-        if (chats.values.any { it.snapshot.value.isCatchingUp }) return
+        if (mutableRuntimes.value.values.any { it.snapshot.value.isCatchingUp }) return
         val started = epoch
         publishing = scope.launch {
             try {
-                val owed = chats.values.mapNotNull { chat ->
+                val owed = mutableRuntimes.value.values.mapNotNull { chat ->
                     chat.owedReminder()?.let { Owed(chat, it.first, it.second) }
                 }
                 // Ask again after the awaited disk work: the account and the app may have moved.
