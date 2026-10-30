@@ -2,7 +2,9 @@ package me.rerere.rikkahub
 
 import android.app.Application
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.AgentSummary
@@ -150,6 +152,13 @@ class SettingsColdStartApplication : SeededColdStartApplication("settings")
 /** A returning user who was standing on their own impression page. */
 class ImpressionColdStartApplication : SeededColdStartApplication("impression")
 
+/**
+ * A returning user whose previous version left the session-list destination in
+ * the file. The list is no longer a destination; the upgrade falls back to the
+ * console.
+ */
+class SessionsColdStartApplication : SeededColdStartApplication("sessions", "main")
+
 @RunWith(RobolectricTestRunner::class)
 @Config(application = SettingsColdStartApplication::class, sdk = [35], qualifiers = "zh-rCN-w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -177,6 +186,30 @@ class ImpressionColdStartTest {
         compose.mainClock.autoAdvance = false
         repeat(8) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
         compose.onNodeWithText(compose.activity.getString(R.string.impression_explain)).assertIsDisplayed()
+        assertEquals("a cold start must not reach the network", emptyList<String>(), CountingHttp.hosts)
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = SessionsColdStartApplication::class, sdk = [35], qualifiers = "zh-rCN-w411dp-h891dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class SessionsColdStartTest {
+    @get:Rule val compose = createAndroidComposeRule<RouteActivity>()
+
+    @Test
+    fun `a stored session-list location lands on the console without opening the list`() {
+        compose.mainClock.autoAdvance = false
+        // The CRT bookend plays before the page is reachable.
+        repeat(8) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
+
+        // The console is the page: it offers both ways on but shows no
+        // conversation error, and the list stays closed.
+        compose.onNodeWithText("进入会话").assertIsDisplayed()
+        compose.onNodeWithText("全部会话").assertIsDisplayed()
+        compose.onNodeWithText("会话不可用").assertDoesNotExist()
+        // The list is the console's overlay. Its sheet may be composed behind
+        // the closed drawer, but it must not be on screen at a cold start.
+        compose.onNodeWithContentDescription("关闭会话列表").assertIsNotDisplayed()
         assertEquals("a cold start must not reach the network", emptyList<String>(), CountingHttp.hosts)
     }
 }

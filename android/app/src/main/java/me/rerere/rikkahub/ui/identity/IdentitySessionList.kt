@@ -51,6 +51,7 @@ import me.rerere.rikkahub.data.remote.OwnedSession
 import me.rerere.rikkahub.data.remote.OwnedSessionState
 import me.rerere.rikkahub.data.remote.SessionView
 import me.rerere.rikkahub.data.remote.SessionsSnapshot
+import me.rerere.rikkahub.data.remote.displayTitle
 import me.rerere.rikkahub.ui.fairy.LocalFairyTokens
 
 /**
@@ -168,7 +169,7 @@ internal fun IdentitySessionList(
                 items(snapshot.sessions, key = { session -> session.id }) { session ->
                     val selected = session.id == snapshot.selectedId
                     SessionRow(
-                        title = session.title.ifEmpty { "新会话" },
+                        title = session.displayTitle,
                         selected = selected,
                         enabled = !busy,
                         onOpen = { onOpen(session.id) },
@@ -227,7 +228,7 @@ internal fun IdentitySessionList(
                     // bring back. It carries no rename and no delete, and the
                     // primary can never appear because it is never archived.
                     SessionRow(
-                        title = session.title.ifEmpty { "新会话" },
+                        title = session.displayTitle,
                         selected = false,
                         enabled = !busy,
                         onOpen = null,
@@ -247,9 +248,9 @@ internal fun IdentitySessionList(
             }
         }
         Row(Modifier.fillMaxWidth()) {
-            TextButton(onClick = onHome) { Text("首页") }
+            TextButton(onClick = onHome, modifier = Modifier.testTag("session-list-home")) { Text("首页") }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onSettings) { Text("设置") }
+            TextButton(onClick = onSettings, modifier = Modifier.testTag("session-list-settings")) { Text("设置") }
         }
     }
     val unreachable = stringResource(R.string.identity_unreachable)
@@ -287,7 +288,7 @@ internal fun IdentitySessionList(
             title = { Text("删除会话") },
             text = {
                 Column {
-                    Text("会话「${session.title.ifEmpty { "新会话" }}」将从列表消失。")
+                    Text("会话「${session.displayTitle}」将从列表消失。")
                     Text("这是归档：日志和消息都会保留，之后可以在已归档列表里恢复。")
                     Text("如果它正在回复，会先停止当前回复，再归档。")
                 }

@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
@@ -86,6 +88,8 @@ class FairyPagesTest {
         ),
         "main",
     )
+    /** The account's archived rows, the other list the shared overlay reads. */
+    private var archivedSessions = emptyList<OwnedSession>()
     private var createdSession = OwnedSession("created")
     /** How many times the account's list was read, so a re-read is observable. */
     private var listReads = 0
@@ -94,28 +98,46 @@ class FairyPagesTest {
     private val sessions = object : SessionBackend {
         override suspend fun list(token: String, archived: Boolean): OwnedSessions {
             listReads += 1
-            return listedSessions
+            return if (archived) OwnedSessions(archivedSessions, null) else listedSessions
         }
         override suspend fun read(token: String, sessionId: String): OwnedSession {
             readGate?.await()
             if (sessionId == "missing") throw IdentityRefused(404, "session/not-found", "会话已不存在")
-            return OwnedSession(sessionId, primary = sessionId == listedSessions.primarySessionId)
+            // The backend answers with the row the list would return, title included.
+            return (listedSessions.sessions + archivedSessions).firstOrNull { it.id == sessionId }
+                ?: OwnedSession(sessionId, primary = sessionId == listedSessions.primarySessionId)
         }
         override suspend fun rename(token: String, sessionId: String, title: String): OwnedSession {
             // The backend answers with the row the list would return; this fake
-            // keeps its list in step so a later refresh cannot disagree with it.
-            val renamed = listedSessions.sessions.first { it.id == sessionId }
+            // keeps its lists in step so a later refresh cannot disagree with it.
+            val renamed = (listedSessions.sessions + archivedSessions).first { it.id == sessionId }
                 .copy(title = title.trim(), titleSource = OwnedSessionTitleSource.USER)
             listedSessions = listedSessions.copy(
                 sessions = listedSessions.sessions.map { if (it.id == sessionId) renamed else it },
             )
+            archivedSessions = archivedSessions.map { if (it.id == sessionId) renamed else it }
             return renamed
         }
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun primary(token: String) = OwnedSession("main", primary = true)
         override suspend fun create(token: String) = createdSession
-        override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
-        override suspend fun restore(token: String, sessionId: String) = error("not used")
+        override suspend fun archive(token: String, sessionId: String): OwnedSession {
+            // Archiving moves the row out of the default list and into the archive,
+            // exactly the two lists the shared overlay reads.
+            val row = (listedSessions.sessions + archivedSessions).firstOrNull { it.id == sessionId }
+                ?: OwnedSession(sessionId, primary = sessionId == listedSessions.primarySessionId)
+            listedSessions = listedSessions.copy(
+                sessions = listedSessions.sessions.filterNot { it.id == sessionId },
+            )
+            archivedSessions = archivedSessions + row
+            return row
+        }
+        override suspend fun restore(token: String, sessionId: String): OwnedSession {
+            val row = archivedSessions.first { it.id == sessionId }
+            archivedSessions = archivedSessions.filterNot { it.id == sessionId }
+            listedSessions = listedSessions.copy(sessions = listedSessions.sessions + row)
+            return row
+        }
     }
     private val updates = mutableMapOf<String, MutableStateFlow<RemoteChatProjection>>()
     private val backend = object : RemoteChatBackend {
@@ -615,34 +637,48 @@ class FairyPagesTest {
         var destination: Screen? = null
         home { destination = it }
         compose.waitUntil { !receive.owned.snapshot.value.loading }
+        // The console names the current session by its own row's title; the
+        // opaque id is never a user-readable name.
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
+        compose.onNodeWithText("main").assertDoesNotExist()
         compose.runOnIdle { receive.owned.select("other") }
         compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
         screenshot("home-selected")
 
-        // The console still reports the opaque current-session id; the drawer is
-        // where the ticket replaces it with the session's title.
-        compose.onNodeWithText("other").assertIsDisplayed()
+        compose.onNodeWithTag("console-session-title").assertTextEquals("另一个会话")
+        compose.onNodeWithText("other").assertDoesNotExist()
         compose.onNodeWithText("进入会话").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(Screen.Conversation("other"), destination) }
     }
 
-    @Test fun `home without an enterable session opens the session list`() {
+    @Test fun `home without an enterable session opens the shared list in place`() {
         listedSessions = OwnedSessions(emptyList(), null)
         var destination: Screen? = null
         home { destination = it }
 
-        compose.onNodeWithText("—").assertIsDisplayed()
+        compose.onNodeWithTag("console-session-title").assertTextEquals("—")
         compose.onNodeWithText("0").assertIsDisplayed()
         compose.onNodeWithText("进入会话").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(Screen.Sessions, destination) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        // The list is an overlay on the console, not the empty-session
+        // conversation destination it used to push.
+        compose.onNodeWithContentDescription("关闭会话列表").assertIsDisplayed()
+        compose.onNodeWithText("暂无会话").assertIsDisplayed()
+        compose.runOnIdle { assertNull("打开会话列表不是导航", destination) }
     }
 
-    @Test fun `home opens all sessions directly with their real count`() {
+    @Test fun `home opens all sessions in place with their real count`() {
         var destination by mutableStateOf<Screen>(Screen.Home)
+        var navigations = 0
         show {
-            DestinationHost(destination) { destination = it }
+            DestinationHost(destination) {
+                destination = it
+                navigations += 1
+            }
         }
 
         compose.onNodeWithText("全部会话").performScrollTo()
@@ -654,14 +690,215 @@ class FairyPagesTest {
         // The row is named by the session's own title. The ordinal ("会话 1") and
         // the opaque id are what the drawer used to show instead, so both must be
         // gone; the main-session binding survives as a marker beside the title.
-        compose.onNodeWithText("主会话标题").assertIsDisplayed()
+        // The console behind the list names the current session too, so the title
+        // is on screen twice and both read the same row.
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
+        compose.onAllNodesWithText("主会话标题").assertCountEquals(2)
         compose.onNodeWithText("另一个会话").assertIsDisplayed()
         compose.onNodeWithText("主会话").assertIsDisplayed()
         compose.onNodeWithText("会话 1").assertDoesNotExist()
         compose.onNodeWithText("会话 2").assertDoesNotExist()
         compose.onNodeWithText("main").assertDoesNotExist()
         compose.onNodeWithText("other").assertDoesNotExist()
-        compose.runOnIdle { assertEquals(Screen.Sessions, destination) }
+        // Opening the list must not push the old session-list destination (or any
+        // other) onto the navigation stack.
+        compose.runOnIdle {
+            assertEquals("打开会话列表不改变当前页面", Screen.Home, destination)
+            assertEquals("打开会话列表不触发任何导航", 0, navigations)
+        }
+    }
+
+    @Test fun `an untitled current session shows the list's placeholder on the console`() {
+        listedSessions = OwnedSessions(
+            listOf(
+                OwnedSession("main", primary = true),
+                OwnedSession("other", title = "另一个会话"),
+            ),
+            "main",
+        )
+        var destination: Screen? = null
+        home { destination = it }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+
+        // The console's current-session line and the list rows share one
+        // placeholder rule, so the unnamed current session is named 新会话 in
+        // both places and the opaque id appears in neither.
+        compose.onNodeWithTag("console-session-title").assertTextEquals("新会话")
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onAllNodesWithText("新会话").assertCountEquals(2)
+        compose.onAllNodesWithText("main").assertCountEquals(0)
+        compose.runOnIdle { assertNull(destination) }
+    }
+
+    @Test fun `closing the shared list leaves the console where it was`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        var navigations = 0
+        show {
+            DestinationHost(destination) {
+                destination = it
+                navigations += 1
+            }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("关闭会话列表").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
+        compose.onNodeWithText("进入会话").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("全部会话").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals("关闭浮层后仍在控制台", Screen.Home, destination)
+            assertEquals("关闭浮层不触发任何导航", 0, navigations)
+        }
+    }
+
+    @Test fun `selecting a row in the console list opens that conversation`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        show {
+            DestinationHost(destination) { destination = it }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("另一个会话").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle { assertEquals(Screen.Conversation("other"), destination) }
+        compose.onNodeWithContentDescription("切换会话").assertIsDisplayed()
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
+    }
+
+    @Test fun `selecting the current session in the console list enters it`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        var navigations = 0
+        show {
+            DestinationHost(destination) {
+                destination = it
+                navigations += 1
+            }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        // From the console every row enters its conversation, the current one
+        // included — the console is not itself standing in that session.
+        compose.onNode(
+            hasTestTag("session-row-title") and hasText("主会话标题"),
+            useUnmergedTree = true,
+        ).performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals(Screen.Conversation("main"), destination)
+            assertEquals("选择当前会话也是一次进入", 1, navigations)
+        }
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
+    }
+
+    @Test fun `the console list restores an archived session and keeps its current one`() {
+        archivedSessions = listOf(OwnedSession("old", title = "旧会话"))
+        home {}
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
+
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        compose.onNodeWithText("已归档").performClick()
+        compose.waitUntil { !receive.owned.archived.value.loading }
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        compose.onNodeWithText("旧会话").assertIsDisplayed()
+        compose.onNodeWithContentDescription("恢复会话").performClick()
+        compose.waitUntil { receive.owned.archived.value.sessions.isEmpty() }
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        compose.onNodeWithText("旧会话").assertDoesNotExist()
+
+        compose.onNodeWithText("返回会话").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        // The restored row is back in the default list; the console keeps naming
+        // the same current session and the same title.
+        compose.onNodeWithText("旧会话").assertIsDisplayed()
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
+        compose.runOnIdle {
+            assertEquals("main", receive.owned.snapshot.value.selectedId)
+            assertEquals(listOf("main", "other", "old"), receive.owned.snapshot.value.sessions.map { it.id })
+        }
+    }
+
+    @Test fun `renaming from the console list updates the console title and the row`() {
+        home {}
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
+
+        // The rename entry's dialog does not idle under the paused Robolectric
+        // clock (see `the drawer offers a rename entry...`); the state seam it
+        // drives is what console, rows and the bar all read.
+        compose.runOnIdle { receive.owned.rename("main", "改名后的主会话") }
+        compose.waitUntil {
+            receive.owned.snapshot.value.sessions.firstOrNull { it.id == "main" }?.title == "改名后的主会话"
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithTag("console-session-title").assertTextEquals("改名后的主会话")
+
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onAllNodesWithText("改名后的主会话").assertCountEquals(2)
+        // The console list carries the same full row actions as the drawer.
+        compose.onAllNodesWithContentDescription("重命名会话").assertCountEquals(2)
+        compose.onAllNodesWithContentDescription("删除会话").assertCountEquals(1)
+        compose.runOnIdle { assertEquals("main", receive.owned.snapshot.value.selectedId) }
+    }
+
+    @Test fun `the console list's home and settings entries act from the console`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        var navigations = 0
+        show {
+            DestinationHost(destination) {
+                destination = it
+                navigations += 1
+            }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithTag("session-list-home").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        // The drawer sheet stays composed off-screen after closing; it must no
+        // longer be displayed over the console.
+        compose.onNodeWithContentDescription("关闭会话列表").assertIsNotDisplayed()
+        compose.runOnIdle {
+            assertEquals("控制台的首页入口只关闭浮层", Screen.Home, destination)
+            assertEquals("控制台的首页入口不制造第二个首页", 0, navigations)
+        }
+
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithTag("session-list-settings").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(Screen.Settings, destination) }
     }
 
     @Test fun `an untitled session shows a placeholder, never its opaque id`() {
@@ -672,17 +909,53 @@ class FairyPagesTest {
             ),
             "main",
         )
-        conversation()
+        conversation("unnamed-7f3a9c1b")
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "unnamed-7f3a9c1b" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
         compose.onNodeWithContentDescription("切换会话").performClick()
         compose.mainClock.advanceTimeBy(500)
 
-        // The named row shows its title; the titled backend row is not the only
-        // shape, so the unnamed one shows the placeholder rather than its id.
-        // The drawer row and the bar name the open session, so its title is
-        // deliberately on screen twice.
-        compose.onAllNodesWithText("主会话标题").assertCountEquals(2)
-        compose.onAllNodesWithText("新会话").assertCountEquals(1)
+        // The open session is untitled, so the title bar's first line and its
+        // drawer row read one placeholder rule; the named session's row keeps
+        // its title. The opaque id is never a displayed name.
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("新会话")
+        compose.onAllNodesWithText("新会话").assertCountEquals(2)
+        compose.onAllNodesWithText("主会话标题").assertCountEquals(1)
         compose.onAllNodesWithText("unnamed-7f3a9c1b").assertCountEquals(0)
+    }
+
+    @Test
+    @Config(qualifiers = "zh-rCN-w320dp-h640dp", fontScale = 1.3f)
+    fun `the conversation bar keeps a long title inside a narrow large-font viewport`() {
+        val longTitle = "很长的会话标题" + "会占满整行需要截断".repeat(8)
+        val longSession = "session-" + "0123456789abcdef".repeat(4)
+        listedSessions = OwnedSessions(
+            listOf(
+                OwnedSession("main", primary = true, title = "主会话标题"),
+                OwnedSession(longSession, title = longTitle),
+            ),
+            "main",
+        )
+        conversation(longSession)
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == longSession }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = true
+
+        // The bar names the session it presents, ellipsized inside the bar's
+        // name column: a long title must not push the bar or the page past the
+        // narrow viewport, and the opaque id is never what the reader sees.
+        val viewport = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val bar = compose.onNodeWithTag("fairy-window-title")
+            .assertTextEquals(longTitle)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "Conversation bar exceeds the ${viewport.width}px viewport: $bar",
+            bar.left >= viewport.left && bar.right <= viewport.right &&
+                bar.top >= viewport.top && bar.bottom <= viewport.bottom,
+        )
+        compose.onAllNodesWithText(longSession).assertCountEquals(0)
     }
 
     @Test
@@ -690,10 +963,11 @@ class FairyPagesTest {
     fun `home keeps long content bounded and actions reachable on narrow screens`() {
         RuntimeEnvironment.setFontScale(1.3f)
         val longName = "长用户名".repeat(12)
+        val longTitle = "很长的会话标题" + "会占满整行需要截断".repeat(8)
         val longSession = "session-" + "0123456789abcdef".repeat(4)
         user = IdentityUser(2, longName)
         listedSessions = OwnedSessions(
-            listOf(OwnedSession("main", primary = true), OwnedSession(longSession)), "main",
+            listOf(OwnedSession("main", primary = true), OwnedSession(longSession, title = longTitle)), "main",
         )
         var destination: Screen? = null
         home { destination = it }
@@ -714,9 +988,36 @@ class FairyPagesTest {
             )
         }
         assertBounded(longName)
-        assertBounded(longSession)
+        // The console names the session with the row's title, bounded by the card.
+        compose.onNodeWithTag("console-session-title").assertTextEquals(longTitle)
+        val consoleTitle = compose.onNodeWithTag("console-session-title")
+            .performScrollTo().assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "Console title exceeds the ${viewport.width}px viewport: $consoleTitle",
+            consoleTitle.left >= viewport.left && consoleTitle.right <= viewport.right,
+        )
+        // The opaque id is not the current session's name on the console.
+        compose.onAllNodesWithText(longSession).assertCountEquals(0)
+
+        // The same long title in the shared list's row is bounded too: the row
+        // ellipsizes instead of pushing the list past the narrow viewport.
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        val titled = compose.onAllNodesWithText(longTitle).fetchSemanticsNodes()
+        assertEquals("控制台与列表行都显示同一个标题", 2, titled.size)
+        titled.forEach { node ->
+            assertTrue(
+                "List/console title exceeds the ${viewport.width}px viewport: ${node.boundsInRoot}",
+                node.boundsInRoot.left >= viewport.left && node.boundsInRoot.right <= viewport.right,
+            )
+        }
+        compose.onNodeWithContentDescription("关闭会话列表").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
         compose.onNodeWithText("全部会话").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("设置").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("console-settings").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("进入会话").performScrollTo()
         screenshot("home-narrow-long")
         compose.onNodeWithText("进入会话").performClick()
@@ -746,9 +1047,9 @@ class FairyPagesTest {
         compose.onNodeWithText("agent-two").assertIsDisplayed()
         compose.onNodeWithText("#2").assertIsDisplayed()
         compose.onNodeWithText("AGENT").assertIsDisplayed()
-        compose.onNodeWithText("main").assertIsDisplayed()
+        compose.onNodeWithTag("console-session-title").assertTextEquals("主会话标题")
         screenshot("home")
-        compose.onNodeWithText("设置").performScrollTo().performClick()
+        compose.onNodeWithTag("console-settings").performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithText("账号").assertIsDisplayed()
         compose.onNodeWithText("退出登录").assertIsDisplayed()
@@ -806,11 +1107,15 @@ class FairyPagesTest {
         screenshot("agents")
     }
 
-    private fun conversation(initial: String = "main", eye: FairyEyeController? = null) {
+    private fun conversation(
+        initial: String = "main",
+        eye: FairyEyeController? = null,
+        onOpen: (String) -> Unit = {},
+    ) {
         var target by mutableStateOf(initial)
         show {
             FairyConversationPage(target, {}, receive, fairy, eye = eye,
-                onOpenConversation = { target = it }, onSettings = {})
+                onOpenConversation = { target = it; onOpen(it) }, onSettings = {})
         }
     }
 
@@ -1138,8 +1443,12 @@ class FairyPagesTest {
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
     }
 
-    @Test fun `selected session can still be opened from the session list`() {
-        conversation()
+    @Test fun `selecting the open session in the list neither navigates nor rebuilds`() {
+        val opened = mutableListOf<String>()
+        conversation(onOpen = opened::add)
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
         compose.onNodeWithText("发送消息…").performTextInput("保留草稿")
         compose.onNodeWithContentDescription("切换会话").performClick()
         compose.mainClock.advanceTimeBy(500)
@@ -1149,7 +1458,12 @@ class FairyPagesTest {
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
         compose.onNodeWithText("主会话").assertIsNotDisplayed()
         compose.onNodeWithText("保留草稿").assertIsDisplayed()
-        compose.runOnIdle { assertEquals("main", receive.owned.snapshot.value.selectedId) }
+        compose.runOnIdle {
+            assertEquals("main", receive.owned.snapshot.value.selectedId)
+            // Selecting the session the page already stands in is a close, not a
+            // navigation: the page keeps its draft and its conversation.
+            assertEquals("选择当前会话不得触发导航", emptyList<String>(), opened)
+        }
     }
 
     @Test fun `drawer switches and creates conversations`() {
@@ -1209,19 +1523,151 @@ class FairyPagesTest {
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
     }
 
-    @Test fun `archiving a session opened before its list row arrives follows main`() {
-        listedSessions = OwnedSessions(emptyList(), "main")
+    @Test fun `archiving the session the page stands in follows the state's move to main`() {
+        listedSessions = OwnedSessions(
+            listOf(OwnedSession("main", primary = true, title = "主会话标题")),
+            "main",
+        )
         var target by mutableStateOf("other")
         show {
             FairyConversationPage(target, {}, receive, fairy,
                 onOpenConversation = { target = it }, onSettings = {})
         }
         compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        // The opened session never joined the backend list; the state still knows
+        // the reader is standing in it, and this archive is the explicit fact the
+        // page follows — no list-membership latch decides it.
         compose.runOnIdle { receive.owned.archive("other") }
         compose.waitUntil { receive.owned.snapshot.value.selectedId == "main" }
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
         compose.runOnIdle { assertEquals("main", target) }
+        // The followed page names main from the same row the list and console read.
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("主会话标题")
+    }
+
+    @Test fun `restoring a session after following an archive opens it instead of bouncing to main`() {
+        listedSessions = OwnedSessions(
+            listOf(
+                OwnedSession("main", primary = true, title = "主会话标题"),
+                OwnedSession("other", title = "另一个会话"),
+            ),
+            "main",
+        )
+        var target by mutableStateOf("other")
+        show {
+            FairyConversationPage(target, {}, receive, fairy,
+                onOpenConversation = { target = it }, onSettings = {})
+        }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle { receive.owned.archive("other") }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "main" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals("main", target)
+            // The page that followed consumed its one archive fact; it is not a
+            // latch that outlives the navigation it caused.
+            assertNull(receive.owned.snapshot.value.archivedSelectionId)
+        }
+
+        // A later restore brings the same session back. Opening it must present
+        // that session, not replay the consumed archive move to main.
+        compose.runOnIdle { receive.owned.restore("other") }
+        compose.waitUntil { receive.owned.snapshot.value.sessions.any { it.id == "other" } }
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("切换会话").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("另一个会话").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals("other", target)
+            assertEquals("other", receive.owned.snapshot.value.selectedId)
+        }
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("另一个会话")
+    }
+
+    @Test fun `archiving another session while standing somewhere does not navigate`() {
+        val opened = mutableListOf<String>()
+        conversation(onOpen = opened::add)
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle { receive.owned.archive("other") }
+        compose.waitUntil { receive.owned.snapshot.value.sessions.none { it.id == "other" } }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals("归档别的会话不改变当前对话", "main", receive.owned.snapshot.value.selectedId)
+            assertEquals(emptyList<String>(), opened)
+        }
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("主会话标题")
+        compose.onNodeWithText("会话不可用").assertDoesNotExist()
+    }
+
+    @Test fun `a session that leaves the list without an archive is not followed`() {
+        val opened = mutableListOf<String>()
+        var target by mutableStateOf("other")
+        show {
+            FairyConversationPage(target, {}, receive, fairy,
+                onOpenConversation = { target = it; opened += it }, onSettings = {})
+        }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "other" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        // A later list read drops the routed session, but nobody archived it.
+        // There is no archive fact, so the page must not read the disappearance
+        // as a follow — the old latch did exactly that.
+        compose.runOnIdle {
+            listedSessions = OwnedSessions(
+                listOf(OwnedSession("main", primary = true, title = "主会话标题")),
+                "main",
+            )
+            receive.owned.refresh()
+        }
+        compose.waitUntil { receive.owned.snapshot.value.selectedId == "main" }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle {
+            assertEquals("列表自行移除不是归档", "other", target)
+            assertEquals(emptyList<String>(), opened)
+        }
+        compose.onNodeWithText("会话不可用").assertIsDisplayed()
+    }
+
+    @Test fun `renaming the open session updates the bar and its row from one snapshot`() {
+        conversation()
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle { receive.owned.rename("main", "改名后的主会话") }
+        compose.waitUntil {
+            receive.owned.snapshot.value.sessions.firstOrNull { it.id == "main" }?.title == "改名后的主会话"
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("fairy-window-title").assertTextEquals("改名后的主会话")
+        compose.onNodeWithContentDescription("切换会话").performClick()
+        compose.mainClock.advanceTimeBy(500)
+        // The bar and the row are the same snapshot value, so they cannot disagree.
+        compose.onAllNodesWithText("改名后的主会话").assertCountEquals(2)
+        compose.runOnIdle { assertEquals("main", receive.owned.snapshot.value.selectedId) }
     }
 
     @Test fun `conversation observes thinking changes without moving the composer`() {

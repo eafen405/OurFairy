@@ -45,6 +45,9 @@ import kotlinx.coroutines.flow.flowOf
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.remote.IdentityUser
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
+import me.rerere.rikkahub.data.remote.displayTitle
+import me.rerere.rikkahub.ui.identity.SessionListOverlay
+import me.rerere.rikkahub.ui.identity.rememberSessionListOverlayState
 import org.koin.compose.koinInject
 
 /** How often the console pulses the interaction module while the screen is live. */
@@ -72,6 +75,7 @@ fun FairyConsolePage(
 ) {
     val baseTokens = LocalFairyTokens.current
     val pageEye = eye ?: remember { FairyEyeController(asleep = fairy.state.value.asleep) }
+    val overlay = rememberSessionListOverlayState()
     val identity by session.identity.collectAsStateWithLifecycle()
     val owned by receive.owned.snapshot.collectAsStateWithLifecycle()
     val interaction by fairy.state.collectAsStateWithLifecycle()
@@ -96,6 +100,9 @@ fun FairyConsolePage(
     // 当前会话: the reader's last choice, else the account's main session. Home presents only this
     // one session — its runtime, its connection, its activity — never a union over the account.
     val currentSessionId = owned.currentSessionId()
+    // The same row the list renders, so the console's name and the row's name are
+    // one value; an unnamed session reads as the list's placeholder, never the id.
+    val currentSession = owned.session(currentSessionId)
     val runtimes by receive.runtimes.collectAsStateWithLifecycle()
     val currentRuntime = currentSessionId?.let(runtimes::get)
     // Unconditional collection: the runtime may not exist yet, and a page that appeared or
@@ -118,94 +125,110 @@ fun FairyConsolePage(
     )
     val window = interaction.window
     CompositionLocalProvider(LocalFairyTokens provides tokens) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(tokens.bgTop, tokens.bgBottom))),
+        SessionListOverlay(
+            state = overlay,
+            sessions = receive.owned,
+            // The console is not standing in a conversation, so every row —
+            // including the current one — enters that conversation. Only a page
+            // that already presents a session treats re-selecting it as a close.
+            standingSessionId = null,
+            onOpenSession = { id -> onOpen(Screen.Conversation(id)) },
+            // The console is home already: its list's home entry only closes.
+            onHome = {},
+            onSettings = { onOpen(Screen.Settings) },
+            stopReply = receive::stopReply,
         ) {
-            FairyBackground(watermark = false)
-            Column(
+            Box(
                 Modifier
                     .fillMaxSize()
-                    .then(host.modifier)
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 16.dp, bottom = 24.dp),
+                    .background(Brush.verticalGradient(listOf(tokens.bgTop, tokens.bgBottom))),
             ) {
-                FairyHddWordmark()
-                Spacer(Modifier.height(16.dp))
-                Box(Modifier.fillMaxWidth().zIndex(1f)) {
-                    FairyScreen(
-                        presence = window.presence,
-                        eyeSize = 112.dp,
-                        speechPulse = interaction.speechPulse,
-                        hud = true,
-                        eye = pageEye,
-                        hudStatus = if (asleep) "SLEEP" else null,
-                        modifier = Modifier.fillMaxWidth().height(208.dp).testTag("fairy-console-screen"),
+                FairyBackground(watermark = false)
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .then(host.modifier)
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 16.dp, bottom = 24.dp),
+                ) {
+                    FairyHddWordmark()
+                    Spacer(Modifier.height(16.dp))
+                    Box(Modifier.fillMaxWidth().zIndex(1f)) {
+                        FairyScreen(
+                            presence = window.presence,
+                            eyeSize = 112.dp,
+                            speechPulse = interaction.speechPulse,
+                            hud = true,
+                            eye = pageEye,
+                            hudStatus = if (asleep) "SLEEP" else null,
+                            modifier = Modifier.fillMaxWidth().height(208.dp).testTag("fairy-console-screen"),
+                        )
+                        if (asleep) {
+                            Text(
+                                "TAP TO WAKE",
+                                fontFamily = tokens.telemetryFontFamily,
+                                fontSize = 11.sp,
+                                letterSpacing = 1.5.sp,
+                                color = tokens.fairyLink.copy(alpha = 0.85f),
+                                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp).fairySlant(),
+                            )
+                        }
+                    }
+                    // The line is a sibling below the screen: its top stays at the
+                    // screen's bottom edge, so added height extends downward over
+                    // the page, never over the Fairy animation.
+                    caption?.let { line ->
+                        FairyCaption(
+                            line,
+                            onFinished = { fairy.captionFinished() },
+                            modifier = Modifier.testTag("fairy-caption"),
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    ConsoleInfoCard(
+                        user = identity?.user,
+                        currentSessionTitle = currentSession?.displayTitle,
+                        sessionCount = owned.sessions.size,
                     )
-                    if (asleep) {
-                        Text(
-                            "TAP TO WAKE",
-                            fontFamily = tokens.telemetryFontFamily,
-                            fontSize = 11.sp,
-                            letterSpacing = 1.5.sp,
-                            color = tokens.fairyLink.copy(alpha = 0.85f),
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp).fairySlant(),
+                    Spacer(Modifier.height(20.dp))
+                    SignalButton(
+                        text = "进入会话",
+                        tag = "SESSIONS",
+                        variant = SignalButtonVariant.PRIMARY,
+                        onClick = {
+                            val target = currentSessionId
+                            if (target == null) overlay.open() else onOpen(Screen.Conversation(target))
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SignalButton(
+                            text = "全部会话",
+                            tag = "${owned.sessions.size} SESSIONS",
+                            onClick = overlay::open,
+                            modifier = Modifier.weight(1f).heightIn(min = 50.dp),
+                        )
+                        SignalButton(
+                            text = "设置",
+                            tag = "SETTINGS",
+                            onClick = { onOpen(Screen.Settings) },
+                            modifier = Modifier.weight(1f).heightIn(min = 50.dp)
+                                .testTag("console-settings"),
                         )
                     }
                 }
-                // The line is a sibling below the screen: its top stays at the
-                // screen's bottom edge, so added height extends downward over
-                // the page, never over the Fairy animation.
-                caption?.let { line ->
-                    FairyCaption(
-                        line,
-                        onFinished = { fairy.captionFinished() },
-                        modifier = Modifier.testTag("fairy-caption"),
-                    )
-                }
-                Spacer(Modifier.height(16.dp))
-                ConsoleInfoCard(
-                    user = identity?.user,
-                    currentSessionId = currentSessionId,
-                    sessionCount = owned.sessions.size,
-                )
-                Spacer(Modifier.height(20.dp))
-                SignalButton(
-                    text = "进入会话",
-                    tag = "SESSIONS",
-                    variant = SignalButtonVariant.PRIMARY,
-                    onClick = {
-                        onOpen(currentSessionId?.let(Screen::Conversation) ?: Screen.Sessions)
-                    },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SignalButton(
-                        text = "全部会话",
-                        tag = "${owned.sessions.size} SESSIONS",
-                        onClick = { onOpen(Screen.Sessions) },
-                        modifier = Modifier.weight(1f).heightIn(min = 50.dp),
-                    )
-                    SignalButton(
-                        text = "设置",
-                        tag = "SETTINGS",
-                        onClick = { onOpen(Screen.Settings) },
-                        modifier = Modifier.weight(1f).heightIn(min = 50.dp),
-                    )
-                }
+                FairyCrtPowerOn(powerOn)
             }
-            FairyCrtPowerOn(powerOn)
         }
     }
 }
 
 @Composable
-private fun ConsoleInfoCard(user: IdentityUser?, currentSessionId: String?, sessionCount: Int) {
+private fun ConsoleInfoCard(user: IdentityUser?, currentSessionTitle: String?, sessionCount: Int) {
     val tokens = LocalFairyTokens.current
     InstrumentPanel(
         modifier = Modifier.fillMaxWidth(),
@@ -248,7 +271,12 @@ private fun ConsoleInfoCard(user: IdentityUser?, currentSessionId: String?, sess
             Column(Modifier.weight(1f)) {
                 ConsoleLabel("CURRENT SESSION")
                 Spacer(Modifier.height(5.dp))
-                ConsoleValue(currentSessionId ?: "—")
+                // The session's own title from the same snapshot row the list
+                // renders; the opaque id is never a display value.
+                ConsoleValue(
+                    currentSessionTitle ?: "—",
+                    modifier = Modifier.testTag("console-session-title"),
+                )
             }
             Spacer(Modifier.width(12.dp))
             Column(horizontalAlignment = Alignment.End) {
@@ -275,7 +303,7 @@ private fun ConsoleLabel(text: String, color: Color? = null, fontSize: TextUnit 
 }
 
 @Composable
-private fun ConsoleValue(text: String) {
+private fun ConsoleValue(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         color = LocalFairyTokens.current.textPrimary,
@@ -283,5 +311,6 @@ private fun ConsoleValue(text: String) {
         fontSize = 12.sp,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
     )
 }

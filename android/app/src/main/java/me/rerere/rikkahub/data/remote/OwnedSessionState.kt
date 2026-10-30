@@ -18,9 +18,37 @@ data class SessionsSnapshot(
     val sessions: List<OwnedSession> = emptyList(),
     val primarySessionId: String? = null,
     val selectedId: String? = null,
+    /**
+     * The session just archived while it was this snapshot's current one, or
+     * null.
+     *
+     * This is the archive-follow rule's whole public answer: [OwnedSessionState.archive]
+     * publishes the archived id only when the reader was standing in that session
+     * and the archive was adopted; [selectedId] then names where the selection
+     * moved (the account's main session). A page that is showing this very id
+     * may follow [selectedId]; a target that was never listed, has expired, is
+     * not this account's, or whose archive was refused publishes nothing here,
+     * so it stays unavailable instead of being mistaken for an archive.
+     *
+     * It describes one archive, not a list read, and it is not a latch. It is
+     * cleared when the credential changes ([OwnedSessionState.bind] — the account
+     * that archived is no longer the one acting), when the reader makes an
+     * explicit selection move ([OwnedSessionState.select],
+     * [OwnedSessionState.read], [OwnedSessionState.create],
+     * [OwnedSessionState.returnToPrimary]), when the page that followed consumes
+     * it ([OwnedSessionState.clearArchiveFollow]), and when the session it names
+     * is restored (a restored row is no longer an archived follow candidate). A
+     * refresh, a rename or restoring a different session preserves it — the
+     * archive is still the reader's last decision even if a title check happens
+     * to re-read the list first.
+     */
+    val archivedSelectionId: String? = null,
     val loading: Boolean = false,
     val failure: String? = null,
 ) {
+    /** This snapshot's row for [id], or null when it lists no such session (a null id included). */
+    fun session(id: String?): OwnedSession? = id?.let { wanted -> sessions.firstOrNull { it.id == wanted } }
+
     companion object {
         /**
          * Marks "the backend could not be reached", which carries no message of
@@ -179,16 +207,39 @@ class OwnedSessionState(
      * The backend keeps the log and messages; the session leaves the default
      * list, so this snapshot drops the row by the same rule the backend applied.
      * A selection that was standing in the archived session moves to the
-     * account's main session, because the row it named is gone. The primary
-     * session never reaches here: the drawer has no delete entry for it and the
-     * backend refuses it, which this method leaves as the backend answered.
+     * account's main session, because the row it named is gone, and that move is
+     * published as [SessionsSnapshot.archivedSelectionId] — the explicit fact a
+     * page follows. Archiving any other session publishes no follow: the reader
+     * keeps standing where they were. The primary session never reaches here:
+     * the drawer has no delete entry for it and the backend refuses it, which
+     * this method leaves as the backend answered.
      */
     fun archive(sessionId: String) = request { token, current ->
+        val standing = current.selectedId ?: current.primarySessionId
         val archived = backend.archive(token, sessionId)
+        val next = current.selectedId?.takeIf { it != archived.id } ?: current.primarySessionId
         current.copy(
             sessions = current.sessions.filterNot { it.id == archived.id },
-            selectedId = current.selectedId?.takeIf { it != archived.id } ?: current.primarySessionId,
+            selectedId = next,
+            // Only an adopted archive of the session the reader was standing in
+            // is a follow, and only when it moved the selection somewhere else.
+            archivedSelectionId = archived.id.takeIf { standing == archived.id && next != archived.id },
         )
+    }
+
+    /**
+     * Consume the archive follow this snapshot published, once the page that
+     * followed has acted on it.
+     *
+     * [SessionsSnapshot.archivedSelectionId] describes one archive, so the page
+     * that navigated to [SessionsSnapshot.selectedId] says so here instead of
+     * leaving the fact for a later reader. Without this, restoring the archived
+     * session would put the row back in the default list while the old fact still
+     * named it, and a page opened on that session would immediately follow the
+     * stale move to main. Every other field is left as it is.
+     */
+    fun clearArchiveFollow() {
+        _snapshot.value = _snapshot.value.copy(archivedSelectionId = null)
     }
 
     /**
@@ -209,6 +260,11 @@ class OwnedSessionState(
         },
         primarySessionId = primarySessionId ?: named.id.takeIf { named.primary },
         selectedId = if (stand) named.id else selectedId,
+        // A session the reader moved into is an explicit decision that
+        // supersedes the archive follow. A rename names a row without moving
+        // the reader, so it leaves the follow in place; a restore clears it only
+        // when it brings back the session the follow names (see [restore]).
+        archivedSelectionId = if (stand) null else archivedSelectionId,
     )
 
     /**
@@ -236,7 +292,12 @@ class OwnedSessionState(
         _archived.value = _archived.value.copy(
             sessions = _archived.value.sessions.filterNot { it.id == restored.id },
         )
-        _snapshot.value = _snapshot.value.joined(restored, stand = false)
+        val joined = _snapshot.value.joined(restored, stand = false)
+        _snapshot.value = joined.copy(
+            // A restored row is back in the default list, so the archive that
+            // named it is no longer something a page should follow.
+            archivedSelectionId = joined.archivedSelectionId?.takeIf { it != restored.id },
+        )
     }
 
     /**

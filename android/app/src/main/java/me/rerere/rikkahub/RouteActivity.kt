@@ -235,7 +235,6 @@ sealed interface Screen : NavKey {
     @Serializable data object SignIn : Screen
     @Serializable data object Register : Screen
     @Serializable data object Home : Screen
-    @Serializable data object Sessions : Screen
     @Serializable data class Conversation(val sessionId: String) : Screen
     @Serializable data object Settings : Screen
     @Serializable data object Gateway : Screen
