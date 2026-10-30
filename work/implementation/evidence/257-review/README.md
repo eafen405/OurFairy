@@ -83,12 +83,37 @@
 | --- | --- |
 | `./gradlew test lintDebug`（`fix/257-review`） | BUILD SUCCESSFUL 3m19s；**53 套件 / 368 用例 / 0 失败 / 0 错误**；lint `severity="Error"` 计数 0 |
 
+（这一行是补齐当时的分支状态。合并 `main` 之后的最终数字见下一节。）
+
 新增用例 4 条：`FairyPagesTest` 的 `the gateway composes through the catalog with no container` 与
 `the impression composes through the catalog with no container`，`NotificationColdStartTest` 的
 `a notification delivered after the account settles opens its conversation` 与
 `a notification delivered before the account settles opens once it does`。
 
+## 合并 spec 256 落地后的 main
+
+收口期间 spec 256 落地 `main`（`f4c82718d0`），它给首页与会话页加了
+`fairy: FairyInteraction` 参数。合并的实质是让 catalog 的页面装配跟上新签名：
+
+- `DestinationPageScope` 带上 `fairy`，`RouteActivity` 注入它，首页与会话页**显式**传入 ——
+  不靠页面的 `koinInject()` 默认值，否则无容器的页面测试会崩。
+- `FairyPagesTest` 的冲突按「保留 spec 256 的新用例、路由继续读 catalog」解：九个手抄 `when` 块里
+  八个换成 `DestinationHost`，剩下的那个注入 `eye` 控制器。`eye` 是页面内部的测试缝（生产留 null
+  让页面自己 remember 一个），catalog 不携带它，所以只有观察眼动的用例直接装配页面。
+- 词汇表两侧条目、证据索引都保留。
+
+| 命令（集成分支 tip） | 结果 |
+| --- | --- |
+| `./gradlew test lintDebug` | **55 套件 / 445 用例 / 0 失败 / 0 错误**；lint `severity="Error"` 计数 0 |
+| `npm test` | 430 通过 / 0 失败 |
+| `npm run combo:verify` | 通过 |
+
+合并时踩了一个坑并已修正：合并提交 `1112be849e` 只提交了测试与证据，catalog 的三处装配改动
+留在工作树里，所以那个提交本身编译不过（门禁当时跑的是工作树）。补提交 `5d2e136fdb` 补上，
+之后每次提交前都核对 `git status --porcelain` 为空。
+
 ## 未执行项
+
 
 
 
