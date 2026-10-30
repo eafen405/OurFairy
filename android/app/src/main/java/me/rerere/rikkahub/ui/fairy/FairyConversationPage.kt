@@ -113,18 +113,16 @@ fun FairyConversationPage(
     val failure = sessions.failure?.let {
         if (it == SessionsSnapshot.UNREACHABLE) stringResource(R.string.identity_unreachable) else it
     }
-    // Archiving the session this page is standing in moves the list's selection
-    // to the account's main session, so the page follows it there instead of
-    // reading the moved selection as "this conversation is unavailable". Only a
-    // session that was in the list and has left it does this: an id that was
-    // never ours (a stale deep link) still reports unavailable. The row may
-    // arrive after the page's first composition, so latch it whenever it appears.
-    var standing by remember(sessionId) { mutableStateOf(false) }
-    if (sessionId != null && sessions.sessions.any { it.id == sessionId }) standing = true
-    LaunchedEffect(sessionId, sessions.selectedId, sessions.sessions.size) {
+    // The session state owns the archive-follow rule: when the reader archives
+    // the session this page is standing in, it publishes that very id together
+    // with the selection it moved to. The page follows only that explicit fact.
+    // It does not remember that the route once existed and cannot tell why a
+    // list changed, so a target that was never ours, has expired or whose
+    // archive was refused keeps showing "会话不可用" instead of navigating.
+    LaunchedEffect(sessionId, sessions.archivedSelectionId, sessions.selectedId) {
         val followed = sessions.selectedId
-        if (sessionId != null && followed != null && followed != sessionId && standing &&
-            sessions.sessions.none { it.id == sessionId }
+        if (sessionId != null && sessions.archivedSelectionId == sessionId &&
+            followed != null && followed != sessionId
         ) {
             onOpenConversation(followed)
         }

@@ -374,6 +374,9 @@ class OwnedSessionStateTest {
         assertEquals(listOf("s-alice"), state.snapshot.value.sessions.map { it.id })
         assertEquals("s-alice", state.snapshot.value.selectedId)
         assertEquals("s-alice", state.snapshot.value.primarySessionId)
+        // The archive names the session the reader was standing in, and the page
+        // follows that explicit fact rather than comparing the list itself.
+        assertEquals("s-other", state.snapshot.value.archivedSelectionId)
     }
 
     @Test
@@ -404,6 +407,158 @@ class OwnedSessionStateTest {
         assertEquals(listOf("s-alice", "s-other"), state.snapshot.value.sessions.map { it.id })
         assertEquals("s-other", state.snapshot.value.selectedId)
         assertEquals("the primary session is never archived", state.snapshot.value.failure)
+        // A refusal is not an archive: nothing to follow.
+        assertNull(state.snapshot.value.archivedSelectionId)
+    }
+
+    @Test
+    fun `archiving a session the reader is not standing in is not a follow`() = runTest {
+        val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
+        val other = OwnedSession(id = "s-other", owner = "user:alice")
+        val third = OwnedSession(id = "s-third", owner = "user:alice")
+        val state = OwnedSessionState(RowsBackend(listOf(main, other, third), main.id), this)
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        state.select("s-other")
+        advanceUntilIdle()
+
+        state.archive("s-third")
+        advanceUntilIdle()
+
+        // The reader keeps standing where they were; the row that left was not
+        // the one the page is in, so there is nothing for a page to follow.
+        assertEquals(listOf("s-alice", "s-other"), state.snapshot.value.sessions.map { it.id })
+        assertEquals("s-other", state.snapshot.value.selectedId)
+        assertNull(state.snapshot.value.archivedSelectionId)
+    }
+
+    @Test
+    fun `an explicit read or choice after an archive clears the follow it published`() = runTest {
+        val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
+        val other = OwnedSession(id = "s-other", owner = "user:alice")
+        val third = OwnedSession(id = "s-third", owner = "user:alice")
+        val state = OwnedSessionState(RowsBackend(listOf(main, other, third), main.id), this)
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        state.select("s-other")
+        advanceUntilIdle()
+
+        state.archive("s-other")
+        advanceUntilIdle()
+        assertEquals("s-other", state.snapshot.value.archivedSelectionId)
+
+        state.read("s-third")
+        advanceUntilIdle()
+        assertNull(state.snapshot.value.archivedSelectionId)
+        assertEquals("s-third", state.snapshot.value.selectedId)
+
+        state.archive("s-third")
+        advanceUntilIdle()
+        assertEquals("s-third", state.snapshot.value.archivedSelectionId)
+
+        state.select("s-alice")
+        advanceUntilIdle()
+        assertNull(state.snapshot.value.archivedSelectionId)
+        assertEquals("s-alice", state.snapshot.value.selectedId)
+    }
+
+    @Test
+    fun `binding another account clears the archive follow`() = runTest {
+        val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
+        val other = OwnedSession(id = "s-other", owner = "user:alice")
+        val state = OwnedSessionState(RowsBackend(listOf(main, other), main.id), this)
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        state.select("s-other")
+        advanceUntilIdle()
+        state.archive("s-other")
+        advanceUntilIdle()
+        assertEquals("s-other", state.snapshot.value.archivedSelectionId)
+
+        state.bind("bob")
+
+        assertNull(state.snapshot.value.archivedSelectionId)
+        assertNull(state.snapshot.value.selectedId)
+        assertEquals(emptyList<OwnedSession>(), state.snapshot.value.sessions)
+    }
+
+    @Test
+    fun `a refresh after the archive keeps the follow until the page moves`() = runTest {
+        val main = OwnedSession(id = "s-alice", owner = "user:alice", primary = true)
+        val other = OwnedSession(id = "s-other", owner = "user:alice")
+        val state = OwnedSessionState(RowsBackend(listOf(main, other), main.id), this)
+        state.bind("alice")
+        state.refresh()
+        advanceUntilIdle()
+        state.select("s-other")
+        advanceUntilIdle()
+        state.archive("s-other")
+        advanceUntilIdle()
+        assertEquals("s-other", state.snapshot.value.archivedSelectionId)
+
+        // A title refresh can re-read the list between the archive and the page
+        // observing it. That is not the reader moving: the follow stays.
+        state.refresh()
+        advanceUntilIdle()
+        assertEquals("s-other", state.snapshot.value.archivedSelectionId)
+        assertEquals("s-alice", state.snapshot.value.selectedId)
+
+        // Naming a row and bringing one back do not move the reader either.
+        state.rename("s-alice", "主会话")
+        advanceUntilIdle()
+        assertEquals("s-other", state.snapshot.value.archivedSelectionId)
+
+        state.restore("s-other")
+        advanceUntilIdle()
+        assertEquals("s-other", state.snapshot.value.archivedSelectionId)
+        assertEquals("s-alice", state.snapshot.value.selectedId)
+        assertEquals(listOf("s-alice", "s-other"), state.snapshot.value.sessions.map { it.id })
+    }
+
+    /** A backend whose list is the rows it still owns, answering each action by id. */
+    private class RowsBackend(
+        initial: List<OwnedSession>,
+        private val mainId: String,
+    ) : SessionBackend {
+        private var rows = initial
+        private val archivedRows = mutableListOf<OwnedSession>()
+        var refusedArchive: IdentityRefused? = null
+
+        override suspend fun list(token: String, archived: Boolean) =
+            if (archived) OwnedSessions(archivedRows.toList(), null) else OwnedSessions(rows, mainId)
+
+        override suspend fun create(token: String) = error("not used")
+        override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
+        override suspend fun primary(token: String) = rows.first { it.id == mainId }
+        override suspend fun read(token: String, sessionId: String) =
+            (rows + archivedRows).first { it.id == sessionId }
+
+        override suspend fun rename(token: String, sessionId: String, title: String): OwnedSession {
+            val renamed = (rows + archivedRows).first { it.id == sessionId }
+                .copy(title = title, titleSource = OwnedSessionTitleSource.USER)
+            rows = rows.map { if (it.id == sessionId) renamed else it }
+            val archived = archivedRows.indexOfFirst { it.id == sessionId }
+            if (archived >= 0) archivedRows[archived] = renamed
+            return renamed
+        }
+
+        override suspend fun archive(token: String, sessionId: String): OwnedSession {
+            refusedArchive?.let { throw it }
+            val row = rows.first { it.id == sessionId }
+            rows = rows.filterNot { it.id == sessionId }
+            archivedRows += row
+            return row
+        }
+
+        override suspend fun restore(token: String, sessionId: String): OwnedSession {
+            val row = archivedRows.first { it.id == sessionId }
+            archivedRows.removeAll { it.id == sessionId }
+            rows = rows + row
+            return row
+        }
     }
 
     /** A backend whose two views answer different rows, as the real one does. */
