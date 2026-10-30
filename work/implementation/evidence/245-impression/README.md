@@ -29,9 +29,12 @@ Android：
 | [`ImpressionState.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/data/remote/ImpressionState.kt) | 读成功才发布 `Impression`；串行保存；写后重读；拒绝保留已读正文与错误 |
 | [`ImpressionPage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/identity/ImpressionPage.kt) | 多行纯文本整份编辑页；读取成功前不渲染输入框与保存按钮；字符计数、超长红字、后端错误横幅 |
 | [`FairySettingsPage.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/fairy/FairySettingsPage.kt) | 普通设置新增「印象」组与「本人印象」入口（默认参数，原调用点不变） |
-| [`RouteActivity.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt) / [`IdentityAccessPolicy.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/identity/IdentityAccessPolicy.kt) | `Screen.Impression` / `IMPRESSION` 目的地；`signedIn` 即可进入，不要求 admin，不经过网关 |
+| [`RouteActivity.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/RouteActivity.kt) / [`IdentityScope.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/identity/IdentityScope.kt) | `Screen.Impression` / `IMPRESSION` 目的地；`signedIn` 即可进入，不要求 admin，不经过网关 |
 | [`IdentityModule.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/di/IdentityModule.kt) | 注册 `ImpressionBackend` |
 | `values/strings_identity.xml` + `values-zh/strings_identity.xml` | 页面文案两语言同步 |
+
+> #264 将 `IdentityAccessPolicy.kt` 更名为 `IdentityScope.kt`（只保留身份事实），准入规则移入
+> [`FairyDestinations.kt`](../../../../android/app/src/main/java/me/rerere/rikkahub/ui/destination/FairyDestinations.kt)。
 
 测试：
 

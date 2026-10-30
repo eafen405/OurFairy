@@ -32,12 +32,12 @@ import org.junit.Test
 class IdentityNavigationTest {
 
     @Test
-    fun `sessions destination survives the navigation library back stack save and restore`() {
+    fun `a real destination stack survives the navigation library back stack save and restore`() {
         val serializer = NavBackStackSerializer(NavKeySerializer<NavKey>())
-        val original = NavBackStack<NavKey>(Screen.Home, Screen.Sessions)
+        val original = NavBackStack<NavKey>(Screen.Home, Screen.Conversation("main"))
         val saved = Json.encodeToString(serializer, original)
         val restored = Json.decodeFromString(serializer, saved)
-        assertEquals(listOf(Screen.Home, Screen.Sessions), restored.toList())
+        assertEquals(listOf(Screen.Home, Screen.Conversation("main")), restored.toList())
     }
 
     /** A credential the device already holds, or none at all. */

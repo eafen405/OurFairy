@@ -1,0 +1,29 @@
+{
+  "title": "Android 会话导航：统一会话列表浮层与当前会话事实（规格 #258）",
+  "entries": [
+    {
+      "dirs": [
+        "265-shared-session-overlay"
+      ],
+      "note": "#265 会话列表抽屉提升为控制台与对话页共用的 `ui/identity/SessionListOverlay.kt`：状态持有 `DrawerState` 与 `CoroutineScope`，`open()`/`close()` 直接驱动抽屉，`isOpen` 由抽屉派生，没有第二份布尔状态；控制台「全部会话」与无当前会话时的「进入会话」就地打开浮层、不导航，`CURRENT SESSION` 改显示同一 `owned` 快照行的 `displayTitle`，未命名会话与列表共用「新会话」占位；对话页改用同一浮层，旧 `Screen.Sessions` 暂留兼容"
+    },
+    {
+      "dirs": [
+        "266-archive-follow-state"
+      ],
+      "note": "#266 归档跟随收进 `OwnedSessionState`：`SessionsSnapshot.archivedSelectionId` 只在归档当前会话且选择确实移动时发布，页面只响应该事实，删除 `standing` 闩锁与列表差分；跟随后消费、恢复命名会话、显式选择与账号切换清除，refresh/rename 保留，过期/无权/拒绝归档不发布；控制台浮层补齐归档视图、恢复、改名、停止回复与首页/设置入口，控制台行（含当前行）一律进入会话，对话页重选当前会话仍只关闭"
+    },
+    {
+      "dirs": [
+        "267-retire-sessions-destination"
+      ],
+      "note": "#267 删除 `Screen.Sessions`、catalog 条目与空会话对话页装配：`FairyConversationPage` 只接受真实 `sessionId`，七个目的地仍由同一张表驱动；旧 `route=\"sessions\"` 按未知路由回退 `[Home]`（`FairyLastLocationTest` 与零网络 `SessionsColdStartTest` 固定），冷启动不打开浮层、不显示错误页；`android/GLOSSARY.md` 新增「会话列表浮层」"
+    },
+    {
+      "dirs": [
+        "258-review"
+      ],
+      "note": "spec #258 收口两轴评审修复：标题栏改传 `OwnedSession.displayTitle`，控制台、列表行与标题栏共用同一条未命名占位并补窄屏大字长标题用例；`archivedSelectionId` 增加页面消费与恢复清除，消除归档后恢复会话又被弹回主会话的路径；`SessionsSnapshot.session(id)` 收拢行查询；浮层参数改名 `standingSessionId` 并记录两个入口的重选语义；按「声称须可执行」删除或收窄 grep 无法落实的结构声称"
+    }
+  ]
+}

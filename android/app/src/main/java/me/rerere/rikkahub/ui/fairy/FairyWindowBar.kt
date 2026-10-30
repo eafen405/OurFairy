@@ -125,15 +125,27 @@ fun FairyWindowTopBar(
     window: FairyWindowState,
     subtitle: String?,
     /**
-     * The open session's own name. A session with no name yet keeps the product
-     * nameplate as the bar's first line; a named one shows its name there and
-     * keeps the nameplate as the small tag, so the bar names what the reader is
-     * looking at without losing Fairy's identity. The value is the session row
-     * the list shows — one source for both surfaces.
+     * The page's eye controller, passed to the mini screen and the opened one. The page owns it
+     * (and with it every transient eye reaction); the window state carries no renderer handle.
+     */
+    eye: FairyEyeController? = null,
+    /**
+     * The open session's own display name. The conversation page passes the
+     * session row's `displayTitle`, so an untitled session reads the list's
+     * placeholder here too; a caller that passes a blank title keeps the product
+     * nameplate as the bar's first line, and a named one shows its name there
+     * and keeps the nameplate as the small tag. The value is the session row the
+     * list shows — one source for both surfaces.
      */
     title: String? = null,
     subtitleLeading: (@Composable () -> Unit)? = null,
     subtitleTag: String? = null,
+    /**
+     * New Fairy outputs that arrived while 当前表现 is SPEAKING, from the interaction module's
+     * transient presentation state. It reaches both screens; their existing SPEAKING gate decides
+     * whether a pulse is drawn.
+     */
+    speechPulse: Int = 0,
     screenOpen: Boolean = rememberFairyScreenOpen(window),
     onNavigateBack: () -> Unit,
     moreMenuContent: (@Composable ColumnScope.(dismiss: () -> Unit) -> Unit)? = null,
@@ -186,8 +198,8 @@ fun FairyWindowTopBar(
                             FairyScreen(
                                 presence = window.presence,
                                 eyeSize = 36.dp,
-                                speechPulse = window.speechPulse,
-                                eye = window.eye,
+                                speechPulse = speechPulse,
+                                eye = eye,
                                 modifier = Modifier.size(width = 64.dp, height = 44.dp),
                             )
                         }
@@ -285,9 +297,9 @@ fun FairyWindowTopBar(
                 FairyScreen(
                     presence = window.presence,
                     eyeSize = 88.dp,
-                    speechPulse = window.speechPulse,
+                    speechPulse = speechPulse,
                     hud = true,
-                    eye = window.eye,
+                    eye = eye,
                     modifier = Modifier
                         .padding(
                             start = 16.dp,

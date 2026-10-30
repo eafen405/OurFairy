@@ -66,7 +66,6 @@ import me.rerere.rikkahub.ui.fairy.FairyNumericSpec
 import me.rerere.rikkahub.ui.fairy.formatFairyNumeric
 import me.rerere.rikkahub.ui.fairy.rememberFairyNumericDraftState
 import androidx.compose.ui.platform.testTag
-import org.koin.compose.koinInject
 
 /**
  * The administrator's shared gateway.
@@ -88,8 +87,8 @@ import org.koin.compose.koinInject
 @Composable
 fun GatewayPage(
     onBack: () -> Unit,
-    session: AccountSession = koinInject(),
-    backend: GatewayBackend = koinInject(),
+    session: AccountSession,
+    backend: GatewayBackend,
 ) {
     val identity by session.identity.collectAsStateWithLifecycle()
     val token = identity?.token

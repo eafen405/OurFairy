@@ -84,6 +84,12 @@ private data class PendingDownload(
 fun RemoteChatPanel(
     state: RemoteChatState,
     onReconnect: () -> Unit,
+    /**
+     * Called with the requestId of a send command that was accepted, and again when that same
+     * pending command is retried. The id is the one send's key, so a listener can report the event
+     * without the panel deciding whether it is new.
+     */
+    onSendAccepted: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val snapshot by state.snapshot.collectAsStateWithLifecycle()
@@ -193,7 +199,13 @@ fun RemoteChatPanel(
                 acceptanceUnknown = pending.acceptanceUnknown,
                 busy = snapshot.sending,
                 onReconcile = state::reconcile,
-                onRetry = state::retryPending,
+                onRetry = {
+                    // The retried command keeps its requestId: reporting it again is how the
+                    // listener's own key makes the retry the same event. The state is the one that
+                    // knows whether it actually took the retry (bound, credential, pending,
+                    // unknown acceptance, not already sending); a refused retry is not reported.
+                    if (state.retryPending()) onSendAccepted(pending.requestId)
+                },
             )
         }
 
@@ -259,7 +271,11 @@ fun RemoteChatPanel(
             onSend = {
                 // Only the state knows whether the command was accepted; a refused send keeps
                 // the text so nothing the user typed disappears behind an error.
-                if (state.send(draft)) draft = ""
+                val requestId = state.send(draft)
+                if (requestId != null) {
+                    onSendAccepted(requestId)
+                    draft = ""
+                }
             },
             onStop = state::stop,
         )

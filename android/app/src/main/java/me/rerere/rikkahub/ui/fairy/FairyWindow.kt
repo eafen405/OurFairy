@@ -81,9 +81,7 @@ internal fun fairyGlowRange(presence: FairyPresence): ClosedFloatingPointRange<F
 data class FairyWindowState(
     val presence: FairyPresence,
     val expanded: Boolean = false,
-    val speechPulse: Int = 0,
     val awaitingReply: Boolean = false,
-    val eye: FairyEyeController? = null,
 )
 
 /**
@@ -135,16 +133,12 @@ private fun FairyEyeInput.fill(eye: FairyEyeController?, eyeRoot: FloatArray, re
         else Offset.Unspecified
     if (eye == null) return
     pointer = units(eye.pointer)
-    attention = units(eye.attention)
     glance = units(eye.glance)
     glanceMs = eye.glanceMs
     glances = eye.glances
-    startles = eye.startles
     blinks = eye.blinks
     wakes = eye.wakes
     wakeConfused = eye.wakeConfused
-    snaps = eye.snaps
-    drowsy = eye.drowsy
     asleep = eye.asleep
 }
 
@@ -160,9 +154,10 @@ private fun FairyEyeInput.fill(eye: FairyEyeController?, eyeRoot: FloatArray, re
  * The eye is alive through [FairyEyeMotion]: saccades between fixations
  * that follow the presence (THINKING searches up left and right, SPEAKING
  * looks at the user, IDLE rests and glances around), blinks, a pupil that
- * dips on [FairyEyeController.startle] and widens with drowsiness, and a
- * gaze that pursues [FairyEyeController.lookAt]. SPEAKING also pulses the
- * eye on [speechPulse]; the disc turns faster while working.
+ * dips when waking and widens in stand-by
+ * ([FairyEyeController.asleep]), and a gaze that pursues
+ * [FairyEyeController.lookAt]. SPEAKING also pulses the eye on
+ * [speechPulse]; the disc turns faster while working.
  *
  * All phases advance in one frame loop that only writes draw-phase state, so
  * frames redraw without recomposing. The loop runs only while continuous
@@ -271,11 +266,8 @@ fun FairyScreen(
                             drawFairyAura(paint, a, if (running) clock.gazePhase else 0f)
                             drawFairyFlash(paint, flash)
                         }
-                        val drowsy = eye?.drowsy ?: 0f
-                        val still = poseOverride ?: FairyEyePose(pupil = restingPupil(drowsy, eye?.asleep == true), lid = restingLid(drowsy))
-                        // Until the loop applies a snap (e.g. found asleep on return), draw the still pose.
-                        val synced = eye == null || motion.snapsSeen == eye.snaps
-                        val live = running && poseOverride == null && synced
+                        val still = poseOverride ?: FairyEyePose(pupil = restingPupil(eye?.asleep == true))
+                        val live = running && poseOverride == null
                         val gaze = if (live) Offset(clock.eyeX * unit, clock.eyeY * unit) else still.gaze * unit
                         val scale = pulse.value
                         withTransform({
