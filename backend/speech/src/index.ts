@@ -10,7 +10,7 @@
  * @module @ourfairy/dsh-speech
  */
 import z from '@deepseek-ai/schemastery'
-import { sendJson } from '@ourfairy/dsh-http/http'
+import { freezeSurface, mountRoutes, sendJson, type RouteHandler } from '@ourfairy/dsh-http/http'
 import { DEFAULT_API_KEY_ENV, SPEECH_FIELDS } from './policy.js'
 import { createSpeechHandler, resolveSpeechSettings, SpeechError } from './service.js'
 import type { Context } from '@deepseek-ai/cordis'
@@ -59,6 +59,19 @@ export type SpeechField = { readonly get: () => unknown } | string | number | nu
  */
 export type SpeechConfig = Record<string, SpeechField>
 
+/**
+ * The addresses this row publishes, and the ones `mountRoutes` mounts.
+ *
+ * `/speech` is the availability read (`GET`, no body); `/speech/transcriptions`
+ * accepts raw `audio/wav` bytes (`POST`) and answers JSON. Both need a live
+ * credential and keep their own admission in the service: neither request body
+ * is read as JSON here.
+ */
+export const SURFACE = freezeSurface([
+  { path: '/speech', method: 'GET', auth: 'authentication', body: 'none', response: 'json', prefix: 'speech' },
+  { path: '/speech/transcriptions', method: 'POST', auth: 'authentication', body: 'binary', response: 'json', prefix: 'speech' },
+])
+
 export function apply(ctx: Context, config: SpeechConfig) {
   /** Read the live row: volatile fields are refs, plain fields are values. */
   const values = (): Record<string, unknown> => Object.fromEntries(SPEECH_FIELDS.map(field => {
@@ -82,42 +95,23 @@ export function apply(ctx: Context, config: SpeechConfig) {
     return caller
   }, sendJson, voiceKey)
   ctx.effect(() => () => service.close())
-  for (const [path, transcribe] of [['/speech', false], ['/speech/transcriptions', true]] as const) {
-    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path, handler: async (req, res) => {
-      try {
-        if (ctx.connection.fence(req) !== undefined) throw new SpeechError(403, 'forbidden-authority', 'untrusted Host or Origin')
-        await service.handle(req, res, transcribe)
-      } catch (error) {
-        if (res.destroyed) return
-        sendJson(res, error instanceof SpeechError ? error.status : 500, { ok: false, error: { code: error instanceof SpeechError ? error.code : 'speech/internal', message: error instanceof SpeechError ? error.message : '语音请求失败' } })
-      }
-    } }), `speech: ${path}`)
-  }
-}
 
-/**
- * The addresses this row publishes, as one read-only table (ticket #272).
- *
- * Kept as a free-standing block at the end of the file so the row's mounting
- * loop above — and its admission order — stays untouched. `/speech` is the
- * availability read (`GET`, no body); `/speech/transcriptions` accepts raw
- * `audio/wav` bytes (`POST`) and answers JSON. Both need a live credential.
- */
-export const SURFACE = Object.freeze([
-  Object.freeze({
-    path: '/speech',
-    method: 'GET',
-    auth: 'authentication',
-    body: 'none',
-    response: 'json',
-    prefix: 'speech',
-  }),
-  Object.freeze({
-    path: '/speech/transcriptions',
-    method: 'POST',
-    auth: 'authentication',
-    body: 'binary',
-    response: 'json',
-    prefix: 'speech',
-  }),
-] as const)
+  /**
+   * The carrier handler both addresses share: the fence first, then the
+   * service's own credential, method and audio checks and its error envelope.
+   * `transcribe` follows the address's declared method — the availability read
+   * is the GET, and the one POST transcribes audio — which is the same split
+   * the service's own method check makes.
+   */
+  const carrier = (transcribe: boolean): RouteHandler => async (req, res) => {
+    try {
+      if (ctx.connection.fence(req) !== undefined) throw new SpeechError(403, 'forbidden-authority', 'untrusted Host or Origin')
+      await service.handle(req, res, transcribe)
+    } catch (error) {
+      if (res.destroyed) return
+      sendJson(res, error instanceof SpeechError ? error.status : 500, { ok: false, error: { code: error instanceof SpeechError ? error.code : 'speech/internal', message: error instanceof SpeechError ? error.message : '语音请求失败' } })
+    }
+  }
+  const handlers = new Map(SURFACE.map((entry): [string, RouteHandler] => [entry.path, carrier(entry.method === 'POST')]))
+  mountRoutes(ctx, { label: 'speech', surface: SURFACE, handlers })
+}

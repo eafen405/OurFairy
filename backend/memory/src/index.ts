@@ -13,7 +13,8 @@
  * @module @ourfairy/dsh-memory
  */
 import z from '@deepseek-ai/schemastery'
-import { ImpressionService, IMPRESSION_PATHS, impressionHandlers, registerImpressions } from './impression.js'
+import { mountRoutes } from '@ourfairy/dsh-http/http'
+import { ImpressionService, impressionHandlers, registerImpressions, SURFACE as IMPRESSION_SURFACE } from './impression.js'
 import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from './maintenance-policy.js'
 import { MaintenanceEngine, readMaintenanceSettings, type MaintenanceField } from './maintenance.js'
 import { MemoryService } from './service.js'
@@ -100,16 +101,7 @@ export function apply(ctx: Context, config: MemoryConfig): void {
     authenticate: request => ctx.identity.authenticateRequest(request),
     fence: request => ctx.connection.fence(request),
   })
-  for (const path of IMPRESSION_PATHS) {
-    const handler = handlers.get(path)
-    if (handler === undefined) {
-      throw new Error(`ourfairy-memory: no impression handler is registered for ${path}`)
-    }
-    ctx.effect(
-      () => ctx.webServer.register({ kind: 'exact', path, handler }),
-      `ourfairy-memory: ${path}`,
-    )
-  }
+  mountRoutes(ctx, { label: 'ourfairy-memory', surface: IMPRESSION_SURFACE, handlers })
 
   /** The tool names and prompt sections already registered on each live agent. */
   const registrations = new Map<Agent, Set<string>>()

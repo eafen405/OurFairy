@@ -9,8 +9,9 @@
  *
  * @module @ourfairy/dsh-gateway
  */
+import { mountRoutes } from '@ourfairy/dsh-http/http'
 import { GatewayService } from './service.js'
-import { GATEWAY_PATHS, gatewayHandlers } from './http.js'
+import { gatewayHandlers, SURFACE } from './http.js'
 import type { Context } from '@deepseek-ai/cordis'
 // The dsh context's own seams and the product's own context rows: the web
 // server's route registry, Connection's trust fence, identity's service, the
@@ -33,10 +34,7 @@ export function apply(ctx: Context) {
     authenticate: request => ctx.identity.authenticateRequest(request),
     fence: request => ctx.connection.fence(request),
   })
-  for (const path of GATEWAY_PATHS) {
-    // The path is one this module owns, so the handler table holds it.
-    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path, handler: handlers.get(path)! }), `ourfairy-gateway: ${path}`)
-  }
+  mountRoutes(ctx, { label: 'ourfairy-gateway', surface: SURFACE, handlers })
 }
 
 export { GatewayService, GatewayError } from './service.js'
