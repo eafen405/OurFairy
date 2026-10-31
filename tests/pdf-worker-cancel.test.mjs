@@ -99,15 +99,16 @@ test('a cancelled PDF worker reports the numeric failure, removes its directory,
     const { ctx, installPdf } = await load()
     const pdf = costlyPdf()
     const before = new Set(readdirSync(scratch).filter(name => name.startsWith('ourfairy-pdf-')))
-    let registered
+    const registered = new Map()
     const agent = { session: {}, options: {} }
-    installPdf({ subprocess: ctx.subprocess, llm: {}, on() {}, agents: { list: () => [{ ...agent, ctx: { tools: { register: definition => { registered = definition } } } }] },
+    installPdf({ subprocess: ctx.subprocess, llm: {}, tools: { register: definition => { registered.set(definition.name, definition) } },
       attachments: { readFileStream: async function* () { yield pdf } } }, { qualifiedFile: async () => ({ mime: 'application/pdf', name: 'costly.pdf', original: {} }) })
-    assert.equal(registered?.name, 'pdf_read_pages')
+    const read = registered.get('pdf_read_pages')
+    assert.ok(read !== undefined, `the row must register its PDF tools globally; got ${JSON.stringify([...registered.keys()])}`)
 
     const controller = new AbortController()
     const started = Date.now()
-    const running = registered.execute({ file_path: 'qualified.pdf', pages: [1] }, { agent, signal: controller.signal })
+    const running = read.execute({ file_path: 'qualified.pdf', pages: [1] }, { agent, signal: controller.signal })
     const directory = await waitFor(() => readdirSync(scratch).filter(name => name.startsWith('ourfairy-pdf-') && !before.has(name)))
     try {
       assert.ok(directory?.length, 'the PDF call must start a worker in its own temporary directory')
@@ -147,8 +148,7 @@ test('the PDF worker asks the service for a bounded stderr collector', async () 
   let spec
   installPdf({
     subprocess: { spawn: value => { spec = value; throw new Error('spawn captured') } },
-    llm: {}, on() {},
-    agents: { list: () => [{ ...agent, ctx: { tools: { register: definition => { registered = definition } } } }] },
+    llm: {}, tools: { register: definition => { registered = definition } },
     attachments: { readFileStream: async function* () { yield costlyPdf() } },
   }, { qualifiedFile: async () => ({ mime: 'application/pdf', name: 'spec.pdf', original: {} }) })
   assert.equal(registered?.name, 'pdf_read_pages')
