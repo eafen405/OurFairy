@@ -88,6 +88,7 @@
 | [arch-274-pdf-global-layer](arch-274-pdf-global-layer/README.md) | #274 PDF 工具改由 global layer 注册，preset restriction 决定继承面 |
 | [arch-276-archive-store-tests](arch-276-archive-store-tests/README.md) | #276 SessionArchiveStore 的 store 级用例：版本拒绝、归档幂等与列表过滤 |
 | [arch-277-mount-routes](arch-277-mount-routes/README.md) | #277 `SURFACE` 成为挂载来源：`dsh-http` 的 `mountRoutes` seam、7 个 row 的注册收敛与 fake-carrier 用例 |
+| [arch-278-delivery-cold-concurrency](arch-278-delivery-cold-concurrency/README.md) | #278 投递冷写与 resume 并发：`/chat/read` 6 轮、`/chat/observe` 5 轮、两发送者 3 轮同冷 primary，只读日志文件下的冷写失败与同身份重试（只加测试） |
 
 ## 插件生态（规格 #73）
 
