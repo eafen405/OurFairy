@@ -269,6 +269,10 @@ test('a file delivery flush failure leaves a ready retry and never confirms inco
   await startBackend([layer]);await projection(bob,target)
   const args={recipientShortId:bob.user.shortId,text:'File checkpoint retry',files:[{path}]}
   const failed=await tool(alice,'deliver_message',args,senderSession,'file-flush-stable')
+  // The injected `session/flush` fault is what refused this delivery; without
+  // the live `delivery/message` event the fixture would stay inert and this
+  // case would only be testing a successful delivery.
+  assert.match(failed,/injected durability checkpoint failure/)
   assert.doesNotMatch(failed,/deliveryId/)
   const db=new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
   assert.equal(db.prepare('SELECT status FROM deliveries WHERE text=?').get(args.text).status,0)
