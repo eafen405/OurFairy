@@ -5,7 +5,6 @@
  * @module @ourfairy/dsh-attachments/src/pdf
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
 import { buildBwrapArgv } from '@ourfairy/dsh-spaces/bwrap'
 import { mkdtemp, rm, chmod, readFile } from 'node:fs/promises'
 import { createWriteStream } from 'node:fs'
@@ -146,7 +145,15 @@ const TOOLS = [
 ] as const
 
 /**
- * Register the PDF tools on every agent.
+ * Register the PDF tools in the row's global layer.
+ *
+ * The tools read the executing agent from `exec.agent` when they are called,
+ * so registration itself depends on no agent: one global registration serves
+ * every current and future agent. A scope that needs a narrower surface
+ * restricts what it inherits (the memory maintenance child allows nothing),
+ * which is also why this row neither replays registration for late agents nor
+ * skips the maintenance preset. The registration's effect belongs to this
+ * row, so unloading the row removes the tools.
  *
  * @param ctx - the context the tools and the worker run in.
  * @param service - the attachment service that qualifies the files.
@@ -187,24 +194,15 @@ export function installPdf(ctx: Context, service: AttachmentService): void {
       active--
     }
   }
-  const register = (agent: Agent): undefined => {
-    // The memory maintenance child (the memory row's maintenance preset) may
-    // use long-term memory tools only; a scope's own registration cannot be
-    // hidden by dsh's tool restriction, so every product row skips this preset.
-    if (agent.session.header?.agentPreset === MAINTENANCE_PRESET) return undefined
-    for (const [name, mode, description] of TOOLS) agent.ctx.tools.register(defineTool({ name, description,
-      parameters: { file_path: { type: 'string', required: true }, ...(mode !== 'info' ? { pages: { type: 'array', required: true, items: { type: 'integer' } } } : {}) },
-      output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => {
-        const pages = (value.pages ?? []) as unknown as WorkerPage[]
-        return [{ type: 'text', text: JSON.stringify(value) },
-          ...pages.filter((page): page is WorkerPage & { image: ImageAttachmentRef } => Boolean(page.image))
-            .map(page => ({ type: 'image' as const, attachment: page.image }))] } },
-      // The tool's schema is the authority for the arguments it takes; the
-      // pages property is present only for the tools that declare it.
-      execute: (args, exec) => execute(exec.agent as Agent, args as PdfToolArgs, mode, exec.signal),
-    }))
-    return undefined
-  }
-  ctx.on('agent/created', ({ agent }) => register(agent), { global: true })
-  for (const agent of ctx.agents.list()) register(agent)
+  for (const [name, mode, description] of TOOLS) ctx.tools.register(defineTool({ name, description,
+    parameters: { file_path: { type: 'string', required: true }, ...(mode !== 'info' ? { pages: { type: 'array', required: true, items: { type: 'integer' } } } : {}) },
+    output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => {
+      const pages = (value.pages ?? []) as unknown as WorkerPage[]
+      return [{ type: 'text', text: JSON.stringify(value) },
+        ...pages.filter((page): page is WorkerPage & { image: ImageAttachmentRef } => Boolean(page.image))
+          .map(page => ({ type: 'image' as const, attachment: page.image }))] } },
+    // The tool's schema is the authority for the arguments it takes; the
+    // pages property is present only for the tools that declare it.
+    execute: (args, exec) => execute(exec.agent as Agent, args as PdfToolArgs, mode, exec.signal),
+  }))
 }
