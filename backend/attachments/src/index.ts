@@ -24,7 +24,7 @@ type SessionOwner = NonNullable<ReturnType<OwnedSessionService['authenticate']>>
 export { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES, uploadIdsOf } from './service.js'
 export { createDownloadResponder } from './download.js'
 export const name = 'ourfairy-attachments'
-export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory', 'agents', 'tools', 'subprocess', 'sessions']
+export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory', 'tools', 'subprocess', 'sessions']
 
 /** The loader validates the row config before `apply`; the service only reads the root. */
 export const Config = z.object({
