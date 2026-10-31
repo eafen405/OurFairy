@@ -20,6 +20,10 @@
       "types": "./dist/owner.d.ts",
       "default": "./dist/owner.js"
     },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "default": "./dist/session.js"
+    },
     "./locale/*.json": "./locale/*.json"
   },
   "files": [

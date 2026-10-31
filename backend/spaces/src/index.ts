@@ -4,7 +4,7 @@
  * @module @ourfairy/dsh-spaces
  */
 import z from '@deepseek-ai/schemastery'
-import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
+import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 import type { Context } from '@deepseek-ai/cordis'
 import { SpaceScope } from './scope.js'
 // The dsh context's own seams: the session store, the tool registry and the
@@ -37,9 +37,10 @@ export function apply(ctx: Context, config: { readonly root: string }): void {
   ctx.inject(['systemPrompt'], context => {
     context.systemPrompt.context({ name: 'ourfairy:spaces', order: 0, text: ({ agent }) => {
       if (!agent) return ''
-      // The memory maintenance child gets only its own narrow material and
-      // instruction; deployment file-space context is not part of that.
-      if (agent.session.header?.agentPreset === MAINTENANCE_PRESET) return ''
+      // Only a session with an owner gets deployment file-space context; the
+      // memory maintenance child gets only its own narrow material and
+      // instruction, and an ownerless context cannot name a private space.
+      if (shortIdOf(agent.session.header?.owner) === undefined) return ''
       return `Authorized file spaces: ${scope.writeRoots(agent.session).map(root => JSON.stringify(root)).join(', ')}. Private space: ${scope.privateRoot(agent.session)}. Public files are shared. Use the shared env directory for dependencies; network access is available. File rights do not change with cwd or escalation.`
     } })
   })

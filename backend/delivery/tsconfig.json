@@ -10,7 +10,6 @@
     { "path": "../attachments" },
     { "path": "../chat" },
     { "path": "../identity" },
-    { "path": "../sessions" },
-    { "path": "../memory" }
+    { "path": "../sessions" }
   ]
 }
