@@ -138,3 +138,5 @@ export function apply(ctx: Context, config: MemoryConfig): void {
   for (const agent of ctx.agents.list()) register(agent)
   engine.start()
 }
+
+export { IMPRESSION_PATHS, SURFACE } from './impression.js'

@@ -210,6 +210,8 @@ export function apply(ctx: Context, config: IdentityConfig): void {
   )
 }
 
+export { IDENTITY_PATHS, SURFACE } from './routes.js'
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The product's identity service, as this package provides it. */

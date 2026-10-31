@@ -17,14 +17,45 @@
  * @covers backend/identity — this is the credential suite's own subject: the
  * invitation, registration, session read, agent roster and sign-out routes, and
  * the refusal each one answers.
- * @covers backend/gateway — the host fence case names `/gateway/read` as that
- * row's entry point, so a route that stopped being registered fails here.
- * @covers backend/attachments — the same case names `/attachments/propose`.
- * @covers backend/speech — the same case names `/speech`.
+ * @covers backend/http — the shared fence/body envelope the untrusted-Host
+ * case drives.
+ * @covers backend/sessions — the same case derives every published session
+ * address from that row's `SURFACE`.
+ * @covers backend/chat — the same case derives every published chat address,
+ * including the session rename the chat row serves.
+ * @covers backend/gateway — the same case derives every published gateway
+ * address; a route that stopped being registered would answer 404, not 403.
+ * @covers backend/memory — the same case derives both `/impression/*` addresses.
+ * @covers backend/attachments — the same case derives all four attachment
+ * addresses, including the raw-chunk upload.
+ * @covers backend/speech — the same case derives both speech addresses; the
+ * 403 is `speech/forbidden-authority`, not a bare code.
  */
 import assert from 'node:assert/strict'
 import { after, before, describe, test } from 'node:test'
 import { describeRun, httpJson, makeHome, removeHome, runBackend, startArgs, startedPort } from './helpers/backend.mjs'
+import { SURFACE as IDENTITY_SURFACE } from '../backend/identity/dist/index.js'
+import { SURFACE as SESSIONS_SURFACE } from '../backend/sessions/dist/index.js'
+import { SURFACE as CHAT_SURFACE } from '../backend/chat/dist/index.js'
+import { SURFACE as GATEWAY_SURFACE } from '../backend/gateway/dist/index.js'
+import { SURFACE as IMPRESSION_SURFACE } from '../backend/memory/dist/index.js'
+import { SURFACE as ATTACHMENTS_SURFACE } from '../backend/attachments/dist/index.js'
+import { SURFACE as SPEECH_SURFACE } from '../backend/speech/dist/index.js'
+
+/**
+ * Every address the product rows publish, read from their own `SURFACE`
+ * exports. The fence case below derives its table from this union; there is no
+ * second path list here to keep in step.
+ */
+const PRODUCT_SURFACE = [
+  ...IDENTITY_SURFACE,
+  ...SESSIONS_SURFACE,
+  ...CHAT_SURFACE,
+  ...GATEWAY_SURFACE,
+  ...IMPRESSION_SURFACE,
+  ...ATTACHMENTS_SURFACE,
+  ...SPEECH_SURFACE,
+]
 
 const PHAETHON_PASSWORD = 'test-phaethon-password'
 const home = makeHome('ourfairy-identity-')
@@ -239,34 +270,42 @@ describe('OurFairy identity over real HTTP', () => {
   })
 
   test('every product module entry point rejects an untrusted Host before parsing the body or reading the credential', async () => {
-    // One representative entry point per product module. No credential and no
-    // body: the 403 with a forbidden-authority code is only reachable through
-    // the fence, because each module's own authorization/body handling would
-    // answer 401 or 400 after a missing credential. `/speech` reports the bare
-    // code; the other modules prefix it with their own name.
-    const paths = [
-      '/identity/sign-in',
-      '/sessions/list',
-      '/chat/read',
-      '/gateway/read',
-      '/attachments/propose',
-      '/speech',
-    ]
-    for (const path of paths) {
-      const refused = await request(path, { host: 'attacker.invalid', body: {} })
-      assert.equal(refused.status, 403, `${path} must be fenced off: ${refused.text}`)
-      assert.match(refused.json?.error?.code ?? '', /forbidden-authority$/u,
-        `${path} must report a forbidden-authority code: ${refused.text}`)
+    // Every address the rows publish, not one representative per module. The
+    // table comes from the rows' own `SURFACE` exports (ticket #272), so an
+    // address added to a row joins this case without a second list to edit.
+    // No credential: the 403 is only reachable through the fence, because each
+    // route's own admission would answer 401/403 for the missing credential,
+    // 405 for a wrong method or 400 for the body. `/speech` is no exception —
+    // its error class adds the `speech/` prefix, like every other row.
+    assert.equal(PRODUCT_SURFACE.length, 38, 'the rows publish 38 product addresses')
+    const fenced = new Set()
+    for (const entry of PRODUCT_SURFACE) {
+      fenced.add(entry.path)
+      const refused = await request(entry.path, {
+        host: 'attacker.invalid',
+        method: entry.method,
+        body: {},
+      })
+      assert.equal(refused.status, 403,
+        `${entry.method} ${entry.path} must be fenced off: ${refused.text}`)
+      assert.equal(refused.json?.error?.code, `${entry.prefix}/forbidden-authority`,
+        `${entry.method} ${entry.path} must report ${entry.prefix}/forbidden-authority: ${refused.text}`)
     }
+    assert.equal(fenced.size, 38, 'the fence case must reach every published address exactly once')
+
     // A malformed body pins the order: a fence that ran after JSON parsing would
     // answer 400 before judging the authority. 403 with the forbidden-authority
     // code is reachable only when the fence runs before the body is parsed.
-    for (const path of paths) {
-      const refused = await request(path, { host: 'attacker.invalid', rawBody: '{' })
+    for (const entry of PRODUCT_SURFACE) {
+      const refused = await request(entry.path, {
+        host: 'attacker.invalid',
+        method: entry.method,
+        rawBody: '{',
+      })
       assert.equal(refused.status, 403,
-        `${path} must be fenced off before its malformed body is parsed: ${refused.text}`)
-      assert.match(refused.json?.error?.code ?? '', /forbidden-authority$/u,
-        `${path} must report a forbidden-authority code for a malformed body: ${refused.text}`)
+        `${entry.method} ${entry.path} must be fenced off before its malformed body is parsed: ${refused.text}`)
+      assert.equal(refused.json?.error?.code, `${entry.prefix}/forbidden-authority`,
+        `${entry.method} ${entry.path} must report ${entry.prefix}/forbidden-authority for a malformed body: ${refused.text}`)
     }
     // The backend still answers the loopback authority after all refusals.
     const admitted = await signIn('phaethon', PHAETHON_PASSWORD)

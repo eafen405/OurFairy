@@ -8,19 +8,27 @@
  * @module @ourfairy/dsh-identity/src/routes
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { postHandler } from '@ourfairy/dsh-http/http'
+import { freezeSurface, postHandler } from '@ourfairy/dsh-http/http'
 import { IdentityError, type IdentityStore, type PublicUser } from './store.js'
 import type { IdentityService } from './index.js'
 
-/** Paths this module owns, in the order the carrier registers them. */
-export const IDENTITY_PATHS = Object.freeze([
-  '/identity/invite',
-  '/identity/register',
-  '/identity/sign-in',
-  '/identity/session',
-  '/identity/sign-out',
-  '/identity/agents',
+/**
+ * The addresses this row publishes, in the order the carrier registers them.
+ *
+ * Registration and login are fenced but anonymous; every other address needs a
+ * live credential, and invite minting also needs the administrator role.
+ */
+export const SURFACE = freezeSurface([
+  { path: '/identity/invite', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/register', method: 'POST', auth: 'fence', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/sign-in', method: 'POST', auth: 'fence', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/session', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/sign-out', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/agents', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'identity' },
 ])
+
+/** Paths this module owns, in the order the carrier registers them. */
+export const IDENTITY_PATHS = Object.freeze(SURFACE.map(entry => entry.path))
 
 /** One handler the carrier registers on the web server. */
 export type IdentityHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>

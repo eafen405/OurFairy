@@ -40,4 +40,4 @@ export function apply(ctx: Context) {
 }
 
 export { GatewayService, GatewayError } from './service.js'
-export { GATEWAY_PATHS, gatewayHandlers } from './http.js'
+export { GATEWAY_PATHS, SURFACE, gatewayHandlers } from './http.js'

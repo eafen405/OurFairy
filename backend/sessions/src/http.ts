@@ -7,19 +7,28 @@
  * @module @ourfairy/dsh-sessions/src/http
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { postHandler } from '@ourfairy/dsh-http/http'
+import { freezeSurface, postHandler } from '@ourfairy/dsh-http/http'
 import { SessionScopeError, type OwnedSessionService, type SessionOwner } from './service.js'
 
-/** Paths this module owns, in the order the carrier registers them. */
-export const SESSION_PATHS = Object.freeze([
-  '/sessions/create',
-  '/sessions/list',
-  '/sessions/select',
-  '/sessions/primary',
-  '/sessions/read',
-  '/sessions/archive',
-  '/sessions/restore',
+/**
+ * The addresses this row publishes, in the order the carrier registers them.
+ *
+ * `create`, `list` and `primary` answer from the caller's own ownership;
+ * `select`, `read`, `archive` and `restore` name one session and refuse it
+ * unless the caller owns it.
+ */
+export const SURFACE = freezeSurface([
+  { path: '/sessions/create', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/list', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/select', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/primary', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/read', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/archive', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/restore', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
 ])
+
+/** Paths this module owns, in the order the carrier registers them. */
+export const SESSION_PATHS = Object.freeze(SURFACE.map(entry => entry.path))
 
 /**
  * The rename path. Its subject is one session, so it belongs to this family's

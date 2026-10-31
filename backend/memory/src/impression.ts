@@ -20,7 +20,7 @@
  *
  * @module @ourfairy/dsh-memory/src/impression
  */
-import { bearerToken, postHandler } from '@ourfairy/dsh-http/http'
+import { bearerToken, freezeSurface, postHandler } from '@ourfairy/dsh-http/http'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 import { ImpressionError, toolRegistrar } from './tool-kit.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -182,11 +182,18 @@ export function registerImpressions(agent: Agent, service: ImpressionService, re
   })
 }
 
-/** Paths the impression entry owns, in the order the carrier registers them. */
-export const IMPRESSION_PATHS = Object.freeze([
-  '/impression/read',
-  '/impression/edit',
+/**
+ * The addresses the impression entry publishes, in the order the carrier
+ * registers them. Both need a live credential; the edit additionally needs a
+ * successful read by that same credential.
+ */
+export const SURFACE = freezeSurface([
+  { path: '/impression/read', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'impression' },
+  { path: '/impression/edit', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'impression' },
 ])
+
+/** Paths the impression entry owns, in the order the carrier registers them. */
+export const IMPRESSION_PATHS = Object.freeze(SURFACE.map(entry => entry.path))
 
 /** One handler the carrier registers on the web server. */
 export type ImpressionHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>
