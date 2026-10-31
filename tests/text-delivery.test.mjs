@@ -230,6 +230,10 @@ test('failed native durability checkpoint never confirms and stable retry recove
   await request('/chat/read',bob.token,{sessionId:target}) // ensure the recipient is live
   const args = {recipientShortId:bob.user.shortId,text:'Checkpoint retry is still one delivery'}
   const failed = await tool(alice,'deliver_message',args,senderSession,'flush-failure-call')
+  // The failure must be the injected `session/flush` fault, not a coincidence:
+  // this keeps the case from passing vacuously if the live write stops emitting
+  // the `delivery/message` event that arms the fixture.
+  assert.match(failed,/injected durability checkpoint failure/)
   assert.doesNotMatch(failed,/deliveryId/)
   const db = new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
   const pending = db.prepare('SELECT * FROM deliveries WHERE text = ?').get(args.text)

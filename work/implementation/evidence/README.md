@@ -86,6 +86,7 @@
 | [arch-272-http-surface](arch-272-http-surface/README.md) | #272 38 个产品 HTTP 地址的 SURFACE 清单与表驱动栅栏测试 |
 | [arch-273-speech-policy](arch-273-speech-policy/README.md) | #273 speech 字段词汇、默认值与规则收进随包 policy |
 | [arch-274-pdf-global-layer](arch-274-pdf-global-layer/README.md) | #274 PDF 工具改由 global layer 注册，preset restriction 决定继承面 |
+| [arch-275-append-once](arch-275-append-once/README.md) | #275 `ourfairyChatRuntime.appendOnce`：live/cold 写入协议收回 chat，delivery `settle` 一次调用、只保留两个注入，facade 5 → 2 |
 | [arch-276-archive-store-tests](arch-276-archive-store-tests/README.md) | #276 SessionArchiveStore 的 store 级用例：版本拒绝、归档幂等与列表过滤 |
 | [arch-277-mount-routes](arch-277-mount-routes/README.md) | #277 `SURFACE` 成为挂载来源：`dsh-http` 的 `mountRoutes` seam、7 个 row 的注册收敛与 fake-carrier 用例 |
 | [arch-278-delivery-cold-concurrency](arch-278-delivery-cold-concurrency/README.md) | #278 投递冷写与 resume 并发：`/chat/read` 6 轮、`/chat/observe` 5 轮、两发送者 3 轮同冷 primary，只读日志文件下的冷写失败与同身份重试（只加测试） |

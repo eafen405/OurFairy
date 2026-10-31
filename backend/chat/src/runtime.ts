@@ -8,7 +8,7 @@ import { FAIRY_PERSONA } from './persona.js'
 import { SessionQueues } from './queues.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
-import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionHistorySeam } from '@deepseek-ai/dsh-agent/session-history'
 import type { OwnedSessionService } from '@ourfairy/dsh-sessions'
@@ -215,6 +215,74 @@ export class SessionRuntime {
   runSession<T>(sessionId: SessionId, work: () => Promise<T>): Promise<T> { return this.#queues.runSession(sessionId, work) }
   /** Serialize one outgoing delivery's preparation, apart from the target session's queue. */
   runDelivery<T>(deliveryId: SessionId, work: () => Promise<T>): Promise<T> { return this.#queues.runDelivery(deliveryId, work) }
+
+  /**
+   * Append one event to a session at most once, resolving only once it is durable.
+   *
+   * This is the one write protocol for a session chat may or may not hold live.
+   * The caller supplies the two program-specific halves — how to recognise its
+   * event on the log and how to build it on a session — and this method owns
+   * everything around them:
+   *
+   * - the target session's queue, so this cannot race `open`/resume or another
+   *   writer; the caller must not already hold the same queue;
+   * - the live/cold branch, decided inside that queue;
+   * - the cold write handle's claim, `read`/`append`/`flush`/`close` order, and
+   *   the restored Session's four construction parameters;
+   * - dedupe against the live-preferred read when live, and against the stored
+   *   prefix when cold. The live read is what makes a retry after a failed
+   *   barrier find the event already committed in this process instead of
+   *   appending it twice; a persistence read would miss it;
+   * - the stored-prefix offset passed to `snapshotEvents`: the restored
+   *   constructor appends its own `session/end-seed`, so the durable suffix
+   *   starts at the prefix length, not at the new event's seq.
+   *
+   * The cold branch never enters or announces the restored Session: entering
+   * would make the next native resume of that id fail with `already exists`
+   * until the process restarts. The event is built on a throwaway Session whose
+   * only durable product is the appended suffix.
+   *
+   * @param sessionId - the session that receives the event.
+   * @param match - finds the caller's event in one log prefix, or undefined.
+   * @param build - appends the event to a Session and returns it.
+   * @returns the existing or newly appended event, durable when this resolves.
+   */
+  async appendOnce<E extends SessionEvent>(
+    sessionId: SessionId,
+    match: (events: readonly SessionEvent[]) => E | undefined,
+    build: (session: Session) => E,
+  ): Promise<E> {
+    return this.runSession(sessionId, async () => {
+      const state = this.#live.get(sessionId)
+      if (state !== undefined) {
+        // The live-preferred read sees events this process committed even when
+        // their barrier has not succeeded yet, which is exactly the retry case.
+        const event = match((await this.events(sessionId)).events) ?? build(state.session)
+        await this.barrier(state)
+        return event
+      }
+      const handle = await this.ctx.sessionPersistence.open(sessionId, 'write')
+      try {
+        const read = await handle.read()
+        let event = match(read.events)
+        if (event === undefined) {
+          // The handle hands its slice over as a readonly array; the session
+          // store takes the seed as it is, and the migration does not copy it.
+          // `prepare` validates the header in place and deep-freezes it, so the
+          // handle's own header must not be handed over directly: native resume
+          // clones it for the same reason (agent-loop `resumeWith`).
+          const session = this.ctx.sessions.prepare(sessionId, { seed: read.events as SessionEvent[],
+            meta: structuredClone(handle.header), inheritedEventCount: handle.inheritedEventCount, eventState: read.eventState })
+          event = build(session)
+          // The constructor appended `session/end-seed`, so the durable suffix
+          // begins at the stored prefix's length.
+          await handle.append(session.snapshotEvents(read.events.length as SessionLogOffset))
+        }
+        await handle.flush()
+        return event
+      } finally { await handle.close() }
+    })
+  }
 
   async #resume(owner: SessionOwner, sessionId: SessionId, titleBackfill: boolean) {
     const state = new LiveSession()
