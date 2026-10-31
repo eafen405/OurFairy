@@ -1,5 +1,5 @@
 /** Narrow product routes over native Agent/SessionQuery, without the upstream controller. */
-import { freezeSurface, postHandler } from '@ourfairy/dsh-http/http'
+import { freezeSurface, mountRoutes, postHandler, type RouteHandler } from '@ourfairy/dsh-http/http'
 import { RemoteChat } from './service.js'
 import { SessionRuntime } from './runtime.js'
 import { ChatRuntimeFacade } from './runtime-facade.js'
@@ -71,27 +71,30 @@ export function apply(ctx: Context): void {
   // `family` is the code prefix a route answers with. Every chat path answers
   // as `chat/*`; the one session path served here answers in the session
   // family's own vocabulary, because that is the family the caller is reading.
-  const register = (path: string, handle: (owner: SessionOwner, body: ChatRequest) => Promise<unknown>, respond?: (response: ServerResponse, result: unknown) => void, family = 'chat') => ctx.effect(() => ctx.webServer.register({ kind: 'exact', path,
-    handler: postHandler({ fence: request => ctx.connection.fence(request), HttpError: SessionScopeError,
-      codePrefix: family, internalMessage: 'remote chat request failed',
-      handle: async (body, request) => handle(chat.caller(request, `${family}/unauthorized`), body),
-      ...respond !== undefined ? { respond } : {} }),
-  }), `ourfairy-chat: ${path}`)
-  register('/chat/send', async (owner, body) => ({ ok: true, receipt: await chat.send(owner, body) }))
-  register('/chat/receipt', async (owner, body) => ({ ok: true, receipt: await chat.receipt(owner, body) }))
-  register('/chat/read', async (owner, body) => ({ ok: true, projection: await chat.read(owner, body) }))
-  register('/chat/page', async (owner, body) => ({ ok: true, page: await chat.page(owner, body) }))
-  register('/chat/checkpoint', async (owner, body) => ({ ok: true, ...await chat.checkpoint(owner, body) }))
-  register('/chat/stop', async (owner, body) => { await chat.stop(owner, body); return { ok: true } })
-  // Serving one address of the session family: a rename is accepted only on a
-  // live session, and opening one is this module's job. The path constant stays
-  // single-sourced in `@ourfairy/dsh-sessions`.
-  register(SESSION_RENAME_PATH, async (owner, body) => ({ ok: true, session: await chat.rename(owner, body) }), undefined, 'sessions')
-  register('/chat/jobs/output', async (owner, body) => ({ ok: true, output: await jobOutput(owner, body) }))
-  register('/chat/jobs/stop', async (owner, body) => ({ ok: true, outcome: await jobStop(owner, body) }))
-  register('/chat/observe', (owner, body) => chat.observe(owner, body), (response, result) => {
-    // The route's handler returns the observer; the transport envelope types
-    // every route result as unknown.
-    respondToChatObserver(response, result as ChatObserver)
+  const post = (family: string, handle: (owner: SessionOwner, body: ChatRequest) => Promise<unknown>, respond?: (response: ServerResponse, result: unknown) => void) => postHandler({
+    fence: request => ctx.connection.fence(request), HttpError: SessionScopeError,
+    codePrefix: family, internalMessage: 'remote chat request failed',
+    handle: async (body, request) => handle(chat.caller(request, `${family}/unauthorized`), body),
+    ...respond !== undefined ? { respond } : {},
   })
+  const handlers = new Map<string, RouteHandler>([
+    ['/chat/send', post('chat', async (owner, body) => ({ ok: true, receipt: await chat.send(owner, body) }))],
+    ['/chat/receipt', post('chat', async (owner, body) => ({ ok: true, receipt: await chat.receipt(owner, body) }))],
+    ['/chat/read', post('chat', async (owner, body) => ({ ok: true, projection: await chat.read(owner, body) }))],
+    ['/chat/page', post('chat', async (owner, body) => ({ ok: true, page: await chat.page(owner, body) }))],
+    ['/chat/checkpoint', post('chat', async (owner, body) => ({ ok: true, ...await chat.checkpoint(owner, body) }))],
+    ['/chat/stop', post('chat', async (owner, body) => { await chat.stop(owner, body); return { ok: true } })],
+    // Serving one address of the session family: a rename is accepted only on a
+    // live session, and opening one is this module's job. The path constant stays
+    // single-sourced in `@ourfairy/dsh-sessions`.
+    [SESSION_RENAME_PATH, post('sessions', async (owner, body) => ({ ok: true, session: await chat.rename(owner, body) }))],
+    ['/chat/jobs/output', post('chat', async (owner, body) => ({ ok: true, output: await jobOutput(owner, body) }))],
+    ['/chat/jobs/stop', post('chat', async (owner, body) => ({ ok: true, outcome: await jobStop(owner, body) }))],
+    ['/chat/observe', post('chat', (owner, body) => chat.observe(owner, body), (response, result) => {
+      // The route's handler returns the observer; the transport envelope types
+      // every route result as unknown.
+      respondToChatObserver(response, result as ChatObserver)
+    })],
+  ])
+  mountRoutes(ctx, { label: 'ourfairy-chat', surface: SURFACE, handlers })
 }

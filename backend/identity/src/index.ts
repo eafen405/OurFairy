@@ -12,9 +12,9 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { ConnectionCredential, ConnectionTrustRequest } from '@deepseek-ai/dsh-client-connection'
-import { bearerToken } from '@ourfairy/dsh-http/http'
+import { bearerToken, mountRoutes } from '@ourfairy/dsh-http/http'
 import { IdentityError, IdentityStore, PHAETHON_SHORT_ID, type PublicUser } from './store.js'
-import { identityHandlers, IDENTITY_PATHS } from './routes.js'
+import { identityHandlers, SURFACE } from './routes.js'
 import { identityInterfaces } from './interfaces.js'
 import { ownerOf } from './owner.js'
 import type { IncomingMessage } from 'node:http'
@@ -191,16 +191,7 @@ export function apply(ctx: Context, config: IdentityConfig): void {
     identify: (request) => service.identify(request),
   })
 
-  for (const path of IDENTITY_PATHS) {
-    const handler = handlers.get(path)
-    if (handler === undefined) {
-      throw new IdentityError(500, 'identity/missing-handler', `no handler is registered for ${path}`)
-    }
-    ctx.effect(
-      () => ctx.webServer.register({ kind: 'exact', path, handler }),
-      `ourfairy-identity: ${path}`,
-    )
-  }
+  mountRoutes(ctx, { label: 'ourfairy-identity', surface: SURFACE, handlers })
 
   const logger: ServiceLogger = ctx.logger
   logger?.info?.(

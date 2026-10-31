@@ -1,7 +1,8 @@
 /**
  * The product transport envelope every product-owned route shares: the bounded
  * JSON request reader, the bearer credential parser, the JSON response writer,
- * and the `post` wrapper around them.
+ * the `post` wrapper around them, and the `mountRoutes` seam that mounts a
+ * row's published surface on the Web carrier.
  *
  * The routes themselves, and the error class each one throws, belong to the
  * package that owns the domain: `postHandler` and `readJsonBody` are given that
@@ -11,6 +12,11 @@
  * @module @ourfairy/dsh-http/src/http
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the carrier's route shape and the `ctx.webServer` augmentation it
+// declares. This module still names no product package and imports nothing at
+// runtime beyond `node:http` types.
+import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 
 /** Largest JSON body any product route accepts; a request document is tiny. */
 const MAX_BODY_BYTES = 64 * 1024
@@ -144,6 +150,64 @@ export interface SurfaceEntry {
  */
 export function freezeSurface(entries: readonly SurfaceEntry[]): readonly SurfaceEntry[] {
   return Object.freeze(entries.map(entry => Object.freeze(entry)))
+}
+
+/** One handler the carrier runs for one exact path. */
+export type RouteHandler = WebRoute['handler']
+
+/** One row's published addresses and the handlers that serve them. */
+export interface MountRoutesOptions {
+  /** The row's published table: its order is the mount order and its paths are the mounted set. */
+  readonly surface: readonly SurfaceEntry[]
+  /** One handler per published path, keyed by that path. */
+  readonly handlers: ReadonlyMap<string, RouteHandler>
+  /**
+   * The row's diagnostic label, prefixed to every registration label. Omitted,
+   * each address is labelled by its own error prefix.
+   */
+  readonly label?: string
+}
+
+/**
+ * Mount one row's published surface: every address, and only those addresses.
+ *
+ * A row registers through this seam instead of repeating its paths in a
+ * registration loop, and the handler table it passes must name exactly the
+ * published paths. Before anything is registered this checks both directions of
+ * that pairing — a path without a handler, a handler without a path, and a
+ * repeated path all fail the row's load — and then registers one exact route per
+ * entry on the calling fiber. A disabled row therefore mounts nothing, and there
+ * is no fallback or placeholder to answer in its place.
+ *
+ * Admission stays the handler's: this only owns the registration lifetime and
+ * the pairing. JSON routes keep delegating to `postHandler`; a route that
+ * answers SSE or raw bytes keeps its own `respond`; a raw-body route keeps its
+ * own fence, credential check and error mapping.
+ *
+ * @param ctx - the row's context; the routes live and die with its fiber.
+ * @param options - the row's published surface and its handler table.
+ */
+export function mountRoutes(ctx: Context, { surface, handlers, label }: MountRoutesOptions): void {
+  const row = label ?? surface[0]?.prefix ?? 'mountRoutes'
+  const paths = new Set<string>()
+  for (const entry of surface) {
+    if (paths.has(entry.path)) throw new Error(`${row}: duplicate path ${entry.path}`)
+    paths.add(entry.path)
+  }
+  for (const entry of surface) {
+    if (!handlers.has(entry.path)) throw new Error(`${row}: no handler is registered for ${entry.path}`)
+  }
+  for (const path of handlers.keys()) {
+    if (!paths.has(path)) throw new Error(`${row}: ${path} has a handler but is not in the surface`)
+  }
+  for (const entry of surface) {
+    // The pairing was checked above, so the handler exists.
+    const handler = handlers.get(entry.path)!
+    ctx.effect(
+      () => ctx.webServer.register({ kind: 'exact', path: entry.path, handler }),
+      `${label ?? entry.prefix}: ${entry.path}`,
+    )
+  }
 }
 
 /** The inputs one product route hands to `postHandler`. */

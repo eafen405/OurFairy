@@ -7,11 +7,12 @@
  *
  * @module @ourfairy/dsh-sessions
  */
+import { mountRoutes } from '@ourfairy/dsh-http/http'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { SessionArchiveStore } from './archive-store.js'
 import { OwnedSessionService } from './service.js'
-import { SESSION_PATHS, sessionHandlers } from './http.js'
+import { sessionHandlers, SURFACE } from './http.js'
 // The dsh context's own seams: the session store, the durable store, the
 // session query and the carrier. The imports are type-only, so they add no
 // runtime dependency.
@@ -53,16 +54,7 @@ export function apply(ctx: Context, config: SessionsConfig): void {
   })
   const handlers = sessionHandlers({ service, fence: request => ctx.connection.fence(request) })
 
-  for (const path of SESSION_PATHS) {
-    const handler = handlers.get(path)
-    if (handler === undefined) {
-      throw new Error(`no handler is registered for ${path}`)
-    }
-    ctx.effect(
-      () => ctx.webServer.register({ kind: 'exact', path, handler }),
-      `ourfairy-sessions: ${path}`,
-    )
-  }
+  mountRoutes(ctx, { label: 'ourfairy-sessions', surface: SURFACE, handlers })
 }
 
 export { OwnedSessionService, primarySessionIdOf, sessionIdOf, SessionScopeError } from './service.js'
