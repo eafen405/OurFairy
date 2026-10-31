@@ -8,7 +8,6 @@
  *
  * @module @ourfairy/dsh-memory/src/service
  */
-import { Service } from '@deepseek-ai/cordis'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 import { MemoryError } from './tool-kit.js'
 import { MAINTENANCE_PRESET } from './preset.js'
@@ -27,12 +26,12 @@ export const SEARCH_LIMIT = 20
 export const SEARCH_CHARACTER_BUDGET = 8000
 
 /**
- * Where one service instance keeps its state: module-private symbols rather
- * than `#` fields, because Cordis calls a service method with a traceable proxy
- * as `this` and a class-private field is unreadable through it.
+ * Where one instance keeps its context: a module-private symbol rather than a
+ * `#` field, matching the two state symbols below.
  */
 const STORE: unique symbol = Symbol('ourfairy-memory-store')
 const GATE: unique symbol = Symbol('ourfairy-memory-gate')
+const CONTEXT: unique symbol = Symbol('ourfairy-memory-context')
 
 /** One memory as the model sees it in a search result. */
 export type MemoryHit = {
@@ -57,12 +56,22 @@ export type MemorySearchReport = {
 /** The session facts every tool passes: the calling session, nothing else. */
 type Caller = { readonly sessionId: string }
 
-export class MemoryService extends Service {
+/**
+ * The memory domain between the storage rows and the model tools.
+ *
+ * It is a plain class, not a Cordis service: the tools and the HTTP routes are
+ * handed this instance directly, and no other row reads the memory domain
+ * through `ctx`. Keeping it off the service registry means the row publishes
+ * exactly the surfaces it actually exposes — tools, prompt sections and two
+ * routes — and nothing else.
+ */
+export class MemoryService {
   declare [STORE]: MemoryStore
   declare [GATE]: Map<string, Set<number>>
+  declare [CONTEXT]: Context
 
   constructor(ctx: Context, store: MemoryStore) {
-    super(ctx, 'ourfairyMemory')
+    this[CONTEXT] = ctx
     this[STORE] = store
     this[GATE] = new Map()
   }
@@ -88,7 +97,7 @@ export class MemoryService extends Service {
     const parentSession = header.parentSession
     const parent = parentSession === undefined
       ? undefined
-      : await this.ctx.sessionPersistence.stat(parentSession as SessionId)
+      : await this[CONTEXT].sessionPersistence.stat(parentSession as SessionId)
     const ownerShortId = shortIdOf(parent?.header.owner)
     if (parentSession === undefined || ownerShortId === undefined) {
       throw new MemoryError(403, 'memory/missing-owner', 'the maintenance child needs an owned source session')
@@ -132,7 +141,7 @@ export class MemoryService extends Service {
     remember(this[GATE], input.sessionId, found.rows.map(row => row.id))
     const owners = new Map<string, number | null>()
     for (const row of found.rows) {
-      if (!owners.has(row.source_session)) owners.set(row.source_session, await ownerShortIdOfSession(this.ctx, row.source_session))
+      if (!owners.has(row.source_session)) owners.set(row.source_session, await ownerShortIdOfSession(this[CONTEXT], row.source_session))
     }
     return {
       memories: found.rows.map(row => ({ id: row.id, content: row.content,
@@ -286,11 +295,4 @@ function assertRange(startAt: number | undefined, endAt: number | undefined): { 
     throw new MemoryError(400, 'memory/invalid-range', 'start_at must not be later than end_at')
   }
   return { startAt, endAt }
-}
-
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    /** The long-term memory service this row provides. */
-    ourfairyMemory: MemoryService
-  }
 }

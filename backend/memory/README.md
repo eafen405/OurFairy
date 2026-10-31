@@ -10,8 +10,10 @@ should be remembered" and "who is this user".
 
 ## What the row contributes
 
-`MemoryService` (context name `ourfairyMemory`) owns the memory tools and
-`ImpressionService` owns the per-user impression; both share the store. Every
+`MemoryService` owns the memory tools and `ImpressionService` owns the
+per-user impression; both share the store. Neither is published on `ctx`: the
+row exposes tools, prompt sections and the two impression routes, and nothing
+else reads the memory domain through the context. Every
 live Agent gets the five memory tools on its own agent context, and an owned
 Agent additionally gets the two impression tools and the impression prompt
 section. Registration follows the product's usual shape: a global

@@ -111,7 +111,10 @@ export function apply(ctx: Context) {
             // The persistence handle hands its slice over as a readonly array;
             // the session store takes the seed as it is, and the migration does
             // not copy it.
-            const session = ctx.sessions.prepare(row.sessionId as SessionId, { seed: read.events as SessionEvent[], meta: handle.header,
+            // `prepare` validates the header in place and deep-freezes it, so the
+            // handle's own header must not be handed over directly: native
+            // resume clones it for the same reason (agent-loop `resumeWith`).
+            const session = ctx.sessions.prepare(row.sessionId as SessionId, { seed: read.events as SessionEvent[], meta: structuredClone(handle.header),
               inheritedEventCount: handle.inheritedEventCount, eventState: read.eventState })
             event = append(session, row)
             // Restore may add a lifecycle marker; persist the whole new suffix.
