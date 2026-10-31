@@ -11,8 +11,9 @@
  * A child is an ordinary dsh Agent with no owner, no inherited parent context
  * and `parentSession` pointing at the source. Its own scoped setup restricts
  * inherited tools to nothing; the memory row registers the five memory tools on
- * it, and every other product row skips its registration for the preset. The
- * child and its source run in parallel: no work of the source is awaited.
+ * it, and every other product tool row registers only for a user's own session,
+ * so none of them registers on the child. The child and its source run in
+ * parallel: no work of the source is awaited.
  *
  * Completion is decided from the durable `turn/end` reason, never from
  * `whenIdle()` (which resolves on failure too). A completed turn — including

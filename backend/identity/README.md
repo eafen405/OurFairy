@@ -20,7 +20,8 @@ credential that speak for them.
   upload lifetime and delivery coordination rows are stored here; the behaviour
   over those rows belongs to the packages that call the faces.
 - The `user:<shortId>` owner codec exported as `./owner`, which writes and reads
-  `SessionHeader.owner`.
+  `SessionHeader.owner`, and the `isUserSession` header predicate exported as
+  `./session`, which names a user's own top-level session.
 - The `/identity/*` paths, their POST body/error envelope, and the
   `ourfairy-identity` authenticator Connection consults for a session token.
 - The `/identity/agents` roster: every live agent's short number and name, and

@@ -5,9 +5,9 @@
  * @module @ourfairy/dsh-spaces/src/policy
  */
 import { FsError } from '@deepseek-ai/dsh-fs'
-import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
 import { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import type { SandboxPolicyRequest } from '@deepseek-ai/dsh-sandbox-policy'
+import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 
 /** Native mode events and context; immutable ownership selects the file root. */
 export default class OwnedSandboxPolicy extends SandboxPolicyService {
@@ -15,11 +15,13 @@ export default class OwnedSandboxPolicy extends SandboxPolicyService {
 
   override resolve(request: SandboxPolicyRequest = {}) {
     const scope = this.ctx.ourfairySpaces
-    // A memory maintenance child is ownerless by design and has no file tools.
-    // The native sandbox-policy prompt context still resolves a policy for every
-    // session, so answer with a read-only shared root instead of deriving the
-    // owner-bound private root that cannot exist.
-    if (request.session?.header?.agentPreset === MAINTENANCE_PRESET) {
+    // An ownerless session — the memory maintenance child by today's
+    // composition — has no file tools. The native sandbox-policy prompt context
+    // still resolves a policy for every session, so answer with a read-only
+    // shared root instead of deriving an owner-bound private root that cannot exist.
+    // A request with no session at all is not ownerless: it keeps the refusal
+    // below, because only an owned session names a private root.
+    if (request.session !== undefined && shortIdOf(request.session.header?.owner) === undefined) {
       return { ...super.resolve(request), mode: 'read-only' as const, workspaceRoot: scope.root }
     }
     scope.owner(request.session)

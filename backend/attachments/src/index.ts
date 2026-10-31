@@ -9,8 +9,8 @@ import { freezeSurface, mountRoutes, postHandler, sendJson, type RouteHandler } 
 import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.js'
 import { installPdf } from './pdf.js'
 import { createDownloadResponder } from './download.js'
-import { MAINTENANCE_PRESET } from '@ourfairy/dsh-memory/preset'
 import { SessionScopeError, OwnedSessionService } from '@ourfairy/dsh-sessions'
+import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ServerResponse } from 'node:http'
 // The dsh context's own seams: the carrier's trust fence and the web server's
@@ -96,11 +96,11 @@ export function apply(ctx: Context, config: { readonly root: string }): void {
   // Each iterator pull must inherit the session: merely constructing the async
   // generator inside AsyncLocalStorage does not scope provider serialization.
   ctx.on('llm/stream', async function* (options, next) {
-    // A maintenance child is ownerless and has no attachments; the native
-    // stream still reaches this hook for every request, so leave its scoped
-    // refresh out instead of demanding an owner it never has.
+    // An ownerless live session — the memory maintenance child today — has no
+    // attachments; the native stream still reaches this hook for every request,
+    // so leave its scoped refresh out instead of demanding an owner it never has.
     const child = options.sessionId === undefined ? undefined : ctx.sessions.get(options.sessionId)
-    if (child?.header?.agentPreset === MAINTENANCE_PRESET) {
+    if (child !== undefined && shortIdOf(child.header?.owner) === undefined) {
       yield* next()
       return
     }
@@ -116,7 +116,7 @@ export function apply(ctx: Context, config: { readonly root: string }): void {
     } finally { await iterator.return?.() }
   })
   ctx.on('tools/execute', async (exec, next) => {
-    if (exec.agent && exec.agent.session.header?.agentPreset !== MAINTENANCE_PRESET) await service.refresh(exec.agent.session)
+    if (exec.agent && shortIdOf(exec.agent.session.header?.owner) !== undefined) await service.refresh(exec.agent.session)
     return next()
   }, { global: true })
 }

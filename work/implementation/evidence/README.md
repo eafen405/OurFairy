@@ -90,6 +90,7 @@
 | [arch-276-archive-store-tests](arch-276-archive-store-tests/README.md) | #276 SessionArchiveStore 的 store 级用例：版本拒绝、归档幂等与列表过滤 |
 | [arch-277-mount-routes](arch-277-mount-routes/README.md) | #277 `SURFACE` 成为挂载来源：`dsh-http` 的 `mountRoutes` seam、7 个 row 的注册收敛与 fake-carrier 用例 |
 | [arch-278-delivery-cold-concurrency](arch-278-delivery-cold-concurrency/README.md) | #278 投递冷写与 resume 并发：`/chat/read` 6 轮、`/chat/observe` 5 轮、两发送者 3 轮同冷 primary，只读日志文件下的冷写失败与同身份重试（只加测试） |
+| [arch-279-agent-capabilities](arch-279-agent-capabilities/README.md) | #279 用「是否用户会话」与「是否有 owner」替代 9 处 maintenance preset 判断，`MAINTENANCE_PRESET` 回到 memory 私有 |
 
 ## 插件生态（规格 #73）
 

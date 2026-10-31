@@ -210,12 +210,12 @@ The child is a native dsh Agent (`ctx.agents.create`) with:
 - no inherited parent history, seed or prompt;
 - a scoped setup that removes every inherited tool (`tools.restrict({ allow: [] })`)
   and contributes only the maintenance instruction. The memory row registers the
-  five memory tools on it and every other product tool row skips this preset, so
-  the child's whole tool catalog is exactly those five. The spaces prompt context
-  contributes nothing for it either, so the maintenance instruction is the only
-  product instruction the child carries. `tests/memory-maintenance.test.mjs`
-  asserts the tool catalog and `tests/memory-policy.test.mjs` asserts the
-  assembled prompt;
+  five memory tools on it; every other product tool row registers only for a
+  user's own session, so the child's whole tool catalog is exactly those five. The
+  spaces prompt context contributes nothing for it either, so the maintenance
+  instruction is the only product instruction the child carries.
+  `tests/memory-maintenance.test.mjs` asserts the tool catalog and
+  `tests/memory-policy.test.mjs` asserts the assembled prompt;
 - the configured light-model route, read again when the child starts, with
   `MiniMax-M3.1-Flash` as the default. The main session's shared model
   selection is never read or written for this child.
