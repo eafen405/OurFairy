@@ -83,6 +83,10 @@
 | [arch-67-projection-exports](arch-67-projection-exports/README.md) | #67 projection 多余导出 |
 | [arch-68-receive-state](arch-68-receive-state/README.md) | #68 删掉 RemoteReceiveState 的五个纯转发方法，调用方直接用 OwnedSessionState |
 | [arch-70-closeout](arch-70-closeout/README.md) | #70 地图 #69 收口：两仓版本组合固定与 final 组合的全量验证 |
+| [arch-272-http-surface](arch-272-http-surface/README.md) | #272 38 个产品 HTTP 地址的 SURFACE 清单与表驱动栅栏测试 |
+| [arch-273-speech-policy](arch-273-speech-policy/README.md) | #273 speech 字段词汇、默认值与规则收进随包 policy |
+| [arch-274-pdf-global-layer](arch-274-pdf-global-layer/README.md) | #274 PDF 工具改由 global layer 注册，preset restriction 决定继承面 |
+| [arch-276-archive-store-tests](arch-276-archive-store-tests/README.md) | #276 SessionArchiveStore 的 store 级用例：版本拒绝、归档幂等与列表过滤 |
 
 ## 插件生态（规格 #73）
 
