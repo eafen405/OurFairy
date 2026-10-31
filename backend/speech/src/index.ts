@@ -11,6 +11,7 @@
  */
 import z from '@deepseek-ai/schemastery'
 import { sendJson } from '@ourfairy/dsh-http/http'
+import { DEFAULT_API_KEY_ENV, SPEECH_FIELDS } from './policy.js'
 import { createSpeechHandler, resolveSpeechSettings, SpeechError } from './service.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
@@ -24,16 +25,24 @@ import type {} from '@ourfairy/dsh-identity'
 export const name = 'ourfairy-speech'
 export const inject = ['webServer', 'connection', 'identity']
 
-/** Every field is live: the gateway edits the row, the next recording reads it. */
+/**
+ * Every field is live: the gateway edits the row, the next recording reads it.
+ *
+ * The field vocabulary and the positive-integer floor are the speech policy's
+ * (`./policy.ts`). This row still declares one schema per field, because a
+ * schema carries the field's type and default as well as its name;
+ * `tests/speech-policy.test.mjs` proves the keys are exactly `SPEECH_FIELDS` and
+ * that the floor agrees with `isPositiveInteger`.
+ */
 export const Config = z.object({
   model: z.string().required().volatile(),
   endpoint: z.string().required().volatile(),
-  apiKeyEnv: z.string().default('VOICE_API_KEY').volatile(),
-  maxDurationMs: z.natural().required().volatile(),
-  maxAudioBytes: z.natural().required().volatile(),
-  timeoutMs: z.natural().required().volatile(),
-  maxGlobalInFlight: z.natural().required().volatile(),
-  maxUserInFlight: z.natural().required().volatile(),
+  apiKeyEnv: z.string().default(DEFAULT_API_KEY_ENV).volatile(),
+  maxDurationMs: z.natural().min(1).required().volatile(),
+  maxAudioBytes: z.natural().min(1).required().volatile(),
+  timeoutMs: z.natural().min(1).required().volatile(),
+  maxGlobalInFlight: z.natural().min(1).required().volatile(),
+  maxUserInFlight: z.natural().min(1).required().volatile(),
 })
 
 /**
@@ -50,11 +59,9 @@ export type SpeechField = { readonly get: () => unknown } | string | number | nu
  */
 export type SpeechConfig = Record<string, SpeechField>
 
-const FIELDS = ['model', 'endpoint', 'apiKeyEnv', 'maxDurationMs', 'maxAudioBytes', 'timeoutMs', 'maxGlobalInFlight', 'maxUserInFlight'] as const
-
 export function apply(ctx: Context, config: SpeechConfig) {
   /** Read the live row: volatile fields are refs, plain fields are values. */
-  const values = (): Record<string, unknown> => Object.fromEntries(FIELDS.map(field => {
+  const values = (): Record<string, unknown> => Object.fromEntries(SPEECH_FIELDS.map(field => {
     const value = config[field]
     return [field, value !== null && typeof value === 'object' && typeof value.get === 'function' ? value.get() : value] as const
   }))

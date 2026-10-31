@@ -12,6 +12,9 @@
  */
 import { Service } from '@deepseek-ai/cordis'
 import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from '@ourfairy/dsh-memory/maintenance-policy'
+import {
+  DEFAULT_API_KEY_ENV, isPositiveInteger, SPEECH_ENDPOINT_PATTERN, SPEECH_ENV_NAME_PATTERN, SPEECH_FIELDS, SPEECH_LIMIT_FIELDS,
+} from '@ourfairy/dsh-speech/policy'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
@@ -445,7 +448,9 @@ export class GatewayService extends Service {
   async asrView() {
     const row = this.row('speech')
     const value = row?.value ?? {}
-    const ref = value.apiKeyEnv ?? 'VOICE_API_KEY'
+    // The field vocabulary is the speech policy's; the gateway adds only the
+    // defaulted reference and the facts around the row.
+    const ref = value.apiKeyEnv ?? DEFAULT_API_KEY_ENV
     const credential = await this.credential(ref)
     // The speech route answers "available" from the resolved value, so the
     // gateway must ask the same seam the same way rather than describing a
@@ -454,14 +459,7 @@ export class GatewayService extends Service {
     const resolved = credentials === undefined ? undefined : await credentials.resolve(ref as CredentialRef).catch(() => undefined)
     return {
       editable: row !== undefined,
-      model: value.model ?? null,
-      endpoint: value.endpoint ?? null,
-      apiKeyEnv: ref,
-      maxDurationMs: value.maxDurationMs ?? null,
-      maxAudioBytes: value.maxAudioBytes ?? null,
-      timeoutMs: value.timeoutMs ?? null,
-      maxGlobalInFlight: value.maxGlobalInFlight ?? null,
-      maxUserInFlight: value.maxUserInFlight ?? null,
+      ...Object.fromEntries(SPEECH_FIELDS.map(field => [field, field === 'apiKeyEnv' ? ref : (value[field] ?? null)])),
       available: resolved?.value?.trim() !== undefined && resolved.value.trim() !== '',
       credential,
     }
@@ -637,19 +635,21 @@ export class GatewayService extends Service {
     const model = input.model
     const endpoint = input.endpoint
     if (typeof model !== 'string' || model.trim() === '') throw new GatewayError(400, 'gateway/invalid-asr', 'model must be a non-empty string')
-    if (typeof endpoint !== 'string' || !/^https?:\/\/[^\s]+$/u.test(endpoint)) {
+    // The check's grammar is the speech policy's, so this save and the speech
+    // runtime accept exactly the same endpoint.
+    if (typeof endpoint !== 'string' || !SPEECH_ENDPOINT_PATTERN.test(endpoint)) {
       throw new GatewayError(400, 'gateway/invalid-asr', 'endpoint must be an http(s) URL')
     }
     const fields: Record<string, unknown> = { model, endpoint }
-    for (const field of ['maxDurationMs', 'maxAudioBytes', 'timeoutMs', 'maxGlobalInFlight', 'maxUserInFlight'] as const) {
+    for (const field of SPEECH_LIMIT_FIELDS) {
       if (input[field] === undefined) continue
-      if (!isSafeInteger(input[field]) || input[field] < 1) {
+      if (!isPositiveInteger(input[field])) {
         throw new GatewayError(400, 'gateway/invalid-asr', `${field} must be a positive integer`)
       }
       fields[field] = input[field]
     }
     if (input.apiKeyEnv !== undefined) {
-      if (typeof input.apiKeyEnv !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(input.apiKeyEnv)) {
+      if (typeof input.apiKeyEnv !== 'string' || !SPEECH_ENV_NAME_PATTERN.test(input.apiKeyEnv)) {
         throw new GatewayError(400, 'gateway/invalid-asr', 'apiKeyEnv must be an environment-variable name')
       }
       fields.apiKeyEnv = input.apiKeyEnv
