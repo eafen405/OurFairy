@@ -17,7 +17,7 @@
 | 组成 | 实现 |
 | --- | --- |
 | 载体 | 原生 Web 载体服务 `ctx.webServer`，产品模块注册 `exact` 路由（身份、会话、对话、网关、附件、语音） |
-| 路径 | `/identity/*`、`/sessions/*`、`/chat/*`、`/gateway/*`、`/attachments/*`、`/speech/*`，全部在 `/api` 之外 |
+| 路径 | 唯一清单是 `tests/route-inventory.test.mjs` 读取的各 row `SURFACE` 导出（38 条，按 row 与前缀分组）；全部在 `/api` 之外，本文不抄路径 |
 | 鉴权 | 请求头 `Authorization: Bearer <session token>`；调用者只由凭据派生，不接受请求体里的用户字段 |
 | 栅栏 | 每个产品路由先调 `ctx.connection.fence(request)`（与原生 `/api` 同一个 Host/Origin 栅栏），再读请求体；JSON 路由共用同一个 `postHandler` 包装 |
 | 错误 | `{ ok: false, error: { code, message } }`，code 以模块前缀区分（如 `chat/unauthorized`） |
@@ -69,7 +69,7 @@ Connection 行是挂载的，但用途只有两个：产品路由复用的 Host/
 | 产品流式面是自建 SSE，断开观察不停止后端回复 | `tests/remote-chat.test.mjs`：`SSE preserves every text prefix and disconnecting observation leaves the backend reply running` |
 | 错误响应的 code 以模块前缀区分 | `tests/gateway.test.mjs`：`the gateway reads the shared configuration, refuses an ordinary agent, and survives a restart`（断言 `gateway/unauthorized`、`gateway/forbidden`） |
 | 产品路由拒绝匿名与越权（含法厄同），且早于冷恢复 | `tests/remote-chat.test.mjs`：`all remote paths reject anonymous and foreign owners, including administrator, before cold resume` |
-| 每个产品模块的代表入口都在解析请求体或读取凭据之前拒绝不受信的 Host | `tests/identity-http.test.mjs`：`every product module entry point rejects an untrusted Host before parsing the body or reading the credential` |
+| 每个产品地址（38 条，从各 row 的 `SURFACE` 派生）都在判断 method、解析请求体或读取凭据之前拒绝不受信的 Host | `tests/identity-http.test.mjs`：`every product module entry point rejects an untrusted Host before parsing the body or reading the credential` |
 | 组合不挂载 Gateway、Remote/Typert 与 plugin manager 行 | `tests/ecosystem-boundary.test.mjs`（解析 bundle 行集合，任一包名出现即失败） |
 
 ## 2. 登录路径留在 `/api` 之外

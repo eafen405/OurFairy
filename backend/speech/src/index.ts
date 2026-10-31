@@ -94,3 +94,30 @@ export function apply(ctx: Context, config: SpeechConfig) {
     } }), `speech: ${path}`)
   }
 }
+
+/**
+ * The addresses this row publishes, as one read-only table (ticket #272).
+ *
+ * Kept as a free-standing block at the end of the file so the row's mounting
+ * loop above — and its admission order — stays untouched. `/speech` is the
+ * availability read (`GET`, no body); `/speech/transcriptions` accepts raw
+ * `audio/wav` bytes (`POST`) and answers JSON. Both need a live credential.
+ */
+export const SURFACE = Object.freeze([
+  Object.freeze({
+    path: '/speech',
+    method: 'GET',
+    auth: 'authentication',
+    body: 'none',
+    response: 'json',
+    prefix: 'speech',
+  }),
+  Object.freeze({
+    path: '/speech/transcriptions',
+    method: 'POST',
+    auth: 'authentication',
+    body: 'binary',
+    response: 'json',
+    prefix: 'speech',
+  }),
+] as const)

@@ -1,5 +1,5 @@
 /** Narrow product routes over native Agent/SessionQuery, without the upstream controller. */
-import { postHandler } from '@ourfairy/dsh-http/http'
+import { freezeSurface, postHandler } from '@ourfairy/dsh-http/http'
 import { RemoteChat } from './service.js'
 import { SessionRuntime } from './runtime.js'
 import { ChatRuntimeFacade } from './runtime-facade.js'
@@ -25,6 +25,27 @@ import type {} from '@deepseek-ai/dsh-client-connection'
  */
 export type { RemoteChat } from './service.js'
 export type { ChatRuntimeFacade } from './runtime-facade.js'
+
+/**
+ * The addresses this row publishes, in registration order.
+ *
+ * Nine answer in the `chat` family and one — a rename accepted only on a live
+ * session — belongs to the session family, so it uses that family's path
+ * constant and error prefix. `observe` is the row's only SSE response; every
+ * other address reads a JSON object and writes JSON.
+ */
+export const SURFACE = freezeSurface([
+  { path: '/chat/send', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'chat' },
+  { path: '/chat/receipt', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'chat' },
+  { path: '/chat/read', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'chat' },
+  { path: '/chat/page', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'chat' },
+  { path: '/chat/checkpoint', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'chat' },
+  { path: '/chat/stop', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'chat' },
+  { path: SESSION_RENAME_PATH, method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/chat/jobs/output', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'chat' },
+  { path: '/chat/jobs/stop', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'chat' },
+  { path: '/chat/observe', method: 'POST', auth: 'ownership', body: 'json', response: 'sse', prefix: 'chat' },
+])
 
 export const name = 'ourfairy-chat'
 /**

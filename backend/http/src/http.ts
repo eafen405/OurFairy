@@ -105,6 +105,47 @@ export function sendJson(response: ServerResponse, status: number, payload: unkn
   response.end(body)
 }
 
+/**
+ * The admission one product address performs after the shared Host/Origin
+ * fence: nothing more (`fence`), a live credential (`authentication`), a
+ * credential that owns the named resource (`ownership`), or the administrator
+ * role (`role`).
+ */
+export type SurfaceAuth = 'fence' | 'authentication' | 'ownership' | 'role'
+
+/** The request body one product address reads: a JSON object, raw bytes, or none. */
+export type SurfaceBody = 'json' | 'binary' | 'none'
+
+/** The response one product address writes: JSON, an SSE stream, or raw bytes. */
+export type SurfaceResponse = 'json' | 'sse' | 'binary'
+
+/**
+ * One product HTTP address, as the row that serves it publishes it.
+ *
+ * The row exports these entries so the mounted surface has one readable list
+ * instead of a literal repeated in every registration, test and document.
+ * `prefix` is the error-code prefix the address answers with; it is usually the
+ * row's own name, but `/sessions/rename` is registered by the chat row and
+ * answers in the session family's vocabulary.
+ */
+export interface SurfaceEntry {
+  readonly path: string
+  readonly method: 'GET' | 'POST'
+  readonly auth: SurfaceAuth
+  readonly body: SurfaceBody
+  readonly response: SurfaceResponse
+  readonly prefix: string
+}
+
+/**
+ * Freeze one row's published surface: the array and every entry.
+ * @param entries - the row's addresses, in registration order.
+ * @returns the same entries, read-only.
+ */
+export function freezeSurface(entries: readonly SurfaceEntry[]): readonly SurfaceEntry[] {
+  return Object.freeze(entries.map(entry => Object.freeze(entry)))
+}
+
 /** The inputs one product route hands to `postHandler`. */
 export interface PostHandlerOptions {
   fence: (request: IncomingMessage) => unknown

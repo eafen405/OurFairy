@@ -5,7 +5,7 @@
  * @module @ourfairy/dsh-attachments
  */
 import z from '@deepseek-ai/schemastery'
-import { postHandler, sendJson } from '@ourfairy/dsh-http/http'
+import { freezeSurface, postHandler, sendJson } from '@ourfairy/dsh-http/http'
 import { AttachmentService, AttachmentError, MAX_CHUNK_BYTES } from './service.js'
 import { installPdf } from './pdf.js'
 import { createDownloadResponder } from './download.js'
@@ -23,6 +23,21 @@ import type {} from '@deepseek-ai/dsh-session'
 type SessionOwner = NonNullable<ReturnType<OwnedSessionService['authenticate']>>
 export { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES, uploadIdsOf } from './service.js'
 export { createDownloadResponder } from './download.js'
+
+/**
+ * The addresses this row publishes, in registration order.
+ *
+ * Three read a JSON object and answer JSON. `/attachments/chunk` reads raw
+ * `application/octet-stream` bytes and answers JSON; `/attachments/download`
+ * reads a JSON object and answers the original bytes.
+ */
+export const SURFACE = freezeSurface([
+  { path: '/attachments/propose', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'attachments' },
+  { path: '/attachments/complete', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'attachments' },
+  { path: '/attachments/chunk', method: 'POST', auth: 'ownership', body: 'binary', response: 'json', prefix: 'attachments' },
+  { path: '/attachments/download', method: 'POST', auth: 'ownership', body: 'json', response: 'binary', prefix: 'attachments' },
+])
+
 export const name = 'ourfairy-attachments'
 export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions', 'attachments', 'sessionQuery', 'ourfairySpaces', 'llm', 'agentDefaultModel', 'fs', 'workingDirectory', 'tools', 'subprocess', 'sessions']
 

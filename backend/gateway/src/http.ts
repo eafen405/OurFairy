@@ -8,7 +8,7 @@
  *
  * @module @ourfairy/dsh-gateway/src/http
  */
-import { postHandler } from '@ourfairy/dsh-http/http'
+import { freezeSurface, postHandler } from '@ourfairy/dsh-http/http'
 import { GatewayError } from './service.js'
 import type { IncomingMessage } from 'node:http'
 import type { GatewayService } from './service.js'
@@ -24,16 +24,22 @@ export interface GatewayHandlerOptions {
   readonly fence: (request: IncomingMessage) => unknown
 }
 
-/** Paths this module owns, in the order the carrier registers them. */
-export const GATEWAY_PATHS = Object.freeze([
-  '/gateway/read',
-  '/gateway/selection',
-  '/gateway/route',
-  '/gateway/route/delete',
-  '/gateway/asr',
-  '/gateway/compaction',
-  '/gateway/maintenance',
+/**
+ * The addresses this row publishes, in the order the carrier registers them.
+ * Every one requires the administrator role.
+ */
+export const SURFACE = freezeSurface([
+  { path: '/gateway/read', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/selection', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/route', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/route/delete', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/asr', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/compaction', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/maintenance', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
 ])
+
+/** Paths this module owns, in the order the carrier registers them. */
+export const GATEWAY_PATHS = Object.freeze(SURFACE.map(entry => entry.path))
 
 /** Build one handler per path in {@link GATEWAY_PATHS}. */
 export function gatewayHandlers({ service, authenticate, fence }: GatewayHandlerOptions) {
