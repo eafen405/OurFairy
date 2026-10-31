@@ -1,5 +1,6 @@
 /** One-shot PCM WAV proxy; cancellation belongs to this request, not to an Agent. */
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { isPositiveInteger, SPEECH_ENDPOINT_PATTERN, SPEECH_ENV_NAME_PATTERN, SPEECH_LIMIT_FIELDS } from './policy.js'
 
 /** The signed-in caller one speech request speaks for. */
 export interface SpeechCaller {
@@ -37,25 +38,17 @@ const fail = () => new SpeechError(502, 'failed', '语音识别失败')
  * @returns the validated snapshot.
  */
 export function resolveSpeechSettings(config: Record<string, unknown>): SpeechSettings {
-  for (const key of ['maxDurationMs', 'maxAudioBytes', 'timeoutMs', 'maxGlobalInFlight', 'maxUserInFlight'] as const) {
-    if (!isSafeInteger(config[key]) || config[key] <= 0) throw new Error(`invalid speech ${key}`)
+  // The field names and legality rules are the speech policy's (`./policy.ts`);
+  // this is the runtime proof that the live row still holds them.
+  for (const key of SPEECH_LIMIT_FIELDS) {
+    if (!isPositiveInteger(config[key])) throw new Error(`invalid speech ${key}`)
   }
   if (typeof config.model !== 'string' || config.model === '') throw new Error('invalid speech model')
-  if (typeof config.endpoint !== 'string' || !/^https?:\/\/[^\s]+$/u.test(config.endpoint)) throw new Error('invalid speech endpoint')
-  if (typeof config.apiKeyEnv !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(config.apiKeyEnv)) throw new Error('invalid speech apiKeyEnv')
-  // The row's schema is the authority on these fields and their types; the
-  // checks above are the runtime proof that the live row still holds them.
+  if (typeof config.endpoint !== 'string' || !SPEECH_ENDPOINT_PATTERN.test(config.endpoint)) throw new Error('invalid speech endpoint')
+  if (typeof config.apiKeyEnv !== 'string' || !SPEECH_ENV_NAME_PATTERN.test(config.apiKeyEnv)) throw new Error('invalid speech apiKeyEnv')
+  // The row's schema is the authority on the fields' types; the checks above
+  // are the runtime proof that the live row still holds the policy's rules.
   return config as unknown as SpeechSettings
-}
-
-/**
- * Whether one value is a safe integer.
- *
- * `Number.isSafeInteger` is the check itself; it is written as a type guard so
- * the value that passes it can be used as a number.
- */
-function isSafeInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value)
 }
 
 /**
