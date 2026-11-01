@@ -16,9 +16,9 @@
     <string name="identity_not_ready_signed_out">Sign in to continue.</string>
     <string name="identity_working">Working…</string>
     <string name="identity_signing_in">Signing in…</string>
-    <string name="identity_unreachable">The backend could not be reached.</string>
+    <string name="identity_unreachable">The server could not be reached.</string>
     <string name="gateway_title">Shared gateway</string>
-    <string name="gateway_explain">These settings are shared by every conversation on the backend. A saved model selection applies from each conversation\'s next reply; a reply already running finishes on the model it started with.</string>
+    <string name="gateway_explain">These settings are shared by every conversation on the server. A saved model selection applies from each conversation\'s next reply; a reply already running finishes on the model it started with.</string>
     <string name="gateway_refresh_action">Reload</string>
     <string name="gateway_loading">Reading the gateway…</string>
     <string name="gateway_unreachable">The gateway could not be reached.</string>
@@ -36,12 +36,12 @@
     <string name="gateway_route_api">Protocol</string>
     <string name="gateway_route_base_url">Base URL</string>
     <string name="gateway_route_api_key_env">API key reference</string>
-    <string name="gateway_route_api_key_env_hint">The name of the backend environment variable that holds the key, not the key itself.</string>
+    <string name="gateway_route_api_key_env_hint">The name of the server environment variable that holds the key, not the key itself.</string>
     <string name="gateway_route_models">Models</string>
     <string name="gateway_route_models_hint">One model per line: id | name | context window | max tokens | input modalities.</string>
     <string name="gateway_route_credential">Credential</string>
-    <string name="gateway_route_credential_configured">configured on the backend</string>
-    <string name="gateway_route_credential_missing">not configured on the backend</string>
+    <string name="gateway_route_credential_configured">configured on the server</string>
+    <string name="gateway_route_credential_missing">not configured on the server</string>
     <string name="gateway_route_credential_writable">writable here</string>
     <string name="gateway_route_credential_read_only">read-only here</string>
     <string name="gateway_route_in_use">A reply is running on this route. Editing or deleting it is refused until that reply ends.</string>
@@ -55,7 +55,7 @@
     <string name="gateway_route_invalid_models">Line(s) %1$s are not a model: check the numbers and the id.</string>
     <string name="gateway_asr_title">Speech input connection</string>
     <string name="gateway_asr_available">Speech input is available.</string>
-    <string name="gateway_asr_unavailable">Speech input is not available: the backend has no usable key or endpoint.</string>
+    <string name="gateway_asr_unavailable">Speech input is not available: the server has no usable key or endpoint.</string>
     <string name="gateway_asr_model">Model</string>
     <string name="gateway_asr_endpoint">Endpoint</string>
     <string name="gateway_asr_max_duration">Longest take (ms)</string>
@@ -94,7 +94,7 @@
     <string name="impression_title">Your impression</string>
     <string name="impression_explain">This is the overall understanding Fairy keeps of you and uses in every conversation. It is separate from long-term memories. Edit it only from here or by asking Fairy explicitly.</string>
     <string name="impression_loading">Reading your impression…</string>
-    <string name="impression_unreachable">The backend could not be reached.</string>
+    <string name="impression_unreachable">The server could not be reached.</string>
     <string name="impression_read_failed">Your impression could not be read, so editing is not available.</string>
     <string name="impression_retry">Try reading again</string>
     <string name="impression_field_label">Impression</string>

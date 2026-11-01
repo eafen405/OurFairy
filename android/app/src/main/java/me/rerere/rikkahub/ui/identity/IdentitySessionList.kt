@@ -45,7 +45,9 @@ import me.rerere.hugeicons.stroke.ArchiveRestore
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.Edit02
+import me.rerere.hugeicons.stroke.Home01
 import me.rerere.hugeicons.stroke.Refresh
+import me.rerere.hugeicons.stroke.Settings01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.OwnedSession
 import me.rerere.rikkahub.data.remote.OwnedSessionState
@@ -108,7 +110,7 @@ internal fun IdentitySessionList(
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (view == SessionView.Default) "会话" else "已归档会话",
+                if (view == SessionView.Default) "会话列表" else "已归档会话",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.weight(1f),
             )
@@ -248,9 +250,13 @@ internal fun IdentitySessionList(
             }
         }
         Row(Modifier.fillMaxWidth()) {
-            TextButton(onClick = onHome, modifier = Modifier.testTag("session-list-home")) { Text("首页") }
+            TextButton(onClick = onHome, modifier = Modifier.testTag("session-list-home")) {
+                Icon(HugeIcons.Home01, contentDescription = "首页", modifier = Modifier.size(20.dp))
+            }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onSettings, modifier = Modifier.testTag("session-list-settings")) { Text("设置") }
+            TextButton(onClick = onSettings, modifier = Modifier.testTag("session-list-settings")) {
+                Icon(HugeIcons.Settings01, contentDescription = "设置", modifier = Modifier.size(20.dp))
+            }
         }
     }
     val unreachable = stringResource(R.string.identity_unreachable)
