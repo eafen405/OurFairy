@@ -106,6 +106,20 @@ export class SessionArchiveStore {
   }
 
   /**
+   * Whether one caller holds one session as archived.
+   *
+   * One indexed row read answers a landing question that concerns a single
+   * session, without listing the caller's whole archive; the owner scope mirrors
+   * the restore write, so a row only answers for the caller it belongs to. A row
+   * that was restored is active, not archived.
+   */
+  isArchived({ sessionId, ownerShortId }: { readonly sessionId: string; readonly ownerShortId: number }): boolean {
+    return this.#db.prepare(`SELECT 1 FROM session_archive
+      WHERE session_id = ? AND owner_short_id = ? AND status = ? AND deleted_at IS NULL`)
+      .get(sessionId, ownerShortId, ARCHIVE_STATUS.archived) !== undefined
+  }
+
+  /**
    * Archive one session for one caller.
    *
    * Archiving is idempotent, and the first archive fixes `archived_at`: asking

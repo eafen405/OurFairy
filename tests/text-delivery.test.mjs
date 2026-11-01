@@ -45,6 +45,29 @@ async function tool(user, name, args, sessionId, callId = `delivery-call-${reque
   }
   assert.fail(`tool ${name} reply was not returned to original chat ${sessionId}`)
 }
+/** The receipt one `deliver_message` call rendered back to the sender. */
+async function deliveryReceipt(user, args, sessionId, callId) {
+  const blocks = JSON.parse(await tool(user, 'deliver_message', args, sessionId, callId))
+  const receipt = blocks[0].text.startsWith('{') ? JSON.parse(blocks[0].text) : assert.fail(`delivery failed: ${blocks[0].text}`)
+  assert.match(receipt.deliveryId, /^[0-9a-f]{64}$/)
+  return receipt
+}
+/**
+ * The two sessions a self-delivery case needs: the fixed primary, filled so the
+ * next create materializes an ordinary session, and that origin conversation.
+ */
+async function selfDeliverySessions(user) {
+  const primary = (await request('/sessions/primary', user.token)).session.id
+  await tool(user, 'groups', {}, primary)
+  const origin = (await request('/sessions/create', user.token)).session.id
+  assert.notEqual(origin, primary)
+  return { primary, origin }
+}
+/** Run one statement through a short-lived handle; the fault trigger is the only use. */
+function runSql(statement) {
+  const db = new DatabaseSync(join(home, 'dsh-home', 'identity', 'identity.sqlite'))
+  try { db.exec(statement) } finally { db.close() }
+}
 async function startBackend(overlays = []) {
   const run = await runBackendAsync(startArgs(overlays), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     MINIMAX_CN_API_KEY: 'mock-group-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}` })
@@ -258,4 +281,88 @@ test('notification outlet failure preserves durable delivery and successful send
   const db = new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
   assert.equal(db.prepare('SELECT status FROM deliveries WHERE text = ?').get(args.text).status,1)
   db.close()
+})
+
+test('a self delivery lands in the origin session as a normal Fairy message, and an archived origin falls back', async () => {
+  const carol = await user('self-delivery-carol')
+  const { primary, origin } = await selfDeliverySessions(carol)
+  const text = 'Delivered to myself in this conversation'
+  const result = await deliveryReceipt(carol, { recipientShortId: carol.user.shortId, text }, origin, 'self-delivery-call-1')
+  assert.equal(result.sessionId, origin, 'the receipt names the session the text landed in')
+  const view = (await request('/chat/read', carol.token, { sessionId: origin })).projection
+  assert.deepEqual(view.messages.filter(message => message.text === text).map(message => message.role), [2],
+    'the delivered text is one ordinary Fairy message in the origin session')
+  const delivered = view.events.filter(event => event.type === 'delivery/message')
+  assert.equal(delivered.length, 1)
+  assert.equal(delivered[0].data.origin.sessionId, origin)
+  assert.equal((await request('/chat/read', carol.token, { sessionId: primary })).projection.messages
+    .some(message => message.text === text), false, 'a self delivery must not also land in the primary')
+  // The archived session stays readable and writable; only its availability as
+  // a landing changes, so this same conversation issues the next delivery.
+  await request('/sessions/archive', carol.token, { sessionId: origin })
+  const fallbackText = 'Delivered after the origin was archived'
+  const fallback = await deliveryReceipt(carol, { recipientShortId: carol.user.shortId, text: fallbackText }, origin, 'self-delivery-call-2')
+  assert.equal(fallback.sessionId, primary, 'an archived origin falls back to the primary')
+  const primaryView = (await request('/chat/read', carol.token, { sessionId: primary })).projection
+  assert.deepEqual(primaryView.messages.filter(message => message.text === fallbackText).map(message => message.role), [2])
+  assert.equal((await request('/chat/read', carol.token, { sessionId: origin })).projection.messages
+    .some(message => message.text === fallbackText), false)
+})
+
+test('a self delivery retry reuses its recorded landing after the origin is archived', async () => {
+  const dana = await user('self-retry-dana')
+  const { primary, origin } = await selfDeliverySessions(dana)
+  const text = 'Retried into the first recorded landing'
+  const callId = 'self-retry-landing-call'
+  // The unique text confines the refusal to this delivery's business completion.
+  // The native append has already succeeded when this trigger fires, which is
+  // what makes the row and the log disagree.
+  runSql(`CREATE TRIGGER fail_self_retry_update BEFORE UPDATE ON deliveries WHEN NEW.text = '${text}'
+    BEGIN SELECT RAISE(ABORT, 'injected business completion failure'); END`)
+  assert.match(await tool(dana, 'deliver_message', { recipientShortId: dana.user.shortId, text }, origin, callId),
+    /injected business completion failure/)
+  // Archiving the origin changes what a fresh landing decision would answer:
+  // from now on a self delivery from this conversation falls back to the
+  // primary. The retry must reuse the recorded session instead of that answer.
+  await request('/sessions/archive', dana.token, { sessionId: origin })
+  runSql('DROP TRIGGER fail_self_retry_update')
+  const receipt = await deliveryReceipt(dana, { recipientShortId: dana.user.shortId, text }, origin, callId)
+  assert.equal(receipt.sessionId, origin, 'the retry receipt names the recorded landing')
+  const landed = (await request('/chat/read', dana.token, { sessionId: origin })).projection
+  assert.deepEqual(landed.messages.filter(message => message.text === text).map(message => message.role), [2],
+    'the retry leaves exactly one ordinary Fairy message in the recorded landing')
+  assert.equal((await request('/chat/read', dana.token, { sessionId: primary })).projection.messages
+    .some(message => message.text === text), false, 'the retry stays out of the primary')
+  // The landing difference is not part of the identity check; the content is.
+  assert.match(await tool(dana, 'deliver_message', { recipientShortId: dana.user.shortId, text: `${text} changed` }, origin, callId),
+    /different content or recipient/)
+})
+
+test('boot recovery settles a pending self delivery into its recorded origin without a tool call', async () => {
+  const erin = await user('self-boot-erin')
+  const { primary, origin } = await selfDeliverySessions(erin)
+  const text = 'Boot recovery lands in the recorded origin'
+  await stopBackend()
+  const fixture = new URL('../backend/chat/test-support/fail-outlets.ts', import.meta.url).pathname
+  const layer = writeOverlay(home, [{ insert: [{ id: 'delivery-faults', name: fixture, config: { sessionId: origin, failFlush: true } }] }],
+    'self-boot-flush-failure.patch.yml')
+  await startBackend([layer])
+  // Make the origin live so the fixture's `session/event` listener can arm the
+  // next flush; a cold append would not emit the same event.
+  await request('/chat/read', erin.token, { sessionId: origin })
+  assert.match(await tool(erin, 'deliver_message', { recipientShortId: erin.user.shortId, text }, origin, 'self-boot-call'),
+    /injected durability checkpoint failure/)
+  // The archive route needs the running backend. Archiving before the restart
+  // means a fresh landing decision would answer the primary.
+  await request('/sessions/archive', erin.token, { sessionId: origin })
+  await stopBackend()
+  await startBackend()
+  // The restart is the only caller after this point: startup settlement, not a
+  // new tool call, must pick the row up and use its recorded session.
+  const recovered = await eventually(() => request('/chat/read', erin.token, { sessionId: origin }),
+    value => value.projection.messages.some(message => message.text === text))
+  assert.deepEqual(recovered.projection.messages.filter(message => message.text === text).map(message => message.role), [2],
+    'startup settlement leaves exactly one ordinary Fairy message in the archived origin')
+  assert.equal((await request('/chat/read', erin.token, { sessionId: primary })).projection.messages
+    .some(message => message.text === text), false, 'startup settlement stays out of the primary')
 })

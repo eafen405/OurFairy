@@ -14,6 +14,7 @@ import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES } from '@ourfairy/dsh-attachments'
 import { ownerOf, shortIdOf } from '@ourfairy/dsh-identity/owner'
 import { isUserSession } from '@ourfairy/dsh-identity/session'
+import { deliveryTargetOf } from './target.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock, ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -136,14 +137,21 @@ export function apply(ctx: Context) {
     // The recipient was checked above, so the user is there; the identity face
     // types its lookup as optional and the migration adds no second check.
     const target = users.byShortId(recipientShortId) as UserRow
-    const primary = await ctx.ourfairySessions.primary(target)
+    // The landing is decided once, before the row exists, and the row records
+    // it: the event, the receipt and recovery all read that recorded session.
+    // The primary is resolved as it always was, and the session service answers
+    // whether the origin could host; the pure rule alone decides the landing.
+    const primarySession = await ctx.ourfairySessions.primary(target)
+    const originCanHost = await ctx.ourfairySessions.canHostDelivery(sender, agent.session.id)
+    const sessionId = deliveryTargetOf({ senderShortId, recipientShortId,
+      originSessionId: agent.session.id, originCanHost, primarySessionId: primarySession.id })
     const deliveryId = createHash('sha256').update(JSON.stringify([agent.session.id, callId])).digest('hex')
     return runtime.runDelivery(deliveryId as SessionId, async () => {
       // The store writes the row and reads it back in the same transaction, so
       // the row is there; the migration keeps the original failure instead of
       // adding a check.
       let row = deliveries.prepare({ deliveryId, senderShortId, senderSessionId: agent.session.id,
-        recipientShortId, sessionId: primary.id, text, files: files.map(selector => ({ selector, prepared: null })) }) as DeliveryRow
+        recipientShortId, sessionId, text, files: files.map(selector => ({ selector, prepared: null })) }) as DeliveryRow
       for (let index = 0; index < row.files.length; index++) {
         // The loop bound is the file count, so the index is in range.
         if (row.files[index]!.prepared !== null) continue
@@ -161,7 +169,7 @@ export function apply(ctx: Context) {
     // cannot be hidden by dsh's tool restriction, so the row enforces it here.
     if (!isUserSession(agent.session.header)) return undefined
     agent.ctx.tools.register(defineTool({ name: 'deliver_message',
-      description: 'Deliver the specified text and optional files selected by readable path or current-session messageId/index to a user’s fixed primary chat. This does not read their history or start their Fairy. The call authorizes delivery; no extra sharing approval is needed.',
+      description: 'Deliver the specified text and optional files selected by readable path or current-session messageId/index to the recipient’s conversation: the caller’s own current session when delivering to themselves, otherwise the recipient’s fixed primary chat. This does not read their history or start their Fairy. The call authorizes delivery; no extra sharing approval is needed.',
       parameters: { recipientShortId: { type: 'integer', required: true }, text: { type: 'string', required: true },
         files: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, messageId: { type: 'string' }, index: { type: 'integer' } } } } },
       output: { schema: { type: 'object', additionalProperties: true }, render: (_args: unknown, value: unknown): ContentBlock[] => [{ type: 'text', text: JSON.stringify(value) }] },

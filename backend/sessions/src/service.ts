@@ -169,10 +169,10 @@ export class OwnedSessionService extends Service {
    * has. Adding a per-caller filter would be a second authority for the same
    * fact.
    *
-   * The archived view never carries the primary session: the primary is the
-   * delivery target and cannot be archived. It answers no standing default for
-   * the same reason — a session that is not in the view cannot be the one the
-   * view stands in.
+   * The archived view never carries the primary session: the primary is where
+   * replies and deliveries from other users land and cannot be archived. It
+   * answers no standing default for the same reason — a session that is not in
+   * the view cannot be the one the view stands in.
    */
   async list(owner: SessionOwner, { archived = false }: { archived?: boolean } = {}): Promise<{
     sessions: SessionHeader[]
@@ -303,13 +303,31 @@ export class OwnedSessionService extends Service {
   }
 
   /**
+   * Whether one session may host a delivery for this caller: the stored header
+   * exists, its owner is this caller, and the session is not archived.
+   *
+   * This is the one read a delivery uses to decide a self delivery's landing.
+   * The archive fact is the store's single-row read, not the caller's archived
+   * list: the question names one session, so enumerating the archive would read
+   * more than the answer needs.
+   */
+  async canHostDelivery(owner: SessionOwner, sessionId: SessionId): Promise<boolean> {
+    const snapshot = await this._headerOf(sessionId)
+    if (snapshot === undefined) return false
+    if (snapshot.header.owner !== ownerOf(owner.shortId)) return false
+    return !this.archiveStore.isArchived({ sessionId: snapshot.header.id, ownerShortId: owner.shortId })
+  }
+
+  /**
    * Archive one owned session: stop offering it in the default views while its
    * log, its messages and its history stay exactly where they are.
    *
    * The primary session is refused here, not only hidden by a client. It is
-   * where replies, deliveries and notifications land, so archiving it would
-   * lose the place they land; the caller gets its own code for that rather than
-   * being told the session does not exist.
+   * where replies and deliveries from other users land, so archiving it would
+   * lose the place they land; a self delivery instead follows the conversation
+   * it was issued from and does not depend on the primary being in the default
+   * view. The caller gets its own code for that rather than being told the
+   * session does not exist.
    *
    * Authorization is the header's, like every other route: a session the caller
    * does not own is refused before the archive is touched, so one identity can
