@@ -49,6 +49,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
@@ -67,7 +68,6 @@ import me.rerere.rikkahub.data.remote.SessionsSnapshot
 import me.rerere.rikkahub.ui.fairy.InstrumentLevel
 import me.rerere.rikkahub.ui.fairy.InstrumentPanel
 import me.rerere.rikkahub.ui.fairy.LocalFairyTokens
-import java.io.File
 
 /**
  * A save target carries no usable media type of its own, so the download is written as opaque
@@ -99,7 +99,7 @@ fun RemoteChatPanel(
     onSendAccepted: (String) -> Unit = {},
     /**
      * Replaces the system `startActivity` for the external handoff. Production leaves it null;
-     * tests use it to record the chooser or to simulate a device with no installed viewer.
+     * tests use it to record the handoff intent or to simulate a device with no installed viewer.
      */
     launchExternal: ((Intent) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -117,6 +117,9 @@ fun RemoteChatPanel(
     var selectionEpoch by remember(snapshot.attachmentEpoch) { mutableStateOf<Long?>(null) }
     var pendingDownload by remember(snapshot.attachmentEpoch) { mutableStateOf<PendingDownload?>(null) }
     var previewPath by remember(snapshot.attachmentEpoch) { mutableStateOf<String?>(null) }
+    var textPreview by remember(snapshot.attachmentEpoch) {
+        mutableStateOf<RemoteAttachmentTextPreviewTarget?>(null)
+    }
 
     var speechBusy by remember(snapshot.attachmentEpoch) { mutableStateOf(false) }
     var speechError by remember(snapshot.attachmentEpoch) { mutableStateOf<String?>(null) }
@@ -270,56 +273,55 @@ fun RemoteChatPanel(
                             pendingDownload = PendingDownload(snapshot.attachmentEpoch, message.messageId, attachment)
                             saveAs.launch(attachment.name)
                         }
-                        when (remoteAttachmentDestination(attachment.mime, attachment.name)) {
-                            RemoteAttachmentDestination.IMAGE -> {
-                                // The cached path depends on the attachment's coordinates only, so
-                                // reopening this one reads the bytes already on disk.
-                                snapshot.sessionId?.let { sessionId ->
-                                    val destination = attachmentPreviewFile(
-                                        context, sessionId, message.messageId, attachment.index, attachment.name,
+                        // One authenticated download into the coordinate's cached preview file,
+                        // shared by the image and text previews and the external handoff. The
+                        // path depends on the attachment's coordinates only, so reopening reads
+                        // the bytes on disk.
+                        fun cachePreview(open: (File) -> Unit) {
+                            val sessionId = snapshot.sessionId ?: return
+                            val destination = attachmentPreviewFile(
+                                context, sessionId, message.messageId, attachment.index, attachment.name,
+                            )
+                            state.cacheAttachment(
+                                snapshot.attachmentEpoch, message.messageId, attachment, destination,
+                            ) { file -> open(file) }
+                        }
+                        when (remoteAttachmentDestinationFor(attachment.mime, attachment.name, attachment.bytes)) {
+                            RemoteAttachmentDestination.IMAGE -> cachePreview { file ->
+                                previewPath = file.absolutePath
+                            }
+
+                            RemoteAttachmentDestination.TEXT -> cachePreview { file ->
+                                textPreview = RemoteAttachmentTextPreviewTarget(
+                                    path = file.absolutePath,
+                                    name = attachment.name,
+                                    layout = remoteAttachmentTextLayout(attachment.mime, attachment.name),
+                                )
+                            }
+
+                            RemoteAttachmentDestination.EXTERNAL -> cachePreview { file ->
+                                // Hand the cached original to an installed viewer. A device
+                                // without one falls back to save-as with those same bytes.
+                                sweepAttachmentPreviews(context, keep = file)
+                                val receiverMissing = launchExternalAttachment(
+                                    context,
+                                    file,
+                                    attachment.mime,
+                                    attachment.name,
+                                    launchExternal ?: { context.startActivity(it) },
+                                )
+                                if (receiverMissing != null) {
+                                    state.noticeAttachment(receiverMissing)
+                                    pendingDownload = PendingDownload(
+                                        snapshot.attachmentEpoch,
+                                        message.messageId,
+                                        attachment,
+                                        cached = file,
                                     )
-                                    state.cacheAttachment(
-                                        snapshot.attachmentEpoch, message.messageId, attachment, destination,
-                                    ) { file -> previewPath = file.absolutePath }
+                                    saveAs.launch(attachment.name)
                                 }
                             }
 
-                            RemoteAttachmentDestination.EXTERNAL -> {
-                                // One authenticated download into the preview cache, then hand the
-                                // cached file to an installed viewer. A device without one falls
-                                // back to save-as with those same bytes.
-                                snapshot.sessionId?.let { sessionId ->
-                                    val destination = attachmentPreviewFile(
-                                        context, sessionId, message.messageId, attachment.index, attachment.name,
-                                    )
-                                    state.cacheAttachment(
-                                        snapshot.attachmentEpoch, message.messageId, attachment, destination,
-                                    ) { file ->
-                                        sweepAttachmentPreviews(context, keep = file)
-                                        val receiverMissing = launchExternalAttachment(
-                                            context,
-                                            file,
-                                            attachment.mime,
-                                            attachment.name,
-                                            launchExternal ?: { context.startActivity(it) },
-                                        )
-                                        if (receiverMissing != null) {
-                                            state.noticeAttachment(receiverMissing)
-                                            pendingDownload = PendingDownload(
-                                                snapshot.attachmentEpoch,
-                                                message.messageId,
-                                                attachment,
-                                                cached = file,
-                                            )
-                                            saveAs.launch(attachment.name)
-                                        }
-                                    }
-                                }
-                            }
-
-                            // The text destination arrives in its own ticket; until then it keeps
-                            // today's save-as in its own branch.
-                            RemoteAttachmentDestination.TEXT -> saveOriginal()
                             RemoteAttachmentDestination.SAVE_AS -> saveOriginal()
                         }
                     }
@@ -328,6 +330,9 @@ fun RemoteChatPanel(
         }
         previewPath?.let { path ->
             AttachmentImagePreview(path = path, onDismissRequest = { previewPath = null })
+        }
+        textPreview?.let { target ->
+            AttachmentTextPreview(target = target, onDismissRequest = { textPreview = null })
         }
         Spacer(Modifier.height(8.dp))
         Composer(

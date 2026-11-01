@@ -4,9 +4,12 @@ package me.rerere.rikkahub.ui.identity
  * Where clicking one transcript attachment goes.
  *
  * This is the client's only attachment-routing decision: the chip reports the click, and the
- * caller reads this answer instead of inspecting the MIME or the name itself. [EXTERNAL] is the
- * handoff to an installed system app; [TEXT] is named for its follow-up ticket and currently
- * keeps save-as.
+ * This is the client's only attachment-routing decision: the chip reports the click, and the
+ * caller reads [remoteAttachmentDestinationFor] instead of inspecting the MIME, the name or the
+ * size itself. [IMAGE] opens the in-app viewer, [TEXT] the in-app read-only preview (text over
+ * [TEXT_PREVIEW_MAX_BYTES] is routed to [EXTERNAL] instead), [EXTERNAL] hands the cached file to
+ * an installed system app and falls back to save-as when there is none, and [SAVE_AS] writes the
+ * original to a location the user picks.
  */
 internal enum class RemoteAttachmentDestination {
     IMAGE,
@@ -14,6 +17,12 @@ internal enum class RemoteAttachmentDestination {
     EXTERNAL,
     SAVE_AS,
 }
+
+/**
+ * Text larger than this is not expanded in-app: one read of the whole body must stay bounded.
+ * The comparison is against the attachment's recorded original size, before any download.
+ */
+internal const val TEXT_PREVIEW_MAX_BYTES: Long = 2L * 1024 * 1024
 
 private const val OCTET_STREAM = "application/octet-stream"
 private const val OPEN_DOCUMENT_PREFIX = "application/vnd.openxmlformats-officedocument."
@@ -24,7 +33,7 @@ private const val OPEN_DOCUMENT_PREFIX = "application/vnd.openxmlformats-officed
  * type is trusted even when it disagrees with the name.
  */
 internal fun remoteAttachmentDestination(mime: String?, name: String): RemoteAttachmentDestination {
-    val type = mime.orEmpty().substringBefore(';').trim().lowercase()
+    val type = normalizedMimeType(mime)
     if (type.isNotEmpty() && type != OCTET_STREAM) {
         return when {
             type.startsWith("image/") -> RemoteAttachmentDestination.IMAGE
@@ -36,6 +45,29 @@ internal fun remoteAttachmentDestination(mime: String?, name: String): RemoteAtt
         }
     }
     return destinationForSuffix(name.substringAfterLast('.', "").lowercase())
+}
+
+/** The wire MIME without its parameters, trimmed and lowercased; the one spelling both checks use. */
+internal fun normalizedMimeType(mime: String?): String =
+    mime.orEmpty().substringBefore(';').trim().lowercase()
+
+/**
+ * The click decision: the type route from [remoteAttachmentDestination], except that text over
+ * [TEXT_PREVIEW_MAX_BYTES] is handed off instead of expanded. Its recorded bytes are the
+ * authority, so the preview never has to download a body it will refuse. [EXTERNAL] is the real
+ * handoff that falls back to save-as when no installed app can take the file.
+ */
+internal fun remoteAttachmentDestinationFor(
+    mime: String?,
+    name: String,
+    bytes: Long,
+): RemoteAttachmentDestination {
+    val destination = remoteAttachmentDestination(mime, name)
+    return if (destination == RemoteAttachmentDestination.TEXT && bytes > TEXT_PREVIEW_MAX_BYTES) {
+        RemoteAttachmentDestination.EXTERNAL
+    } else {
+        destination
+    }
 }
 
 private fun destinationForSuffix(suffix: String): RemoteAttachmentDestination = when {
@@ -50,7 +82,7 @@ private val IMAGE_SUFFIXES = setOf(
     "png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "heif", "avif", "svg",
 )
 
-/** Text and code suffixes the client can read as text once the text preview ticket lands. */
+/** Text and code suffixes the client reads as text in the in-app preview. */
 private val TEXT_SUFFIXES = setOf(
     "md", "markdown", "txt", "text", "log", "csv", "tsv", "json", "jsonl", "yaml", "yml",
     "toml", "ini", "xml", "html", "htm", "css", "js", "mjs", "cjs", "jsx", "ts", "tsx",
@@ -58,7 +90,7 @@ private val TEXT_SUFFIXES = setOf(
     "cs", "swift", "sh", "bash", "zsh", "sql", "properties",
 )
 
-/** Documents handed to an installed system app once the external-handoff ticket lands. */
+/** Documents handed to an installed system app. */
 private val EXTERNAL_SUFFIXES = setOf(
     "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "epub",
 )

@@ -10,10 +10,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import androidx.core.content.FileProvider
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +42,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -57,9 +60,9 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The transcript's attachment click, observed through the real panel: an image opens the existing
- * full-screen viewer from one cached download, text keeps save-as until its own ticket (the
- * external handoff is covered by RemoteAttachmentExternalTest), and closing the viewer deletes
- * only the preview cache.
+ * full-screen viewer from one cached download, text opens the in-app read-only preview from the
+ * same cache (over 2 MiB text and PDF/Office are handed to an installed system app), unknown types
+ * keep save-as, and closing either preview deletes only the preview cache.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35], qualifiers = "zh-rCN-w411dp-h891dp")
@@ -127,31 +130,60 @@ class RemoteAttachmentPreviewTest {
         startKoin { modules(module { single { OkHttpClient() } }) }
     }
 
+    @Before
+    fun clearPreviewCache() {
+        // Every case starts from an empty preview cache; otherwise an earlier case's cached
+        // bytes for the same coordinate would be reused by a later case that downloads once.
+        File(context.cacheDir, "attachment-preview").deleteRecursively()
+    }
+
+    @Before
+    fun clearProviderCache() {
+        // FileProvider caches path strategies per authority in a static map while Robolectric
+        // gives every test its own cache directory.
+        FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }
+            .get(null).let { (it as HashMap<*, *>).clear() }
+    }
+
     @After
     fun close() {
         scope.cancel()
         stopKoin()
     }
 
-    private fun show(name: String, mime: String): Files {
-        val attachment = RemoteChatAttachment(0, 1, name, mime, png.size.toLong())
+    private fun show(
+        name: String,
+        mime: String,
+        content: ByteArray = png,
+        recordedBytes: Long = content.size.toLong(),
+        launchExternal: ((Intent) -> Unit)? = null,
+    ): Files {
+        val attachment = RemoteChatAttachment(0, 1, name, mime, recordedBytes)
         val projection = RemoteChatProjection(
             sessionId = "s1", generation = "g1", version = 1, cursor = 0, durableThroughSeq = 0,
             messages = listOf(RemoteChatMessage("m1", 0, 0, null, 1, 2, "附件", listOf(attachment))),
             throughSeq = 0, fromSeq = 0, events = listOf(remoteEvent(0)),
         )
-        val files = Files(png)
+        val files = Files(content)
         val state = RemoteChatState(Chat(projection), scope, store, "https://fairy", attachmentsBackend = files)
         state.bind("token", "s1", 1)
         compose.setContent {
-            FairyAppTheme { RemoteChatPanel(state = state, onReconnect = {}) }
+            FairyAppTheme {
+                RemoteChatPanel(state = state, onReconnect = {}, launchExternal = launchExternal)
+            }
         }
         compose.waitForIdle()
         return files
     }
 
-    private fun clickAttachment(name: String) {
-        compose.onNodeWithText(name).performClick()
+    private fun clickAttachment(chip: String) {
+        compose.onNodeWithText(chip).performClick()
+    }
+
+    private fun awaitText(text: String) {
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     private fun viewerShown() = compose
@@ -220,16 +252,118 @@ class RemoteAttachmentPreviewTest {
     }
 
     @Test
-    fun `a non-image attachment keeps today's save-as route without downloading`() {
-        val files = show("notes.md", "text/markdown")
+    fun `a pdf attachment hands the cached file to the system without saving`() {
+        val launched = mutableListOf<Intent>()
+        val files = show("document.pdf", "application/pdf", launchExternal = { launched += it })
+        val cached = attachmentPreviewFile(context, "s1", "m1", 0, "document.pdf")
 
-        clickAttachment("notes.md · ${attachmentSizeLabel(png.size.toLong())}")
+        clickAttachment("document.pdf · ${attachmentSizeLabel(png.size.toLong())}")
+        compose.waitUntil(timeoutMillis = 5_000) { launched.isNotEmpty() }
+
+        assertEquals("外派只下载一次", 1, files.downloads.size)
+        assertTrue("交接的文件应留在预览缓存里", cached.isFile)
+        assertEquals(Intent.ACTION_VIEW, launched.single().action)
+        assertFalse("PDF 不走应用内预览", viewerShown())
+        assertNull("有接收方时不得另存为", shadowOf(compose.activity).nextStartedActivityForResult)
+    }
+
+    @Test
+    fun `an unknown attachment keeps the save-as route without downloading`() {
+        val files = show("archive.zip", "application/zip")
+
+        clickAttachment("archive.zip · ${attachmentSizeLabel(png.size.toLong())}")
         compose.waitForIdle()
 
-        assertTrue(files.downloads.isEmpty())
-        assertFalse("文本票未落地前不得进入图片预览", viewerShown())
+        assertTrue("未知类型不得预下载", files.downloads.isEmpty())
+        assertFalse("未知类型不得进入预览", viewerShown())
         val started = shadowOf(compose.activity).nextStartedActivityForResult
-        assertNotNull("非图片仍走另存为", started)
+        assertNotNull("未知类型仍走另存为", started)
         assertEquals(Intent.ACTION_CREATE_DOCUMENT, started.intent.action)
+    }
+
+    @Test
+    fun `clicking a markdown attachment renders it from one cached download`() {
+        val markdown = "# 标题\n\n正文".toByteArray()
+        val files = show("notes.md", "text/plain", markdown)
+        val cached = attachmentPreviewFile(context, "s1", "m1", 0, "notes.md")
+
+        clickAttachment("notes.md · ${attachmentSizeLabel(markdown.size.toLong())}")
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithContentDescription("关闭预览").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.onAllNodesWithText("标题").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(
+            "Markdown 不应仍显示原始符号",
+            compose.onAllNodesWithText("# 标题").fetchSemanticsNodes().isEmpty(),
+        )
+
+        assertEquals(1, files.downloads.size)
+        assertTrue("预览应读取缓存文件", cached.isFile)
+        assertArrayEquals(markdown, cached.readBytes())
+    }
+
+    @Test
+    fun `clicking a plain text attachment shows its body with line breaks kept`() {
+        val body = "第一行\n    缩进行\n最后一行"
+        val text = body.toByteArray()
+        val files = show("notes.txt", "text/plain", text)
+
+        clickAttachment("notes.txt · ${attachmentSizeLabel(text.size.toLong())}")
+        awaitText(body)
+
+        assertEquals(1, files.downloads.size)
+    }
+
+    @Test
+    fun `an undecodable text attachment shows an explicit failure state`() {
+        val bytes = byteArrayOf(0xFF.toByte(), 0xFF.toByte())
+        show("notes.txt", "text/plain", bytes)
+
+        clickAttachment("notes.txt · ${attachmentSizeLabel(bytes.size.toLong())}")
+        awaitText("无法解码")
+    }
+
+    @Test
+    fun `closing the text preview returns to the transcript and deletes only its cached file`() {
+        val text = "只读预览".toByteArray()
+        val files = show("notes.txt", "text/plain", text)
+        val chip = "notes.txt · ${attachmentSizeLabel(text.size.toLong())}"
+        val cached = attachmentPreviewFile(context, "s1", "m1", 0, "notes.txt")
+
+        clickAttachment(chip)
+        awaitText("只读预览")
+        compose.onNodeWithContentDescription("关闭预览").performClick()
+        compose.waitForIdle()
+
+        assertFalse("关闭预览应删除缓存文件", cached.exists())
+        assertEquals("预览只下载一次", 1, files.downloads.size)
+        // The preview is an overlay: the conversation it was opened from stays in place.
+        compose.onNodeWithText(chip).assertExists()
+    }
+
+    @Test
+    fun `a text over two mib is handed off instead of expanded`() {
+        val over = TEXT_PREVIEW_MAX_BYTES + 1
+        val launched = mutableListOf<Intent>()
+        val files = show(
+            "big.txt",
+            "text/plain",
+            "x".toByteArray(),
+            recordedBytes = over,
+            launchExternal = { launched += it },
+        )
+
+        clickAttachment("big.txt · ${attachmentSizeLabel(over)}")
+        compose.waitUntil(timeoutMillis = 5_000) { launched.isNotEmpty() }
+
+        assertEquals("超过 2 MiB 的文本应外派并下载一次", 1, files.downloads.size)
+        assertTrue(
+            "超过 2 MiB 不得进入文本预览",
+            compose.onAllNodesWithContentDescription("关闭预览").fetchSemanticsNodes().isEmpty(),
+        )
+        assertEquals(Intent.ACTION_VIEW, launched.single().action)
+        assertNull("外派不得同时走另存为", shadowOf(compose.activity).nextStartedActivityForResult)
     }
 }
