@@ -362,7 +362,7 @@
 | --- | --- |
 | [286-merge-hook](286-merge-hook/README.md) | #286 `.githooks` 补 `pre-merge-commit`，与 `pre-commit` 同样委托 `scripts/precommit.ts`；实测发现 Git 2.53 在 `pre-merge-commit` 运行之后才写 `MERGE_HEAD`，因此钩子显式传 `--merge` 要求全量门禁（`isMerging` 保留给冲突合并后的 `git commit`）。结构测试从 `core.hooksPath` 取实际目录，固定两个入口都存在、可执行并委托到同一脚本，另有 `--print --merge` 判定测试。真实合并未用 `--no-verify`：钩子输出 `pre-commit: full gate`、474/474、combo verified；README「提交前钩子」同步。 |
 
-## 界面微调（#215/#217/#218/#239/#255）
+## 界面微调（#215/#217/#218/#239/#255/#291）
 
 | 目录 | 内容 |
 | --- | --- |
@@ -371,6 +371,7 @@
 | [ui-218](ui-218/README.md) | #218 长按消息复制正文，含流式进行中的行；保留查看全文与 toast（真机未执行） |
 | [239-idle-caption](239-idle-caption/README.md) | #239 待机台词气泡改在 Fairy 屏幕下方向下展开（411dp Robolectric 断言与前后截图；真机未执行） |
 | [255-fairy-eye-highlight](255-fairy-eye-highlight/README.md) | #255 Fairy 眼睛高光随瞳孔移动、围绕移动后的瞳孔中心缩放，内侧 70% 保持原亮度、外侧 30% 渐隐（`FairyEyeTest` 固定几何；真机未执行） |
+| [291-standby-exit](291-standby-exit/README.md) | #291 主页待机台词气泡退场时高度连续收起，下方卡片与按钮随平移回位（411dp Robolectric 断言与前后截图；真机未执行） |
 
 ## Triage 修复
 
