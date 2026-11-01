@@ -38,11 +38,11 @@ CI 的后端地址来自仓库变量 `OURFAIRY_IDENTITY_ENDPOINT`，签名来自
 
 ## 会话附件
 
-会话里附件点击的去处由 `app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestination.kt` 的 `remoteAttachmentDestination` 判定：图片进入应用内全屏预览（缩放、保存），文本、PDF/Office 与未知类型在本版仍走另存为，由后续票逐个替换。卡片只上报点击，不自己判断类型。
+会话里附件点击的去处由 `app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestination.kt` 的 `remoteAttachmentDestinationFor(mime, name, bytes)` 判定：图片进入应用内全屏预览（缩放、保存），文本进入应用内只读预览，PDF/Office 与未知类型在本版仍走另存为，由后续票逐个替换。文本超过 2 MiB 不在应用内展开，改走外派/另存为。卡片只上报点击，不自己判断类型。
 
-图片经现有会话鉴权下载接口写入应用缓存 `attachment-preview/` 子目录，再交给现有全屏图片查看器。同一（会话、消息、附件序号）复用同一路径，预览与保存共用一份字节，关闭预览删除该缓存文件，已另存的文件不受影响。应用内打开读取的是应用自己的缓存目录。
+图片与文本经现有会话鉴权下载接口写入应用缓存 `attachment-preview/` 子目录，再交给预览。同一（会话、消息、附件序号）复用同一路径，预览与保存共用一份字节，关闭预览删除该缓存文件，已另存的文件不受影响。文本预览只读：`.md`/`.markdown` 后缀或 `text/markdown` 按 Markdown 排版（与 `MessageBody` 相同的一对 `parseMarkdown` + `MarkdownBlock`），其余以等宽、保留换行与缩进的文本显示；解码按严格 UTF-8 → GB18030 顺序，两者都不成立时显示「无法解码」，不显示替换字符。应用内打开读取的是应用自己的缓存目录。
 
-判定与面板去向由 `app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestinationTest.kt` 与同目录的 `RemoteAttachmentPreviewTest.kt` 固定；缓存路径、一次下载与关闭清理由 `RemoteAttachmentPreviewFileTest.kt` 与 `app/src/test/java/me/rerere/rikkahub/data/remote/RemoteAttachmentStateTest.kt` 固定。词汇见 [客户端词汇表](GLOSSARY.md) 的「附件去处」与「附件预览缓存」。
+去向、2 MiB 上限与 Markdown 判定由 `app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestinationTest.kt` 与同目录的 `RemoteAttachmentTextTest.kt` 固定；面板点击（图片、Markdown、纯文本、无法解码、超限回落）、一次下载与关闭后回到原会话由 `app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentPreviewTest.kt` 固定；缓存路径、一次下载与关闭清理由 `RemoteAttachmentPreviewFileTest.kt` 与 `app/src/test/java/me/rerere/rikkahub/data/remote/RemoteAttachmentStateTest.kt` 固定。词汇见 [客户端词汇表](GLOSSARY.md) 的「附件去处」与「附件预览缓存」。
 
 ## 源码入口
 

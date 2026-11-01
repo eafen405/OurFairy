@@ -48,6 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
@@ -105,6 +106,9 @@ fun RemoteChatPanel(
     var selectionEpoch by remember(snapshot.attachmentEpoch) { mutableStateOf<Long?>(null) }
     var pendingDownload by remember(snapshot.attachmentEpoch) { mutableStateOf<PendingDownload?>(null) }
     var previewPath by remember(snapshot.attachmentEpoch) { mutableStateOf<String?>(null) }
+    var textPreview by remember(snapshot.attachmentEpoch) {
+        mutableStateOf<RemoteAttachmentTextPreviewTarget?>(null)
+    }
 
     var speechBusy by remember(snapshot.attachmentEpoch) { mutableStateOf(false) }
     var speechError by remember(snapshot.attachmentEpoch) { mutableStateOf<String?>(null) }
@@ -241,23 +245,33 @@ fun RemoteChatPanel(
                             pendingDownload = PendingDownload(snapshot.attachmentEpoch, message.messageId, attachment)
                             saveAs.launch(attachment.name)
                         }
-                        when (remoteAttachmentDestination(attachment.mime, attachment.name)) {
-                            RemoteAttachmentDestination.IMAGE -> {
-                                // The cached path depends on the attachment's coordinates only, so
-                                // reopening this one reads the bytes already on disk.
-                                snapshot.sessionId?.let { sessionId ->
-                                    val destination = attachmentPreviewFile(
-                                        context, sessionId, message.messageId, attachment.index,
-                                    )
-                                    state.cacheAttachment(
-                                        snapshot.attachmentEpoch, message.messageId, attachment, destination,
-                                    ) { file -> previewPath = file.absolutePath }
-                                }
+                        // One authenticated download into the coordinate's cached preview file,
+                        // shared by the image and text previews. The path depends on the
+                        // attachment's coordinates only, so reopening reads the bytes on disk.
+                        fun cachePreview(open: (File) -> Unit) {
+                            val sessionId = snapshot.sessionId ?: return
+                            val destination = attachmentPreviewFile(
+                                context, sessionId, message.messageId, attachment.index,
+                            )
+                            state.cacheAttachment(
+                                snapshot.attachmentEpoch, message.messageId, attachment, destination,
+                            ) { file -> open(file) }
+                        }
+                        when (remoteAttachmentDestinationFor(attachment.mime, attachment.name, attachment.bytes)) {
+                            RemoteAttachmentDestination.IMAGE -> cachePreview { file ->
+                                previewPath = file.absolutePath
                             }
 
-                            // The text and external destinations arrive in follow-up tickets; until
-                            // then each keeps today's save-as in its own branch.
-                            RemoteAttachmentDestination.TEXT -> saveOriginal()
+                            RemoteAttachmentDestination.TEXT -> cachePreview { file ->
+                                textPreview = RemoteAttachmentTextPreviewTarget(
+                                    path = file.absolutePath,
+                                    name = attachment.name,
+                                    layout = remoteAttachmentTextLayout(attachment.mime, attachment.name),
+                                )
+                            }
+
+                            // The external handoff arrives in its own ticket; until then it keeps
+                            // today's save-as, as does everything the client cannot preview.
                             RemoteAttachmentDestination.EXTERNAL -> saveOriginal()
                             RemoteAttachmentDestination.SAVE_AS -> saveOriginal()
                         }
@@ -267,6 +281,9 @@ fun RemoteChatPanel(
         }
         previewPath?.let { path ->
             AttachmentImagePreview(path = path, onDismissRequest = { previewPath = null })
+        }
+        textPreview?.let { target ->
+            AttachmentTextPreview(target = target, onDismissRequest = { textPreview = null })
         }
         Spacer(Modifier.height(8.dp))
         Composer(
