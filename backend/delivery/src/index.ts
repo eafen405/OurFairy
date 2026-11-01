@@ -139,15 +139,12 @@ export function apply(ctx: Context) {
     const target = users.byShortId(recipientShortId) as UserRow
     // The landing is decided once, before the row exists, and the row records
     // it: the event, the receipt and recovery all read that recorded session.
-    // A self delivery only asks the session service when it could land in the
-    // origin at all; another recipient has no origin session here.
-    const originCanHost = recipientShortId === senderShortId
-      && await ctx.ourfairySessions.canHostDelivery(sender, agent.session.id)
-    const landing = deliveryTargetOf({ senderShortId, recipientShortId,
-      originSessionId: agent.session.id, originCanHost })
-    // The primary is resolved (and created on first use) only when it is the
-    // landing: a self delivery the origin can host leaves the primary untouched.
-    const sessionId = landing === 'origin' ? agent.session.id : (await ctx.ourfairySessions.primary(target)).id
+    // The primary is resolved as it always was, and the session service answers
+    // whether the origin could host; the pure rule alone decides the landing.
+    const primarySession = await ctx.ourfairySessions.primary(target)
+    const originCanHost = await ctx.ourfairySessions.canHostDelivery(sender, agent.session.id)
+    const sessionId = deliveryTargetOf({ senderShortId, recipientShortId,
+      originSessionId: agent.session.id, originCanHost, primarySessionId: primarySession.id })
     const deliveryId = createHash('sha256').update(JSON.stringify([agent.session.id, callId])).digest('hex')
     return runtime.runDelivery(deliveryId as SessionId, async () => {
       // The store writes the row and reads it back in the same transaction, so

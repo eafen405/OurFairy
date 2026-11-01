@@ -46,6 +46,17 @@ async function tool(user, name, args, sessionId, callId = `delivery-call-${reque
   }
   assert.fail(`tool ${name} reply was not returned to original chat ${sessionId}`)
 }
+/**
+ * The two sessions a self-delivery case needs: the fixed primary, filled so the
+ * next create materializes an ordinary session, and that origin conversation.
+ */
+async function selfDeliverySessions(user) {
+  const primary = (await request('/sessions/primary', user.token)).session.id
+  await tool(user, 'groups', {}, primary)
+  const origin = (await request('/sessions/create', user.token)).session.id
+  assert.notEqual(origin, primary)
+  return { primary, origin }
+}
 async function startBackend(overlays = []) {
   // This suite drives many tool turns through one source session; keep them
   // below the maintenance threshold so it tests delivery, not maintenance.
@@ -329,12 +340,7 @@ test('authorized shared files appear together in live and persisted recipient at
 })
 test('a file delivered to the caller lands with its text in the origin session and downloads only there', async () => {
   const dana = await user('self-file-dana')
-  // A fresh identity's first created session is its primary; fill that log so
-  // the next create materializes the ordinary conversation the caller is in.
-  const primary = (await request('/sessions/primary', dana.token)).session.id
-  await tool(dana, 'groups', {}, primary)
-  const origin = (await request('/sessions/create', dana.token)).session.id
-  assert.notEqual(origin, primary)
+  const { primary, origin } = await selfDeliverySessions(dana)
   const bytes = Buffer.from('SELF LANDING ORIGINAL 原样')
   const path = join(home,'dsh-home','spaces','private',String(dana.user.shortId),'self-landing.txt')
   await tool(dana, 'write', { file_path: path, content: bytes.toString() }, origin)

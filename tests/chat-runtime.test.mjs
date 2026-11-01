@@ -82,3 +82,36 @@ test('a continuation of settled queue work may re-enter that queue', async () =>
   await background
   assert.deepEqual(order, ['re-entered'])
 })
+
+test('a re-entering continuation queues behind newer running work, and a live nested entry still fails fast', async () => {
+  const queues = new SessionQueues()
+  const order = []
+  const releaseNewer = deferred()
+  const reenter = deferred()
+  let continuation
+  await queues.runSession('re-entry-session', async () => {
+    // The turn started here outlives the queue entry; this is what it later does
+    // when a self delivery asks for the same session.
+    continuation = (async () => {
+      await reenter.promise
+      await queues.runSession('re-entry-session', async () => { order.push('continuation re-entered') })
+    })()
+  })
+  const newer = queues.runSession('re-entry-session', async () => {
+    order.push('newer started')
+    // A nested entry of the work now running is the old defect: it would wait
+    // on itself, so the queue refuses it immediately.
+    assert.throws(() => queues.runSession('re-entry-session', async () => {}), /already held/)
+    await releaseNewer.promise
+    order.push('newer ended')
+  })
+  await tick()
+  assert.deepEqual(order, ['newer started'])
+  reenter.resolve()
+  await tick()
+  assert.deepEqual(order, ['newer started'], 'the continuation must not overtake the newer running entry')
+  releaseNewer.resolve()
+  await Promise.all([newer, continuation])
+  assert.deepEqual(order, ['newer started', 'newer ended', 'continuation re-entered'],
+    'the continuation enters only after the newer entry settles')
+})
