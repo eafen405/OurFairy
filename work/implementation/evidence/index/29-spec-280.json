@@ -15,6 +15,12 @@
     },
     {
       "dirs": [
+        "284-retry-landing"
+      ],
+      "note": "#284 自投重试与启动恢复沿用首次落点（characterisation，生产代码无改动）：UPDATE 触发器按本条唯一文本让业务完成失败；同一 callId 重试仍只有一条消息，回执与行都保持首次记录的会话，发起会话在重试前归档也不改判，落点差异不参与同身份冲突（内容差异仍报 different content or recipient）；停后端、删触发器再启动后无工具调用，启动结算把 pending 行结算到记录会话，message_id 与日志里那条投递事件一致。两例在基线上即通过，另用临时变异（重试改用重算落点、关闭 pending 恢复）证明用例会对回归失败"
+    },
+    {
+      "dirs": [
         "285-landing-notifications"
       ],
       "note": "#285 Android 提醒按落点会话发送：`publishBacklog()` 不再把所有欠账合并成一条、优先主会话，而是对 `owedRecords()` 逐条 `publish(key, preview)`，每条都指向内容真正所在的会话；单条发布被拒只丢该落点的一次声音（消费先于尝试，不重放），其他落点照常尝试。前台/关闭接收/停止观察的抑制与追平门保持不变；`AndroidRemoteNotifications` 的 URI tag 已让多会话通知共存，未改。定向测试新增三会话错峰 3 条提醒、仅非主会话欠账不改指、单条拒绝不吞其他落点；真机通知未验收"
