@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+cd "$(git rev-parse --show-toplevel)"
+# Tests inspect companion repositories; do not pin their Git commands to this worktree.
+unset $(git rev-parse --local-env-vars)
+# Git runs this hook before it writes MERGE_HEAD, so the gate cannot infer the
+# merge from the repository; --merge names it. The suite split stays in
+# scripts/precommit.ts, where tests pin it.
+exec node scripts/precommit.ts --merge

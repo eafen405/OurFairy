@@ -1,0 +1,11 @@
+{
+  "title": "合并提交门禁（#286）",
+  "entries": [
+    {
+      "dirs": [
+        "286-merge-hook"
+      ],
+      "note": "#286 `.githooks` 补 `pre-merge-commit`，与 `pre-commit` 同样委托 `scripts/precommit.ts`；实测发现 Git 2.53 在 `pre-merge-commit` 运行之后才写 `MERGE_HEAD`，因此钩子显式传 `--merge` 要求全量门禁（`isMerging` 保留给冲突合并后的 `git commit`）。结构测试从 `core.hooksPath` 取实际目录，固定两个入口都存在、可执行并委托到同一脚本，另有 `--print --merge` 判定测试。真实合并未用 `--no-verify`：钩子输出 `pre-commit: full gate`、474/474、combo verified；README「提交前钩子」同步。"
+    }
+  ]
+}
