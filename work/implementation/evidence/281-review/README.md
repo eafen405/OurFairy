@@ -123,3 +123,25 @@ JUDGEMENT（Fowler 异味/判断项）
 - 最终树：`cd android && ./gradlew test lintDebug` 通过（612 tests / 0 failures；lint 无新增告警），
   合入后在最终树复跑 7 个受影响测试类共 79 tests / 0 failures
 - `git status --porcelain`：空
+
+## 最终门禁（Lead，最终集成 tip）
+
+最终集成 tip：`0b608cc3df`（`Merge branch 'ticket/281-review-fixes'` + 证据索引提交）。以下命令都在该 tip 的
+`integration/spec-281` worktree 上执行，输出留在 `work/tmp/281-closeout/`（不入库）。
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm test` | exit 0；473 pass / 0 fail / 0 cancelled / 0 skipped（17 suites，121.5s） |
+| `npm run combo:verify` | `combo: combination verified`；ourfairy / dsh / android source 三行 ok |
+| `cd android && ./gradlew test lintDebug assembleDebug` | `BUILD SUCCESSFUL in 4m 09s`，161 tasks 全部 executed；612 tests / 0 failures / 0 errors / 0 skips（app 540、ui 20、highlight 52）；`lintDebug` 三模块通过；`assembleDebug` 通过 |
+| `node scripts/evidence-index.ts --check` | `evidence index is current` |
+
+本轮之前各票与复审分支只跑过 `test lintDebug`；`assembleDebug` 按规格要求在最终集成状态补跑并通过。
+真机验收仍未执行（见上节「未验证」），不以模拟器或构建成功替代。
+
+与规格的两处显式偏离（已在 #281 收口说明中记录）：
+
+1. 外派用裸 `ACTION_VIEW` 而不是 `ACTION_VIEW + chooser`：chooser 对零目标也会正常解析，会让
+   「没有接收方」的回落不可达；故事的「交给系统里能打开它的应用」与「没有应用时仍能另存为」都保留。
+2. 预览缓存是「坐标目录 + 清洗后的原始显示名叶」，不是「文件名只由坐标决定」：外派给系统查看器时
+   需要真实文件名与扩展名，坐标仍唯一决定缓存位置，路径复用与不撞车的用例保持不变。
