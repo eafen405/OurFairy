@@ -168,4 +168,48 @@ class RemoteAttachmentDestinationTest {
             remoteAttachmentDestination("IMAGE/PNG", "cat.png"),
         )
     }
+
+    @Test
+    fun `a text over two mib is not expanded in app`() {
+        val over = TEXT_PREVIEW_MAX_BYTES + 1
+        listOf(
+            Triple("text/plain", "notes.txt", over),
+            Triple("text/markdown", "notes.md", over),
+            Triple("application/octet-stream", "Main.kt", over),
+        ).forEach { (mime, name, bytes) ->
+            assertEquals(
+                "$name 超过 2 MiB 应离开应用内文本预览",
+                RemoteAttachmentDestination.EXTERNAL,
+                remoteAttachmentDestinationFor(mime, name, bytes),
+            )
+        }
+    }
+
+    @Test
+    fun `a text at or under two mib stays in the in app preview`() {
+        listOf(TEXT_PREVIEW_MAX_BYTES, TEXT_PREVIEW_MAX_BYTES - 1, 0L).forEach { bytes ->
+            assertEquals(
+                "notes.txt @ $bytes",
+                RemoteAttachmentDestination.TEXT,
+                remoteAttachmentDestinationFor("text/plain", "notes.txt", bytes),
+            )
+        }
+    }
+
+    @Test
+    fun `the two mib ceiling applies only to text`() {
+        val over = TEXT_PREVIEW_MAX_BYTES + 1
+        assertEquals(
+            RemoteAttachmentDestination.IMAGE,
+            remoteAttachmentDestinationFor("image/png", "cat.png", over),
+        )
+        assertEquals(
+            RemoteAttachmentDestination.EXTERNAL,
+            remoteAttachmentDestinationFor("application/pdf", "document.pdf", over),
+        )
+        assertEquals(
+            RemoteAttachmentDestination.SAVE_AS,
+            remoteAttachmentDestinationFor("application/zip", "archive.zip", over),
+        )
+    }
 }
