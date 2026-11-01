@@ -337,6 +337,12 @@
 | --- | --- |
 | [259-receive-decoupling](259-receive-decoupling/README.md) | #269 提醒欠账改为按账号与会话键读取持久 ChatSyncRecord，无活运行时也能发现与消费（消费规则只在 ChatSyncStore 一处，ChatSyncKey 只保留一种规范形态），停止观察不消费，绑定在首个投影前保持“未回答”；#268 新增 6 会话组合负载（5 个 200 条历史 + 1 个 232,703 字符 / 128 字符 / 20 ms 流式）经生产 RemoteReceiveState/RemoteChatState 记录连接、堆、接收至状态/帧与主线程指标，结果独立命名为 multi-session，宿主测试钉住声明与 #74 stream 正文；#270 没有同设备多会话数据，未做运行时释放或调度改动；设备三轮基线与真机通知未执行 |
 
+## 自投落点跟随发起会话（规格 #280）
+
+| 目录 | 内容 |
+| --- | --- |
+| [282-self-delivery-text](282-self-delivery-text/README.md) | #282 自投文字落发起会话：落点判定收进无依赖的 `delivery/src/target.ts` 纯函数，`index.ts` 在 prepare 前判定一次并把结果记为 `deliveries.session_id`（重试/恢复沿用记录）；自投且发起会话存在、属于发送者、未归档时不再解析或创建主会话。会话服务新增唯一布尔读 `canHostDelivery`，归档事实经 archive-store 新单行 `isArchived` 取得，不枚举归档列表。实测发现基线的同会话写入会被 `SessionQueues` 误判为「调用链已持有」（chat `send` 的 async 上下文带进回合），改为按条目是否已结束判定：已结束条目可重入、运行中仍立即拒绝；否则「自投回写发起会话」必然抛错。工具描述、GLOSSARY 主会话/投递消息、delivery/chat/sessions README 同步。真实启动器行为用例覆盖自投落发起会话、回执即落点、归档后回落主会话，跨用户用例保持通过 |
+
 ## 界面微调（#215/#217/#218/#239/#255）
 
 | 目录 | 内容 |
