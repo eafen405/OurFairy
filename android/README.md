@@ -38,11 +38,11 @@ CI 的后端地址来自仓库变量 `OURFAIRY_IDENTITY_ENDPOINT`，签名来自
 
 ## 会话附件
 
-会话里附件点击的去处由 `app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestination.kt` 的 `remoteAttachmentDestination` 判定：图片进入应用内全屏预览（缩放、保存），文本、PDF/Office 与未知类型在本版仍走另存为，由后续票逐个替换。卡片只上报点击，不自己判断类型。
+会话里附件点击的去处由 `app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestination.kt` 的 `remoteAttachmentDestination` 判定：图片进入应用内全屏预览（缩放、保存），PDF/Office 交给系统里能打开它的应用，文本与未知类型在本版仍走另存为，由文本票替换。卡片只上报点击，不自己判断类型。
 
-图片经现有会话鉴权下载接口写入应用缓存 `attachment-preview/` 子目录，再交给现有全屏图片查看器。同一（会话、消息、附件序号）复用同一路径，预览与保存共用一份字节，关闭预览删除该缓存文件，已另存的文件不受影响。应用内打开读取的是应用自己的缓存目录。
+图片与 PDF/Office 都经现有会话鉴权下载接口写入应用缓存 `attachment-preview/` 子目录：（会话、消息、附件序号）决定一个坐标目录，目录里的文件名是清洗后的原始名，接收方看到的是原名而不是摘要。图片交给现有全屏图片查看器；PDF/Office 用 FileProvider 的 `content://` URI 以 `ACTION_VIEW` 交给系统 chooser，并附临时读授权。系统没有能接收它的应用时回落到另存为，复用缓存里的同一份字节，不二次下载。同一坐标复用同一份字节，图片预览关闭删除其缓存文件，已另存的文件不受影响；外派给系统应用的文件不在交接后立即删除（接收方可能仍在读），下一次外派打开时清扫其余预览缓存。FileProvider 只暴露 `app-update/` 与 `attachment-preview/` 两个缓存子目录（`app/src/main/res/xml/file_paths.xml`），不暴露整个 cache，安装包目录的既有暴露不变。
 
-判定与面板去向由 `app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestinationTest.kt` 与同目录的 `RemoteAttachmentPreviewTest.kt` 固定；缓存路径、一次下载与关闭清理由 `RemoteAttachmentPreviewFileTest.kt` 与 `app/src/test/java/me/rerere/rikkahub/data/remote/RemoteAttachmentStateTest.kt` 固定。词汇见 [客户端词汇表](GLOSSARY.md) 的「附件去处」与「附件预览缓存」。
+判定与面板去向由 `app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestinationTest.kt`、同目录的 `RemoteAttachmentPreviewTest.kt` 与 `RemoteAttachmentExternalTest.kt` 固定；交接意图与清扫规则由 `RemoteAttachmentHandoffTest.kt` 固定；缓存路径、一次下载与关闭清理由 `RemoteAttachmentPreviewFileTest.kt` 与 `app/src/test/java/me/rerere/rikkahub/data/remote/RemoteAttachmentStateTest.kt` 固定；`file_paths.xml` 的暴露清单与 provider 的未导出、授权属性由同目录 `RemoteAppUpdateTest.kt` 固定。词汇见 [客户端词汇表](GLOSSARY.md) 的「附件去处」与「附件预览缓存」。
 
 ## 源码入口
 
