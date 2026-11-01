@@ -71,7 +71,7 @@ JUDGEMENT（Fowler 异味/判断项）
 | F3（Spec c2） | 已修 | Markdown 的 MIME 与后缀表收进 `RemoteAttachmentDestination.kt:18-21`（`MARKDOWN_MIME`、`MARKDOWN_SUFFIXES`），后缀表由该集合生成；`RemoteAttachmentText.kt:25-37` 的 `remoteAttachmentTextLayout` 只读同一组常量，不再自带一份。 | `RemoteAttachmentTextTest` 的 Markdown/纯文本取舍用例；`RemoteAttachmentDestinationTest` 的 `.md` 有效类型用例 |
 | F4（Standards 4，Duplicated Code） | 已修 | `RemoteChatState.kt:567-588` 新增 `suspend fun saveCachedAttachment(expectedEpoch, cached, save)`：先查 epoch，运行保存，成功后写唯一字面量 `ATTACHMENT_SAVED`（:21），失败用既有私有 `description()`；`markAttachmentSaved()`（:662-664）同时供直接另存与缓存另存。面板缓存分支（`RemoteChatPanel.kt:160-168`）只调用它，不再自建 try/catch 或另一套错误文案。 | `RemoteAttachmentStateTest` 新增「saving the cached attachment…」「a failed cached save…」「a cached save captured under an older epoch…」三例；`RemoteAttachmentExternalTest` 回落保存后断言「原件已保存」 |
 | F5（Spec b2 + Standards 5，seam leak） | 已修（走真实包管理器路线） | 生产 `RemoteChatPanel` 删除 `launchExternal` 参数；共享 helper 保留函数级 `launch` 接缝（与既有 `launchInstall` 同形）。测试用 Robolectric 的真实 `startActivity`：`Application.requireActivityResolution()`（`ShadowApplication.checkActivities(true)`）+ `registerActivityFor` 注册假查看器；无查看器用例不注册，`ActivityNotFoundException` 由真实路径抛出，回落另存为的目标用真实 `ActivityResultContracts.CreateDocument` 注册。未采用「只保留函数级接缝」的退路，因为 Robolectric 能确定性复现 ANFE 与成功解析。 | `RemoteAttachmentHandoffTest`「the real launch path reports a device without a receiver」；`RemoteAttachmentExternalTest` 的 PDF/docx 成功交接与无查看器回落；`RemoteAttachmentPreviewTest` 的 PDF/超 2 MiB 外派 |
-| F6（Standards 2，HARD） | 已修 | 删除 `RemoteAttachmentDestination` 的「唯一判定/调用方不自行检查」保证与重复句，改为「The four places a click on a transcript attachment can go.」；`remoteAttachmentOpenDestination` 的 KDoc 只陈述输入输出，并事实性写明类型路由私有、公开入口仅此一个（:37-49）。 | 编译期可见性（`destinationFor` 私有）＋ `RemoteAttachmentDestinationTest` 全部经公开入口 |
+| F6（Standards 2，HARD） | 已修 | 删除 `RemoteAttachmentDestination` 的「唯一判定/调用方不自行检查」保证与重复句，改为「The four places a click on a transcript attachment can go.」；`remoteAttachmentOpenDestination` 的 KDoc 只陈述输入输出，并事实性写明类型路由私有、公开入口仅此一个（:37-54）。 | 编译期可见性（`destinationFor` 私有）＋ `RemoteAttachmentDestinationTest` 全部经公开入口 |
 | F7（Standards 6，Mysterious Name） | 已修 | `remoteAttachmentDestinationFor` 更名 `remoteAttachmentOpenDestination`，名称包含 2 MiB 展开规则；类型路由 `destinationFor` 私有，生产只有一个公开路由入口。测试全部改调公开入口。 | `RemoteAttachmentDestinationTest` 的类型路由与 2 MiB 用例都调用 `remoteAttachmentOpenDestination` |
 | F8（Standards 3，HARD） | 已修 | `android/GLOSSARY.md`「附件预览缓存」改为：普通另存为写独立临时文件，不读预览缓存；只有外派无接收方回落才复用缓存字节。`android/README.md`「会话附件」删去重复的完整路由表，保留操作事实并指向 GLOSSARY 作为词汇权威；测试引用改为：关闭清理在 `RemoteAttachmentPreviewTest`、缓存路径在 `RemoteAttachmentPreviewFileTest`、一次下载/复用/过期 epoch 在 `RemoteAttachmentStateTest`。 | 文档中的每个行为名都能落到真实测试：`RemoteAttachmentPreviewTest`（关闭清理）、`RemoteAttachmentPreviewFileTest`（路径）、`RemoteAttachmentStateTest`（下载/epoch）、`RemoteAttachmentDestinationTest`/`RemoteAttachmentTextTest`（路由/Markdown） |
 | F9（Standards 7） | 已修 | 无接收方文案改为取消安全的「没有能打开该文件的系统应用，请选择保存位置」（`RemoteChatPanel.kt:78`）；`RemoteAttachmentHandoffTest` 与 `RemoteAttachmentExternalTest` 同步字面量。 | 上述两个测试的断言；`RemoteAttachmentExternalTest` 还验证随后真的打开 `ACTION_CREATE_DOCUMENT` |
@@ -91,15 +91,15 @@ JUDGEMENT（Fowler 异味/判断项）
 
 | 命令 | 结果 |
 | --- | --- |
-| `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew :app:testDebugUnitTest --tests '…RemoteAttachmentDestinationTest' --tests '…RemoteAttachmentTextTest' --tests '…RemoteAttachmentHandoffTest' --tests '…RemoteAppUpdateTest' --tests '…RemoteAttachmentExternalTest' --tests '…RemoteAttachmentPreviewTest' --tests '…RemoteAttachmentStateTest'` | 79 tests、0 failures/errors/skips（7 个类：Destination 20、Text 8、Handoff 5、AppUpdate 17、External 6、Preview 10、State 13） |
+| `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew :app:testDebugUnitTest --tests 'me.rerere.rikkahub.ui.identity.RemoteAttachmentDestinationTest' --tests 'me.rerere.rikkahub.ui.identity.RemoteAttachmentTextTest' --tests 'me.rerere.rikkahub.ui.identity.RemoteAttachmentHandoffTest' --tests 'me.rerere.rikkahub.ui.identity.RemoteAppUpdateTest' --tests 'me.rerere.rikkahub.ui.identity.RemoteAttachmentExternalTest' --tests 'me.rerere.rikkahub.ui.identity.RemoteAttachmentPreviewTest' --tests 'me.rerere.rikkahub.data.remote.RemoteAttachmentStateTest'` | 79 tests、0 failures/errors/skips（7 个类：Destination 20、Text 8、Handoff 5、AppUpdate 17、External 6、Preview 10、State 13） |
 | `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug` | `BUILD SUCCESSFUL in 3m 10s`（134 tasks：64 executed、70 up-to-date）；JUnit XML 合计 612 tests（app 540、ui 20、highlight 52）、0 failures/errors/skips；lintDebug 通过，31 条既存 warning，无新增文件告警（改动文件上只有 `RemoteChatPanel.kt:102` 的既存 `ModifierParameter`） |
-| `git merge integration/spec-281` | 集成分支 tip 未移动（仍为 `5e329acb6e`），`Already up to date.`，无合并提交；合入后复跑受影响的定向测试 |
-| `git commit`（含 `android/`，pre-commit 自动 full gate） | `npm test` 473 pass / 0 fail（17 suites）；`npm run combo:verify` → `combo: combination verified`；`./gradlew test lintDebug` `BUILD SUCCESSFUL`；未使用 `--no-verify`。首次重跑前 Android 步骤因 shell 未导出 `ANDROID_HOME` 在 3s 内失败，显式导出后通过；不是代码或测试失败 |
-| `git status --porcelain` | 提交后为空 |
+| `git merge integration/spec-281` | 集成分支 tip 未移动（仍为 `5e329acb6e`），`Already up to date.`，无合并提交；随后在最终树复跑 79 个受影响测试，0 failures/errors/skips |
+| `git commit`（含 `android/`，pre-commit 自动 full gate） | `npm test` 473 pass / 0 fail（17 suites）；`npm run combo:verify` → `combo: combination verified`；`./gradlew test lintDebug` `BUILD SUCCESSFUL in 2s`（任务均为 up-to-date，同一代码树的完整 Android 门禁结果见上一行）；未使用 `--no-verify`。首次 commit 的 Android 步骤因 shell 未导出 `ANDROID_HOME` 在 3s 内失败，显式导出后通过；不是代码或测试失败 |
+| `git status --porcelain`（提交与合并后） | 空 |
 
-测试先于实现写入。改名片段的实现前状态是同批测试引用未解析符号（编译期红灯）；本轮没有为每个切片单独留存首个红灯日志，
-第一次整体运行暴露 6 个测试夹具问题（Robolectric 把普通 `startActivity` 同时记入 for-result 队列、`CreateDocument`
-的目标需用真实 contract 构造），修正后全绿。如实记录，不把「测试通过」写成设备验收。
+测试与实现同批落地：行为测试先写，但本轮没有为每个切片单独执行并留存红灯运行。改名/新符号切片在实现前本会以未解析
+符号编译失败；第一次整体运行暴露的 6 个失败是测试夹具问题（Robolectric 把普通 `startActivity` 同时记入 for-result
+队列；`CreateDocument` 的目标需用真实 contract 构造），修正后全绿。如实记录这一点，不把「测试通过」写成设备验收。
 
 ## 未验证（无设备）
 
@@ -113,4 +113,13 @@ JUDGEMENT（Fowler 异味/判断项）
 ## 提交
 
 - `74d85caacb` `fix(#281): 按两轴复审统一附件外派与有效类型`（含代码与测试；pre-commit full gate 通过）
-- 本文件所在提交：`docs(#281): 记录 #281 两轴复审修订证据`（提交 SHA 以 `git log` 为准）
+- `7d43874903` `docs(#281): 修正附件词汇与 README 的可执行声称`（含本文件；pre-commit docs gate 通过）
+- 其后仅补记本节的合并结果，分支最终 tip 以 `git log --oneline -1` 为准。
+
+## 最终状态
+
+- 分支：`ticket/281-review-fixes`
+- 起点与合并基线：`integration/spec-281` @ `5e329acb6e`（`git merge` 为 `Already up to date.`，无合并提交）
+- 最终树：`cd android && ./gradlew test lintDebug` 通过（612 tests / 0 failures；lint 无新增告警），
+  合入后在最终树复跑 7 个受影响测试类共 79 tests / 0 failures
+- `git status --porcelain`：空
