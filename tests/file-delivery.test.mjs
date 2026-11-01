@@ -327,3 +327,35 @@ test('authorized shared files appear together in live and persisted recipient at
     assert.match(await tool(bob,'read',{file_path:groupPath},target),/outside|denied|permission/i)
   }finally{await follow.close()}
 })
+test('a file delivered to the caller lands with its text in the origin session and downloads only there', async () => {
+  const dana = await user('self-file-dana')
+  // A fresh identity's first created session is its primary; fill that log so
+  // the next create materializes the ordinary conversation the caller is in.
+  const primary = (await request('/sessions/primary', dana.token)).session.id
+  await tool(dana, 'groups', {}, primary)
+  const origin = (await request('/sessions/create', dana.token)).session.id
+  assert.notEqual(origin, primary)
+  const bytes = Buffer.from('SELF LANDING ORIGINAL 原样')
+  const path = join(home,'dsh-home','spaces','private',String(dana.user.shortId),'self-landing.txt')
+  await tool(dana, 'write', { file_path: path, content: bytes.toString() }, origin)
+  const text = 'Delivered to myself with a file'
+  assert.match(await tool(dana, 'deliver_message', { recipientShortId: dana.user.shortId, text, files: [{ path }] }, origin, 'self-file-landing'), /deliveryId/)
+  const view = await projection(dana, origin)
+  const messages = view.messages.filter(message => message.text === text)
+  assert.equal(messages.length, 1)
+  assert.equal(messages[0].role, 2, 'the delivered text and file are one ordinary Fairy message in the origin')
+  assert.deepEqual(messages[0].attachments, [{ index: 0, type: 1, name: 'self-landing.txt', mime: 'text/plain', bytes: bytes.length }])
+  const delivered = view.events.filter(event => event.type === 'delivery/message')
+  assert.equal(delivered.length, 1)
+  assert.equal(delivered[0].data.origin.sessionId, origin)
+  const primaryView = await projection(dana, primary)
+  assert.equal(primaryView.messages.some(message => message.text === text), false, 'a self delivery must not also land in the primary')
+  assert.equal(primaryView.events.some(event => event.type === 'delivery/message'), false)
+  const landing = await download(dana, origin, messages[0].messageId, 0)
+  assert.equal(landing.status, 200)
+  assert.deepEqual(landing.bytes, bytes)
+  assert.equal((await download(dana, primary, messages[0].messageId, 0)).status, 404)
+  const elsewhere = (await request('/sessions/create', dana.token)).session.id
+  assert.notEqual(elsewhere, origin)
+  assert.equal((await download(dana, elsewhere, messages[0].messageId, 0)).status, 404)
+})
