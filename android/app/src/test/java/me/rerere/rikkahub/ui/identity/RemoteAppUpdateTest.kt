@@ -14,7 +14,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.core.content.FileProvider
 import java.io.File
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.flow
@@ -51,11 +50,7 @@ class RemoteAppUpdateTest {
 
     @Before
     fun clearProviderCache() {
-        // FileProvider caches the resolved paths per authority in a static map while
-        // Robolectric gives every test its own cache directory. A strategy resolved by
-        // an earlier test would point at that test's sandbox.
-        FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }
-            .get(null).let { (it as HashMap<*, *>).clear() }
+        clearFileProviderCache()
     }
 
     private fun apkFile(name: String = "latest.apk"): File {
@@ -69,7 +64,12 @@ class RemoteAppUpdateTest {
     fun `the install intent hands the package archive to the system installer`() {
         val apk = apkFile()
 
-        val intent = appInstallIntent(context, apk)
+        val intent = localFileViewIntent(
+            context,
+            apk,
+            "application/vnd.android.package-archive",
+            apk.name,
+        )
 
         assertEquals(Intent.ACTION_VIEW, intent.action)
         assertEquals("application/vnd.android.package-archive", intent.type)
@@ -91,7 +91,13 @@ class RemoteAppUpdateTest {
 
     @Test
     fun `a missing system installer is reported instead of crashing`() {
-        val failure = launchInstall(context, apkFile()) { throw ActivityNotFoundException() }
+        val failure = launchLocalFileView(
+            context,
+            apkFile(),
+            "application/vnd.android.package-archive",
+            "latest.apk",
+            "未找到系统安装程序",
+        ) { throw ActivityNotFoundException() }
         val settingsFailure = launchInstallSettings(context) { throw ActivityNotFoundException() }
 
         assertEquals("未找到系统安装程序", failure)
