@@ -4,9 +4,9 @@ package me.rerere.rikkahub.ui.identity
  * Where clicking one transcript attachment goes.
  *
  * This is the client's only attachment-routing decision: the chip reports the click, and the
- * caller reads this answer instead of inspecting the MIME or the name itself. [TEXT] and
- * [EXTERNAL] are named for the follow-up tickets; for now their branches fall back to save-as, the
- * behaviour every non-image attachment already had.
+ * caller reads this answer instead of inspecting the MIME or the name itself. [EXTERNAL] is the
+ * handoff to an installed system app; [TEXT] is named for its follow-up ticket and currently
+ * keeps save-as.
  */
 internal enum class RemoteAttachmentDestination {
     IMAGE,

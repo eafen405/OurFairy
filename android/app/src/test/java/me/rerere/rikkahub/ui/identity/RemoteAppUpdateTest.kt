@@ -116,7 +116,7 @@ class RemoteAppUpdateTest {
     }
 
     @Test
-    fun `the file paths expose only the update cache`() {
+    fun `the file paths expose exactly the update and attachment preview caches`() {
         val paths = mutableListOf<Triple<String, String, String>>()
         val parser = context.resources.getXml(R.xml.file_paths)
         var event = parser.eventType
@@ -132,7 +132,13 @@ class RemoteAppUpdateTest {
         }
         parser.close()
 
-        assertEquals(listOf(Triple("cache-path", "app-update", "app-update/")), paths)
+        assertEquals(
+            listOf(
+                Triple("cache-path", "app-update", "app-update/"),
+                Triple("cache-path", "attachment-preview", "attachment-preview/"),
+            ),
+            paths,
+        )
     }
 
     @Test

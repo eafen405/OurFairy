@@ -540,6 +540,11 @@ class RemoteChatState(
         mutable.value = mutable.value.copy(attachments = mutable.value.attachments.filterNot { it.uploadId in uploadIds })
     }
 
+    /** Records one attachment-level message for the panel to show, e.g. a handoff with no receiver. */
+    fun noticeAttachment(message: String) {
+        mutable.value = mutable.value.copy(attachmentNotice = message)
+    }
+
     /** Download privately first. A late response never reaches a new binding's SAF target. */
     fun downloadAttachment(
         expectedEpoch: Long,

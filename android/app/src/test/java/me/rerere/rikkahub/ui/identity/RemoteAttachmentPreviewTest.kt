@@ -57,8 +57,9 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The transcript's attachment click, observed through the real panel: an image opens the existing
- * full-screen viewer from one cached download, every other destination keeps save-as for now, and
- * closing the viewer deletes only the preview cache.
+ * full-screen viewer from one cached download, text keeps save-as until its own ticket (the
+ * external handoff is covered by RemoteAttachmentExternalTest), and closing the viewer deletes
+ * only the preview cache.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35], qualifiers = "zh-rCN-w411dp-h891dp")
@@ -163,7 +164,7 @@ class RemoteAttachmentPreviewTest {
     @Test
     fun `clicking an image attachment downloads once and opens the full-screen viewer`() {
         val files = show("cat.png", "image/png")
-        val cached = attachmentPreviewFile(context, "s1", "m1", 0)
+        val cached = attachmentPreviewFile(context, "s1", "m1", 0, "cat.png")
 
         clickAttachment("cat.png · ${attachmentSizeLabel(png.size.toLong())}")
         awaitViewer()

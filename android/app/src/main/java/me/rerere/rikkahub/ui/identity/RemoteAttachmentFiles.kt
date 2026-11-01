@@ -52,17 +52,23 @@ suspend fun importAttachment(context: Context, uri: Uri): ImportedAttachment {
 fun createAttachmentTempFile(context: Context): File = File.createTempFile(TEMP_PREFIX, null, context.cacheDir)
 
 private const val PREVIEW_DIRECTORY = "attachment-preview"
+private const val PREVIEW_PART_SUFFIX = ".part"
 private const val HEX = "0123456789abcdef"
 
 /**
- * The one cached preview file for an attachment coordinate: session, message and attachment
- * index, and nothing else. The name is a digest because those identifiers are wire values that
- * may contain separators; the attachment's display name never takes part, so the same attachment
- * always resumes at the same path. The directory is prepared for the download that follows.
+ * The cache slot for one attachment coordinate: session, message and attachment index, and
+ * nothing else. The slot name is a digest because those identifiers are wire values that may
+ * contain separators. The slot is not created here so a legacy cache file that still occupies
+ * that path can be migrated by [attachmentPreviewFile].
  */
-fun attachmentPreviewFile(context: Context, sessionId: String, messageId: String, index: Int): File {
-    val directory = File(context.cacheDir, PREVIEW_DIRECTORY)
-    directory.mkdirs()
+internal fun attachmentPreviewDirectory(
+    context: Context,
+    sessionId: String,
+    messageId: String,
+    index: Int,
+): File {
+    val root = File(context.cacheDir, PREVIEW_DIRECTORY)
+    root.mkdirs()
     val digest = MessageDigest.getInstance("SHA-256")
         .digest("$sessionId\u0000$messageId\u0000$index".toByteArray(Charsets.UTF_8))
     val name = buildString(digest.size * 2) {
@@ -72,7 +78,77 @@ fun attachmentPreviewFile(context: Context, sessionId: String, messageId: String
             append(HEX[value and 0x0f])
         }
     }
-    return File(directory, name)
+    return File(root, name)
+}
+
+/**
+ * The one cached preview file for an attachment coordinate. The coordinate directory is decided
+ * only by [attachmentPreviewDirectory]; the leaf is the sanitised original display name because
+ * an external viewer shows that name to the user. A digest-named file left by the earlier layout
+ * is renamed into the new directory instead of downloaded again, and one already-complete file in
+ * the slot is renamed to the current leaf for the same reason.
+ */
+fun attachmentPreviewFile(
+    context: Context,
+    sessionId: String,
+    messageId: String,
+    index: Int,
+    name: String,
+): File {
+    val slot = attachmentPreviewDirectory(context, sessionId, messageId, index)
+    val leaf = sanitizedPreviewName(name)
+    if (slot.isFile) migrateLegacySlot(slot, leaf) else slot.mkdirs()
+    val file = File(slot, leaf)
+    if (!file.exists() && slot.isDirectory) {
+        slot.listFiles()
+            ?.firstOrNull { it.isFile && !it.name.endsWith(PREVIEW_PART_SUFFIX) }
+            ?.renameTo(file)
+    }
+    return file
+}
+
+/** Renames the previous digest-named cache file into the coordinate directory it now names. */
+private fun migrateLegacySlot(slot: File, leaf: String) {
+    val legacy = File(slot.parentFile, slot.name + ".legacy")
+    legacy.delete()
+    if (slot.renameTo(legacy) && slot.mkdirs()) {
+        legacy.renameTo(File(slot, leaf))
+    } else {
+        // Renaming failed; dropping the stale bytes lets the next open download them again.
+        legacy.delete()
+        slot.delete()
+    }
+}
+
+/**
+ * Deletes every cached preview slot except [keep], which is the file just handed to an external
+ * app. A handoff is deliberately not cleaned at launch: the receiving app may still be reading
+ * it, so the next external open does the sweep instead. The in-app image preview keeps its own
+ * delete-on-close.
+ */
+internal fun sweepAttachmentPreviews(context: Context, keep: File) {
+    val root = File(context.cacheDir, PREVIEW_DIRECTORY)
+    val keepSlot = keep.parentFile?.canonicalFile ?: return
+    val keepFile = keep.canonicalFile
+    root.listFiles()?.forEach { entry ->
+        if (entry.canonicalFile != keepSlot) {
+            entry.deleteRecursively()
+        } else {
+            entry.listFiles()?.forEach { child ->
+                if (child.canonicalFile != keepFile) child.deleteRecursively()
+            }
+        }
+    }
+}
+
+/** Only the original base name reaches the leaf, with path separators neutralised. */
+private fun sanitizedPreviewName(raw: String): String {
+    val cleaned = buildString(raw.length) {
+        for (character in raw) {
+            append(if (character.isISOControl() || character == '/' || character == '\\') '_' else character)
+        }
+    }.trim().take(MAX_NAME_LENGTH)
+    return if (cleaned.isBlank() || cleaned == "." || cleaned == "..") FALLBACK_NAME else cleaned
 }
 
 /** Writes the downloaded original to the location the user picked, unchanged. The stream is */
