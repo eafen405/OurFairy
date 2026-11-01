@@ -1,7 +1,15 @@
 package me.rerere.rikkahub.ui.fairy
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -26,6 +35,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.channels.Channel
@@ -38,6 +48,13 @@ private const val ACCEL_END_MS = 6f
 
 /** How long a fully typed segment stays before the next one. */
 const val CAPTION_HOLD_MS = 2500L
+
+/**
+ * Duration of the stand-by dialog box's appearance and disappearance. The
+ * growing/shrinking panel is what carries the info card and buttons below it,
+ * so this one value is the whole page motion.
+ */
+internal const val FAIRY_CAPTION_TRANSITION_MS = 250
 
 /**
  * One idle line, typed out segment by segment like the game's dialog box:
@@ -122,5 +139,41 @@ fun FairyCaption(
                 .fairyPanel(RoundedCornerShape(6.dp), tokens.pill)
                 .padding(horizontal = 10.dp, vertical = 3.dp),
         )
+    }
+}
+
+/**
+ * The console's stand-by dialog box slot: [FairyCaption] while [line] is being
+ * said, and the line just settled while the panel's height shrinks away.
+ *
+ * The transition's growing/shrinking container is what moves the content below
+ * the slot, so the card and buttons under the console travel with the panel
+ * instead of snapping back. Reduced Motion inserts and removes the panel in one
+ * frame, like the rest of the page.
+ *
+ * [onFinished] is passed straight through: the module settles its line when the
+ * line finishes, not when the panel has finished leaving, so no line is held
+ * back to fill the exit.
+ */
+@Composable
+internal fun FairyCaptionSlot(
+    line: FairyLine?,
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val allowSpatial = LocalAgoraMotionPolicy.current.allowSpatialTransitions
+    // The last line stays composed through its own exit: a panel that blanked
+    // out before shrinking would read as a deletion, not as the box leaving.
+    var lastLine by remember { mutableStateOf(line) }
+    LaunchedEffect(line) { if (line != null) lastLine = line }
+    val size = tween<IntSize>(FAIRY_CAPTION_TRANSITION_MS, easing = FastOutSlowInEasing)
+    val fade = tween<Float>(FAIRY_CAPTION_TRANSITION_MS, easing = FastOutSlowInEasing)
+    AnimatedVisibility(
+        visible = line != null,
+        enter = if (allowSpatial) fadeIn(fade) + expandVertically(size) else EnterTransition.None,
+        exit = if (allowSpatial) fadeOut(fade) + shrinkVertically(size) else ExitTransition.None,
+    ) {
+        val shown = line ?: lastLine
+        if (shown != null) FairyCaption(shown, onFinished = onFinished, modifier = modifier)
     }
 }

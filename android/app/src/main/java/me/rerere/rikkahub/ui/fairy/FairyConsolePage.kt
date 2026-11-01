@@ -179,14 +179,14 @@ fun FairyConsolePage(
                     }
                     // The line is a sibling below the screen: its top stays at the
                     // screen's bottom edge, so added height extends downward over
-                    // the page, never over the Fairy animation.
-                    caption?.let { line ->
-                        FairyCaption(
-                            line,
-                            onFinished = { fairy.captionFinished() },
-                            modifier = Modifier.testTag("fairy-caption"),
-                        )
-                    }
+                    // the page, never over the Fairy animation. Its slot keeps the
+                    // settled line composed while the shrinking panel carries the
+                    // card and buttons back up.
+                    FairyCaptionSlot(
+                        line = caption,
+                        onFinished = { fairy.captionFinished() },
+                        modifier = Modifier.testTag("fairy-caption"),
+                    )
                     Spacer(Modifier.height(16.dp))
                     ConsoleInfoCard(
                         user = identity?.user,
