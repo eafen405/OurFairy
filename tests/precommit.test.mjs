@@ -297,13 +297,31 @@ test('the merge entry point asks for the full gate itself, because MERGE_HEAD is
   // Git runs `pre-merge-commit` before the merge state is recorded, so
   // `MERGE_HEAD` is absent there and `scripts/precommit.ts` cannot infer the
   // merge; the hook names it with `--merge` instead.
-  const printed = execFileSync(process.execPath, ['scripts/precommit.ts', '--print', '--merge'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  })
-  const decision = JSON.parse(printed)
-  assert.equal(decision.mode, 'full', 'a merge commit is judged as a whole, whatever its diff touches')
-  assert.deepEqual(decision.commands, FULL_COMMANDS)
+  //
+  // The decision reads the caller's index, so give it one matching HEAD: a
+  // worktree with staged Android paths must still test the merge decision, not
+  // fail on the Gradle command those paths add. That add-on has its own case
+  // above.
+  const dir = mkdtempSync(join(tmpdir(), 'ourfairy-precommit-merge-'))
+  try {
+    const env = { ...process.env, GIT_INDEX_FILE: join(dir, 'index') }
+    execFileSync('git', ['read-tree', 'HEAD'], {
+      cwd: repoRoot,
+      env,
+      stdio: ['ignore', 'ignore', 'ignore'],
+    })
+    const printed = execFileSync(process.execPath, ['scripts/precommit.ts', '--print', '--merge'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env,
+    })
+    const decision = JSON.parse(printed)
+    assert.equal(decision.mode, 'full', 'a merge commit is judged as a whole, whatever its diff touches')
+    assert.deepEqual(decision.commands, FULL_COMMANDS)
+    assert.deepEqual(decision.paths, [], 'the merge decision does not depend on the caller\'s staged paths')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test('a selection wider than the limit falls back to the full suite', () => {
