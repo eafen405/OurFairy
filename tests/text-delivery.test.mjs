@@ -298,3 +298,87 @@ test('a self delivery lands in the origin session as a normal Fairy message, and
   assert.equal((await request('/chat/read', carol.token, { sessionId: origin })).projection.messages
     .some(message => message.text === fallbackText), false)
 })
+
+test('a self delivery retry reuses its recorded landing after the origin is archived', async () => {
+  const dana = await user('self-retry-dana')
+  // Same shape as the previous case: fill the primary first so create
+  // materializes the ordinary conversation the caller is actually in.
+  const primary = (await request('/sessions/primary', dana.token)).session.id
+  await tool(dana, 'groups', {}, primary)
+  const origin = (await request('/sessions/create', dana.token)).session.id
+  assert.notEqual(origin, primary)
+  const text = 'Retried into the first recorded landing'
+  const callId = 'self-retry-landing-call'
+  const db = new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
+  // The unique text confines the refusal to this delivery's business completion.
+  // The native append has already succeeded when this trigger fires, which is
+  // what makes the row and the log disagree.
+  db.exec(`CREATE TRIGGER fail_self_retry_update BEFORE UPDATE ON deliveries WHEN NEW.text = '${text}'
+    BEGIN SELECT RAISE(ABORT, 'injected business completion failure'); END`)
+  assert.match(await tool(dana, 'deliver_message', { recipientShortId: dana.user.shortId, text }, origin, callId),
+    /injected business completion failure/)
+  const pending = db.prepare('SELECT * FROM deliveries WHERE text = ?').get(text)
+  assert.equal(pending.status, 0)
+  assert.equal(pending.recipient_session_id, origin, 'the first attempt records the origin as the landing')
+  const first = (await request('/chat/read', dana.token, { sessionId: origin })).projection
+  assert.deepEqual(first.messages.filter(message => message.text === text).map(message => message.role), [2])
+  assert.equal(first.events.filter(event => event.type === 'delivery/message').length, 1)
+  // Archiving the origin changes what a fresh landing decision would answer:
+  // from now on a self delivery from this conversation falls back to the
+  // primary. The retry must reuse the recorded session instead of that answer.
+  await request('/sessions/archive', dana.token, { sessionId: origin })
+  db.exec('DROP TRIGGER fail_self_retry_update')
+  const receipt = await deliveryReceipt(dana, { recipientShortId: dana.user.shortId, text }, origin, callId)
+  assert.equal(receipt.sessionId, origin, 'the retry receipt names the recorded landing')
+  const retried = (await request('/chat/read', dana.token, { sessionId: origin })).projection
+  assert.deepEqual(retried.messages.filter(message => message.text === text).map(message => message.role), [2],
+    'the retry adds no second message')
+  assert.equal(retried.events.filter(event => event.type === 'delivery/message').length, 1)
+  assert.equal((await request('/chat/read', dana.token, { sessionId: primary })).projection.messages
+    .some(message => message.text === text), false, 'the retry stays out of the primary')
+  assert.equal(db.prepare('SELECT status FROM deliveries WHERE delivery_id = ?').get(pending.delivery_id).status, 1)
+  assert.equal(db.prepare('SELECT recipient_session_id FROM deliveries WHERE delivery_id = ?').get(pending.delivery_id).recipient_session_id, origin)
+  // The landing difference is not part of the identity check; the content is.
+  assert.match(await tool(dana, 'deliver_message', { recipientShortId: dana.user.shortId, text: `${text} changed` }, origin, callId),
+    /different content or recipient/)
+  db.close()
+})
+
+test('boot recovery settles a pending self delivery into its recorded origin without a tool call', async () => {
+  const erin = await user('self-boot-erin')
+  const primary = (await request('/sessions/primary', erin.token)).session.id
+  await tool(erin, 'groups', {}, primary)
+  const origin = (await request('/sessions/create', erin.token)).session.id
+  assert.notEqual(origin, primary)
+  const text = 'Boot recovery lands in the recorded origin'
+  const db = new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
+  db.exec(`CREATE TRIGGER fail_self_boot_update BEFORE UPDATE ON deliveries WHEN NEW.text = '${text}'
+    BEGIN SELECT RAISE(ABORT, 'injected business completion failure'); END`)
+  assert.match(await tool(erin, 'deliver_message', { recipientShortId: erin.user.shortId, text }, origin, 'self-boot-call'),
+    /injected business completion failure/)
+  const pending = db.prepare('SELECT * FROM deliveries WHERE text = ?').get(text)
+  assert.equal(pending.status, 0)
+  assert.equal(pending.recipient_session_id, origin, 'the pending row names the origin as the landing')
+  const appended = (await request('/chat/read', erin.token, { sessionId: origin })).projection
+  assert.deepEqual(appended.messages.filter(message => message.text === text).map(message => message.role), [2],
+    'the failed business completion still leaves one durable message in the origin')
+  // The restart is the only caller after this point: startup settlement, not a
+  // new tool call, must pick the row up and use its recorded session.
+  await stopBackend()
+  db.exec('DROP TRIGGER fail_self_boot_update')
+  await startBackend()
+  await eventually(() => {
+    try { return db.prepare('SELECT status FROM deliveries WHERE delivery_id = ?').get(pending.delivery_id)?.status }
+    catch { return undefined }
+  }, status => status === 1)
+  const recovered = (await request('/chat/read', erin.token, { sessionId: origin })).projection
+  assert.deepEqual(recovered.messages.filter(message => message.text === text).map(message => message.role), [2],
+    'startup settlement adds no second message')
+  const delivered = recovered.events.filter(event => event.type === 'delivery/message')
+  assert.equal(delivered.length, 1)
+  assert.equal(db.prepare('SELECT message_id FROM deliveries WHERE delivery_id = ?').get(pending.delivery_id).message_id,
+    delivered[0].data.message.id, 'the settled row names the message already in the origin log')
+  assert.equal((await request('/chat/read', erin.token, { sessionId: primary })).projection.messages
+    .some(message => message.text === text), false, 'startup settlement stays out of the primary')
+  db.close()
+})
