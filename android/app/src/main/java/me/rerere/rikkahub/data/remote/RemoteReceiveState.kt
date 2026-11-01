@@ -19,9 +19,9 @@ import kotlinx.coroutines.launch
  * the turn it publishes the account (see [bindIdentity]) — the previous account's list and chats
  * are retired before a collector can observe the new identity.
  *
- * Reception also owns the reminder: a session records the episode it owes in its own durable
- * record, and this module sees every session, so a backlog is published as one reminder rather
- * than one per session.
+ * Reception also owns the reminders: a session records the episode it owes in its own durable
+ * record, and this module sees every session, so each owed landing session gets its own reminder
+ * that opens where the content is.
  */
 class RemoteReceiveState(
     backend: SessionBackend,
@@ -201,10 +201,10 @@ class RemoteReceiveState(
 
     /**
      * Publish only once no observed session is still catching up: a session mid-recovery has not
-     * said whether it owes anything, so publishing earlier would spend the reminder on whichever
-     * sessions answered first — one reminder per arriving session. A session whose attempt failed
-     * has answered too: it owes nothing on that connection, so it stops holding the backlog and a
-     * permanently unreachable session cannot keep another session's reminder waiting.
+     * said whether it owes anything, so publishing earlier would settle a partial backlog from
+     * whichever sessions answered first instead of one pass over all of them. A session whose
+     * attempt failed has answered too: it owes nothing on that connection, so it stops holding the
+     * backlog and a permanently unreachable session cannot keep another session's reminder waiting.
      *
      * The debt itself is read from the ledger by the account's session keys. A live runtime is
      * asked only what it observed — never whether anything is owed — so a debt written by a
@@ -242,17 +242,23 @@ class RemoteReceiveState(
                 // Consumed before the attempt: a crash here may miss the sound, but cannot replay it.
                 owed.forEach { consume(it) }
                 if (started != epoch || !observing || !notificationsEnabled() || platform.isForeground()) return@launch
-                // One reminder for the account's whole backlog. It opens the primary session when
-                // that one owes something, so a merge still lands where the user reads.
-                val primary = owned.snapshot.value.primarySessionId
-                val target = owed.minWithOrNull(compareBy({ it.key.sessionId != primary }, { it.key.sessionId }))
-                    ?: return@launch
-                platform.publish(target.key, target.preview)
+                // One reminder per owed landing session, each opening the session that holds the
+                // content. The primary session earns no preference here: it is only one landing.
+                owed.forEach { target ->
+                    try {
+                        platform.publish(target.key, target.preview)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // The debt was consumed before the attempt, so this landing's sound is
+                        // lost rather than replayed; the other landings still get their reminder.
+                    }
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                // The records were consumed before the attempt, so this attempt's sound is lost
-                // rather than replayed; the retry only publishes what a later settlement owes.
+                // A read or consumption failed part-way. The retry publishes whatever a later
+                // settlement still owes; it cannot replay a landing that was already consumed.
                 scope.launch { delay(RETRY_MILLIS); publishBacklog() }
             } finally {
                 publishing = null

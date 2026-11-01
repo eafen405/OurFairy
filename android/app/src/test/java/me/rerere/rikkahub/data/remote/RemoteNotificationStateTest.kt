@@ -16,8 +16,8 @@ import org.junit.Test
 
 /**
  * A session only records the episode it owes the reminder; reception sees every session and
- * publishes the backlog once. These tests therefore drive the session through reception, because
- * that module owns when a reminder appears.
+ * publishes each owed session's reminder. These tests therefore drive the session through
+ * reception, because that module owns when a reminder appears.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoteNotificationStateTest {
@@ -161,7 +161,7 @@ class RemoteNotificationStateTest {
             completed = RemoteCompletedActivity("s/5", 5, 6, 5), delivery = RemoteActivityDelivery("s/1", 2)))); runCurrent()
         assertEquals(listOf("delivered2", "delivered6"), platform.alerts.map { it.second })
     }
-    @Test fun `reconnect waits for catchup and writer ack then merges backlog without guessing unknown as quiet`() = runTest {
+    @Test fun `reconnect waits for catchup and writer ack then publishes the backlog without guessing unknown as quiet`() = runTest {
         val store = Store()
         val key = ChatSyncKey("https://fairy", 1, "s")
         store.seed(key, ChatSyncRecord(0, true, notificationThrough = 0))

@@ -100,8 +100,8 @@ data class RemoteChatSnapshot(
      * Whether this session still has to answer before the account's backlog can be settled.
      *
      * A session that has not received its opening frame yet reports neither `syncing` nor a
-     * failure, so waiting on `syncing` alone let the first arrival spend the reminder before the
-     * other sessions said what they owed. A failed attempt has answered — it owes nothing on that
+     * failure, so waiting on `syncing` alone let the first arrival publish before the other
+     * sessions said what they owed. A failed attempt has answered — it owes nothing on that
      * connection — so it stops holding the others back.
      */
     internal val isCatchingUp: Boolean
