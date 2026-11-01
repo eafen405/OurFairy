@@ -53,7 +53,7 @@ Correctly done: canHostDelivery as the only new service surface (service.ts:316)
 | --- | --- | --- |
 | F1（Standards 1） | 已修 | 在 `backend/sessions/src/service.ts` 的 `canHostDelivery` KDoc 与 `backend/sessions/README.md` 删除「missing/ownerless/foreign 返回 false 而不是抛错」的句子；保留谓词定义（header 存在、owner 是调用者、未归档）。归档输入已由 `tests/text-delivery.test.mjs` 端到端覆盖，不新增服务级接缝。 |
 | F2（Standards 2 + Spec b2） | 已修 | `backend/delivery/src/target.ts` 改为 `deliveryTargetOf({ senderShortId, recipientShortId, originSessionId, originCanHost, primarySessionId }) => string`，直接返回落点会话 id；`backend/delivery/src/index.ts` 恢复始终解析主会话，并无条件问一次 `canHostDelivery`（跨用户投递也问），自身收件人谓词只留在纯规则里。`tests/delivery-target.test.mjs` 同步。`backend/delivery/README.md` 删除「only home / no imports」「created on first use, only when it is the landing」与无 import 保证叙事；`backend/sessions/README.md` 删除「不必枚举归档列表」的保证，改写为单行读的事实。记录行的 `settle` 与回执路径未改。 |
-| F3（Standards 3） | 未完成（开放项） | 本分支不把最终门禁当作收口：Lead 仍在本次修订合入后的最终集成 tip 运行 `npm test`、`npm run combo:verify` 与 `cd android && ./gradlew test lintDebug`。本次提交的 pre-commit 因改动含 `android/` 路径自动跑了 full gate（`npm test` 473 pass / 0 fail、`combo: combination verified`、Android `BUILD SUCCESSFUL`）；那只是提交门禁，不替代 Lead 在最终集成 tip 的复核，F3 保持未完成。 |
+| F3（Standards 3） | 已修（Lead 在最终集成 tip 复核） | 修订合入后的最终集成 tip `f000f67781` 上由 Lead 重跑全量门禁：`npm test` 473 pass / 0 fail、`npm run combo:verify` 三行 ok、`cd android && ./gradlew test lintDebug` BUILD SUCCESSFUL；见文末「最终门禁」。本次修订提交的 pre-commit 也跑过同一条 full gate（含 Android），但那只是提交门禁，不替代这里的复核。 |
 | F4（Standards 4） | 已修 | `tests/text-delivery.test.mjs` 增加 `selfDeliverySessions` helper，替换 3 处「填充主会话再建普通会话」块；`tests/file-delivery.test.mjs` 增加同名 helper，替换 1 处。既有断言不变。 |
 | F5（Standards 5） | 未修（有理由） | 三条 archive SQL 回答不同问题：`list` 的集合查询、`isArchived` 的单行读取、restore 的状态写入。共享 SQL 片段会把这三种语义压成一个不透明片段；按 AGENTS「结构按需」保留三处直写。 |
 | F6（Standards 6 + Spec c1） | 已修 | `tests/text-delivery.test.mjs` 的重试用例只把 `deliveries` UPDATE 触发器当故障注入，经短生命周期连接安装/删除，不读 `status`/`recipient_session_id`/`message_id`；外部断言工具错误、重试回执 `sessionId`、`origin` 恰一条消息、主会话无、换文本冲突。启动恢复用例改用既有 `backend/chat/test-support/fail-outlets.ts` 的 `failFlush`：失败一次、归档 `origin`、不带故障层重启，只在重启后读投影断言 `origin` 恰一条、主会话无，不读库、不调工具。`work/implementation/evidence/284-retry-landing/README.md` 已同步。 |
@@ -82,4 +82,19 @@ Correctly done: canHostDelivery as the only new service surface (service.ts:316)
 
 Android 方面只跑了提交门禁自动执行的 `cd android && ./gradlew test lintDebug`（`BUILD SUCCESSFUL`）；没有额外跑 `assembleDebug`/`assembleRelease`，因为 S2 只改 KDoc 注释，不改 Kotlin 行为。
 
-全量 `npm test` 与 `npm run combo:verify` 已由本次提交的 pre-commit 执行（结果见上）；它们不改变 F3 仍是 Lead 在最终集成 tip 复核的开放项。
+全量 `npm test` 与 `npm run combo:verify` 已由本次提交的 pre-commit 执行（结果见上）；F3 随后由 Lead 在最终集成 tip 复核，见下节。
+
+## 最终门禁（Lead，最终集成 tip）
+
+最终集成 tip：`f000f67781`（`Merge branch 'ticket/280-review-fixes'` 及其证据索引提交）。
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run build` | exit 0（`npm test` 的 pretest 执行） |
+| `npm test` | 473 pass / 0 fail / 0 cancelled / 0 skipped（duration 75.6s） |
+| `npm run combo:verify` | `combo: combination verified`；ourfairy / dsh / android source 三行 ok |
+| `cd android && ./gradlew test lintDebug` | `BUILD SUCCESSFUL in 1m 43s`（130 tasks：6 executed、124 up-to-date） |
+| `node scripts/evidence-index.ts --check` | `evidence index is current` |
+
+第一次全量尝试在 `tests/gateway.test.mjs` 上挂起超过 12 分钟（该测试进程无子进程、无输出），手动终止；随后单跑 `tests/gateway.test.mjs` 12/12 通过（56s），再用共享 corepack 缓存的 PATH 垫片重跑全量通过。垫片只让隔离复制仓库复用同一份 pnpm 缓存，不改测试选择与命令；F3 至此关闭。提交门禁与这里的复核都只覆盖模型替身，不代表真实云模型或真机验收。
+
