@@ -62,14 +62,17 @@ _Avoid_: 断点续传、自动登录
 
 **附件去处**（`RemoteAttachmentDestination`）：
 点会话附件后去哪里：图片预览、文本预览、外派系统应用、另存为。判定只来自
-`remoteAttachmentDestination(mime, name)`：有可信 MIME 时以 MIME 为准，`application/octet-stream`
-或缺失时才按后缀纠正，未知类型回落另存为；卡片只上报点击，不自己猜类型。四类结果由
-`RemoteAttachmentDestinationTest` 固定，面板上的实际去向由 `RemoteAttachmentPreviewTest` 固定。
+`remoteAttachmentDestinationFor(mime, name, bytes)`：有可信 MIME 时以 MIME 为准，`application/octet-stream`
+或缺失时才按后缀纠正，未知类型回落另存为；文本超过 2 MiB 不在应用内展开，转外派/另存为。文本预览
+内 Markdown 与纯文本的取舍由 `remoteAttachmentTextLayout(mime, name)` 给出：`.md`/`.markdown` 后缀或
+`text/markdown` MIME 为 Markdown，其余为等宽纯文本。卡片只上报点击，不自己猜类型。四类结果与 2 MiB
+上限由 `RemoteAttachmentDestinationTest` 固定，Markdown 取舍由 `RemoteAttachmentTextTest` 固定，
+面板上的实际去向由 `RemoteAttachmentPreviewTest` 固定。
 _Avoid_: 文件类型判断、MIME 猜测
 
 **附件预览缓存**（`attachmentPreviewFile`）：
-应用缓存 `attachment-preview/` 子目录里按（会话、消息、附件序号）派生的图片预览文件。同一附件
-重复打开复用同一路径，预览与保存共用这份字节；关闭预览删除该文件，已另存的文件不受影响。
+应用缓存 `attachment-preview/` 子目录里按（会话、消息、附件序号）派生的预览文件，图片与文本共用。
+同一附件重复打开复用同一路径，预览与保存共用这份字节；关闭预览删除该文件，已另存的文件不受影响。
 路径、一次下载与关闭清理分别由 `RemoteAttachmentPreviewFileTest`、`RemoteAttachmentStateTest`
 与 `RemoteAttachmentPreviewTest` 固定。
 _Avoid_: 下载目录、缩略图缓存、临时下载
