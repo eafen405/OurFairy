@@ -237,6 +237,10 @@ fun RemoteChatPanel(
                 downloadEnabled = !snapshot.downloading,
                 onDownload = { message, attachment ->
                     if (!snapshot.downloading) {
+                        fun saveOriginal() {
+                            pendingDownload = PendingDownload(snapshot.attachmentEpoch, message.messageId, attachment)
+                            saveAs.launch(attachment.name)
+                        }
                         when (remoteAttachmentDestination(attachment.mime, attachment.name)) {
                             RemoteAttachmentDestination.IMAGE -> {
                                 // The cached path depends on the attachment's coordinates only, so
@@ -252,13 +256,10 @@ fun RemoteChatPanel(
                             }
 
                             // The text and external destinations arrive in follow-up tickets; until
-                            // then every non-image attachment keeps today's save-as.
-                            RemoteAttachmentDestination.TEXT,
-                            RemoteAttachmentDestination.EXTERNAL,
-                            RemoteAttachmentDestination.SAVE_AS -> {
-                                pendingDownload = PendingDownload(snapshot.attachmentEpoch, message.messageId, attachment)
-                                saveAs.launch(attachment.name)
-                            }
+                            // then each keeps today's save-as in its own branch.
+                            RemoteAttachmentDestination.TEXT -> saveOriginal()
+                            RemoteAttachmentDestination.EXTERNAL -> saveOriginal()
+                            RemoteAttachmentDestination.SAVE_AS -> saveOriginal()
                         }
                     }
                 },
