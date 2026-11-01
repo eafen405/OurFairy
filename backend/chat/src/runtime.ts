@@ -225,7 +225,7 @@ export class SessionRuntime {
    * everything around them:
    *
    * - the target session's queue, so this cannot race `open`/resume or another
-   *   writer; the caller must not already hold the same queue;
+   *   writer; the caller must not still be running work in the same queue;
    * - the live/cold branch, decided inside that queue;
    * - the cold write handle's claim, `read`/`append`/`flush`/`close` order, and
    *   the restored Session's four construction parameters;
