@@ -342,6 +342,7 @@
 | 目录 | 内容 |
 | --- | --- |
 | [282-self-delivery-text](282-self-delivery-text/README.md) | #282 自投文字落发起会话：落点判定收进无依赖的 `delivery/src/target.ts` 纯函数，`index.ts` 在 prepare 前判定一次并把结果记为 `deliveries.session_id`（重试/恢复沿用记录）；自投且发起会话存在、属于发送者、未归档时不再解析或创建主会话。会话服务新增唯一布尔读 `canHostDelivery`，归档事实经 archive-store 新单行 `isArchived` 取得，不枚举归档列表。实测发现基线的同会话写入会被 `SessionQueues` 误判为「调用链已持有」（chat `send` 的 async 上下文带进回合），改为按条目是否已结束判定：已结束条目可重入、运行中仍立即拒绝；否则「自投回写发起会话」必然抛错。工具描述、GLOSSARY 主会话/投递消息、delivery/chat/sessions README 同步。真实启动器行为用例覆盖自投落发起会话、回执即落点、归档后回落主会话，跨用户用例保持通过 |
+| [283-file-landing](283-file-landing/README.md) | #283 自投文件随落点（characterisation，生产代码无改动）：新用户填满主会话后开普通会话 A，在 A 写私有空间文件并自投文字+文件；断言 A 中一条普通 Fairy 消息带正确附件清单、一条 delivery/message 事件、主会话无副本；从 A 下载原件 200 且字节一致，同消息同索引从主会话与另一会话均 404。落点已在 prepare 前记录，settle 把文字与附件清单写进该记录会话，因此文件路径无需额外规则 |
 | [285-landing-notifications](285-landing-notifications/README.md) | #285 Android 提醒按落点会话发送：`publishBacklog()` 不再把所有欠账合并成一条、优先主会话，而是对 `owedRecords()` 逐条 `publish(key, preview)`，每条都指向内容真正所在的会话；单条发布被拒只丢该落点的一次声音（消费先于尝试，不重放），其他落点照常尝试。前台/关闭接收/停止观察的抑制与追平门保持不变；`AndroidRemoteNotifications` 的 URI tag 已让多会话通知共存，未改。定向测试新增三会话错峰 3 条提醒、仅非主会话欠账不改指、单条拒绝不吞其他落点；真机通知未验收 |
 
 ## 界面微调（#215/#217/#218/#239/#255）
