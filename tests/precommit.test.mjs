@@ -293,6 +293,19 @@ test('a merge and an explicit --full run the full suite whatever changed', () =>
   assert.equal(classify(['docs/README.md'], { forceFull: true }), 'full', '--full must force the full suite')
 })
 
+test('the merge entry point asks for the full gate itself, because MERGE_HEAD is not written yet', () => {
+  // Git runs `pre-merge-commit` before the merge state is recorded, so
+  // `MERGE_HEAD` is absent there and `scripts/precommit.ts` cannot infer the
+  // merge; the hook names it with `--merge` instead.
+  const printed = execFileSync(process.execPath, ['scripts/precommit.ts', '--print', '--merge'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  })
+  const decision = JSON.parse(printed)
+  assert.equal(decision.mode, 'full', 'a merge commit is judged as a whole, whatever its diff touches')
+  assert.deepEqual(decision.commands, FULL_COMMANDS)
+})
+
 test('a selection wider than the limit falls back to the full suite', () => {
   const staged = count => Array.from({ length: count }, (_, index) => `tests/synthetic-${index}.test.mjs`)
   assert.equal(plan(staged(45)).mode, 'related', 'a selection at the limit still runs its own tests')
@@ -316,19 +329,23 @@ test('every gate keeps the combination check, so drift is caught either way', ()
 test('the hooks directory Git uses provides both commit entry points into the shared gate', () => {
   // Git runs `pre-merge-commit` for a merge commit and never `pre-commit`, so a
   // directory holding only `pre-commit` lets every merge through without the
-  // gate — and the full-suite branch `scripts/precommit.ts` keeps for merges is
-  // unreachable. `core.hooksPath` is what Git actually executes; CI does not
-  // install hooks, so an unset path falls back to the directory `hooks:install`
-  // would point at.
+  // gate. The merge hook passes `--merge`: at that point Git has not written
+  // MERGE_HEAD yet, so the script cannot infer the merge from the repository.
+  // `core.hooksPath` is what Git actually executes; CI does not install hooks,
+  // so an unset path falls back to the directory `hooks:install` would point at.
   const configured = spawnSync('git', ['config', '--get', 'core.hooksPath'], { cwd: repoRoot, encoding: 'utf8' })
   const hooksPath = configured.status === 0 ? configured.stdout.trim() : '.githooks'
   const hooksDir = resolve(repoRoot, hooksPath)
-  for (const hook of ['pre-commit', 'pre-merge-commit']) {
+  const delegation = {
+    'pre-commit': /^exec node scripts\/precommit\.ts$/mu,
+    'pre-merge-commit': /^exec node scripts\/precommit\.ts --merge$/mu,
+  }
+  for (const [hook, expected] of Object.entries(delegation)) {
     const file = join(hooksDir, hook)
     assert.ok(existsSync(file), `${hook} is missing from ${hooksPath}; a merge commit runs only pre-merge-commit`)
     assert.ok((statSync(file).mode & 0o111) !== 0, `${hook} must be executable, or Git skips it silently`)
     const body = readFileSync(file, 'utf8')
-    assert.match(body, /^exec node scripts\/precommit\.ts$/mu, `${hook} must delegate to the shared gate`)
+    assert.match(body, expected, `${hook} must delegate to the shared gate`)
     assert.doesNotMatch(body, /^npm test$/mu, `${hook} must not keep its own copy of the command list`)
   }
 })

@@ -29,6 +29,7 @@
  *   node scripts/precommit.ts           # classify the staged change and run the gate
  *   node scripts/precommit.ts --print   # print the decision as JSON, run nothing
  *   node scripts/precommit.ts --full    # run the full suite whatever changed
+ *   node scripts/precommit.ts --merge   # name a merge the hook cannot see yet
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -294,6 +295,10 @@ export function stagedPaths(root: string): string[] {
 
 /**
  * Whether this checkout is in the middle of a merge.
+ *
+ * `pre-merge-commit` runs before Git writes MERGE_HEAD, so that hook passes
+ * `--merge` instead; this check covers `git commit` finishing a conflicted
+ * merge.
  * @param root
  * @returns
  */
@@ -304,7 +309,10 @@ export function isMerging(root: string): boolean {
 function main(argv: string[]): void {
   const print = argv.includes('--print')
   const paths = stagedPaths(repoRoot)
-  const decision = plan(paths, { merge: isMerging(repoRoot), forceFull: argv.includes('--full') })
+  const decision = plan(paths, {
+    merge: isMerging(repoRoot) || argv.includes('--merge'),
+    forceFull: argv.includes('--full'),
+  })
   if (print) {
     process.stdout.write(`${JSON.stringify({ ...decision, paths }, null, 2)}\n`)
     return
