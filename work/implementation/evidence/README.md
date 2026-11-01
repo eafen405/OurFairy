@@ -347,6 +347,12 @@
 | [280-review](280-review/README.md) | #280 两轴复审修订：Standards 轴 3 硬 + 4 判断、Spec 轴 2 缺 + 2 越界 + 2 疑似错误。已修：删除 `canHostDelivery` 不可执行的返回声称与 target.ts「唯一落点权威」措辞；落点纯规则直接返回会话 id，删掉重复的自投判定与未要求的「跳过 primary()」；#284 用例改为外部断言（触发器只作故障注入，启动恢复走既有 failFlush），补队列重入交错用例，修正客户端主会话注释，撤回归档注释里的循环理由。F5（三处归档 SQL）记录不修理由；S1（无发起会话纯函数覆盖）按票面认可保留；最终门禁由收口在最终 tip 复核。两轴报告原文与逐项处置见目录 README |
 | [285-landing-notifications](285-landing-notifications/README.md) | #285 Android 提醒按落点会话发送：`publishBacklog()` 不再把所有欠账合并成一条、优先主会话，而是对 `owedRecords()` 逐条 `publish(key, preview)`，每条都指向内容真正所在的会话；单条发布被拒只丢该落点的一次声音（消费先于尝试，不重放），其他落点照常尝试。前台/关闭接收/停止观察的抑制与追平门保持不变；`AndroidRemoteNotifications` 的 URI tag 已让多会话通知共存，未改。定向测试新增三会话错峰 3 条提醒、仅非主会话欠账不改指、单条拒绝不吞其他落点；真机通知未验收 |
 
+## 合并提交门禁（#286）
+
+| 目录 | 内容 |
+| --- | --- |
+| [286-merge-hook](286-merge-hook/README.md) | #286 `.githooks` 补 `pre-merge-commit`，与 `pre-commit` 同样委托 `scripts/precommit.ts`；实测发现 Git 2.53 在 `pre-merge-commit` 运行之后才写 `MERGE_HEAD`，因此钩子显式传 `--merge` 要求全量门禁（`isMerging` 保留给冲突合并后的 `git commit`）。结构测试从 `core.hooksPath` 取实际目录，固定两个入口都存在、可执行并委托到同一脚本，另有 `--print --merge` 判定测试。真实合并未用 `--no-verify`：钩子输出 `pre-commit: full gate`、474/474、combo verified；README「提交前钩子」同步。 |
+
 ## 界面微调（#215/#217/#218/#239/#255）
 
 | 目录 | 内容 |
