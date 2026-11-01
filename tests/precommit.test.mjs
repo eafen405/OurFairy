@@ -23,10 +23,10 @@
  * suite still passes.
  */
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
-import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import {
   DOCS_COMMANDS,
@@ -313,10 +313,24 @@ test('every gate keeps the combination check, so drift is caught either way', ()
   )
 })
 
-test('the hook runs the shared script instead of its own command list', () => {
-  const hook = readFileSync(join(repoRoot, '.githooks', 'pre-commit'), 'utf8')
-  assert.match(hook, /exec node scripts\/precommit\.ts/u, 'the hook must delegate, or the split is unreachable')
-  assert.doesNotMatch(hook, /^npm test$/mu, 'the hook must not keep its own copy of the command list')
+test('the hooks directory Git uses provides both commit entry points into the shared gate', () => {
+  // Git runs `pre-merge-commit` for a merge commit and never `pre-commit`, so a
+  // directory holding only `pre-commit` lets every merge through without the
+  // gate — and the full-suite branch `scripts/precommit.ts` keeps for merges is
+  // unreachable. `core.hooksPath` is what Git actually executes; CI does not
+  // install hooks, so an unset path falls back to the directory `hooks:install`
+  // would point at.
+  const configured = spawnSync('git', ['config', '--get', 'core.hooksPath'], { cwd: repoRoot, encoding: 'utf8' })
+  const hooksPath = configured.status === 0 ? configured.stdout.trim() : '.githooks'
+  const hooksDir = resolve(repoRoot, hooksPath)
+  for (const hook of ['pre-commit', 'pre-merge-commit']) {
+    const file = join(hooksDir, hook)
+    assert.ok(existsSync(file), `${hook} is missing from ${hooksPath}; a merge commit runs only pre-merge-commit`)
+    assert.ok((statSync(file).mode & 0o111) !== 0, `${hook} must be executable, or Git skips it silently`)
+    const body = readFileSync(file, 'utf8')
+    assert.match(body, /^exec node scripts\/precommit\.ts$/mu, `${hook} must delegate to the shared gate`)
+    assert.doesNotMatch(body, /^npm test$/mu, `${hook} must not keep its own copy of the command list`)
+  }
 })
 
 test('CI runs the full gate on push and manual dispatch, and builds before it tests', () => {
