@@ -3,8 +3,8 @@
 - 票：[#284](https://github.com/eafen405/OurFairy/issues/284)；父 spec：[#280](https://github.com/eafen405/OurFairy/issues/280)
 - 分支：`ticket/284-retry-landing`；worktree `.worktrees/284-retry-landing`
 - 基线：`integration/spec-280` @ `114f7b451e`（`git merge-base --is-ancestor 114f7b451e HEAD` 通过）
-- 合并集成：`git merge integration/spec-280` → fast-forward `114f7b451e` → `50f22d22d3`（含 #283/#285，无冲突、无合并提交）
-- 交付提交：本 README 与 `tests/text-delivery.test.mjs` 的同一提交（SHA 见 `git log -1 --format=%H -- work/implementation/evidence/284-retry-landing/README.md`）
+- 合并集成：开工 `git merge integration/spec-280` → fast-forward `114f7b451e` → `50f22d22d3`（含 #283/#285）；收口前 tip 推进到 `dfbf58a2b0`（#283 证据索引），再合并为 `2c2452a5fa`（无冲突，未改测试）
+- 交付提交：`c522e2ec53`（本 README 与 `tests/text-delivery.test.mjs` 的同一提交；`git log --diff-filter=A -1 --format=%h -- work/implementation/evidence/284-retry-landing/README.md` 可复读该 SHA）
 
 ## 结论
 
@@ -72,7 +72,9 @@
 | 合并后构建 | `npm run build` | exit 0 |
 | 本票套件（合并后） | `node --test tests/text-delivery.test.mjs` | 9 pass / 0 fail |
 | 共享投递行为（合并后） | `node --test tests/file-delivery.test.mjs tests/delivery-row.test.mjs tests/delivery-cold-concurrency.test.mjs tests/delivery-target.test.mjs` | 17 pass / 0 fail |
-| 合并集成分支 | `git merge integration/spec-280` | fast-forward 到 `50f22d22d3`，无冲突、无合并提交 |
+| 合并集成分支（开工） | `git merge integration/spec-280` | fast-forward 到 `50f22d22d3`，无冲突、无合并提交 |
+| 合并集成分支（收口前） | `git merge integration/spec-280`（`dfbf58a2b0`） | 合并提交 `2c2452a5fa`，无冲突；只带入证据索引两个文件 |
+| 收口后构建与套件 | `npm run build`；`node --test tests/text-delivery.test.mjs tests/docs.test.mjs` | build exit 0；10 pass / 0 fail |
 | 提交门禁 | `git commit`（`.githooks/pre-commit` → `scripts/precommit.ts`，2 个改动路径选 `tests/docs.test.mjs` + `tests/text-delivery.test.mjs`） | `npm run build` exit 0；10 pass / 0 fail；`combo:verify` 三行 ok、`combo: combination verified` |
 | 证据索引 | `node scripts/evidence-index.ts --check` | `evidence index is current`（本目录尚未登记进 `index/29-spec-280.json`，按票面要求留给 Lead） |
 
