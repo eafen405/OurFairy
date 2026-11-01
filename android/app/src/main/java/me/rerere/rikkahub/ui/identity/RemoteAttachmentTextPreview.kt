@@ -19,6 +19,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,8 +37,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.rikkahub.data.remote.RemoteMessageFormat
+import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.fairy.FairyColorScheme
 import me.rerere.rikkahub.ui.fairy.LocalFairyTokens
+import me.rerere.rikkahub.ui.theme.LocalDarkMode
+import me.rerere.ui.markdown.MarkdownDocument
+import me.rerere.ui.markdown.parseMarkdown
 
 /** One cached text attachment plus how it is presented; the panel decides both at click time. */
 internal data class RemoteAttachmentTextPreviewTarget(
@@ -48,15 +53,16 @@ internal data class RemoteAttachmentTextPreviewTarget(
 
 private sealed interface TextPreviewState {
     data object Loading : TextPreviewState
-    data class Ready(val text: String) : TextPreviewState
+    data class Ready(val text: String, val document: MarkdownDocument?) : TextPreviewState
     data class Failed(val message: String) : TextPreviewState
 }
 
 /**
  * Read-only full-screen preview of one cached text attachment, overlay-styled like the image
- * viewer so the transcript stays in place underneath. The bytes are read and decoded off the
- * main thread; Markdown goes through the same renderer a settled message body uses, everything
- * else is selectable monospace text with its line breaks and indentation unchanged.
+ * viewer so the transcript stays in place underneath. The bytes are read, decoded and (for
+ * Markdown) parsed off the main thread; Markdown goes through the same parse/render pair a
+ * settled message body uses, everything else is selectable monospace text with its line breaks
+ * and indentation unchanged.
  */
 @Composable
 internal fun AttachmentTextPreview(
@@ -74,7 +80,15 @@ internal fun AttachmentTextPreview(
                 null
             }
             when (val decoded = bytes?.let(::decodeRemoteAttachmentText)) {
-                is RemoteAttachmentText.Decoded -> TextPreviewState.Ready(decoded.text)
+                is RemoteAttachmentText.Decoded -> TextPreviewState.Ready(
+                    text = decoded.text,
+                    document = if (target.layout == RemoteAttachmentTextLayout.MARKDOWN) {
+                        withContext(Dispatchers.Default) { parseMarkdown(decoded.text) }
+                    } else {
+                        null
+                    },
+                )
+
                 RemoteAttachmentText.Undecodable -> TextPreviewState.Failed("无法解码")
                 null -> TextPreviewState.Failed("无法读取附件")
             }
@@ -127,7 +141,11 @@ internal fun AttachmentTextPreview(
                 }
 
                 is TextPreviewState.Ready -> when (target.layout) {
-                    RemoteAttachmentTextLayout.MARKDOWN -> MarkdownTextPreview(current.text)
+                    RemoteAttachmentTextLayout.MARKDOWN -> MarkdownTextPreview(
+                        text = current.text,
+                        document = requireNotNull(current.document),
+                    )
+
                     RemoteAttachmentTextLayout.PLAIN -> PlainTextPreview(current.text)
                 }
             }
@@ -135,16 +153,25 @@ internal fun AttachmentTextPreview(
     }
 }
 
-/** Reuse the settled message renderer so an attachment and a message cannot look different. */
+/** The same parsed document plus [MarkdownBlock] pair a settled message body renders. */
 @Composable
-private fun MarkdownTextPreview(text: String) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-    ) {
-        MessageBody(format = RemoteMessageFormat.MARKDOWN, text = text)
+private fun MarkdownTextPreview(text: String, document: MarkdownDocument) {
+    val tokens = LocalFairyTokens.current
+    CompositionLocalProvider(LocalDarkMode provides true) {
+        MaterialTheme(colorScheme = FairyColorScheme) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                MarkdownBlock(
+                    content = text,
+                    document = document,
+                    style = MaterialTheme.typography.bodyMedium.copy(color = tokens.textPrimary),
+                )
+            }
+        }
     }
 }
 

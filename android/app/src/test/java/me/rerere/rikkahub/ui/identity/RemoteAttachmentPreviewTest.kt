@@ -252,9 +252,15 @@ class RemoteAttachmentPreviewTest {
 
         clickAttachment("notes.md · ${attachmentSizeLabel(markdown.size.toLong())}")
         compose.waitUntil(timeoutMillis = 5_000) {
-            compose.onAllNodesWithText("标题").fetchSemanticsNodes().isNotEmpty() &&
-                compose.onAllNodesWithText("# 标题").fetchSemanticsNodes().isEmpty()
+            compose.onAllNodesWithContentDescription("关闭预览").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.onAllNodesWithText("标题").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(
+            "Markdown 不应仍显示原始符号",
+            compose.onAllNodesWithText("# 标题").fetchSemanticsNodes().isEmpty(),
+        )
 
         assertEquals(1, files.downloads.size)
         assertTrue("预览应读取缓存文件", cached.isFile)
