@@ -11,6 +11,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.security.MessageDigest
 import kotlin.coroutines.coroutineContext
 
 /** Per-file original limit the wire enforces; a larger selection never reaches a proposal. */
@@ -49,6 +50,30 @@ suspend fun importAttachment(context: Context, uri: Uri): ImportedAttachment {
 
 /** Destination for a download. Owned by the caller until the download finishes or is abandoned. */
 fun createAttachmentTempFile(context: Context): File = File.createTempFile(TEMP_PREFIX, null, context.cacheDir)
+
+private const val PREVIEW_DIRECTORY = "attachment-preview"
+private const val HEX = "0123456789abcdef"
+
+/**
+ * The one cached preview file for an attachment coordinate: session, message and attachment
+ * index, and nothing else. The name is a digest because those identifiers are wire values that
+ * may contain separators; the attachment's display name never takes part, so the same attachment
+ * always resumes at the same path. The directory is prepared for the download that follows.
+ */
+fun attachmentPreviewFile(context: Context, sessionId: String, messageId: String, index: Int): File {
+    val directory = File(context.cacheDir, PREVIEW_DIRECTORY)
+    directory.mkdirs()
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest("$sessionId\u0000$messageId\u0000$index".toByteArray(Charsets.UTF_8))
+    val name = buildString(digest.size * 2) {
+        digest.forEach { byte ->
+            val value = byte.toInt() and 0xff
+            append(HEX[value ushr 4])
+            append(HEX[value and 0x0f])
+        }
+    }
+    return File(directory, name)
+}
 
 /** Writes the downloaded original to the location the user picked, unchanged. The stream is */
 suspend fun exportAttachment(context: Context, target: Uri, source: File) = withContext(Dispatchers.IO) {
