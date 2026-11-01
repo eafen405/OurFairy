@@ -1,0 +1,11 @@
+{
+  "title": "附件打开：去处判定与图片预览（规格 #281）",
+  "entries": [
+    {
+      "dirs": [
+        "287-attachment-route"
+      ],
+      "note": "#287 附件去处判定与图片预览：去处收进 `ui/identity/RemoteAttachmentDestination.kt` 的无依赖纯函数 `remoteAttachmentDestination(mime, name)`（IMAGE / TEXT / EXTERNAL / SAVE_AS），可信 MIME 优先（去参数、转小写），`application/octet-stream` 或缺失时按后缀判定，图片进应用内全屏。预览缓存 `attachmentPreviewFile` 位于 `cacheDir/attachment-preview/`，文件名是（会话, 消息, 序号）三个坐标的 SHA-256 摘要，不含显示名、路径分隔符无法逃出子目录；`cacheAttachment` 与原另存为共用同一次认证下载，先写同目录 `.part` 再 `renameTo`，同坐标已有完整文件直接复用，因此一次打开下载调用恒为 1，失败或 epoch 不符的迟到下载不落最终文件。面板 `onDownload` 收敛为一个 `when`：IMAGE 解析缓存并打开复用的现有 `ImagePreviewDialog`（缩放、保存读本地绝对路径，不重新下载），`DisposableEffect` 在预览离开组合时删除缓存文件，关闭回原消息位置；TEXT、EXTERNAL、SAVE_AS 本票按票面刻意保留另存为，各占相邻分支供 #288/#289 替换。收口 `cd android && ./gradlew test lintDebug --rerun-tasks`：`BUILD SUCCESSFUL in 3m 13s`，577 tests、0 failures/errors/skips，lintDebug 通过（新增文件无告警，两条既存告警未修）；真机手势、返回键关闭与 SAF 另存未人工验收。无数据库、wire、manifest 与依赖变更"
+    }
+  ]
+}

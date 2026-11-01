@@ -347,6 +347,12 @@
 | [280-review](280-review/README.md) | #280 两轴复审修订：Standards 轴 3 硬 + 4 判断、Spec 轴 2 缺 + 2 越界 + 2 疑似错误。已修：删除 `canHostDelivery` 不可执行的返回声称与 target.ts「唯一落点权威」措辞；落点纯规则直接返回会话 id，删掉重复的自投判定与未要求的「跳过 primary()」；#284 用例改为外部断言（触发器只作故障注入，启动恢复走既有 failFlush），补队列重入交错用例，修正客户端主会话注释，撤回归档注释里的循环理由。F5（三处归档 SQL）记录不修理由；S1（无发起会话纯函数覆盖）按票面认可保留；最终门禁由收口在最终 tip 复核。两轴报告原文与逐项处置见目录 README |
 | [285-landing-notifications](285-landing-notifications/README.md) | #285 Android 提醒按落点会话发送：`publishBacklog()` 不再把所有欠账合并成一条、优先主会话，而是对 `owedRecords()` 逐条 `publish(key, preview)`，每条都指向内容真正所在的会话；单条发布被拒只丢该落点的一次声音（消费先于尝试，不重放），其他落点照常尝试。前台/关闭接收/停止观察的抑制与追平门保持不变；`AndroidRemoteNotifications` 的 URI tag 已让多会话通知共存，未改。定向测试新增三会话错峰 3 条提醒、仅非主会话欠账不改指、单条拒绝不吞其他落点；真机通知未验收 |
 
+## 附件打开：去处判定与图片预览（规格 #281）
+
+| 目录 | 内容 |
+| --- | --- |
+| [287-attachment-route](287-attachment-route/README.md) | #287 附件去处判定与图片预览：去处收进 `ui/identity/RemoteAttachmentDestination.kt` 的无依赖纯函数 `remoteAttachmentDestination(mime, name)`（IMAGE / TEXT / EXTERNAL / SAVE_AS），可信 MIME 优先（去参数、转小写），`application/octet-stream` 或缺失时按后缀判定，图片进应用内全屏。预览缓存 `attachmentPreviewFile` 位于 `cacheDir/attachment-preview/`，文件名是（会话, 消息, 序号）三个坐标的 SHA-256 摘要，不含显示名、路径分隔符无法逃出子目录；`cacheAttachment` 与原另存为共用同一次认证下载，先写同目录 `.part` 再 `renameTo`，同坐标已有完整文件直接复用，因此一次打开下载调用恒为 1，失败或 epoch 不符的迟到下载不落最终文件。面板 `onDownload` 收敛为一个 `when`：IMAGE 解析缓存并打开复用的现有 `ImagePreviewDialog`（缩放、保存读本地绝对路径，不重新下载），`DisposableEffect` 在预览离开组合时删除缓存文件，关闭回原消息位置；TEXT、EXTERNAL、SAVE_AS 本票按票面刻意保留另存为，各占相邻分支供 #288/#289 替换。收口 `cd android && ./gradlew test lintDebug --rerun-tasks`：`BUILD SUCCESSFUL in 3m 13s`，577 tests、0 failures/errors/skips，lintDebug 通过（新增文件无告警，两条既存告警未修）；真机手势、返回键关闭与 SAF 另存未人工验收。无数据库、wire、manifest 与依赖变更 |
+
 ## 界面微调（#215/#217/#218/#239/#255）
 
 | 目录 | 内容 |
