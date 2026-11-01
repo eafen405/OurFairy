@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import java.util.UUID
 import java.io.File
+import java.io.IOException
 
 /** An unresolved client command, not authoritative message history. */
 data class PendingChatSend(
@@ -546,6 +547,41 @@ class RemoteChatState(
         attachment: RemoteChatAttachment,
         destination: File,
         save: suspend (File) -> Unit,
+    ) = startAttachmentDownload(expectedEpoch, messageId, attachment, destination, keep = false, save)
+
+    /**
+     * Download one attachment into the caller's cached preview file and report it once the bytes
+     * are complete. The file stays in place for the preview to show and save, and the caller
+     * deletes it when that preview closes.
+     *
+     * A complete file already at [destination] is reused, so opening the same attachment again
+     * reads the same bytes instead of downloading them a second time. Downloads are staged at a
+     * sibling `.part` path and renamed only after the last byte, so an interrupted download can
+     * never leave a truncated file that a later open would reuse as the original.
+     */
+    fun cacheAttachment(
+        expectedEpoch: Long,
+        messageId: String,
+        attachment: RemoteChatAttachment,
+        destination: File,
+        onReady: (File) -> Unit,
+    ) {
+        if (destination.isFile && destination.length() > 0) {
+            if (expectedEpoch == attachmentEpoch) onReady(destination) else destination.delete()
+            return
+        }
+        startAttachmentDownload(expectedEpoch, messageId, attachment, destination, keep = true) {
+            onReady(it)
+        }
+    }
+
+    private fun startAttachmentDownload(
+        expectedEpoch: Long,
+        messageId: String,
+        attachment: RemoteChatAttachment,
+        destination: File,
+        keep: Boolean,
+        save: suspend (File) -> Unit,
     ) {
         val backend = attachmentsBackend
         val credential = token
@@ -556,16 +592,21 @@ class RemoteChatState(
         }
         mutable.value = mutable.value.copy(downloading = true, attachmentNotice = null)
         download = scope.launch {
+            val target = if (keep) File(destination.parentFile, destination.name + ".part") else destination
             try {
-                backend.download(credential, selected.sessionId, messageId, attachment, destination)
+                target.parentFile?.mkdirs()
+                backend.download(credential, selected.sessionId, messageId, attachment, target)
                 if (expectedEpoch != attachmentEpoch) return@launch
+                if (keep && !target.renameTo(destination)) throw IOException("附件缓存无法写入")
                 save(destination)
-                if (expectedEpoch == attachmentEpoch) mutable.value = mutable.value.copy(attachmentNotice = "原件已保存")
+                if (!keep && expectedEpoch == attachmentEpoch) {
+                    mutable.value = mutable.value.copy(attachmentNotice = "原件已保存")
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
                 if (expectedEpoch == attachmentEpoch) mutable.value = mutable.value.copy(attachmentNotice = failure.description())
             } finally {
-                destination.delete()
+                if (keep) target.delete() else destination.delete()
                 if (expectedEpoch == attachmentEpoch) mutable.value = mutable.value.copy(downloading = false)
             }
         }

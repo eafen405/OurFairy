@@ -104,6 +104,7 @@ fun RemoteChatPanel(
     // the one from the conversation the user was looking at when they chose the files.
     var selectionEpoch by remember(snapshot.attachmentEpoch) { mutableStateOf<Long?>(null) }
     var pendingDownload by remember(snapshot.attachmentEpoch) { mutableStateOf<PendingDownload?>(null) }
+    var previewPath by remember(snapshot.attachmentEpoch) { mutableStateOf<String?>(null) }
 
     var speechBusy by remember(snapshot.attachmentEpoch) { mutableStateOf(false) }
     var speechError by remember(snapshot.attachmentEpoch) { mutableStateOf<String?>(null) }
@@ -236,11 +237,35 @@ fun RemoteChatPanel(
                 downloadEnabled = !snapshot.downloading,
                 onDownload = { message, attachment ->
                     if (!snapshot.downloading) {
-                        pendingDownload = PendingDownload(snapshot.attachmentEpoch, message.messageId, attachment)
-                        saveAs.launch(attachment.name)
+                        when (remoteAttachmentDestination(attachment.mime, attachment.name)) {
+                            RemoteAttachmentDestination.IMAGE -> {
+                                // The cached path depends on the attachment's coordinates only, so
+                                // reopening this one reads the bytes already on disk.
+                                snapshot.sessionId?.let { sessionId ->
+                                    val destination = attachmentPreviewFile(
+                                        context, sessionId, message.messageId, attachment.index,
+                                    )
+                                    state.cacheAttachment(
+                                        snapshot.attachmentEpoch, message.messageId, attachment, destination,
+                                    ) { file -> previewPath = file.absolutePath }
+                                }
+                            }
+
+                            // The text and external destinations arrive in follow-up tickets; until
+                            // then every non-image attachment keeps today's save-as.
+                            RemoteAttachmentDestination.TEXT,
+                            RemoteAttachmentDestination.EXTERNAL,
+                            RemoteAttachmentDestination.SAVE_AS -> {
+                                pendingDownload = PendingDownload(snapshot.attachmentEpoch, message.messageId, attachment)
+                                saveAs.launch(attachment.name)
+                            }
+                        }
                     }
                 },
             )
+        }
+        previewPath?.let { path ->
+            AttachmentImagePreview(path = path, onDismissRequest = { previewPath = null })
         }
         Spacer(Modifier.height(8.dp))
         Composer(
