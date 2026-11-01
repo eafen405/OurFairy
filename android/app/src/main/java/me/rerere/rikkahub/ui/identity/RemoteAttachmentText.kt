@@ -22,20 +22,16 @@ internal enum class RemoteAttachmentTextLayout {
     PLAIN,
 }
 
-private val MARKDOWN_SUFFIXES = setOf("md", "markdown")
-
 /**
- * Markdown when the MIME says so or the name carries a Markdown suffix. The suffix decides for
- * `text/plain`, because that common type comes from the system picker and not from the author;
- * the body never decides, so a `.txt` that happens to contain Markdown stays plain.
+ * Markdown when the effective type is [MARKDOWN_MIME] or the name carries one of
+ * [MARKDOWN_SUFFIXES]. The suffix decides for `text/plain`, because that common type comes from
+ * the system picker and not from the author; the body never decides, so a `.txt` that happens to
+ * contain Markdown stays plain.
  */
 internal fun remoteAttachmentTextLayout(mime: String?, name: String): RemoteAttachmentTextLayout {
-    val markdownSuffix = name.substringAfterLast('.', "").lowercase() in MARKDOWN_SUFFIXES
-    return if (normalizedMimeType(mime) == "text/markdown" || markdownSuffix) {
-        RemoteAttachmentTextLayout.MARKDOWN
-    } else {
-        RemoteAttachmentTextLayout.PLAIN
-    }
+    val markdown = attachmentMimeFor(mime, name) == MARKDOWN_MIME ||
+        attachmentSuffix(name) in MARKDOWN_SUFFIXES
+    return if (markdown) RemoteAttachmentTextLayout.MARKDOWN else RemoteAttachmentTextLayout.PLAIN
 }
 
 /**

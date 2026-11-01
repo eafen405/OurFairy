@@ -2,7 +2,6 @@ package me.rerere.rikkahub.ui.identity
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
-import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -28,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -77,37 +75,9 @@ internal sealed interface AppUpdateUiState {
     data class Failed(val message: String) : AppUpdateUiState
 }
 
-/**
- * 交给系统安装器的 Intent。安装包只能以 FileProvider 的 content URI 交给系统，
- * 否则 Android 会拒绝读取（File URI 跨进程被禁止）。
- */
-internal fun appInstallIntent(context: Context, apk: File): Intent {
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apk)
-    return Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "application/vnd.android.package-archive")
-        clipData = ClipData.newRawUri(apk.name, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-}
-
 /** 系统里“允许安装未知来源应用”的页面，带上本应用的包名。 */
 internal fun unknownSourcesIntent(context: Context): Intent =
     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${context.packageName}".toUri())
-
-/**
- * 把安装包交给系统安装器。系统里没有安装器时返回可展示的错误文案，否则返回 null。
- * [launch] 是接缝：线上交给系统设置页，测试可以换成抛异常的假实现。
- */
-internal fun launchInstall(
-    context: Context,
-    apk: File,
-    launch: (Intent) -> Unit = { context.startActivity(it) },
-): String? = try {
-    launch(appInstallIntent(context, apk))
-    null
-} catch (missing: ActivityNotFoundException) {
-    "未找到系统安装程序"
-}
 
 /**
  * 打开未知来源授权页。系统里没有该页面时返回可展示的错误文案，否则返回 null。
@@ -214,7 +184,13 @@ internal fun RemoteAppUpdateContent(
             state = ready.copy(needsInstallPermission = true)
             return
         }
-        val failure = launchInstall(context, ready.file)
+        val failure = launchLocalFileView(
+            context,
+            ready.file,
+            "application/vnd.android.package-archive",
+            ready.file.name,
+            "未找到系统安装程序",
+        )
         state = if (failure == null) ready.copy(needsInstallPermission = false) else AppUpdateUiState.Failed(failure)
     }
 

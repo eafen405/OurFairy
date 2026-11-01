@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.identity
 import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import androidx.core.content.FileProvider
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -18,8 +17,8 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 /**
- * Handing one cached attachment to an installed system app: the intent shape a viewer receives,
- * the launch seam that catches a missing receiver, and the cache sweep that lets a receiver keep
+ * Handing one cached local file to an installed system app: the intent shape a receiver gets, the
+ * launch seam that catches a missing receiver, and the cache sweep that lets a receiver keep
  * reading after the handoff.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -29,10 +28,7 @@ class RemoteAttachmentHandoffTest {
 
     @Before
     fun clearProviderCache() {
-        // FileProvider caches path strategies per authority in a static map while Robolectric
-        // gives every test its own cache directory.
-        FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }
-            .get(null).let { (it as HashMap<*, *>).clear() }
+        clearFileProviderCache()
     }
 
     private fun cachedAttachment(name: String, session: String = "session-1", message: String = "message-1"): File =
@@ -43,7 +39,7 @@ class RemoteAttachmentHandoffTest {
         val name = "季度 报告.pdf"
         val file = cachedAttachment(name)
 
-        val intent = externalAttachmentIntent(context, file, "application/pdf", name)
+        val intent = localFileViewIntent(context, file, "application/pdf", name)
 
         assertEquals(Intent.ACTION_VIEW, intent.action)
         assertFalse("不得包成 chooser，否则没有接收方时无法抛错", intent.hasExtra(Intent.EXTRA_INTENT))
@@ -64,9 +60,13 @@ class RemoteAttachmentHandoffTest {
     fun `the handoff goes through the launch seam`() {
         var launched: Intent? = null
 
-        val failure = launchExternalAttachment(context, cachedAttachment("report.pdf"), "application/pdf", "report.pdf") {
-            launched = it
-        }
+        val failure = launchLocalFileView(
+            context,
+            cachedAttachment("report.pdf"),
+            "application/pdf",
+            "report.pdf",
+            "没有能打开该文件的系统应用，请选择保存位置",
+        ) { launched = it }
 
         assertNull(failure)
         assertNotNull(launched)
@@ -75,14 +75,30 @@ class RemoteAttachmentHandoffTest {
 
     @Test
     fun `a missing receiver is reported instead of crashing`() {
-        val failure = launchExternalAttachment(
+        val failure = launchLocalFileView(
             context,
             cachedAttachment("report.pdf"),
             "application/pdf",
             "report.pdf",
+            "没有能打开该文件的系统应用，请选择保存位置",
         ) { throw ActivityNotFoundException() }
 
-        assertEquals("没有能打开该文件的系统应用，已改为另存为", failure)
+        assertEquals("没有能打开该文件的系统应用，请选择保存位置", failure)
+    }
+
+    @Test
+    fun `the real launch path reports a device without a receiver`() {
+        context.requireActivityResolution()
+
+        val failure = launchLocalFileView(
+            context,
+            cachedAttachment("report.pdf"),
+            "application/pdf",
+            "report.pdf",
+            "没有能打开该文件的系统应用，请选择保存位置",
+        )
+
+        assertEquals("没有能打开该文件的系统应用，请选择保存位置", failure)
     }
 
     @Test

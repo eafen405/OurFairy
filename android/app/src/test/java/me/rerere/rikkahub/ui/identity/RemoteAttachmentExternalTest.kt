@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.identity
 import android.Manifest
 import android.app.Activity
 import android.app.Application
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -13,7 +12,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
-import androidx.core.content.FileProvider
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,10 +50,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The transcript's PDF/Office click, observed through the real panel: one authenticated download
- * into the preview cache, handed to the system as a content URI with ACTION_VIEW. A device with
- * no receiver falls back to save-as from those same bytes, and a later external open sweeps the
- * file the earlier receiver may still be reading.
+ * The transcript's PDF/Office click, observed through the real panel and the real `startActivity`
+ * path: one authenticated download into the preview cache, handed to an installed viewer as a
+ * content URI with ACTION_VIEW and the effective media type. A device with no receiver falls back
+ * to save-as from those same bytes, and a later external open sweeps the file the earlier receiver
+ * may still be reading.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35], qualifiers = "zh-rCN-w411dp-h891dp")
@@ -113,10 +112,7 @@ class RemoteAttachmentExternalTest {
 
     @Before
     fun clearProviderCache() {
-        // FileProvider caches path strategies per authority in a static map while Robolectric
-        // gives every test its own cache directory.
-        FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }
-            .get(null).let { (it as HashMap<*, *>).clear() }
+        clearFileProviderCache()
     }
 
     @After
@@ -124,24 +120,35 @@ class RemoteAttachmentExternalTest {
         scope.cancel()
     }
 
-    private fun show(
-        vararg names: String,
-        launchExternal: (Intent) -> Unit,
-    ): Files {
-        val attachments = names.mapIndexed { index, name ->
-            RemoteChatAttachment(index, 1, name, "application/pdf", bytes.size.toLong())
+    /** One attachment as the backend records it, plus the media type an installed viewer handles. */
+    private data class AttachmentSpec(val name: String, val mime: String, val viewerMime: String?)
+
+    private fun pdf(name: String) = AttachmentSpec(name, "application/pdf", "application/pdf")
+
+    private fun show(vararg attachments: AttachmentSpec): Files {
+        val recorded = attachments.mapIndexed { index, spec ->
+            RemoteChatAttachment(index, 1, spec.name, spec.mime, bytes.size.toLong())
         }
         val projection = RemoteChatProjection(
             sessionId = "s1", generation = "g1", version = 1, cursor = 0, durableThroughSeq = 0,
-            messages = listOf(RemoteChatMessage("m1", 0, 0, null, 1, 2, "附件", attachments)),
+            messages = listOf(RemoteChatMessage("m1", 0, 0, null, 1, 2, "附件", recorded)),
             throughSeq = 0, fromSeq = 0, events = listOf(remoteEvent(0)),
         )
+        // A device verifies that the intent resolves before starting it; register the installed
+        // viewers the handoff should find, and the save-as target the fallback needs.
+        context.requireActivityResolution()
+        context.registerDocumentCreator("application/octet-stream")
+        attachments.forEachIndexed { index, spec ->
+            val viewerMime = spec.viewerMime ?: return@forEachIndexed
+            val cached = attachmentPreviewFile(context, "s1", "m1", index, spec.name)
+            context.registerActivityFor(localFileViewIntent(context, cached, viewerMime, spec.name))
+        }
         val files = Files(bytes)
         val state = RemoteChatState(Chat(projection), scope, store, "https://fairy", attachmentsBackend = files)
         state.bind("token", "s1", 1)
         compose.setContent {
             FairyAppTheme {
-                RemoteChatPanel(state = state, onReconnect = {}, launchExternal = launchExternal)
+                RemoteChatPanel(state = state, onReconnect = {})
             }
         }
         compose.waitForIdle()
@@ -152,18 +159,27 @@ class RemoteAttachmentExternalTest {
         compose.onNodeWithText("$name · ${attachmentSizeLabel(bytes.size.toLong())}").performClick()
     }
 
+    private fun awaitStartedActivity(): Intent {
+        val shadow = shadowOf(compose.activity)
+        compose.waitUntil(timeoutMillis = 5_000) { shadow.peekNextStartedActivity() != null }
+        return shadow.nextStartedActivity
+    }
+
+    /** Robolectric records plain starts in both queues; only a document request means save-as. */
+    private fun nextDocumentRequest(): Intent? =
+        shadowOf(compose.activity).nextStartedActivityForResult?.intent
+            ?.takeIf { it.action == Intent.ACTION_CREATE_DOCUMENT }
+
     @Test
     fun `clicking a pdf downloads once and hands the cached file to the system`() {
-        val launched = mutableListOf<Intent>()
-        val files = show("report.pdf", launchExternal = { launched += it })
+        val files = show(pdf("report.pdf"))
         val cached = attachmentPreviewFile(context, "s1", "m1", 0, "report.pdf")
 
         clickAttachment("report.pdf")
-        compose.waitUntil(timeoutMillis = 5_000) { launched.isNotEmpty() }
+        val intent = awaitStartedActivity()
 
         assertEquals("打开只应下载一次", 1, files.downloads.size)
         assertTrue("交接的文件应留在预览缓存里", cached.isFile)
-        val intent = launched.single()
         assertEquals(Intent.ACTION_VIEW, intent.action)
         assertEquals("application/pdf", intent.type)
         assertEquals("content", intent.data?.scheme)
@@ -173,19 +189,34 @@ class RemoteAttachmentExternalTest {
         assertEquals("report.pdf", intent.clipData?.description?.label)
         assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
         assertTrue(intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
-        assertNull("有接收方时不得打开另存为", shadowOf(compose.activity).nextStartedActivityForResult)
+        assertNull("有接收方时不得打开另存为", nextDocumentRequest())
+    }
+
+    @Test
+    fun `an octet stream docx is handed off with the word document type`() {
+        val word = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        val files = show(AttachmentSpec("report.docx", "application/octet-stream", word))
+
+        clickAttachment("report.docx")
+        val intent = awaitStartedActivity()
+
+        assertEquals("外派应使用后缀纠正后的类型，而不是 octet-stream", word, intent.type)
+        assertEquals(1, files.downloads.size)
+        assertNull("有接收方时不得打开另存为", nextDocumentRequest())
     }
 
     @Test
     fun `without an installed viewer the cached bytes go to save-as`() {
-        val files = show("report.pdf", launchExternal = { throw ActivityNotFoundException() })
+        val files = show(AttachmentSpec("report.pdf", "application/pdf", viewerMime = null))
         val cached = attachmentPreviewFile(context, "s1", "m1", 0, "report.pdf")
         val saved = File(context.cacheDir, "saved-report.pdf")
 
+        val expectedHandoff = localFileViewIntent(context, cached, "application/pdf", "report.pdf")
+        assertNull("没有安装查看器时不得解析到 activity", context.packageManager.resolveActivity(expectedHandoff, 0))
         clickAttachment("report.pdf")
         compose.waitUntil(timeoutMillis = 5_000) { files.downloads.size == 1 }
         compose.waitUntil(timeoutMillis = 5_000) {
-            compose.onAllNodesWithText("没有能打开该文件的系统应用，已改为另存为")
+            compose.onAllNodesWithText("没有能打开该文件的系统应用，请选择保存位置")
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -208,31 +239,28 @@ class RemoteAttachmentExternalTest {
 
     @Test
     fun `reopening the same pdf reuses the cached bytes without downloading again`() {
-        val launched = mutableListOf<Intent>()
-        val files = show("report.pdf", launchExternal = { launched += it })
+        val files = show(pdf("report.pdf"))
 
         clickAttachment("report.pdf")
-        compose.waitUntil(timeoutMillis = 5_000) { launched.size == 1 }
-        compose.waitForIdle()
+        assertEquals(Intent.ACTION_VIEW, awaitStartedActivity().action)
         clickAttachment("report.pdf")
-        compose.waitUntil(timeoutMillis = 5_000) { launched.size == 2 }
+        assertEquals(Intent.ACTION_VIEW, awaitStartedActivity().action)
 
         assertEquals("同一附件重复打开只应下载一次", 1, files.downloads.size)
     }
 
     @Test
     fun `a later external open sweeps the file handed to the earlier receiver`() {
-        val launched = mutableListOf<Intent>()
-        val files = show("first.pdf", "second.pdf", launchExternal = { launched += it })
+        val files = show(pdf("first.pdf"), pdf("second.pdf"))
         val first = attachmentPreviewFile(context, "s1", "m1", 0, "first.pdf")
         val second = attachmentPreviewFile(context, "s1", "m1", 1, "second.pdf")
 
         clickAttachment("first.pdf")
-        compose.waitUntil(timeoutMillis = 5_000) { launched.size == 1 }
+        assertEquals(Intent.ACTION_VIEW, awaitStartedActivity().action)
         assertTrue("交接后不得立刻删除接收方可能仍在读的文件", first.isFile)
 
         clickAttachment("second.pdf")
-        compose.waitUntil(timeoutMillis = 5_000) { launched.size == 2 }
+        assertEquals(Intent.ACTION_VIEW, awaitStartedActivity().action)
 
         assertEquals(2, files.downloads.size)
         assertFalse("下一次外派打开应清掉上一份缓存", first.exists())

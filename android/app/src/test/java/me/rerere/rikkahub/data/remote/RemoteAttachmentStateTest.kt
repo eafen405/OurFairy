@@ -281,4 +281,46 @@ class RemoteAttachmentStateTest {
         assertTrue(state.snapshot.value.attachmentNotice!!.isNotBlank())
         assertFalse(state.snapshot.value.downloading)
     }
+
+    @Test fun `saving the cached attachment reports the shared saved notice`() = runTest {
+        val state = RemoteChatState(Chat(),backgroundScope,Store(),"https://fairy",attachmentsBackend=Files())
+        state.bind("alice","s1",1); runCurrent()
+        val cached = File.createTempFile("cached", ".pdf").apply { writeText("exact cache") }
+        var saved: File? = null
+
+        state.saveCachedAttachment(state.snapshot.value.attachmentEpoch,cached) { saved = it }
+
+        assertEquals(cached,saved)
+        assertEquals("原件已保存",state.snapshot.value.attachmentNotice)
+        cached.delete()
+    }
+
+    @Test fun `a failed cached save reports the same description formatter and keeps the file`() = runTest {
+        val state = RemoteChatState(Chat(),backgroundScope,Store(),"https://fairy",attachmentsBackend=Files())
+        state.bind("alice","s1",1); runCurrent()
+        val cached = File.createTempFile("cached", ".pdf").apply { writeText("exact cache") }
+
+        state.saveCachedAttachment(state.snapshot.value.attachmentEpoch,cached) {
+            throw IOException("所选位置无法写入")
+        }
+
+        assertEquals("所选位置无法写入",state.snapshot.value.attachmentNotice)
+        assertTrue(cached.isFile)
+        cached.delete()
+    }
+
+    @Test fun `a cached save captured under an older epoch neither runs nor reports`() = runTest {
+        val state = RemoteChatState(Chat(),backgroundScope,Store(),"https://fairy",attachmentsBackend=Files())
+        state.bind("alice","s1",1); runCurrent()
+        val oldEpoch = state.snapshot.value.attachmentEpoch
+        val cached = File.createTempFile("cached", ".pdf").apply { writeText("exact cache") }
+        state.bind("alice","s2",1); runCurrent()
+        var saved = false
+
+        state.saveCachedAttachment(oldEpoch,cached) { saved = true }
+
+        assertFalse(saved)
+        assertNull(state.snapshot.value.attachmentNotice)
+        cached.delete()
+    }
 }

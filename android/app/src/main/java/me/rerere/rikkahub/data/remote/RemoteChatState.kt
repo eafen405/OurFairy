@@ -17,6 +17,9 @@ import java.util.UUID
 import java.io.File
 import java.io.IOException
 
+/** The one saved notice both attachment save paths report. */
+private const val ATTACHMENT_SAVED = "原件已保存"
+
 /** An unresolved client command, not authoritative message history. */
 data class PendingChatSend(
     val requestId: String,
@@ -552,7 +555,37 @@ class RemoteChatState(
         attachment: RemoteChatAttachment,
         destination: File,
         save: suspend (File) -> Unit,
-    ) = startAttachmentDownload(expectedEpoch, messageId, attachment, destination, keep = false, save)
+    ) = startAttachmentDownload(
+        expectedEpoch,
+        messageId,
+        attachment,
+        destination,
+        keepCompletedFile = false,
+        save,
+    )
+
+    /**
+     * Saves one attachment that is already complete in the preview cache — the no-receiver
+     * fallback — and records the result. A save captured under an older attachment epoch is
+     * dropped without running, so a late completion never writes to a new binding's target.
+     */
+    suspend fun saveCachedAttachment(
+        expectedEpoch: Long,
+        cached: File,
+        save: suspend (File) -> Unit,
+    ) {
+        if (expectedEpoch != attachmentEpoch) return
+        try {
+            save(cached)
+            if (expectedEpoch == attachmentEpoch) markAttachmentSaved()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            if (expectedEpoch == attachmentEpoch) {
+                mutable.value = mutable.value.copy(attachmentNotice = failure.description())
+            }
+        }
+    }
 
     /**
      * Download one attachment into the caller's cached preview file and report it once the bytes
@@ -575,7 +608,13 @@ class RemoteChatState(
             if (expectedEpoch == attachmentEpoch) onReady(destination) else destination.delete()
             return
         }
-        startAttachmentDownload(expectedEpoch, messageId, attachment, destination, keep = true) {
+        startAttachmentDownload(
+            expectedEpoch,
+            messageId,
+            attachment,
+            destination,
+            keepCompletedFile = true,
+        ) {
             onReady(it)
         }
     }
@@ -585,7 +624,7 @@ class RemoteChatState(
         messageId: String,
         attachment: RemoteChatAttachment,
         destination: File,
-        keep: Boolean,
+        keepCompletedFile: Boolean,
         save: suspend (File) -> Unit,
     ) {
         val backend = attachmentsBackend
@@ -597,24 +636,31 @@ class RemoteChatState(
         }
         mutable.value = mutable.value.copy(downloading = true, attachmentNotice = null)
         download = scope.launch {
-            val target = if (keep) File(destination.parentFile, destination.name + ".part") else destination
+            val target = if (keepCompletedFile) {
+                File(destination.parentFile, destination.name + ".part")
+            } else {
+                destination
+            }
             try {
                 target.parentFile?.mkdirs()
                 backend.download(credential, selected.sessionId, messageId, attachment, target)
                 if (expectedEpoch != attachmentEpoch) return@launch
-                if (keep && !target.renameTo(destination)) throw IOException("附件缓存无法写入")
+                if (keepCompletedFile && !target.renameTo(destination)) throw IOException("附件缓存无法写入")
                 save(destination)
-                if (!keep && expectedEpoch == attachmentEpoch) {
-                    mutable.value = mutable.value.copy(attachmentNotice = "原件已保存")
-                }
+                if (!keepCompletedFile && expectedEpoch == attachmentEpoch) markAttachmentSaved()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
                 if (expectedEpoch == attachmentEpoch) mutable.value = mutable.value.copy(attachmentNotice = failure.description())
             } finally {
-                if (keep) target.delete() else destination.delete()
+                if (keepCompletedFile) target.delete() else destination.delete()
                 if (expectedEpoch == attachmentEpoch) mutable.value = mutable.value.copy(downloading = false)
             }
         }
+    }
+
+    /** Writes the one saved notice; both the direct save-as and the cached fallback use it. */
+    private fun markAttachmentSaved() {
+        mutable.value = mutable.value.copy(attachmentNotice = ATTACHMENT_SAVED)
     }
 
     /**
