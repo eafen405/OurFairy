@@ -170,9 +170,9 @@ export class OwnedSessionService extends Service {
    * fact.
    *
    * The archived view never carries the primary session: the primary is where
-   * replies, notifications and deliveries from other users land and cannot be
-   * archived. It answers no standing default for the same reason — a session
-   * that is not in the view cannot be the one the view stands in.
+   * replies and deliveries from other users land and cannot be archived. It
+   * answers no standing default for the same reason — a session that is not in
+   * the view cannot be the one the view stands in.
    */
   async list(owner: SessionOwner, { archived = false }: { archived?: boolean } = {}): Promise<{
     sessions: SessionHeader[]
@@ -325,11 +325,11 @@ export class OwnedSessionService extends Service {
    * log, its messages and its history stay exactly where they are.
    *
    * The primary session is refused here, not only hidden by a client. It is
-   * where replies, notifications and deliveries from other users land, so
-   * archiving it would lose the place they land; a self delivery instead follows
-   * the conversation it was issued from and does not depend on the primary being
-   * in the default view. The caller gets its own code for that rather than
-   * being told the session does not exist.
+   * where replies and deliveries from other users land, so archiving it would
+   * lose the place they land; a self delivery instead follows the conversation
+   * it was issued from and does not depend on the primary being in the default
+   * view. The caller gets its own code for that rather than being told the
+   * session does not exist.
    *
    * Authorization is the header's, like every other route: a session the caller
    * does not own is refused before the archive is touched, so one identity can
