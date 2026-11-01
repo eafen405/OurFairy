@@ -68,11 +68,13 @@ node --test tests/chat-read-window.test.mjs
 npm run hooks:install   # git config core.hooksPath .githooks
 ```
 
-之后每次提交都会过一道门禁，按改动内容分四种（`scripts/precommit.ts`）：只改 Markdown 跑
+之后每次提交都会过一道门禁，合并提交也不例外：`.githooks/` 同时提供 `pre-commit` 与
+`pre-merge-commit`，两者都执行 `scripts/precommit.ts`（结构由 `tests/precommit.test.mjs` 固定）。
+门禁按改动内容分四种：只改 Markdown 跑
 `tests/docs.test.mjs`；改动面能选出相关测试时跑 `npm run build` 与选中的测试文件；源码改动但选不出
 相关测试时跑 `npm run typecheck`；根构建权威、包 manifest、共享 fixture、合并提交或 `--full` 跑全量
 `npm test`。四种门禁都保留 `npm run combo:verify`；`android/` 的非 Markdown 改动还会运行
-`cd android && ./gradlew test lintDebug`。任一失败即阻止提交；检查针对当前工作树，未暂存的
+`cd android && ./gradlew test lintDebug`。任一失败即阻止提交或合并；检查针对当前工作树，未暂存的
 改动同样会影响结果。全量检查仍在交付前与 CI 上跑，钩子只是不再让每条证据提交都等它。
 
 ### CI
