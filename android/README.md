@@ -36,6 +36,14 @@ CI 的后端地址来自仓库变量 `OURFAIRY_IDENTITY_ENDPOINT`，签名来自
 
 当前发布通道只提供 arm64 APK；x86_64 设备或模拟器需要另行提供并接入对应包，不能把这个 arm64 入口视为已经覆盖它们。
 
+## 会话附件
+
+会话里附件点击的去处由 `app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestination.kt` 的 `remoteAttachmentDestination` 判定：图片进入应用内全屏预览（缩放、保存），文本、PDF/Office 与未知类型在本版仍走另存为，由后续票逐个替换。卡片只上报点击，不自己判断类型。
+
+图片经现有会话鉴权下载接口写入应用缓存 `attachment-preview/` 子目录，再交给现有全屏图片查看器。同一（会话、消息、附件序号）复用同一路径，预览与保存共用一份字节，关闭预览删除该缓存文件，已另存的文件不受影响。应用内打开读取的是应用自己的缓存目录。
+
+判定与面板去向由 `app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestinationTest.kt` 与同目录的 `RemoteAttachmentPreviewTest.kt` 固定；缓存路径、一次下载与关闭清理由 `RemoteAttachmentPreviewFileTest.kt` 与 `app/src/test/java/me/rerere/rikkahub/data/remote/RemoteAttachmentStateTest.kt` 固定。词汇见 [客户端词汇表](GLOSSARY.md) 的「附件去处」与「附件预览缓存」。
+
 ## 源码入口
 
 - `app`：Fairy 页面、远程会话和 Android 平台接入。
