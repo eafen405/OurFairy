@@ -1,0 +1,11 @@
+{
+  "title": "自投落点跟随发起会话（规格 #280）",
+  "entries": [
+    {
+      "dirs": [
+        "282-self-delivery-text"
+      ],
+      "note": "#282 自投文字落发起会话：落点判定收进无依赖的 `delivery/src/target.ts` 纯函数，`index.ts` 在 prepare 前判定一次并把结果记为 `deliveries.session_id`（重试/恢复沿用记录）；自投且发起会话存在、属于发送者、未归档时不再解析或创建主会话。会话服务新增唯一布尔读 `canHostDelivery`，归档事实经 archive-store 新单行 `isArchived` 取得，不枚举归档列表。实测发现基线的同会话写入会被 `SessionQueues` 误判为「调用链已持有」（chat `send` 的 async 上下文带进回合），改为按条目是否已结束判定：已结束条目可重入、运行中仍立即拒绝；否则「自投回写发起会话」必然抛错。工具描述、GLOSSARY 主会话/投递消息、delivery/chat/sessions README 同步。真实启动器行为用例覆盖自投落发起会话、回执即落点、归档后回落主会话，跨用户用例保持通过"
+    }
+  ]
+}

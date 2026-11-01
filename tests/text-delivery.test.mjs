@@ -45,6 +45,13 @@ async function tool(user, name, args, sessionId, callId = `delivery-call-${reque
   }
   assert.fail(`tool ${name} reply was not returned to original chat ${sessionId}`)
 }
+/** The receipt one `deliver_message` call rendered back to the sender. */
+async function deliveryReceipt(user, args, sessionId, callId) {
+  const blocks = JSON.parse(await tool(user, 'deliver_message', args, sessionId, callId))
+  const receipt = blocks[0].text.startsWith('{') ? JSON.parse(blocks[0].text) : assert.fail(`delivery failed: ${blocks[0].text}`)
+  assert.match(receipt.deliveryId, /^[0-9a-f]{64}$/)
+  return receipt
+}
 async function startBackend(overlays = []) {
   const run = await runBackendAsync(startArgs(overlays), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
     MINIMAX_CN_API_KEY: 'mock-group-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}` })
@@ -258,4 +265,36 @@ test('notification outlet failure preserves durable delivery and successful send
   const db = new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
   assert.equal(db.prepare('SELECT status FROM deliveries WHERE text = ?').get(args.text).status,1)
   db.close()
+})
+
+test('a self delivery lands in the origin session as a normal Fairy message, and an archived origin falls back', async () => {
+  const carol = await user('self-delivery-carol')
+  // The first create of an identity is its primary while that log is empty, so
+  // this case fills the primary first and lets create materialize an ordinary
+  // session — the conversation the caller is in when asking to deliver.
+  const primary = (await request('/sessions/primary', carol.token)).session.id
+  await tool(carol, 'groups', {}, primary)
+  const origin = (await request('/sessions/create', carol.token)).session.id
+  assert.notEqual(origin, primary)
+  const text = 'Delivered to myself in this conversation'
+  const result = await deliveryReceipt(carol, { recipientShortId: carol.user.shortId, text }, origin, 'self-delivery-call-1')
+  assert.equal(result.sessionId, origin, 'the receipt names the session the text landed in')
+  const view = (await request('/chat/read', carol.token, { sessionId: origin })).projection
+  assert.deepEqual(view.messages.filter(message => message.text === text).map(message => message.role), [2],
+    'the delivered text is one ordinary Fairy message in the origin session')
+  const delivered = view.events.filter(event => event.type === 'delivery/message')
+  assert.equal(delivered.length, 1)
+  assert.equal(delivered[0].data.origin.sessionId, origin)
+  assert.equal((await request('/chat/read', carol.token, { sessionId: primary })).projection.messages
+    .some(message => message.text === text), false, 'a self delivery must not also land in the primary')
+  // The archived session stays readable and writable; only its availability as
+  // a landing changes, so this same conversation issues the next delivery.
+  await request('/sessions/archive', carol.token, { sessionId: origin })
+  const fallbackText = 'Delivered after the origin was archived'
+  const fallback = await deliveryReceipt(carol, { recipientShortId: carol.user.shortId, text: fallbackText }, origin, 'self-delivery-call-2')
+  assert.equal(fallback.sessionId, primary, 'an archived origin falls back to the primary')
+  const primaryView = (await request('/chat/read', carol.token, { sessionId: primary })).projection
+  assert.deepEqual(primaryView.messages.filter(message => message.text === fallbackText).map(message => message.role), [2])
+  assert.equal((await request('/chat/read', carol.token, { sessionId: origin })).projection.messages
+    .some(message => message.text === fallbackText), false)
 })

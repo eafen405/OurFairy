@@ -222,16 +222,18 @@ lost-page 用例）。
 Typert 传输，不提供本投影的耐久任务折叠；保留理由与漂移信号见
 [原生能力依赖记录](../../docs/decisions/native-capability-dependencies.md#job-output-and-stop)。
 
-### 跨用户投递
+### 投递消息
 
-`deliver_message({recipientShortId,text,files?})` 把指定文本与可选文件写入收件人的固定主
-会话，返回 `{deliveryId,sessionId,messageId,acceptedSeq}`。它不读取收件人历史，也不启动收件人
-推理。投递行本身的入口、禁用行为与表归属见 [delivery README](../delivery/README.md)。
+`deliver_message({recipientShortId,text,files?})` 把指定文本与可选文件写入收件方的会话：投递给
+本人时落在发起投递的那个会话，投递给其他用户时仍落在其固定主会话；发起会话已归档、或调用方没有
+可用的发起会话（未来的后台投递）时回落主会话。返回 `{deliveryId,sessionId,messageId,acceptedSeq}`，
+其中 `sessionId` 就是实际落点。它不读取收件人历史，也不启动收件人推理。落点规则与判定位置见
+[delivery README](../delivery/README.md)。
 
-投递身份由发送方会话 id 与原生工具调用 id 派生。业务表 `deliveries` 在追加前固定收件人与
-内容：状态 0 待协调、1 已持久送达、2 正在准备文件。原生 `delivery/message` 事件是送达事实，
-携带同一投递身份与真实发送方会话，外观为普通 Fairy 消息。重试按该身份核对：同一身份找到
-同一条消息，内容或收件人不同则拒绝；启动时按该身份核对未完成的行。
+投递身份由发送方会话 id 与原生工具调用 id 派生。业务表 `deliveries` 在追加前固定收件人、内容与
+落点（落点只判定一次，重试沿用记录）：状态 0 待协调、1 已持久送达、2 正在准备文件。原生
+`delivery/message` 事件是送达事实，携带同一投递身份与真实发送方会话，外观为普通 Fairy 消息。
+重试按该身份核对：同一身份找到同一条消息，内容或收件人不同则拒绝；启动时按该身份核对未完成的行。
 
 文件项为发送方当前可写范围内的 `{path}`，或本会话已接纳原件的 `{messageId,index}`，
 最多 8 个、单个 32 MiB、合计 64 MiB。`attachments_json` 保存有序的 `{selector,prepared}`：
