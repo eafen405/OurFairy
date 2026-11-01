@@ -327,6 +327,79 @@ class FairyPagesTest {
         screenshot("home-idle-line")
     }
 
+    @Test fun `an ending idle line folds the console below it instead of snapping`() {
+        show(reduceMotion = false) { FairyConsolePage({}, account, receive, fairy) }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.waitForIdle()
+        val settledTop = consoleTitleTop()
+
+        ShadowSystemClock.advanceBy(Duration.ofMillis(FIRST_LINE_MS + 1_000))
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithTag("fairy-caption").assertExists()
+        val lineTop = consoleTitleTop()
+        assertTrue("待机台词应把下方组件顶下去：$lineTop 应大于 $settledTop", lineTop > settledTop + 1f)
+        screenshot("home-idle-exit-line")
+
+        compose.runOnIdle { fairy.captionFinished() }
+        compose.mainClock.advanceTimeByFrame()
+        compose.waitForIdle()
+        val captionOnFirstFrame = compose.onAllNodesWithTag("fairy-caption").fetchSemanticsNodes().isNotEmpty()
+        val firstFrame = consoleTitleTop()
+        screenshot("home-idle-exit-16ms")
+
+        compose.mainClock.advanceTimeBy(50)
+        compose.waitForIdle()
+        val mid = consoleTitleTop()
+        screenshot("home-idle-exit-66ms")
+
+        compose.mainClock.advanceTimeBy(300)
+        compose.waitForIdle()
+        val settled = consoleTitleTop()
+        screenshot("home-idle-exit-settled")
+
+        assertTrue("退场第一帧台词仍在组合中", captionOnFirstFrame)
+        assertTrue(
+            "台词消失的第一帧下方组件不应瞬间回弹（$firstFrame 应仍明显低于 $settledTop）",
+            firstFrame > settledTop + (lineTop - settledTop) / 2,
+        )
+        assertTrue(
+            "台词退场中途下方组件应处于起点与终点之间（$mid 应在 $settledTop 与 $lineTop 之间）",
+            mid > settledTop + 1f && mid < lineTop - 1f,
+        )
+        compose.onNodeWithTag("fairy-caption").assertDoesNotExist()
+        assertTrue(
+            "台词退场结束后下方组件回到无台词位置（$settled 应为 $settledTop）",
+            abs(settled - settledTop) < 0.5f,
+        )
+    }
+
+    @Test fun `reduced motion removes the idle line without moving the console`() {
+        home {}
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.waitForIdle()
+        val settledTop = consoleTitleTop()
+
+        ShadowSystemClock.advanceBy(Duration.ofMillis(FIRST_LINE_MS + 1_000))
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertTrue("待机台词已出现", consoleTitleTop() > settledTop + 1f)
+
+        compose.runOnIdle { fairy.captionFinished() }
+        // The exit finishes on the next frame: no height or position is animated.
+        compose.mainClock.advanceTimeBy(50)
+        compose.waitForIdle()
+        compose.onNodeWithTag("fairy-caption").assertDoesNotExist()
+        assertTrue(
+            "Reduced Motion 下不播放退场位移（${consoleTitleTop()} 应为 $settledTop）",
+            abs(consoleTitleTop() - settledTop) < 0.5f,
+        )
+    }
+
+    /** Top of the console card's axis label in the root, so a pushed card is observable. */
+    private fun consoleTitleTop(): Float =
+        compose.onNodeWithTag("console-session-title").fetchSemanticsNode().boundsInRoot.top
+
     /** One session's projection with the given backend activity and no reply text yet. */
     private fun activity(
         sessionId: String,

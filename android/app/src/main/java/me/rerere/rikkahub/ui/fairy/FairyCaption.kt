@@ -39,6 +39,9 @@ private const val ACCEL_END_MS = 6f
 /** How long a fully typed segment stays before the next one. */
 const val CAPTION_HOLD_MS = 2500L
 
+/** How long the box takes to change height, both growing with a line and folding away. */
+internal const val CAPTION_SIZE_MS = 200
+
 /**
  * One idle line, typed out segment by segment like the game's dialog box:
  * each segment types in, holds [CAPTION_HOLD_MS], then gives way to the next;
@@ -102,7 +105,7 @@ fun FairyCaption(
                 .background(tokens.panelOpaque, FairyDialogShape)
                 .fairyDialogPanel(active = segment >= 0 && shown < full.length)
                 .then(tap)
-                .animateContentSize(tween(200))
+                .animateContentSize(tween(CAPTION_SIZE_MS))
                 .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 14.dp),
         ) {
             Text(text, style = bodyStyle.copy(fontSize = 15.sp, lineHeight = 21.sp), color = tokens.textPrimary)

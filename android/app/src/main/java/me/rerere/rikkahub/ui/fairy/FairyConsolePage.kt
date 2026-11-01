@@ -1,5 +1,12 @@
 package me.rerere.rikkahub.ui.fairy
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +29,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -87,6 +95,11 @@ fun FairyConsolePage(
     val asleep = interaction.asleep
     val caption = interaction.caption
     val tokens = baseTokens
+    // The box's last line stays composed while the box folds away, so the card and buttons
+    // below travel up with the exit instead of snapping; Reduced Motion drops it at once.
+    var lastCaption by remember { mutableStateOf<FairyLine?>(null) }
+    if (caption != null) lastCaption = caption
+    val allowSpatialTransitions = LocalAgoraMotionPolicy.current.allowSpatialTransitions
 
     // The page only supplies the beat; 待机 and 台词 live in the module (and outlive this page).
     // Leaving settles the transient presentation through the shared host's lifecycle observer.
@@ -179,13 +192,29 @@ fun FairyConsolePage(
                     }
                     // The line is a sibling below the screen: its top stays at the
                     // screen's bottom edge, so added height extends downward over
-                    // the page, never over the Fairy animation.
-                    caption?.let { line ->
-                        FairyCaption(
-                            line,
-                            onFinished = { fairy.captionFinished() },
-                            modifier = Modifier.testTag("fairy-caption"),
-                        )
+                    // the page, never over the Fairy animation. Top anchoring keeps
+                    // it there while it folds away for the rising card to clip, and
+                    // Reduced Motion drops it at once.
+                    AnimatedVisibility(
+                        visible = caption != null,
+                        enter = EnterTransition.None,
+                        exit = if (allowSpatialTransitions) {
+                            fadeOut(tween(CAPTION_SIZE_MS, easing = FastOutSlowInEasing)) +
+                                shrinkVertically(
+                                    tween(CAPTION_SIZE_MS, easing = FastOutSlowInEasing),
+                                    shrinkTowards = Alignment.Top,
+                                )
+                        } else {
+                            ExitTransition.None
+                        },
+                    ) {
+                        lastCaption?.let { line ->
+                            FairyCaption(
+                                line,
+                                onFinished = { fairy.captionFinished() },
+                                modifier = Modifier.testTag("fairy-caption"),
+                            )
+                        }
                     }
                     Spacer(Modifier.height(16.dp))
                     ConsoleInfoCard(
