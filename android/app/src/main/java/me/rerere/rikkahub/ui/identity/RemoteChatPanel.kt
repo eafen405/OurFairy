@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.identity
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -74,11 +75,16 @@ import me.rerere.rikkahub.ui.fairy.LocalFairyTokens
  */
 private const val SAVE_AS_MIME = "application/octet-stream"
 
-/** What a download click captured before the system file chooser took over the screen. */
+/**
+ * What a download click captured before the system file chooser took over the screen.
+ * [cached] is set when the bytes are already in the preview cache (the no-receiver fallback), so
+ * saving reuses them instead of downloading the same attachment a second time.
+ */
 private data class PendingDownload(
     val epoch: Long,
     val messageId: String,
     val attachment: RemoteChatAttachment,
+    val cached: File? = null,
 )
 
 @Composable
@@ -91,6 +97,11 @@ fun RemoteChatPanel(
      * without the panel deciding whether it is new.
      */
     onSendAccepted: (String) -> Unit = {},
+    /**
+     * Replaces the system `startActivity` for the external handoff. Production leaves it null;
+     * tests use it to record the handoff intent or to simulate a device with no installed viewer.
+     */
+    launchExternal: ((Intent) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val snapshot by state.snapshot.collectAsStateWithLifecycle()
@@ -149,6 +160,23 @@ fun RemoteChatPanel(
     val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(SAVE_AS_MIME)) { target ->
         val captured = pendingDownload.also { pendingDownload = null } ?: return@rememberLauncherForActivityResult
         if (target == null) return@rememberLauncherForActivityResult
+        val cached = captured.cached
+        if (cached != null) {
+            // The no-receiver fallback already downloaded the original; save that exact file.
+            scope.launch {
+                try {
+                    exportAttachment(context, target, cached)
+                    if (state.snapshot.value.attachmentEpoch == captured.epoch) state.noticeAttachment("原件已保存")
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    if (state.snapshot.value.attachmentEpoch == captured.epoch) {
+                        state.noticeAttachment(failure.message ?: "保存失败")
+                    }
+                }
+            }
+            return@rememberLauncherForActivityResult
+        }
         scope.launch {
             // The state streams into this temp file, checks the account and session it was
             // captured under, and only then asks for the bytes to be handed to the chooser.
@@ -246,12 +274,13 @@ fun RemoteChatPanel(
                             saveAs.launch(attachment.name)
                         }
                         // One authenticated download into the coordinate's cached preview file,
-                        // shared by the image and text previews. The path depends on the
-                        // attachment's coordinates only, so reopening reads the bytes on disk.
+                        // shared by the image and text previews and the external handoff. The
+                        // path depends on the attachment's coordinates only, so reopening reads
+                        // the bytes on disk.
                         fun cachePreview(open: (File) -> Unit) {
                             val sessionId = snapshot.sessionId ?: return
                             val destination = attachmentPreviewFile(
-                                context, sessionId, message.messageId, attachment.index,
+                                context, sessionId, message.messageId, attachment.index, attachment.name,
                             )
                             state.cacheAttachment(
                                 snapshot.attachmentEpoch, message.messageId, attachment, destination,
@@ -270,9 +299,29 @@ fun RemoteChatPanel(
                                 )
                             }
 
-                            // The external handoff arrives in its own ticket; until then it keeps
-                            // today's save-as, as does everything the client cannot preview.
-                            RemoteAttachmentDestination.EXTERNAL -> saveOriginal()
+                            RemoteAttachmentDestination.EXTERNAL -> cachePreview { file ->
+                                // Hand the cached original to an installed viewer. A device
+                                // without one falls back to save-as with those same bytes.
+                                sweepAttachmentPreviews(context, keep = file)
+                                val receiverMissing = launchExternalAttachment(
+                                    context,
+                                    file,
+                                    attachment.mime,
+                                    attachment.name,
+                                    launchExternal ?: { context.startActivity(it) },
+                                )
+                                if (receiverMissing != null) {
+                                    state.noticeAttachment(receiverMissing)
+                                    pendingDownload = PendingDownload(
+                                        snapshot.attachmentEpoch,
+                                        message.messageId,
+                                        attachment,
+                                        cached = file,
+                                    )
+                                    saveAs.launch(attachment.name)
+                                }
+                            }
+
                             RemoteAttachmentDestination.SAVE_AS -> saveOriginal()
                         }
                     }

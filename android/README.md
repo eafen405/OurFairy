@@ -38,11 +38,11 @@ CI 的后端地址来自仓库变量 `OURFAIRY_IDENTITY_ENDPOINT`，签名来自
 
 ## 会话附件
 
-会话里附件点击的去处由 `app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestination.kt` 的 `remoteAttachmentDestinationFor(mime, name, bytes)` 判定：图片进入应用内全屏预览（缩放、保存），文本进入应用内只读预览，PDF/Office 与未知类型在本版仍走另存为，由后续票逐个替换。文本超过 2 MiB 不在应用内展开，改走外派/另存为。卡片只上报点击，不自己判断类型。
+会话里附件点击的去处由 `app/src/main/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestination.kt` 的唯一入口 `remoteAttachmentDestinationFor(mime, name, bytes)` 判定：图片进入应用内全屏预览（缩放、保存）；文本进入应用内只读预览，`.md`/`.markdown` 后缀或 `text/markdown` MIME 按 Markdown 排版，其余以等宽、保留换行与缩进的文本显示，解码按严格 UTF-8 → GB18030 顺序，都不成立时显示「无法解码」；文本超过 2 MiB 不在应用内展开，转为外派；PDF/Office 交给系统里能打开它的应用；其余未知类型走另存为。卡片只上报点击，不自己判断类型。
 
-图片与文本经现有会话鉴权下载接口写入应用缓存 `attachment-preview/` 子目录，再交给预览。同一（会话、消息、附件序号）复用同一路径，预览与保存共用一份字节，关闭预览删除该缓存文件，已另存的文件不受影响。文本预览只读：`.md`/`.markdown` 后缀或 `text/markdown` 按 Markdown 排版（与 `MessageBody` 相同的一对 `parseMarkdown` + `MarkdownBlock`），其余以等宽、保留换行与缩进的文本显示；解码按严格 UTF-8 → GB18030 顺序，两者都不成立时显示「无法解码」，不显示替换字符。应用内打开读取的是应用自己的缓存目录。
+图片、文本与 PDF/Office 都经现有会话鉴权下载接口写入应用缓存 `attachment-preview/` 子目录：（会话、消息、附件序号）决定一个坐标目录，目录里的文件名是清洗后的原始名，接收方看到的是原名而不是摘要。面板的 `cachePreview` 让图片、文本与外派共用这一份缓存字节。图片交给现有全屏图片查看器，文本交给只读预览，两者关闭时由共享的 `DeleteCachedPreviewOnDispose` 删除自己的缓存文件；已另存的文件不受影响。PDF/Office 用 FileProvider 的 `content://` URI 以 `ACTION_VIEW` 直接交给系统解析（有多个应用匹配时由系统解析器让用户选择），并附临时读授权。外派不套 `Intent.createChooser`：系统 chooser 始终存在，即使没有目标应用也会正常展示自己的空状态，「没有接收方」就无法被识别，回落另存为也不会发生。系统没有能接收它的应用时回落到另存为，复用缓存里的同一份字节，不二次下载。外派给系统应用的文件不在交接后立即删除（接收方可能仍在读），下一次外派打开时清扫其余预览缓存。FileProvider 只暴露 `app-update/` 与 `attachment-preview/` 两个缓存子目录（`app/src/main/res/xml/file_paths.xml`），不暴露整个 cache，安装包目录的既有暴露不变。
 
-去向、2 MiB 上限与 Markdown 判定由 `app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestinationTest.kt` 与同目录的 `RemoteAttachmentTextTest.kt` 固定；面板点击（图片、Markdown、纯文本、无法解码、超限回落）、一次下载与关闭后回到原会话由 `app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentPreviewTest.kt` 固定；缓存路径、一次下载与关闭清理由 `RemoteAttachmentPreviewFileTest.kt` 与 `app/src/test/java/me/rerere/rikkahub/data/remote/RemoteAttachmentStateTest.kt` 固定。词汇见 [客户端词汇表](GLOSSARY.md) 的「附件去处」与「附件预览缓存」。
+去向与 2 MiB 上限由 `app/src/test/java/me/rerere/rikkahub/ui/identity/RemoteAttachmentDestinationTest.kt` 固定，Markdown 取舍由同目录 `RemoteAttachmentTextTest.kt` 固定；面板点击（图片、Markdown、纯文本、无法解码、超限外派、PDF 外派、未知类型另存为）、一次下载与关闭后回到原会话由同目录 `RemoteAttachmentPreviewTest.kt` 固定；外派意图、无接收方回落与清扫由 `RemoteAttachmentExternalTest.kt` 与 `RemoteAttachmentHandoffTest.kt` 固定；缓存路径、一次下载与关闭清理由 `RemoteAttachmentPreviewFileTest.kt` 与 `app/src/test/java/me/rerere/rikkahub/data/remote/RemoteAttachmentStateTest.kt` 固定；`file_paths.xml` 的暴露清单与 provider 的未导出、授权属性由同目录 `RemoteAppUpdateTest.kt` 固定。词汇见 [客户端词汇表](GLOSSARY.md) 的「附件去处」与「附件预览缓存」。
 
 ## 源码入口
 

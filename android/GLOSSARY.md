@@ -62,18 +62,26 @@ _Avoid_: 断点续传、自动登录
 
 **附件去处**（`RemoteAttachmentDestination`）：
 点会话附件后去哪里：图片预览、文本预览、外派系统应用、另存为。判定只来自
-`remoteAttachmentDestinationFor(mime, name, bytes)`：有可信 MIME 时以 MIME 为准，`application/octet-stream`
-或缺失时才按后缀纠正，未知类型回落另存为；文本超过 2 MiB 不在应用内展开，转外派/另存为。文本预览
-内 Markdown 与纯文本的取舍由 `remoteAttachmentTextLayout(mime, name)` 给出：`.md`/`.markdown` 后缀或
-`text/markdown` MIME 为 Markdown，其余为等宽纯文本。卡片只上报点击，不自己猜类型。四类结果与 2 MiB
-上限由 `RemoteAttachmentDestinationTest` 固定，Markdown 取舍由 `RemoteAttachmentTextTest` 固定，
-面板上的实际去向由 `RemoteAttachmentPreviewTest` 固定。
+`remoteAttachmentDestinationFor(mime, name, bytes)`：有可信 MIME 时以 MIME 为准，
+`application/octet-stream` 或缺失时才按后缀纠正，未知类型回落另存为；文本超过 2 MiB 不在应用内
+展开，转外派。文本预览内 Markdown 与纯文本的取舍由 `remoteAttachmentTextLayout(mime, name)` 给出：
+`.md`/`.markdown` 后缀或 `text/markdown` MIME 为 Markdown，其余为等宽纯文本。卡片只上报点击，不自己
+猜类型。外派是真正的交接：先把原件缓存到 `attachment-preview/`，再用 FileProvider 的 `content://`
+URI 以 `ACTION_VIEW` 直接交给系统解析（多个应用匹配时由系统解析器让用户选择），附临时读授权。
+外派不套 `Intent.createChooser`，因为系统 chooser 始终存在，会吞掉「没有接收方」这个信号；只有裸
+`ACTION_VIEW` 在没有匹配 activity 时抛 `ActivityNotFoundException`，据此回落到另存为并复用已缓存
+的同一份字节。四类结果与 2 MiB 上限由 `RemoteAttachmentDestinationTest` 固定，Markdown 取舍由
+`RemoteAttachmentTextTest` 固定，面板去向由 `RemoteAttachmentPreviewTest` 固定，外派的意图与回落由
+`RemoteAttachmentHandoffTest` 与 `RemoteAttachmentExternalTest` 固定。
 _Avoid_: 文件类型判断、MIME 猜测
 
 **附件预览缓存**（`attachmentPreviewFile`）：
-应用缓存 `attachment-preview/` 子目录里按（会话、消息、附件序号）派生的预览文件，图片与文本共用。
-同一附件重复打开复用同一路径，预览与保存共用这份字节；关闭预览删除该文件，已另存的文件不受影响。
-路径、一次下载与关闭清理分别由 `RemoteAttachmentPreviewFileTest`、`RemoteAttachmentStateTest`
-与 `RemoteAttachmentPreviewTest` 固定。
+应用缓存 `attachment-preview/` 子目录里按（会话、消息、附件序号）坐标目录派生的预览文件；坐标
+只决定目录，目录里的文件名是清洗后的原始显示名，好让系统查看器显示原名。图片、文本与外派共用
+面板 `cachePreview` 下载的这份字节；同一附件重复打开复用它，图片/文本预览与另存为也共用它。
+图片与文本预览关闭时由共享的 `DeleteCachedPreviewOnDispose` 删除该文件，已另存的文件不受影响。
+外派给系统应用的文件不在交接后立即删除，下一次外派打开时清扫其余坐标目录。
+路径、一次下载、关闭与外派清理由 `RemoteAttachmentPreviewFileTest`、`RemoteAttachmentStateTest`、
+`RemoteAttachmentPreviewTest`、`RemoteAttachmentHandoffTest` 与 `RemoteAttachmentExternalTest` 固定。
 _Avoid_: 下载目录、缩略图缓存、临时下载
 

@@ -4,9 +4,12 @@ package me.rerere.rikkahub.ui.identity
  * Where clicking one transcript attachment goes.
  *
  * This is the client's only attachment-routing decision: the chip reports the click, and the
+ * This is the client's only attachment-routing decision: the chip reports the click, and the
  * caller reads [remoteAttachmentDestinationFor] instead of inspecting the MIME, the name or the
- * size itself. [TEXT] opens the in-app read-only preview; [EXTERNAL] and [SAVE_AS] keep today's
- * save-as until the external-handoff ticket replaces [EXTERNAL].
+ * size itself. [IMAGE] opens the in-app viewer, [TEXT] the in-app read-only preview (text over
+ * [TEXT_PREVIEW_MAX_BYTES] is routed to [EXTERNAL] instead), [EXTERNAL] hands the cached file to
+ * an installed system app and falls back to save-as when there is none, and [SAVE_AS] writes the
+ * original to a location the user picks.
  */
 internal enum class RemoteAttachmentDestination {
     IMAGE,
@@ -51,8 +54,8 @@ internal fun normalizedMimeType(mime: String?): String =
 /**
  * The click decision: the type route from [remoteAttachmentDestination], except that text over
  * [TEXT_PREVIEW_MAX_BYTES] is handed off instead of expanded. Its recorded bytes are the
- * authority, so the preview never has to download a body it will refuse. [EXTERNAL] is the
- * handoff that falls back to save-as here; the external ticket makes it a real handoff.
+ * authority, so the preview never has to download a body it will refuse. [EXTERNAL] is the real
+ * handoff that falls back to save-as when no installed app can take the file.
  */
 internal fun remoteAttachmentDestinationFor(
     mime: String?,
@@ -87,7 +90,7 @@ private val TEXT_SUFFIXES = setOf(
     "cs", "swift", "sh", "bash", "zsh", "sql", "properties",
 )
 
-/** Documents handed to an installed system app once the external-handoff ticket lands. */
+/** Documents handed to an installed system app. */
 private val EXTERNAL_SUFFIXES = setOf(
     "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "epub",
 )
