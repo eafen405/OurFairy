@@ -40,7 +40,7 @@ data class ChatSyncRecord(
     val notificationEpisodeId: String? = null,
     /**
      * A claimed episode the reminder has not published yet. The session only records what it
-     * owes; reception sees every session and publishes the backlog once.
+     * owes; reception sees every session and publishes each owed session's reminder.
      */
     val notificationOwed: Boolean = false,
 )
