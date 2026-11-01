@@ -6,6 +6,7 @@ Android worktree `287-attachment-route`，分支 `ticket/287-attachment-route`�
 - `67c29be07a` `feat(#287): 收敛附件去处的唯一纯函数判定`
 - `c94be4a262` `feat(#287): 图片附件应用内全屏预览并复用一次下载`
 - `209de19e83` `docs(#287): 记录附件去处与预览缓存子目录`
+- `bc78f34dcb` `feat(#287): 四个去处各留独立分支供后续票替换`
 - 本证据文件的提交见该文件自身所在提交。
 
 无数据库、wire 与 manifest 变更，无新增依赖。
@@ -35,8 +36,9 @@ SHA-256 十六进制摘要，不夹带显示名，标识符里的路径分隔符
 - epoch 不符的迟到下载不回调、不落最终文件（沿用原另存为的绑定检查）。
 
 **面板唯一分叉。** `ui/identity/RemoteChatPanel.kt` 的 `onDownload` 是对四个去处的一个 `when`：
-IMAGE 解析缓存路径、调用 `cacheAttachment` 并打开预览；TEXT / EXTERNAL / SAVE_AS 三个分支本票都
-走原有另存为（`PendingDownload` + `CreateDocument`），供后续票按行替换。
+IMAGE 解析缓存路径、调用 `cacheAttachment` 并打开预览；TEXT、EXTERNAL、SAVE_AS 各占一条相邻分支，
+本票都调用同一个 `saveOriginal()` 走原有另存为（`PendingDownload` + `CreateDocument`），供后续票
+按行替换。
 
 **预览生命周期。** `ui/identity/RemoteAttachmentPreview.kt` 的 `AttachmentImagePreview` 复用
 现有 `ImagePreviewDialog`（缩放、保存入参是本地绝对路径，不重新下载）；`DisposableEffect` 在预览
@@ -74,14 +76,15 @@ cd android && ./gradlew :app:testDebugUnitTest \
 cd android && ./gradlew test lintDebug --rerun-tasks
 ```
 
-`BUILD SUCCESSFUL in 3m 29s`，`130 actionable tasks: 130 executed`。JUnit XML：app 505 tests、
+`BUILD SUCCESSFUL in 3m 13s`，`130 actionable tasks: 130 executed`。JUnit XML：app 505 tests、
 ui 20 tests、highlight 52 tests，合计 577 tests，0 failures / 0 errors / 0 skipped。`lintDebug`
 通过；本票新增文件无告警，改动到的旧文件上的两条告警为既存（`RemoteAttachmentFiles.kt` 的
 `DefaultLocale` 来自原有 `attachmentSizeLabel`，`RemoteChatPanel.kt` 的 `ModifierParameter`
 来自原有参数顺序）。
 
-两条源码提交的 pre-commit gate 各自实跑 `./gradlew test lintDebug`，均 `BUILD SUCCESSFUL`
-（`5m 02s`、`2m 20s`），未使用 `--no-verify`。
+三条源码提交的 pre-commit gate 各自实跑 `./gradlew test lintDebug`，均 `BUILD SUCCESSFUL`
+（`5m 02s`、`2m 20s`、`2m 24s`），未使用 `--no-verify`。分支拆分后另行重跑
+`RemoteAttachmentPreviewTest`，4 tests / 0 failures。
 
 ## 覆盖的验收标准
 
