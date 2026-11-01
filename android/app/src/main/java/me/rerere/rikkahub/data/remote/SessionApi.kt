@@ -111,7 +111,7 @@ interface SessionBackend {
      * The log, the messages and the history stay; what changes is that the
      * session is no longer offered in the default list and can be restored.
      * The backend refuses the primary session, which is where replies and
-     * notifications land.
+     * deliveries from other users land.
      */
     suspend fun archive(token: String, sessionId: String): OwnedSession
 

@@ -14,19 +14,18 @@ unchanged by this row split.
 
 ## Where a delivery lands
 
-`src/target.ts` is that rule's only home and has no imports: the caller has
-already resolved the facts, so the decision is one function over the two short
-numbers, the origin session id and one boolean. `src/index.ts` asks the
-owned-session service whether the origin may host the delivery
-(`canHostDelivery`: the header exists, it belongs to the sender and it is not
-archived), decides once, and records the decided session id on the delivery row
-before any file is prepared. The receipt, the settled `delivery/message` event
-and boot recovery read that recorded id; a retry reuses the existing row and
-therefore its first landing. A missing origin session — a caller that has no
-conversation, as a future background delivery may not — also falls back to the
-primary. The primary session is resolved, and created on first use, only when it
-is the landing, so a self delivery into an existing conversation does not create
-one as a side effect.
+`src/target.ts` decides the landing from facts the call already holds: the two
+short numbers, the origin session id, whether the origin may host the delivery
+and the recipient's primary session id. `src/index.ts` resolves the primary as
+it always did, asks the owned-session service whether the origin may host the
+delivery (`canHostDelivery`: the header exists, it belongs to the sender and it
+is not archived), and records the decided session id on the delivery row before
+any file is prepared. A delivery to another user, or a self delivery whose
+origin cannot host, lands in the recipient's primary. The receipt, the settled
+`delivery/message` event and boot recovery read that recorded id; a retry reuses
+the existing row and therefore its first landing. A missing origin session — a
+caller that has no conversation, as a future background delivery may not — also
+falls back to the primary.
 
 ## What it may reach in chat
 

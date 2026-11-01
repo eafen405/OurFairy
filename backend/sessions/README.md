@@ -31,8 +31,7 @@ caller's archive, exposed as `ctx.ourfairySessions` and the `/sessions/*` paths.
   changes nothing, and a session that is not archived answers
   `sessions/not-archived` (409) rather than pretending it does not exist. The
   same store answers whether one named session is archived with a single indexed
-  row read (`isArchived`); a one-session question never has to enumerate the
-  caller's archive list.
+  row read (`isArchived`).
 - The one-shot event read exported as `./events`: `readSessionEvents` opens an
   observation, returns its events and cursor, and disposes it in `finally`.
 - The empty-session rule on `/sessions/create`: a session whose log carries no
@@ -92,10 +91,9 @@ returns the caller's empty session when one exists (the primary first, then the
 newest empty ordinary) and only materializes a new ordinary session otherwise.
 `canHostDelivery` answers whether one session may host a delivery — the stored
 header exists, its owner is `ownerOf(owner.shortId)`, and the session is not
-archived — answering false rather than throwing for a missing, ownerless or
-foreign session, and reading the archive fact through the store's single-row
-read. A self delivery uses it to decide whether it keeps landing in the
-conversation it was issued from. `archive` refuses the primary session with
+archived. It reads the archive fact through the store's single-row read. A self
+delivery uses it to decide whether it keeps landing in the conversation it was
+issued from. `archive` refuses the primary session with
 `sessions/primary-not-archivable`; `restore` refuses a session that is not in the
 caller's archive with `sessions/not-archived`; a foreign or unknown session is
 refused by the same ownership check every route uses. It injects `webServer`,

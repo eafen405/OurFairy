@@ -309,9 +309,7 @@ export class OwnedSessionService extends Service {
    * This is the one read a delivery uses to decide a self delivery's landing.
    * The archive fact is the store's single-row read, not the caller's archived
    * list: the question names one session, so enumerating the archive would read
-   * more than the answer needs. A missing, ownerless or foreign header answers
-   * false rather than throwing, because the caller asked whether this is a place
-   * their delivery may land, not for the session itself.
+   * more than the answer needs.
    */
   async canHostDelivery(owner: SessionOwner, sessionId: SessionId): Promise<boolean> {
     const snapshot = await this._headerOf(sessionId)
