@@ -52,14 +52,12 @@ suspend fun importAttachment(context: Context, uri: Uri): ImportedAttachment {
 fun createAttachmentTempFile(context: Context): File = File.createTempFile(TEMP_PREFIX, null, context.cacheDir)
 
 private const val PREVIEW_DIRECTORY = "attachment-preview"
-private const val PREVIEW_PART_SUFFIX = ".part"
 private const val HEX = "0123456789abcdef"
 
 /**
  * The cache slot for one attachment coordinate: session, message and attachment index, and
  * nothing else. The slot name is a digest because those identifiers are wire values that may
- * contain separators. The slot is not created here so a legacy cache file that still occupies
- * that path can be migrated by [attachmentPreviewFile].
+ * contain separators.
  */
 internal fun attachmentPreviewDirectory(
     context: Context,
@@ -84,9 +82,7 @@ internal fun attachmentPreviewDirectory(
 /**
  * The one cached preview file for an attachment coordinate. The coordinate directory is decided
  * only by [attachmentPreviewDirectory]; the leaf is the sanitised original display name because
- * an external viewer shows that name to the user. A digest-named file left by the earlier layout
- * is renamed into the new directory instead of downloaded again, and one already-complete file in
- * the slot is renamed to the current leaf for the same reason.
+ * an external viewer shows that name to the user.
  */
 fun attachmentPreviewFile(
     context: Context,
@@ -96,28 +92,8 @@ fun attachmentPreviewFile(
     name: String,
 ): File {
     val slot = attachmentPreviewDirectory(context, sessionId, messageId, index)
-    val leaf = sanitizedPreviewName(name)
-    if (slot.isFile) migrateLegacySlot(slot, leaf) else slot.mkdirs()
-    val file = File(slot, leaf)
-    if (!file.exists() && slot.isDirectory) {
-        slot.listFiles()
-            ?.firstOrNull { it.isFile && !it.name.endsWith(PREVIEW_PART_SUFFIX) }
-            ?.renameTo(file)
-    }
-    return file
-}
-
-/** Renames the previous digest-named cache file into the coordinate directory it now names. */
-private fun migrateLegacySlot(slot: File, leaf: String) {
-    val legacy = File(slot.parentFile, slot.name + ".legacy")
-    legacy.delete()
-    if (slot.renameTo(legacy) && slot.mkdirs()) {
-        legacy.renameTo(File(slot, leaf))
-    } else {
-        // Renaming failed; dropping the stale bytes lets the next open download them again.
-        legacy.delete()
-        slot.delete()
-    }
+    slot.mkdirs()
+    return File(slot, sanitizedPreviewName(name))
 }
 
 /**

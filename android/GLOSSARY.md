@@ -65,8 +65,10 @@ _Avoid_: 断点续传、自动登录
 `remoteAttachmentDestination(mime, name)`：有可信 MIME 时以 MIME 为准，`application/octet-stream`
 或缺失时才按后缀纠正，未知类型回落另存为；卡片只上报点击，不自己猜类型。外派是真正的交接：
 先把原件缓存到 `attachment-preview/`，再用 FileProvider 的 `content://` URI 以 `ACTION_VIEW`
-交给系统 chooser，附临时读授权；系统没有能接收它的应用时回落到另存为，且复用已缓存的同一份
-字节。四类结果由 `RemoteAttachmentDestinationTest` 固定，外派的意图与回落由
+直接交给系统解析（多个应用匹配时由系统解析器让用户选择），附临时读授权。外派不套
+`Intent.createChooser`，因为系统 chooser 始终存在，会吞掉「没有接收方」这个信号；只有裸
+`ACTION_VIEW` 在没有匹配 activity 时抛 `ActivityNotFoundException`，据此回落到另存为并复用已缓存
+的同一份字节。四类结果由 `RemoteAttachmentDestinationTest` 固定，外派的意图与回落由
 `RemoteAttachmentHandoffTest` 与 `RemoteAttachmentExternalTest` 固定。
 _Avoid_: 文件类型判断、MIME 猜测
 
@@ -75,7 +77,7 @@ _Avoid_: 文件类型判断、MIME 猜测
 只决定目录，目录里的文件名是清洗后的原始显示名，好让系统查看器显示原名。同一附件重复打开
 复用同一份字节，图片预览与另存为共用这份字节；关闭图片预览删除该文件，已另存的文件不受影响。
 外派给系统应用的文件不在交接后立即删除，下一次外派打开时清扫其余坐标目录。
-路径与旧布局迁移、一次下载、关闭与外派清理由 `RemoteAttachmentPreviewFileTest`、
+路径、一次下载、关闭与外派清理由 `RemoteAttachmentPreviewFileTest`、
 `RemoteAttachmentStateTest`、`RemoteAttachmentPreviewTest`、`RemoteAttachmentHandoffTest` 与
 `RemoteAttachmentExternalTest` 固定。
 _Avoid_: 下载目录、缩略图缓存、临时下载

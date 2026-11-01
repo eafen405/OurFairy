@@ -53,7 +53,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The transcript's PDF/Office click, observed through the real panel: one authenticated download
- * into the preview cache, handed to the system as a content URI through the chooser. A device with
+ * into the preview cache, handed to the system as a content URI with ACTION_VIEW. A device with
  * no receiver falls back to save-as from those same bytes, and a later external open sweeps the
  * file the earlier receiver may still be reading.
  */
@@ -152,10 +152,6 @@ class RemoteAttachmentExternalTest {
         compose.onNodeWithText("$name · ${attachmentSizeLabel(bytes.size.toLong())}").performClick()
     }
 
-    @Suppress("DEPRECATION")
-    private fun chooserTarget(chooser: Intent): Intent =
-        chooser.getParcelableExtra(Intent.EXTRA_INTENT) ?: error("chooser 缺少目标意图")
-
     @Test
     fun `clicking a pdf downloads once and hands the cached file to the system`() {
         val launched = mutableListOf<Intent>()
@@ -167,16 +163,16 @@ class RemoteAttachmentExternalTest {
 
         assertEquals("打开只应下载一次", 1, files.downloads.size)
         assertTrue("交接的文件应留在预览缓存里", cached.isFile)
-        val target = chooserTarget(launched.single())
-        assertEquals(Intent.ACTION_VIEW, target.action)
-        assertEquals("application/pdf", target.type)
-        assertEquals("content", target.data?.scheme)
-        assertEquals("${context.packageName}.fileprovider", target.data?.authority)
-        assertTrue(target.data?.path?.startsWith("/attachment-preview/") == true)
-        assertTrue(target.data?.path?.endsWith("/report.pdf") == true)
-        assertEquals("report.pdf", target.clipData?.description?.label)
-        assertTrue(target.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
-        assertTrue(target.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        val intent = launched.single()
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertEquals("application/pdf", intent.type)
+        assertEquals("content", intent.data?.scheme)
+        assertEquals("${context.packageName}.fileprovider", intent.data?.authority)
+        assertTrue(intent.data?.path?.startsWith("/attachment-preview/") == true)
+        assertTrue(intent.data?.path?.endsWith("/report.pdf") == true)
+        assertEquals("report.pdf", intent.clipData?.description?.label)
+        assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        assertTrue(intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertNull("有接收方时不得打开另存为", shadowOf(compose.activity).nextStartedActivityForResult)
     }
 

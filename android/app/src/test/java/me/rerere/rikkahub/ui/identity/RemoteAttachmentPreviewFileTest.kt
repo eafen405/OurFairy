@@ -2,7 +2,6 @@ package me.rerere.rikkahub.ui.identity
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -34,10 +33,10 @@ class RemoteAttachmentPreviewFileTest {
 
     @Test
     fun `the cache file lives in a coordinate directory under the dedicated preview subdirectory`() {
-        val file = attachmentPreviewFile(context, "session-1", "message-1", 0, "report.pdf")
+        val file = attachmentPreviewFile(context, "session-1", "message-1", 0, "季度 报告.pdf")
 
         assertEquals(previewRoot, file.canonicalFile.parentFile?.parentFile)
-        assertEquals("report.pdf", file.name)
+        assertEquals("季度 报告.pdf", file.name)
         assertTrue("缓存坐标目录应可直接写入", file.parentFile!!.isDirectory)
     }
 
@@ -68,19 +67,5 @@ class RemoteAttachmentPreviewFileTest {
 
         assertEquals(coordinate.canonicalFile, file.canonicalFile.parentFile)
         assertFalse("目录分隔符不得进入文件名", file.name.contains('/') || file.name.contains('\\'))
-    }
-
-    @Test
-    fun `a legacy digest-named cache file is renamed instead of downloaded again`() {
-        val slot = attachmentPreviewDirectory(context, "session-1", "message-1", 0)
-        val legacy = File(slot.parentFile, slot.name)
-        val bytes = byteArrayOf(0x25, 0x50, 0x44, 0x46)
-        legacy.writeBytes(bytes)
-
-        val file = attachmentPreviewFile(context, "session-1", "message-1", 0, "report.pdf")
-
-        assertFalse("旧布局的缓存文件应被移走", legacy.isFile)
-        assertTrue(file.isFile)
-        assertArrayEquals(bytes, file.readBytes())
     }
 }

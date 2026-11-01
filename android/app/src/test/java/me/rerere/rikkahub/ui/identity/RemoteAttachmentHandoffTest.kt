@@ -38,31 +38,26 @@ class RemoteAttachmentHandoffTest {
     private fun cachedAttachment(name: String, session: String = "session-1", message: String = "message-1"): File =
         attachmentPreviewFile(context, session, message, 0, name).apply { writeBytes(byteArrayOf(1, 2, 3)) }
 
-    @Suppress("DEPRECATION")
-    private fun chooserTarget(chooser: Intent): Intent =
-        chooser.getParcelableExtra(Intent.EXTRA_INTENT) ?: error("chooser 缺少目标意图")
-
     @Test
-    fun `the handoff intent opens the cached file through the system chooser`() {
+    fun `the handoff intent opens the cached file with the system's viewer`() {
         val name = "季度 报告.pdf"
         val file = cachedAttachment(name)
 
-        val chooser = externalAttachmentIntent(context, file, "application/pdf", name)
-        val target = chooserTarget(chooser)
+        val intent = externalAttachmentIntent(context, file, "application/pdf", name)
 
-        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
-        assertEquals(Intent.ACTION_VIEW, target.action)
-        assertEquals("application/pdf", target.type)
-        assertEquals("content", target.data?.scheme)
-        assertEquals("${context.packageName}.fileprovider", target.data?.authority)
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertFalse("不得包成 chooser，否则没有接收方时无法抛错", intent.hasExtra(Intent.EXTRA_INTENT))
+        assertEquals("application/pdf", intent.type)
+        assertEquals("content", intent.data?.scheme)
+        assertEquals("${context.packageName}.fileprovider", intent.data?.authority)
         assertTrue(
             "目标必须位于附件预览子目录",
-            target.data?.path?.startsWith("/attachment-preview/") == true,
+            intent.data?.path?.startsWith("/attachment-preview/") == true,
         )
-        assertTrue(target.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
-        assertTrue(target.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
-        assertEquals(name, target.clipData?.description?.label)
-        assertEquals(target.data, target.clipData?.getItemAt(0)?.uri)
+        assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        assertTrue(intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        assertEquals(name, intent.clipData?.description?.label)
+        assertEquals(intent.data, intent.clipData?.getItemAt(0)?.uri)
     }
 
     @Test
@@ -75,7 +70,7 @@ class RemoteAttachmentHandoffTest {
 
         assertNull(failure)
         assertNotNull(launched)
-        assertEquals(Intent.ACTION_CHOOSER, launched!!.action)
+        assertEquals(Intent.ACTION_VIEW, launched!!.action)
     }
 
     @Test
