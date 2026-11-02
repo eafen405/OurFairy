@@ -131,8 +131,6 @@ The focused set was: `skill-runtime`, `skill-package`, `projection-units`,
 
 ## Unfinished items / risks
 
-- The ticket prompt said `src/README.md`; the repository convention is a package-root `README.md`
-  published by `files`, so the documentation lives at `backend/skill-creator/README.md`.
 - The Skills page renders the backend's archive/restore action scope but performs no archive or
   restore; those endpoints and permissions belong to #298. Pending review is empty by design and
   `kind: 2` is reserved.
