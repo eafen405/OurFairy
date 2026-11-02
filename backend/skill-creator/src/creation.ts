@@ -25,6 +25,7 @@ import {
   PackageError,
   assertPackagePath,
   canonicalManifest,
+  copySkillPackage,
   readSkillPackage,
   readSkillFrontmatter,
   writeSkillPackage,
@@ -34,6 +35,8 @@ import {
 import { SKILL_SCOPE, SOURCE_TYPE, VERSION_STATUS, SkillStoreError } from './store.js'
 import { runVerification, type VerificationReport } from './verify.js'
 import { SkillError } from './service.js'
+import { canInspect, canReview, requireSharingConsent, type SharingConsent } from './sharing.js'
+import type { InstallSource } from './install.js'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SkillRow, SkillStore, PendingDraftRow, SkillVersionRow } from './store.js'
 import type { SkillService } from './service.js'
@@ -87,15 +90,24 @@ export interface CandidateEvidence {
   readonly note?: string
 }
 
-/** The facts an explicit `create` call hands the backend. */
+/** The facts one `create` call hands the backend. */
 export interface CreateCandidateInput {
   readonly ownerShortId: number
   readonly sessionId: string
   /** The caller's durable log, read by the tool before the call. */
   readonly events: readonly SessionEvent[]
   readonly scope: number
-  readonly focus: SkillFocusInput
-  readonly files: readonly CandidateFile[]
+  /** The explicit-creation provenance; omitted for an address install. */
+  readonly focus?: SkillFocusInput
+  /** Model-drafted files for an explicit create; mutually exclusive with `packageDir`. */
+  readonly files?: readonly CandidateFile[]
+  /**
+   * A package fetched by the install path; the creation path copies it into its
+   * own staging directory and validates the copy. Mutually exclusive with `files`.
+   */
+  readonly packageDir?: string
+  /** The fixed source an install recorded; absent for an explicit create. */
+  readonly install?: InstallSource
   readonly scenarios: readonly CandidateScenario[]
   readonly comparisons?: readonly CandidateComparison[]
   readonly evidence?: readonly CandidateEvidence[]
@@ -156,6 +168,7 @@ export interface ReviewPackage {
     readonly focus: FocusProvenance | null
     readonly address?: string
     readonly resolvedVersion?: string
+    readonly digest?: string
   }
   readonly status: number
   readonly manifestHash: string
@@ -403,6 +416,12 @@ interface SourceProvenance {
   readonly evidence?: CandidateEvidence[]
   readonly address?: string
   readonly resolvedVersion?: string
+  readonly digest?: string
+  readonly etag?: string
+  readonly lastModified?: string
+  readonly fetchedAt?: number
+  /** The user turn that explicitly consented to a common proposal. */
+  readonly consent?: SharingConsent
   readonly benefit?: string
 }
 
@@ -719,14 +738,6 @@ function verificationReason(report: ReviewPackage['verification']): string | und
   return undefined
 }
 
-/** The one review-permission function; the sharing ticket extends the common branch. */
-export function canReview(shortId: number, skill: SkillRow): boolean {
-  if (skill.scope === SKILL_SCOPE.personal) return skill.owner_short_id === shortId
-  // #298: a common candidate is reviewable by Phaethon, and visible to its
-  // proposer. This ticket cannot create one, so the branch stays closed.
-  return false
-}
-
 /** The creation module's dependencies: the store, the runtime service and the data root. */
 export interface SkillCreationOptions {
   readonly root: string
@@ -753,38 +764,55 @@ export class SkillCreation {
   }
 
   /** The pending candidates one caller may review, newest first and bounded. */
-  pending(shortId: number): PendingItem[] {
-    return this.#store.pendingDrafts(shortId).map(row => this.#pendingItem(row))
+  pending(shortId: number, isAdmin = false): PendingItem[] {
+    return this.#store.pendingDrafts(shortId, isAdmin).map(row => this.#pendingItem(row, isAdmin))
   }
 
   /**
-   * Validate, stage, record and verify one explicit candidate.
+   * Validate, stage, record and verify one candidate.
    *
-   * The file set is written to `tmp/<uuid>/`, re-read by the one package
-   * algorithm, moved into `candidates/<uuid>/` and only then inserted. A name
-   * that already has an approved current version is refused as a conflict: a
-   * revision is the evolution ticket's path. The candidate never enters a
-   * provider; only an approved version is served.
+   * An explicit create writes the model's files to `tmp/<uuid>/`; an install
+   * copies the already-fetched package there instead. Both are then re-read by
+   * the one package algorithm, moved into `candidates/<uuid>/` and inserted. A
+   * common candidate additionally needs the explicit sharing consent read from
+   * the anchoring user turn, and records its proposer; the review material then
+   * contains only the cleaned package and source summary. A name that already
+   * has an approved current version is refused as a conflict: a revision is the
+   * evolution ticket's path. The candidate never enters a provider; only an
+   * approved version is served.
    */
   async create(input: CreateCandidateInput): Promise<CreateCandidateResult> {
     try {
-      if (input.scope !== SKILL_SCOPE.personal) {
-        throw new SkillError(400, 'skills/common-unsupported', 'common skills need the sharing ticket; create a personal skill for now')
+      if (input.scope !== SKILL_SCOPE.personal && input.scope !== SKILL_SCOPE.common) {
+        throw new SkillError(400, 'skills/invalid-scope', `unknown skill scope ${String(input.scope)}`)
       }
-      if (!Array.isArray(input.files) || input.files.length === 0) {
+      const common = input.scope === SKILL_SCOPE.common
+      const consent = common ? requireSharingConsent(input.events) : undefined
+      if (input.packageDir !== undefined && input.files !== undefined) {
+        throw new SkillError(400, 'skills/invalid-package', 'create accepts either package files or a fetched package, not both')
+      }
+      if (input.packageDir === undefined && (!Array.isArray(input.files) || input.files.length === 0)) {
         throw new SkillError(400, 'skills/invalid-package', 'create needs the complete package files, including SKILL.md')
       }
-      const focus = resolveFocus(input.events, input.focus)
-      const evidence = checkedEvidence(input.evidence)
+      if (input.packageDir !== undefined && input.install === undefined) {
+        throw new SkillError(400, 'skills/invalid-package', 'a fetched package needs the install source it was fetched from')
+      }
+      const focus = input.focus === undefined ? undefined : resolveFocus(input.events, input.focus)
+      if (focus === undefined && input.install === undefined) {
+        throw new SkillError(400, 'skills/invalid-focus', 'create needs focus: {"kind":"turn"} or {"kind":"task","text":"..."}')
+      }
+      const evidence = common ? [] : checkedEvidence(input.evidence)
       const staging = join(this.#root, 'tmp', randomUUID())
       const candidateId = randomUUID()
       let candidateDir: string | undefined
       try {
-        writeSkillPackage(staging, input.files)
+        if (input.packageDir === undefined) writeSkillPackage(staging, input.files as readonly CandidateFile[])
+        else copySkillPackage(input.packageDir, staging)
         const parsed = readSkillPackage(staging)
+        const identityOwner = common ? undefined : input.ownerShortId
         const existing = this.#store.activeIdentity({
-          scope: SKILL_SCOPE.personal,
-          ownerShortId: input.ownerShortId,
+          scope: input.scope,
+          ownerShortId: identityOwner,
           name: parsed.name,
         })
         if (existing !== undefined) {
@@ -794,21 +822,41 @@ export class SkillCreation {
           if (existing.current_version_id !== null) {
             throw new SkillError(409, 'skills/name-conflict', `a skill named ${existing.name} already exists; use a revision`)
           }
+          if (common && existing.proposed_by !== input.ownerShortId) {
+            throw new SkillError(409, 'skills/name-conflict',
+              `a common skill named ${existing.name} already has a candidate proposed by another user`)
+          }
         }
         const scenarios = checkedScenarios(input.scenarios, new Set(parsed.manifest.map(entry => entry.path)), this.#verifyTimeoutMs)
         const comparisons = checkedComparisons(input.comparisons)
         mkdirSync(join(this.#root, 'candidates'), { recursive: true })
         candidateDir = join(this.#root, 'candidates', candidateId)
         renameSync(staging, candidateDir)
+        const install = input.install
         const location: SourceProvenance = {
-          sessionId: input.sessionId,
-          focus,
-          ...(evidence.length === 0 ? {} : { evidence }),
+          ...(common
+            ? { ...(consent === undefined ? {} : { consent }) }
+            : {
+                sessionId: input.sessionId,
+                ...(focus === undefined ? {} : { focus }),
+                ...(evidence.length === 0 ? {} : { evidence }),
+              }),
+          ...(install === undefined
+            ? {}
+            : {
+                address: install.address,
+                resolvedVersion: install.resolvedVersion,
+                digest: install.digest,
+                fetchedAt: install.fetchedAt,
+                ...(install.etag === undefined ? {} : { etag: install.etag }),
+                ...(install.lastModified === undefined ? {} : { lastModified: install.lastModified }),
+              }),
         }
         const draft = this.#store.createDraft({
           name: parsed.name,
-          scope: SKILL_SCOPE.personal,
-          ownerShortId: input.ownerShortId,
+          scope: input.scope,
+          ...(identityOwner === undefined ? {} : { ownerShortId: identityOwner }),
+          ...(common ? { proposedBy: input.ownerShortId } : {}),
           createdBy: input.ownerShortId,
           packagePath: `candidates/${candidateId}`,
           manifest: canonicalManifest(parsed.manifest),
@@ -817,7 +865,7 @@ export class SkillCreation {
           ...(input.license === undefined
             ? (parsed.license === undefined ? {} : { license: parsed.license })
             : { license: input.license }),
-          sourceType: SOURCE_TYPE.explicit,
+          sourceType: install === undefined ? SOURCE_TYPE.explicit : SOURCE_TYPE.install,
           sourceLocation: JSON.stringify(location),
         })
         const verification = await runVerification({
@@ -852,9 +900,9 @@ export class SkillCreation {
    * The read-only review package for one candidate, plus its deterministic
    * display and one explicitly bounded expansion.
    */
-  inspect(shortId: number, versionId: number, options: { expand?: 'none' | 'skill' | 'files'; path?: string } = {}): InspectResult {
+  inspect(shortId: number, isAdmin: boolean, versionId: number, options: { expand?: 'none' | 'skill' | 'files'; path?: string } = {}): InspectResult {
     try {
-      const { version, skill } = this.#visible(shortId, versionId)
+      const { version, skill } = this.#visible(shortId, isAdmin, versionId, 'inspect')
       const directory = this.#service.versionDirectory(version)
       const parsed = this.#readCandidate(version, skill, directory)
       const provenance = parseSourceLocation(version.source_location)
@@ -877,6 +925,7 @@ export class SkillCreation {
           focus: provenance.focus ?? null,
           ...(provenance.address === undefined ? {} : { address: provenance.address }),
           ...(provenance.resolvedVersion === undefined ? {} : { resolvedVersion: provenance.resolvedVersion }),
+          ...(provenance.digest === undefined ? {} : { digest: provenance.digest }),
         },
         status: version.status,
         manifestHash: version.manifest_hash,
@@ -890,7 +939,7 @@ export class SkillCreation {
         packageTotal: parsed.manifest.length,
         changes,
         verification,
-        nextActions: version.status === VERSION_STATUS.pending ? [...REVIEW_ACTIONS] : [],
+        nextActions: version.status === VERSION_STATUS.pending && canReview(shortId, isAdmin, skill) ? [...REVIEW_ACTIONS] : [],
         growthConfirmation: {
           required: growth.exceeded,
           oldCharacters: growth.oldCharacters,
@@ -931,8 +980,9 @@ export class SkillCreation {
    * immutable version and one transaction move the current pointer. A failure
    * renames it back, so a half-published version is never readable.
    */
-  review({ shortId, versionId, decision, note }: {
+  review({ shortId, isAdmin, versionId, decision, note }: {
     readonly shortId: number
+    readonly isAdmin: boolean
     readonly versionId: number
     readonly decision: ReviewDecision
     readonly note?: string
@@ -941,7 +991,7 @@ export class SkillCreation {
       if (!REVIEW_ACTIONS.includes(decision)) {
         throw new SkillError(400, 'skills/invalid-decision', `decision must be one of ${REVIEW_ACTIONS.join(', ')}`)
       }
-      const { version, skill } = this.#visible(shortId, versionId)
+      const { version, skill } = this.#visible(shortId, isAdmin, versionId, 'review')
       if (version.status !== VERSION_STATUS.pending) {
         throw new SkillError(409, 'skills/not-pending', `skill version ${versionId} is no longer pending`)
       }
@@ -1022,9 +1072,9 @@ export class SkillCreation {
    * The candidate reference the review-entry route injects, after the same
    * one visibility function `inspect` uses. A non-reviewer sees not-found.
    */
-  reviewTarget(shortId: number, versionId: number): { versionId: number; skillId: number; name: string; manifestHash: string } {
+  reviewTarget(shortId: number, isAdmin: boolean, versionId: number): { versionId: number; skillId: number; name: string; manifestHash: string } {
     try {
-      const { version, skill } = this.#visible(shortId, versionId)
+      const { version, skill } = this.#visible(shortId, isAdmin, versionId, 'inspect')
       if (version.status !== VERSION_STATUS.pending) {
         throw new SkillError(409, 'skills/not-pending', `skill version ${versionId} is no longer pending`)
       }
@@ -1035,7 +1085,8 @@ export class SkillCreation {
   }
 
   /** One pending row as both `skill_manage list` and `/skills/list` expose it. */
-  #pendingItem(row: PendingDraftRow): PendingItem {
+  #pendingItem(row: PendingDraftRow, isAdmin: boolean): PendingItem {
+    const decidable = row.skill_scope === SKILL_SCOPE.personal || isAdmin
     return {
       versionId: row.id,
       skillId: row.skill_id,
@@ -1044,17 +1095,27 @@ export class SkillCreation {
       sourceType: row.source_type,
       createdAt: row.created_at,
       growthExceeded: row.growth_exceeded === 1,
-      nextActions: [...REVIEW_ACTIONS],
+      nextActions: decidable ? [...REVIEW_ACTIONS] : [],
     }
   }
 
-  /** The version and identity the caller may review; anything else is not found. */
-  #visible(shortId: number, versionId: number): { version: SkillVersionRow; skill: SkillRow } {
+  /**
+   * The version and identity the caller may inspect or decide.
+   *
+   * A personal candidate belongs to its owner. A common candidate is visible to
+   * its proposer and Phaethon; only Phaethon may decide it, so a proposer who
+   * can read it gets a forbidden refusal for a review decision rather than a
+   * not-found that would hide a candidate they can see.
+   */
+  #visible(shortId: number, isAdmin: boolean, versionId: number, action: 'inspect' | 'review'): { version: SkillVersionRow; skill: SkillRow } {
     const version = this.#store.version(versionId)
     if (version === undefined) throw new SkillError(404, 'skills/not-found', `skill version ${versionId} is not visible to this user`)
     const skill = this.#store.identity(version.skill_id)
-    if (skill === undefined || !canReview(shortId, skill)) {
+    if (skill === undefined || !canInspect(shortId, isAdmin, skill)) {
       throw new SkillError(404, 'skills/not-found', `skill version ${versionId} is not visible to this user`)
+    }
+    if (action === 'review' && !canReview(shortId, isAdmin, skill)) {
+      throw new SkillError(403, 'skills/forbidden', 'only Phaethon may decide a common skill candidate')
     }
     return { version, skill }
   }

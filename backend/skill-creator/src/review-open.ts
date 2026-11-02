@@ -55,13 +55,14 @@ export function reviewEntryText(target: { readonly name: string; readonly versio
  *
  * @returns the primary session id the client should open.
  */
-export async function appendReviewEntry({ ctx, creation, shortId, versionId }: {
+export async function appendReviewEntry({ ctx, creation, shortId, isAdmin, versionId }: {
   readonly ctx: Context
   readonly creation: SkillCreation
   readonly shortId: number
+  readonly isAdmin: boolean
   readonly versionId: number
 }): Promise<{ readonly sessionId: string }> {
-  const target = creation.reviewTarget(shortId, versionId)
+  const target = creation.reviewTarget(shortId, isAdmin, versionId)
   const header = await ctx.ourfairySessions.primary({ shortId })
   const text = reviewEntryText(target)
   const source: SkillReviewSource = {
