@@ -13,12 +13,13 @@
  * supplies per-user candidates and re-checks a version's integrity when the
  * native tool loads it.
  *
- * Creation and review are this ticket's surface: one `skill_manage` tool on
- * user sessions (create/list/inspect/review), the isolated candidate area, the
- * disposable verification runner, the deterministic review display row and the
- * pending entry that appends a system-context reference to the caller's primary
- * session. Install, sharing, evolution and background learning are later
- * tickets; their hooks are marked, not half-built.
+ * The row's surface is one `skill_manage` tool on user sessions
+ * (create/install/list/inspect/review/rollback/archive/restore), the isolated
+ * candidate area, the disposable verification runner, the deterministic review
+ * display row, shared proposals with Phaethon-only approval, the lifecycle
+ * rules and the pending entry that appends a system-context reference to the
+ * caller's primary session. Background learning is the one later engine; its
+ * hooks are marked, not half-built.
  *
  * @module @ourfairy/dsh-skill-creator
  */
@@ -28,9 +29,12 @@ import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 import { mountRoutes } from '@ourfairy/dsh-http/http'
 import { SkillCreation } from './creation.js'
 import { SURFACE, skillHandlers } from './http.js'
+import { SkillInstall } from './install.js'
+import { SkillNotifications } from './notify.js'
 import { SkillProviders } from './provider.js'
 import { appendReviewEntry } from './review-open.js'
 import { SkillService } from './service.js'
+import { SkillLifecycle } from './sharing.js'
 import { SkillStore } from './store.js'
 import { registerSkillTools } from './tools.js'
 import type { Context } from '@deepseek-ai/cordis'
@@ -87,6 +91,7 @@ export type SkillCreatorConfig = {
   readonly bundledSkillsDir: string
   readonly seedDir?: string
   readonly verifyTimeoutMs?: number
+  readonly installMaxBytes?: number
 }
 
 /** Whether one absolute path is `root` or under it; the database belongs inside the data root. */
@@ -104,6 +109,9 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
     root: config.root,
     verifyTimeoutMs: config.verifyTimeoutMs ?? 120_000,
   })
+  const install = new SkillInstall({ root: config.root, maxBytes: config.installMaxBytes ?? 10 * 1024 * 1024 })
+  const lifecycle = new SkillLifecycle(store, service)
+  const notifications = new SkillNotifications(store)
   const providers = new SkillProviders(service)
   ctx.effect(() => () => {
     providers.dispose()
@@ -122,10 +130,13 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
   const handlers = skillHandlers({
     service,
     creation,
+    lifecycle,
+    notifications,
     authenticate: request => ctx.identity.authenticateRequest(request),
     fence: request => ctx.connection.fence(request),
     invalidateOwner: shortId => providers.invalidateOwner(shortId),
-    openReview: (shortId, versionId) => appendReviewEntry({ ctx, creation, shortId, versionId }),
+    invalidateAll: () => providers.invalidateAll(),
+    openReview: (shortId, isAdmin, versionId) => appendReviewEntry({ ctx, creation, shortId, isAdmin, versionId }),
   })
   mountRoutes(ctx, { label: 'ourfairy-skill-creator', surface: SURFACE, handlers })
 
@@ -148,6 +159,10 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
       ctx,
       creation,
       service,
+      install,
+      lifecycle,
+      notifications,
+      isAdmin: shortId => ctx.identity.users.byShortId(shortId)?.isAdmin === true,
       invalidateOwner: shortId => providers.invalidateOwner(shortId),
       invalidateAll: () => providers.invalidateAll(),
     }, names)
@@ -161,10 +176,13 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
   for (const agent of ctx.agents.list()) register(agent)
 }
 
-export { buildReviewDisplay, canReview, parseSourceLocation, resolveFocus, REVIEW_ACTIONS, SkillCreation } from './creation.js'
+export { buildReviewDisplay, parseSourceLocation, resolveFocus, REVIEW_ACTIONS, SkillCreation } from './creation.js'
 export { SKILL_PATHS, SURFACE } from './http.js'
+export { extractSkillArchive, installBasesFromEnv, parseInstallAddress, SkillInstall } from './install.js'
+export { REVIEW_RESULTS_LIMIT, SkillNotifications } from './notify.js'
 export { appendReviewEntry, reviewEntryText } from './review-open.js'
 export { ACTION_SCOPE, POOL_STATE, SkillService } from './service.js'
+export { canInspect, canManageLifecycle, canReview, requireSharingConsent, SHARING_PHRASES, SkillLifecycle } from './sharing.js'
 export { SKILL_MANAGE_DESCRIPTION, SKILL_MANAGE_NAME, registerSkillTools } from './tools.js'
 export { runVerification, type VerificationReport } from './verify.js'
 export { PROVIDER_NAME, SkillProviders } from './provider.js'

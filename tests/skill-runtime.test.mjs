@@ -373,7 +373,8 @@ describe('skill runtime through the real composition', () => {
     assert.equal(activation.scope, 2)
     assert.equal(activation.state, 3, 'a common skill with no preference is disabled')
     assert.equal(activation.enabled, false)
-    assert.deepEqual(activation.actions, { toggle: 1, archive: 2, restore: 2 })
+    assert.deepEqual(activation.actions, { toggle: 1, archive: 0, restore: 0 },
+      'only Phaethon is offered the common lifecycle actions; this caller may only toggle it')
     assert.equal(pool.some(item => item.name === 'skill-creator'), false, 'the bundled native skill is not a product pool item')
 
     const updated = (await request('/skills/preference', alice.token, { skillId: activation.skillId, enabled: true })).skill

@@ -22,14 +22,16 @@ import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.remote.ChatSyncKey
 import me.rerere.rikkahub.data.remote.RemoteNotificationPlatform
 import me.rerere.rikkahub.data.remote.RemoteReceivePlatform
+import me.rerere.rikkahub.data.remote.SkillsNotificationPlatform
 import me.rerere.rikkahub.ui.identity.RemoteNotificationTarget
+import me.rerere.rikkahub.ui.identity.SkillsNotificationTarget
 
 /**
  * Android's notification and reception platform: it publishes reminders and answers the
  * foreground/enabled facts reception reads. Eligibility and durable consumption belong to shared
  * session sync, never here.
  */
-class AndroidRemoteNotifications(private val context: Context) : RemoteNotificationPlatform, RemoteReceivePlatform {
+class AndroidRemoteNotifications(private val context: Context) : RemoteNotificationPlatform, RemoteReceivePlatform, SkillsNotificationPlatform {
     private val preferences = context.getSharedPreferences("ourfairy.remote-receive", Context.MODE_PRIVATE)
     private val mutableEnabled = MutableStateFlow(preferences.getBoolean("enabled", false))
     override val enabled = mutableEnabled.asStateFlow()
@@ -40,6 +42,7 @@ class AndroidRemoteNotifications(private val context: Context) : RemoteNotificat
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(MESSAGES_CHANNEL, "Fairy 会话提醒", NotificationManager.IMPORTANCE_DEFAULT))
         manager.createNotificationChannel(NotificationChannel(RECEIVE_CHANNEL, "Fairy 后台接收", NotificationManager.IMPORTANCE_LOW))
+        manager.createNotificationChannel(NotificationChannel(SKILLS_CHANNEL, "Fairy 技能提醒", NotificationManager.IMPORTANCE_DEFAULT))
     }
 
     override fun setEnabled(value: Boolean) {
@@ -47,10 +50,15 @@ class AndroidRemoteNotifications(private val context: Context) : RemoteNotificat
         mutableEnabled.value = value
     }
 
-    fun notificationsAllowed(): Boolean {
+    fun notificationsAllowed(): Boolean = channelAllowed(MESSAGES_CHANNEL)
+
+    /** The skills reminder has its own channel; it is never gated by the chat channel's mood. */
+    private fun skillsNotificationsAllowed(): Boolean = channelAllowed(SKILLS_CHANNEL)
+
+    private fun channelAllowed(channel: String): Boolean {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
-        return context.getSystemService(NotificationManager::class.java).getNotificationChannel(MESSAGES_CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
+        return context.getSystemService(NotificationManager::class.java).getNotificationChannel(channel)?.importance != NotificationManager.IMPORTANCE_NONE
     }
 
     override fun isForeground() = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -86,20 +94,64 @@ class AndroidRemoteNotifications(private val context: Context) : RemoteNotificat
         }
     }
 
+    /**
+     * Publish one merged skill reminder opening the skills page.
+     *
+     * Same eligibility and one-notification-per-account rule as [publish]: the URI is the tag, so a
+     * later reminder for the same account replaces the earlier one instead of stacking.
+     */
+    @SuppressLint("MissingPermission")
+    override fun publishSkills(endpoint: String, userShortId: Int, preview: String) {
+        if (!skillsNotificationsAllowed()) {
+            mutableFailure.value = "通知权限或技能提醒渠道已关闭；技能页仍会显示待审状态"
+            return
+        }
+        val intent = Intent(context, RouteActivity::class.java).apply {
+            action = ACTION_OPEN_SKILLS
+            data = Uri.Builder().scheme("ourfairy").authority("skills")
+                .appendPath(endpoint).appendPath(userShortId.toString()).build()
+            putExtra(EXTRA_ENDPOINT, endpoint)
+            putExtra(EXTRA_ACCOUNT, userShortId)
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val content = PendingIntent.getActivity(context, 1, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val notification = NotificationCompat.Builder(context, SKILLS_CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_rikkahub).setContentTitle("Fairy 技能")
+            .setContentText(preview).setStyle(NotificationCompat.BigTextStyle().bigText(preview))
+            .setContentIntent(content).setAutoCancel(true).setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build()
+        try {
+            NotificationManagerCompat.from(context).notify(intent.data.toString(), SKILLS_MESSAGE_ID, notification)
+            mutableFailure.value = null
+        } catch (failure: RuntimeException) {
+            mutableFailure.value = "系统未能发布技能提醒：${failure.message}"
+            throw failure
+        }
+    }
+
     companion object {
         const val MESSAGES_CHANNEL = "ourfairy.remote.messages"
         const val RECEIVE_CHANNEL = "ourfairy.remote.receive"
+        const val SKILLS_CHANNEL = "ourfairy.remote.skills"
         const val ACTION_OPEN_REMOTE = "me.rerere.rikkahub.OPEN_REMOTE_SESSION"
+        const val ACTION_OPEN_SKILLS = "me.rerere.rikkahub.OPEN_SKILLS"
         const val EXTRA_ENDPOINT = "remote_endpoint"
         const val EXTRA_ACCOUNT = "remote_account"
         const val EXTRA_SESSION = "remote_session"
         private const val MESSAGE_ID = 1
+        private const val SKILLS_MESSAGE_ID = 2
 
         fun target(intent: Intent): RemoteNotificationTarget? {
             val endpoint = intent.getStringExtra(EXTRA_ENDPOINT) ?: return null
             val session = intent.getStringExtra(EXTRA_SESSION) ?: return null
             val account = intent.getIntExtra(EXTRA_ACCOUNT, 0)
             return if (account > 0) RemoteNotificationTarget(endpoint, account, session) else null
+        }
+
+        /** The skills-page target one skills notification names, or null. */
+        fun skillsTarget(intent: Intent): SkillsNotificationTarget? {
+            val endpoint = intent.getStringExtra(EXTRA_ENDPOINT) ?: return null
+            val account = intent.getIntExtra(EXTRA_ACCOUNT, 0)
+            return if (account > 0) SkillsNotificationTarget(endpoint, account) else null
         }
     }
 }

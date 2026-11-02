@@ -93,12 +93,12 @@ const MATRIX = {
   memory: { 'POST/json/json': 2 },
   attachments: { 'POST/json/json': 2, 'POST/binary/json': 1, 'POST/json/binary': 1 },
   speech: { 'GET/none/json': 1, 'POST/binary/json': 1 },
-  skills: { 'POST/json/json': 4 },
+  skills: { 'POST/json/json': 6 },
 }
 
-test('the eight rows publish 42 unique addresses, read-only and grouped as declared', () => {
-  assert.equal(ALL.length, 42, 'the product HTTP surface is 42 addresses')
-  assert.equal(new Set(ALL.map(entry => entry.path)).size, 42, 'every published path is unique')
+test('the eight rows publish 44 unique addresses, read-only and grouped as declared', () => {
+  assert.equal(ALL.length, 44, 'the product HTTP surface is 44 addresses')
+  assert.equal(new Set(ALL.map(entry => entry.path)).size, 44, 'every published path is unique')
 
   for (const [row, surface] of ROWS) {
     assert.ok(Object.isFrozen(surface), `${row} must publish its SURFACE as a read-only array`)
@@ -115,7 +115,7 @@ test('the eight rows publish 42 unique addresses, read-only and grouped as decla
   }
 
   assert.deepEqual(countsOf(ALL.map(entry => entry.row)), {
-    identity: 6, sessions: 7, chat: 10, gateway: 7, memory: 2, attachments: 4, speech: 2, skills: 4,
+    identity: 6, sessions: 7, chat: 10, gateway: 7, memory: 2, attachments: 4, speech: 2, skills: 6,
   }, 'the rows must publish the declared number of addresses')
 
   // The chat row owns nine chat addresses and serves the session family's one
@@ -123,7 +123,7 @@ test('the eight rows publish 42 unique addresses, read-only and grouped as decla
   assert.deepEqual(countsOf(CHAT_SURFACE.map(entry => entry.prefix)), { chat: 9, sessions: 1 },
     'the chat row publishes nine chat addresses and the one session rename')
   assert.deepEqual(countsOf(ALL.map(entry => entry.prefix)), {
-    identity: 6, sessions: 8, chat: 9, gateway: 7, impression: 2, attachments: 4, speech: 2, skills: 4,
+    identity: 6, sessions: 8, chat: 9, gateway: 7, impression: 2, attachments: 4, speech: 2, skills: 6,
   }, 'the error-prefix grouping is the one the addresses answer with')
 
   const renames = CHAT_SURFACE.filter(entry => entry.prefix === 'sessions')
@@ -140,11 +140,11 @@ test('each row serves the method/body/response matrix it publishes', () => {
     )
   }
 
-  assert.deepEqual(countsOf(ALL.map(entry => entry.method)), { POST: 41, GET: 1 },
+  assert.deepEqual(countsOf(ALL.map(entry => entry.method)), { POST: 43, GET: 1 },
     'every address is POST except the speech availability read')
-  assert.deepEqual(countsOf(ALL.map(entry => entry.body)), { json: 39, binary: 2, none: 1 },
+  assert.deepEqual(countsOf(ALL.map(entry => entry.body)), { json: 41, binary: 2, none: 1 },
     '35 addresses read a JSON object; chunk and transcriptions read raw bytes; the GET reads none')
-  assert.deepEqual(countsOf(ALL.map(entry => entry.response)), { json: 40, sse: 1, binary: 1 },
+  assert.deepEqual(countsOf(ALL.map(entry => entry.response)), { json: 42, sse: 1, binary: 1 },
     'every address answers JSON except the SSE and download responses')
 })
 
@@ -156,7 +156,7 @@ test('the handler table each row builds holds exactly its published addresses, i
     ['gateway', GATEWAY_SURFACE, gatewayHandlers({ service: {}, authenticate: () => undefined, fence })],
     ['memory', IMPRESSION_SURFACE,
       impressionHandlers({ service: {}, authenticate: () => undefined, fence })],
-    ['skills', SKILL_SURFACE, skillHandlers({ service: {}, creation: {}, authenticate: () => undefined, fence, invalidateOwner: () => {}, openReview: async () => ({ sessionId: 'session-1' }) })],
+    ['skills', SKILL_SURFACE, skillHandlers({ service: {}, creation: {}, lifecycle: {}, notifications: {}, authenticate: () => undefined, fence, invalidateOwner: () => {}, invalidateAll: () => {}, openReview: async () => ({ sessionId: 'session-1' }) })],
   ]
   for (const [row, surface, handlers] of tables) {
     assert.deepEqual([...handlers.keys()], surface.map(entry => entry.path),

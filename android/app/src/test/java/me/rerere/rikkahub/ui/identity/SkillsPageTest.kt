@@ -28,11 +28,14 @@ import me.rerere.rikkahub.data.remote.IdentityUser
 import me.rerere.rikkahub.data.remote.InMemoryCredentialStore
 import me.rerere.rikkahub.data.remote.PendingSkill
 import me.rerere.rikkahub.data.remote.SignedIn
+import me.rerere.rikkahub.data.remote.SkillActionTarget
 import me.rerere.rikkahub.data.remote.SkillActionScopes
 import me.rerere.rikkahub.data.remote.SkillPool
 import me.rerere.rikkahub.data.remote.SkillPoolItem
 import me.rerere.rikkahub.data.remote.SkillPoolState
+import me.rerere.rikkahub.data.remote.SkillReviewResult
 import me.rerere.rikkahub.data.remote.SkillScope
+import me.rerere.rikkahub.data.remote.SkillVersionStatus
 import me.rerere.rikkahub.data.remote.SkillsBackend
 import me.rerere.rikkahub.ui.fairy.FairyAppTheme
 import me.rerere.rikkahub.ui.fairy.ProvideAgoraMotionPolicy
@@ -76,8 +79,12 @@ class SkillsPageTest {
         var list: suspend () -> SkillPool,
         var setEnabled: suspend (Long, Boolean) -> Unit = { _, _ -> },
         var reviewOpen: suspend (Long) -> String = { "ourfairy-user-2-primary" },
+        var archive: suspend (Long) -> Unit = { _ -> },
+        var restore: suspend (Long) -> Unit = { _ -> },
     ) : SkillsBackend {
         val writes = mutableListOf<Pair<Long, Boolean>>()
+        val archived = mutableListOf<Long>()
+        val restored = mutableListOf<Long>()
         val opened = mutableListOf<Long>()
         var reads = 0
         override suspend fun list(token: String): SkillPool {
@@ -95,6 +102,18 @@ class SkillsPageTest {
             setEnabled(skillId, enabled)
             return SkillPoolItem(skillId, "skill-$skillId", scope = SkillScope.PERSONAL, state = SkillPoolState.IN_CATALOG, enabled = enabled)
         }
+
+        override suspend fun archive(token: String, skillId: Long): SkillPoolItem {
+            archived += skillId
+            archive(skillId)
+            return SkillPoolItem(skillId, "skill-$skillId", scope = SkillScope.PERSONAL, state = SkillPoolState.ARCHIVED, enabled = true)
+        }
+
+        override suspend fun restore(token: String, skillId: Long): SkillPoolItem {
+            restored += skillId
+            restore(skillId)
+            return SkillPoolItem(skillId, "skill-$skillId", scope = SkillScope.PERSONAL, state = SkillPoolState.DISABLED, enabled = false)
+        }
     }
 
     private fun item(
@@ -103,6 +122,7 @@ class SkillsPageTest {
         scope: Int,
         state: Int,
         enabled: Boolean,
+        archiveScope: Int = if (scope == SkillScope.COMMON) 2 else 1,
     ) = SkillPoolItem(
         skillId = id,
         name = name,
@@ -113,8 +133,8 @@ class SkillsPageTest {
         currentVersionId = 10 + id,
         actions = SkillActionScopes(
             toggle = 1,
-            archive = if (scope == SkillScope.COMMON) 2 else 1,
-            restore = if (scope == SkillScope.COMMON) 2 else 1,
+            archive = archiveScope,
+            restore = archiveScope,
         ),
     )
 
@@ -155,7 +175,7 @@ class SkillsPageTest {
         compose.onNodeWithText("已禁用").assertExists()
         compose.onNodeWithText("进入目录").assertExists()
         compose.onAllNodesWithText("共有").assertCountEquals(2)
-        compose.onAllNodesWithText("个人").assertCountEquals(1)
+        compose.onAllNodesWithText("个人").assertCountEquals(2)
         compose.onAllNodesWithText("归档/恢复范围：全部用户").assertCountEquals(2)
         compose.onAllNodesWithText("归档/恢复范围：仅本人").assertCountEquals(1)
         compose.onNodeWithText("pending-skill").performScrollTo().performClick()
@@ -214,6 +234,68 @@ class SkillsPageTest {
         assertEquals("the page re-read the pool after the accepted write", 2, backend.reads)
         compose.onNodeWithTag("skill-switch-2").assertIsOff()
         compose.onNodeWithText("已禁用").assertExists()
+    }
+
+    @Test
+    fun `archive and restore call the backend and the control follows the fresh read`() {
+        var archived = false
+        val backend = ScriptedSkills(
+            list = {
+                SkillPool(skills = listOf(item(2, "personal-skill", SkillScope.PERSONAL,
+                    if (archived) SkillPoolState.ARCHIVED else SkillPoolState.IN_CATALOG, enabled = true)))
+            },
+            archive = { archived = true },
+            restore = { archived = false },
+        )
+        show(backend)
+
+        compose.onNodeWithTag("skill-archive-2").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals(listOf(2L), backend.archived)
+        compose.onNodeWithText("已归档").assertExists()
+        compose.onNodeWithTag("skill-restore-2").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals(listOf(2L), backend.restored)
+        compose.onNodeWithText("进入目录").assertExists()
+        assertEquals("each write re-read the pool", 3, backend.reads)
+    }
+
+    @Test
+    fun `a lifecycle action the backend does not offer is not rendered`() {
+        val backend = ScriptedSkills(list = {
+            SkillPool(skills = listOf(item(5, "common-skill", SkillScope.COMMON, SkillPoolState.IN_CATALOG,
+                enabled = true, archiveScope = SkillActionTarget.NONE)))
+        })
+        show(backend)
+
+        compose.onNodeWithText("common-skill").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("skill-archive-5").assertDoesNotExist()
+        compose.onNodeWithTag("skill-restore-5").assertDoesNotExist()
+        compose.onAllNodesWithText("归档/恢复范围：全部用户").assertCountEquals(0)
+    }
+
+    @Test
+    fun `recent decisions render the backend's status and scope`() {
+        val backend = ScriptedSkills(list = {
+            SkillPool(
+                skills = listOf(item(2, "personal-skill", SkillScope.PERSONAL, SkillPoolState.IN_CATALOG, enabled = true)),
+                reviewResults = listOf(
+                    SkillReviewResult(versionId = 51, skillId = 9, name = "shared-approved", scope = SkillScope.COMMON,
+                        status = SkillVersionStatus.APPROVED, decidedAt = 100, proposer = true),
+                    SkillReviewResult(versionId = 52, skillId = 10, name = "personal-rejected", scope = SkillScope.PERSONAL,
+                        status = SkillVersionStatus.REJECTED, decidedAt = 101, proposer = false),
+                ),
+            )
+        })
+        show(backend)
+
+        compose.onNodeWithText("最近审核结果").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("shared-approved").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("已通过").assertExists()
+        compose.onNodeWithText("personal-rejected").assertExists()
+        compose.onNodeWithText("已拒绝").assertExists()
     }
 
     @Test
