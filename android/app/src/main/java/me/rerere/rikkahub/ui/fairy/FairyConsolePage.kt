@@ -124,6 +124,12 @@ fun FairyConsolePage(
         content = { it.at(0.5f, 0.55f) },
     )
     val window = interaction.window
+    // 进入会话: the same target for the button and the left swipe — the current
+    // session, or the shared list when there is nothing to enter.
+    val enterConversation: () -> Unit = {
+        val target = currentSessionId
+        if (target == null) overlay.open() else onOpen(Screen.Conversation(target))
+    }
     CompositionLocalProvider(LocalFairyTokens provides tokens) {
         SessionListOverlay(
             state = overlay,
@@ -141,6 +147,10 @@ fun FairyConsolePage(
             Box(
                 Modifier
                     .fillMaxSize()
+                    .fairySwipeNavigation(
+                        enabled = !overlay.isOpen,
+                        onSwipeLeft = enterConversation,
+                    )
                     .background(Brush.verticalGradient(listOf(tokens.bgTop, tokens.bgBottom))),
             ) {
                 FairyBackground(watermark = false)
@@ -179,14 +189,14 @@ fun FairyConsolePage(
                     }
                     // The line is a sibling below the screen: its top stays at the
                     // screen's bottom edge, so added height extends downward over
-                    // the page, never over the Fairy animation.
-                    caption?.let { line ->
-                        FairyCaption(
-                            line,
-                            onFinished = { fairy.captionFinished() },
-                            modifier = Modifier.testTag("fairy-caption"),
-                        )
-                    }
+                    // the page, never over the Fairy animation. Its slot keeps the
+                    // settled line composed while the shrinking panel carries the
+                    // card and buttons back up.
+                    FairyCaptionSlot(
+                        line = caption,
+                        onFinished = { fairy.captionFinished() },
+                        modifier = Modifier.testTag("fairy-caption"),
+                    )
                     Spacer(Modifier.height(16.dp))
                     ConsoleInfoCard(
                         user = identity?.user,
@@ -198,10 +208,7 @@ fun FairyConsolePage(
                         text = "进入会话",
                         tag = "SESSIONS",
                         variant = SignalButtonVariant.PRIMARY,
-                        onClick = {
-                            val target = currentSessionId
-                            if (target == null) overlay.open() else onOpen(Screen.Conversation(target))
-                        },
+                        onClick = enterConversation,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                     )
                     Spacer(Modifier.height(12.dp))

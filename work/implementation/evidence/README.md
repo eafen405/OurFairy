@@ -362,7 +362,7 @@
 | --- | --- |
 | [286-merge-hook](286-merge-hook/README.md) | #286 `.githooks` 补 `pre-merge-commit`，与 `pre-commit` 同样委托 `scripts/precommit.ts`；实测发现 Git 2.53 在 `pre-merge-commit` 运行之后才写 `MERGE_HEAD`，因此钩子显式传 `--merge` 要求全量门禁（`isMerging` 保留给冲突合并后的 `git commit`）。结构测试从 `core.hooksPath` 取实际目录，固定两个入口都存在、可执行并委托到同一脚本，另有 `--print --merge` 判定测试。真实合并未用 `--no-verify`：钩子输出 `pre-commit: full gate`、474/474、combo verified；README「提交前钩子」同步。 |
 
-## 界面微调（#215/#217/#218/#239/#255）
+## 界面微调（#215/#217/#218/#239/#255/#290/#291/#292）
 
 | 目录 | 内容 |
 | --- | --- |
@@ -371,6 +371,9 @@
 | [ui-218](ui-218/README.md) | #218 长按消息复制正文，含流式进行中的行；保留查看全文与 toast（真机未执行） |
 | [239-idle-caption](239-idle-caption/README.md) | #239 待机台词气泡改在 Fairy 屏幕下方向下展开（411dp Robolectric 断言与前后截图；真机未执行） |
 | [255-fairy-eye-highlight](255-fairy-eye-highlight/README.md) | #255 Fairy 眼睛高光随瞳孔移动、围绕移动后的瞳孔中心缩放，内侧 70% 保持原亮度、外侧 30% 渐隐（`FairyEyeTest` 固定几何；真机未执行） |
+| [290-swipe-nav](290-swipe-nav/README.md) | #290 主页左划进入当前会话/共享列表、会话页右划回首页；会话页顶栏改为齿轮与 Fairy 小屏回首页，会话列表标题与底栏图标，7 条文案「后端」→「服务端」（Robolectric 断言；真机手势未执行） |
+| [291-caption-exit](291-caption-exit/README.md) | #291 待机台词气泡退场时高度连续收起，下方卡片与按钮随平移回位；`FairyCaptionSlot` 保留最后一句，Reduced Motion 瞬时（411dp Robolectric 断言；真机未执行） |
+| [292-tool-collapse](292-tool-collapse/README.md) | #292 工具调用默认只显示最新一次，箭头展开该步全部调用；单工具无箭头，流式增长保持收起（Robolectric 8 用例；真机未执行） |
 
 ## Triage 修复
 
@@ -392,6 +395,7 @@
 | [stage-t16-t19](stage-t16-t19/) · [review-t16-t19](review-t16-t19/) · [review-t16-t19-fix](review-t16-t19-fix/README.md) | T16–T19 整合、评审与修复 |
 | [review-24-26](review-24-26/README.md) · [review-24-26-backend](review-24-26-backend/evidence.md) | #24–#26 阶段评审 |
 | [review-arch-map69](review-arch-map69/README.md) · [review-arch-map69-fixes](review-arch-map69-fixes/README.md) | 地图 #69 最终两轴 code-review（四份逐字报告）与逐条评审项的修复/记录不修 |
+| [fixes-290-291-292](fixes-290-291-292/README.md) | #290/#291/#292 小修批次：三票 octopus 合入 `e59587b62b`；#291 选本地 slot 版并关闭重复 PR #294；合并提交走全量门禁（474 npm tests、628 Android tests、combo verified） |
 | [retro-guardrails](retro-guardrails/README.md) | 复盘修复验证 |
 
 ## 阅读顺序
