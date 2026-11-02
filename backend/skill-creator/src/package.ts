@@ -360,3 +360,48 @@ export function copySkillPackage(sourceDir: string, targetDir: string): void {
     writeFileSync(path, file.bytes, { mode: file.executable ? 0o755 : 0o644 })
   }
 }
+
+/** One file the creation path writes into a staged candidate. */
+export interface PackageFileInput {
+  readonly path: string
+  readonly content: string
+  readonly executable?: boolean
+}
+
+/**
+ * Write one package from model-supplied files.
+ *
+ * This is the only way a draft's bytes enter the tree: every path is checked
+ * by {@link assertPackagePath} before anything is written, duplicate paths are
+ * refused, and a path that is a prefix of another entry is refused rather than
+ * leaving it ambiguous whether the shorter is a file or a directory. The
+ * caller validates the written directory with {@link readSkillPackage} before
+ * the candidate becomes visible.
+ *
+ * @param targetDir - an empty directory the caller owns; not walked as a source.
+ * @param files - the complete package contents.
+ */
+export function writeSkillPackage(targetDir: string, files: readonly PackageFileInput[]): void {
+  mkdirSync(targetDir, { recursive: true })
+  const seen = new Set<string>()
+  for (const file of files) {
+    assertPackagePath(file.path)
+    if (seen.has(file.path)) throw new PackageError(`skill package lists ${file.path} more than once`)
+    if (typeof file.content !== 'string') throw new PackageError(`skill package file ${file.path} needs text content`)
+    seen.add(file.path)
+  }
+  // A file cannot also be another entry's directory: `scripts` and
+  // `scripts/run.sh` cannot both be files in one package.
+  for (const path of seen) {
+    const segments = path.split('/')
+    for (let index = 1; index < segments.length; index += 1) {
+      const prefix = segments.slice(0, index).join('/')
+      if (seen.has(prefix)) throw new PackageError(`skill package path ${prefix} is both a file and a directory (${path})`)
+    }
+  }
+  for (const file of files) {
+    const full = join(targetDir, ...file.path.split('/'))
+    mkdirSync(dirname(full), { recursive: true })
+    writeFileSync(full, file.content, { mode: file.executable === true ? 0o755 : 0o644 })
+  }
+}

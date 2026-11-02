@@ -254,3 +254,27 @@ test('an archived identity refuses an import until it is restored', async () => 
     store.close()
   }
 })
+
+test('the creation writer stages a complete package and refuses unsafe or conflicting paths', async () => {
+  const { readSkillPackage, writeSkillPackage } = await import('../backend/skill-creator/dist/package.js')
+  const dir = join(temp('skill-write-'), 'pkg')
+  writeSkillPackage(dir, [
+    { path: 'SKILL.md', content: '---\nname: written-skill\ndescription: Use when writing.\n---\n\n# Workflow\n' },
+    { path: 'scripts/run.sh', content: '#!/bin/sh\nexit 0\n', executable: true },
+  ])
+  const parsed = readSkillPackage(dir)
+  assert.equal(parsed.name, 'written-skill')
+  assert.deepEqual(parsed.manifest.map(entry => entry.path), ['SKILL.md', 'scripts/run.sh'])
+  assert.equal(parsed.manifest.find(entry => entry.path === 'scripts/run.sh')?.executable, true,
+    'the executable bit the model asked for is the bit the manifest records')
+
+  assert.throws(() => writeSkillPackage(join(temp('skill-write-bad-'), 'pkg'), [
+    { path: 'SKILL.md', content: 'x' }, { path: '../escape', content: 'x' },
+  ]), /"\." or "\.\."|relative/u)
+  assert.throws(() => writeSkillPackage(join(temp('skill-write-dup-'), 'pkg'), [
+    { path: 'SKILL.md', content: 'x' }, { path: 'SKILL.md', content: 'y' },
+  ]), /more than once/u)
+  assert.throws(() => writeSkillPackage(join(temp('skill-write-prefix-'), 'pkg'), [
+    { path: 'scripts', content: 'x' }, { path: 'scripts/run.sh', content: 'y' },
+  ]), /both a file and a directory/u)
+})

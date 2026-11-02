@@ -125,7 +125,7 @@ test('the stateVersion constants bind the README contract', () => {
   // The README is read, not restated: the numbers below are this suite's
   // expectation, and the documented sentence must name the same ones, so a
   // version bump that forgets the prose fails here instead of shipping drift.
-  const versions = { ourfairyTranscript: 5, ourfairyWork: 2 }
+  const versions = { ourfairyTranscript: 6, ourfairyWork: 2 }
   const documented = { ourfairyTranscript: /transcript `(\d+)`/u, ourfairyWork: /\bwork `(\d+)`/u }
   const readme = readFileSync(new URL('../backend/chat/README.md', import.meta.url), 'utf8')
   for (const definition of [units.transcriptDefinition, units.workDefinition]) {
@@ -393,6 +393,60 @@ test('a checkpointed skill call continues exactly like a cold replay', () => {
   const checkpoint = units.transcriptDefinition.stateSchema.parse(JSON.parse(JSON.stringify(state)))
   state = units.transcriptDefinition.apply(checkpoint, log[1])
   assert.deepEqual(JSON.parse(JSON.stringify(state)), cold)
+})
+
+test('a successful skill_manage review result derives one kind-2 row with the backend display', () => {
+  const display = '技能候选 demo（个人，版本 7，哈希 abc）\n新技能，420 字符\n适用：demo\n验证：实际执行 1，复用 0，未执行 0，失败 0\n查看全文：skill_manage inspect versionId=7 expand=skill'
+  const log = [
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'review-call', name: 'skill_manage', arguments: '{"action":"inspect","versionId":7}' }),
+    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+      content: [{ type: 'text', text: JSON.stringify({ ok: true, action: 'inspect', kind: 'skill-review', display }) }],
+      source: { kind: 'tool' }, toolCallId: 'review-call' } }, { surfaceOp: 'append' }),
+  ]
+  const state = fold(units.transcriptDefinition, log)
+  const rows = units.transcriptAt(state)
+  assert.equal(rows.length, 1)
+  assert.deepEqual(rows[0], {
+    messageId: 'skill-review:review-call',
+    position: 0,
+    seq: 1,
+    requestId: null,
+    role: 3,
+    status: 2,
+    text: display,
+    kind: 2,
+    toolCallId: 'review-call',
+  })
+})
+
+test('a failed, malformed or unrelated skill_manage result derives no review row', () => {
+  const failed = fold(units.transcriptDefinition, [
+    event(0, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+      content: [{ type: 'text', text: JSON.stringify({ kind: 'skill-review', display: 'x' }) }],
+      source: { kind: 'tool' }, toolCallId: 'c1', isError: true } }, { surfaceOp: 'append' }),
+  ])
+  assert.deepEqual(units.transcriptAt(failed), [], 'a failed call never publishes a review row')
+
+  const malformed = fold(units.transcriptDefinition, [
+    event(0, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+      content: [{ type: 'text', text: 'not json' }], source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' }),
+    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't2', role: 'tool',
+      content: [{ type: 'text', text: JSON.stringify({ ok: true, pending: [], pool: [] }) }],
+      source: { kind: 'tool' }, toolCallId: 'c2' } }, { surfaceOp: 'append' }),
+  ])
+  assert.deepEqual(units.transcriptAt(malformed), [], 'only a result naming a review display derives a row')
+})
+
+test('a duplicated review result keeps the first row and adds no transition', () => {
+  const result = display => event(0, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+    content: [{ type: 'text', text: JSON.stringify({ kind: 'skill-review', display }) }],
+    source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' })
+  const state = fold(units.transcriptDefinition, [result('first display'), { ...result('second display'), seq: 2 }])
+  const rows = units.transcriptAt(state)
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].text, 'first display')
+  assert.equal(rows[0].seq, 0)
+  assert.deepEqual(state.rows[0].transitions, [])
 })
 
 test('a delivered message is not an assistant step and names no tools', () => {

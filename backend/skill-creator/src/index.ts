@@ -13,9 +13,12 @@
  * supplies per-user candidates and re-checks a version's integrity when the
  * native tool loads it.
  *
- * Creation, review, install and background learning are later tickets. This
- * row deliberately exposes no model tool yet: the selection pool and activation
- * are the whole runtime surface.
+ * Creation and review are this ticket's surface: one `skill_manage` tool on
+ * user sessions (create/list/inspect/review), the isolated candidate area, the
+ * disposable verification runner, the deterministic review display row and the
+ * pending entry that appends a system-context reference to the caller's primary
+ * session. Install, sharing, evolution and background learning are later
+ * tickets; their hooks are marked, not half-built.
  *
  * @module @ourfairy/dsh-skill-creator
  */
@@ -23,10 +26,13 @@ import z from '@deepseek-ai/schemastery'
 import { sep } from 'node:path'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 import { mountRoutes } from '@ourfairy/dsh-http/http'
+import { SkillCreation } from './creation.js'
 import { SURFACE, skillHandlers } from './http.js'
 import { SkillProviders } from './provider.js'
+import { appendReviewEntry } from './review-open.js'
 import { SkillService } from './service.js'
 import { SkillStore } from './store.js'
+import { registerSkillTools } from './tools.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 // The dsh seams this row reads and augments. Type-only imports add no runtime
@@ -35,11 +41,14 @@ import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-skill'
+import type {} from '@ourfairy/dsh-chat'
 import type {} from '@ourfairy/dsh-identity'
+import type {} from '@ourfairy/dsh-sessions'
 import type {} from '@ourfairy/dsh-spaces'
 
 export const name = 'ourfairy-skill-creator'
-export const inject = ['skills', 'agents', 'identity', 'webServer', 'connection', 'ourfairySpaces']
+export const inject = ['skills', 'agents', 'tools', 'identity', 'webServer', 'connection', 'ourfairySpaces',
+  'sessionQuery', 'ourfairySessions', 'ourfairyChatRuntime']
 
 /**
  * The row's configuration.
@@ -77,6 +86,7 @@ export type SkillCreatorConfig = {
   readonly root: string
   readonly bundledSkillsDir: string
   readonly seedDir?: string
+  readonly verifyTimeoutMs?: number
 }
 
 /** Whether one absolute path is `root` or under it; the database belongs inside the data root. */
@@ -90,6 +100,10 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
   }
   const store = new SkillStore({ path: config.path })
   const service = new SkillService(store, { root: config.root, bundledSkillsDir: config.bundledSkillsDir })
+  const creation = new SkillCreation(store, service, {
+    root: config.root,
+    verifyTimeoutMs: config.verifyTimeoutMs ?? 120_000,
+  })
   const providers = new SkillProviders(service)
   ctx.effect(() => () => {
     providers.dispose()
@@ -107,9 +121,11 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
 
   const handlers = skillHandlers({
     service,
+    creation,
     authenticate: request => ctx.identity.authenticateRequest(request),
     fence: request => ctx.connection.fence(request),
     invalidateOwner: shortId => providers.invalidateOwner(shortId),
+    openReview: (shortId, versionId) => appendReviewEntry({ ctx, creation, shortId, versionId }),
   })
   mountRoutes(ctx, { label: 'ourfairy-skill-creator', surface: SURFACE, handlers })
 
@@ -122,16 +138,29 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
     session => service.readonlyVersionDirs(shortIdOf(session.header.owner)),
   ), 'ourfairy-skill-creator: read-only skill versions')
 
-  ctx.on('agent/created', ({ agent }: { agent: Agent }) => {
+  /** The per-agent tool names already offered; registration can replay on one Agent. */
+  const toolRegistrations = new Map<Agent, Set<string>>()
+  const register = (agent: Agent): undefined => {
     providers.register(agent)
+    const names = toolRegistrations.get(agent) ?? new Set<string>()
+    toolRegistrations.set(agent, names)
+    registerSkillTools(agent, { ctx, creation, service }, names)
     return undefined
+  }
+  ctx.on('agent/created', ({ agent }: { agent: Agent }) => register(agent), { global: true })
+  ctx.on('agent/disposed', ({ agent }: { agent: Agent }) => {
+    providers.forget(agent)
+    toolRegistrations.delete(agent)
   }, { global: true })
-  ctx.on('agent/disposed', ({ agent }: { agent: Agent }) => providers.forget(agent), { global: true })
-  for (const agent of ctx.agents.list()) providers.register(agent)
+  for (const agent of ctx.agents.list()) register(agent)
 }
 
+export { buildReviewDisplay, canReview, parseSourceLocation, resolveFocus, REVIEW_ACTIONS, SkillCreation } from './creation.js'
 export { SKILL_PATHS, SURFACE } from './http.js'
+export { appendReviewEntry, reviewEntryText } from './review-open.js'
 export { ACTION_SCOPE, POOL_STATE, SkillService } from './service.js'
+export { SKILL_MANAGE_DESCRIPTION, SKILL_MANAGE_NAME, registerSkillTools } from './tools.js'
+export { runVerification, type VerificationReport } from './verify.js'
 export { PROVIDER_NAME, SkillProviders } from './provider.js'
 export { SKILL_SCOPE, SkillStore, SOURCE_TYPE, VERSION_STATUS } from './store.js'
 export { importReviewedPackage } from './seed.js'

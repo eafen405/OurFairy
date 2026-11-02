@@ -61,10 +61,12 @@ chat 的职责。响应的会话行与 `/sessions/list` 的同一行由同一份
   的前缀，未知为 -1；它不表示客户端已应用该前缀。
 - `messages`：`{messageId,position,seq,requestId,role,status,text,attachments,tools?,kind?,toolCallId?}`。
   `role` 1 用户、2 Fairy、3 派生展示行；`status` 1 待定、2 完成、3 中断、4 失败。文本是原始文本，
-  含空白与 Markdown。`kind` 只在派生行出现：1 技能激活（`加载了skill:<name>`），2 保留给技能审核；
-  `toolCallId` 是该派生行配对的工具调用标识。技能激活行由成功的原生 `skill` 工具结果确定性派生，
-  只存在于投影，不进入模型上下文、普通投递或正文检索；目录发布、失败读取、资源读取和 `/name`
-  文本都不产生它。同一工具调用标识重放时首次出现者生效，不移动位置、不新增 transition。
+  含空白与 Markdown。`kind` 只在派生行出现：1 技能激活（`加载了skill:<name>`），2 技能审核
+  （后端 `skill_manage inspect` 结果里的 `display` 四块材料）；`toolCallId` 是该派生行配对的
+  工具调用标识。技能激活行由成功的原生 `skill` 工具结果确定性派生；技能审核行由成功且 JSON
+  含 `{kind:'skill-review',display}` 的 `skill_manage` 工具结果确定性派生。两者都只存在于投影，
+  不进入模型上下文、普通投递或正文检索；目录发布、失败读取、资源读取和 `/name` 文本都不产生
+  它们。同一工具调用标识重放时首次出现者生效，不移动位置、不新增 transition。
   `position` 是该行在会话呈现顺序中的位置，由服务端按首次出现次序排定：会话内唯一，同一
   `messageId` 跨分页、重连与 generation 稳定（冷恢复后的逐字段比较见
   `tests/chat-cold-boundary.test.mjs`）。它只用于排列，不是 seq、不表示连续、也不表示内容新旧。
@@ -147,8 +149,9 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 每个单元声明 `key`、`stateVersion`、zod `stateSchema`、`init(header)` 与 `apply(state,event)`：
 `apply` 必须同步且纯，未解释的事件返回同一引用；state 必须能被 registry 做 JSON checkpoint。
 每个单元的 `stateVersion` 在折叠语义或 state 形状变化时递增，旧版本的持久化行会被丢弃并从
-`init` 重折。当前版本：transcript `5`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
-工具名 + 未完成 `skill` 调用的窄配对表），work `2`（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读这几行，
+`init` 重折。当前版本：transcript `6`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
+工具名 + 未完成 `skill` 调用的窄配对表 + 成功的 `skill_manage` 审核结果派生行），work `2`
+（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读这几行，
 与本文件一起漂移即失败。
 
 - 任务与活动是同一次 fold：activity 依赖每个事件后的任务/report 快照，拆开会形成第二套
@@ -174,6 +177,11 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
   `{messageId: 'skill-activation:<callId>', role: 3, kind: 1, status: 2, seq: 结果事件 seq,
   toolCallId}`，并消费该表项；失败结果只消费、不追加。每次成功激活恰好一行，重放与断线补齐
   按 `callId` 去重（首次出现胜出），位置跟随对应工具结果，不新增任何原生事件。
+- 审核展示行走同一 fold：成功（`isError !== true`）的 `tool/result` 若第一个文本块是可解析
+  JSON 且 `kind === 'skill-review'`、`display` 为非空字符串，追加一行
+  `{messageId: 'skill-review:<callId>', role: 3, kind: 2, status: 2, seq: 结果事件 seq,
+  toolCallId}`，`text` 就是后端组合的 `display`。它不经过 `skill` 配对表，失败结果、其他工具
+  结果和普通 JSON（如 `list`）都不产生；重复结果按 `callId` 首次出现胜出。
 - `/chat/read` 与 `/chat/observe` 从这两个单元读 durable 值；同一会话的所有观察者共享同一份
   单元状态（`tests/chat-multi-observer.test.mjs`）。
 
