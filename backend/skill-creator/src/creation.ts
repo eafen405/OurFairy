@@ -625,8 +625,12 @@ export function buildReviewDisplay(review: ReviewPackage): string {
   const verification = review.verification
   lines.push(`验证：实际执行 ${verification.executed.length}，复用 ${verification.reused.length}，未执行 ${verification.unexecuted.length}，失败 ${verification.failed.length}`)
   for (const record of verification.executed) lines.push(`✔ ${record.name}: ${record.command} → exit ${String(record.exitCode)}`)
+  for (const record of verification.reused) {
+    const source = typeof record.reusedFrom === 'number' ? `复用自版本 ${record.reusedFrom}` : '复用'
+    lines.push(`↺ ${record.name}: ${record.command} → ${source}`)
+  }
   for (const record of verification.failed) lines.push(`✘ ${record.name}: ${record.command} → exit ${record.exitCode === null ? '—' : String(record.exitCode)}`)
-  if (verification.executed.length + verification.failed.length > 0) lines.push(`环境：${verification.environment}`)
+  if (verification.executed.length + verification.reused.length + verification.failed.length > 0) lines.push(`环境：${verification.environment}`)
   lines.push(`查看全文：skill_manage inspect versionId=${review.versionId} expand=skill（单文件：expand=files path=<path>）`)
   if (review.growthConfirmation.required) {
     lines.push(`篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」`)
@@ -710,7 +714,9 @@ function verificationOf(version: SkillVersionRow): ReviewPackage['verification']
 /** The approval verdict a verification report must satisfy. */
 function verificationReason(report: ReviewPackage['verification']): string | undefined {
   if (!report.complete) return 'the verification report is incomplete; run it again'
-  if (report.executed.length === 0) return 'the verification report has no actually executed scenario'
+  if (report.executed.length === 0 && report.reused.length === 0) {
+    return 'the verification report has no executed or reused scenario'
+  }
   if (report.unexecuted.length > 0) return 'the verification report has unexecuted scenarios'
   if (report.failed.length > 0) return 'a verification scenario failed; change the candidate and verify it again'
   return undefined

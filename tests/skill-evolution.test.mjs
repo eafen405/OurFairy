@@ -372,4 +372,79 @@ describe('revision candidates', () => {
     assert.ok(!inspect.value.display.includes('确认增长'), 'a 109% revision carries no growth instruction')
     ids.growthRevision = { versionId: revision.value.versionId, skillId: base.skillId }
   })
+
+  test('a revision reuses unchanged verification and reruns only the affected scenarios', async () => {
+    const base = await publishNewSkill('reuse-demo', {
+      bodyLength: 1000,
+      files: packageFiles('reuse-demo', {
+        bodyLength: 1000,
+        extra: {
+          'references/stable.md': 'STABLE',
+          'references/golden.txt': 'one',
+          'references/changing.md': 'OLD',
+        },
+      }),
+      scenarios: [
+        { name: 'stable check', command: 'grep -q STABLE references/stable.md', uses: ['references/stable.md'] },
+        { name: 'golden check', command: 'test -s references/golden.txt', uses: ['references/golden.txt'] },
+        { name: 'changing check', command: 'grep -q OLD references/changing.md', uses: ['references/changing.md'] },
+        { name: 'no dependencies', command: 'true' },
+      ],
+    })
+    assert.equal(versionOf(base.versionId).core_characters, 1000)
+    const parentReport = JSON.parse(versionOf(base.versionId).verification)
+    assert.equal(parentReport.executed.length, 4, 'the first version executed every scenario')
+    assert.deepEqual(parentReport.reused, [])
+    assert.deepEqual(parentReport.executed.find(record => record.name === 'stable check').uses, ['references/stable.md'],
+      'the record keeps the dependency the reuse decision reads')
+
+    const revision = await createRevision('reuse-demo', base.versionId, {
+      bodyLength: 1090,
+      files: packageFiles('reuse-demo', {
+        bodyLength: 1090,
+        extra: {
+          'references/stable.md': 'STABLE',
+          'references/golden.txt': 'two',
+          'references/changing.md': 'NEW',
+        },
+      }),
+      scenarios: [
+        { name: 'stable check', command: 'grep -q STABLE references/stable.md', uses: ['references/stable.md'] },
+        { name: 'golden check', command: 'test -s references/golden.txt', uses: ['references/golden.txt'] },
+        { name: 'changing check', command: 'grep -q NEW references/changing.md', uses: ['references/changing.md'] },
+        { name: 'no dependencies', command: 'true' },
+      ],
+    })
+    assert.equal(revision.isError, false, revision.text)
+    const report = JSON.parse(versionOf(revision.value.versionId).verification)
+    assert.equal(report.complete, true)
+    assert.deepEqual(report.reused.map(record => record.name).sort(), ['no dependencies', 'stable check'],
+      'an unchanged scenario and one with no dependencies reuse the parent run')
+    assert.deepEqual(report.executed.map(record => record.name).sort(), ['changing check', 'golden check'],
+      'a changed command or a changed used file reruns the scenario')
+    assert.ok(report.reused.every(record => record.reusedFrom === base.versionId),
+      'a reused record names the parent version it came from')
+    assert.ok(report.executed.every(record => record.reusedFrom === undefined))
+    assert.equal(report.reused.find(record => record.name === 'stable check').exitCode, 0)
+
+    const inspect = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'inspect', versionId: revision.value.versionId,
+    })
+    assert.equal(inspect.isError, false, inspect.text)
+    assert.deepEqual(inspect.value.review.verification.reused.map(record => record.name).sort(),
+      ['no dependencies', 'stable check'])
+    assert.deepEqual(inspect.value.review.verification.executed.map(record => record.name).sort(),
+      ['changing check', 'golden check'])
+    assert.ok(inspect.value.display.includes('验证：实际执行 2，复用 2，未执行 0，失败 0'), inspect.value.display)
+    assert.ok(inspect.value.display.includes(`↺ stable check: grep -q STABLE references/stable.md → 复用自版本 ${base.versionId}`),
+      inspect.value.display)
+    assert.ok(inspect.value.display.includes('✔ changing check: grep -q NEW references/changing.md → exit 0'), inspect.value.display)
+
+    const approved = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'review', versionId: revision.value.versionId, decision: 'approve',
+    })
+    assert.equal(approved.isError, false, 'verification that is partly reused still authorises approval: ' + approved.text)
+    assert.equal(versionOf(base.versionId).status, 4)
+    assert.equal(versionOf(revision.value.versionId).status, 3)
+  })
 })
