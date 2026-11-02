@@ -484,7 +484,10 @@ export function extractSkillArchive(archive: Buffer, options: {
     if (header.type !== '0' && header.type !== '5') {
       throw new SkillError(400, 'skills/invalid-archive', `archive entry ${JSON.stringify(header.path)} has unsupported type ${JSON.stringify(header.type)}`)
     }
-    const relative = destinationOf(header.path, options.githubPath)
+    // A directory entry conventionally ends in "/"; that trailing separator
+    // names a directory, not an empty path segment.
+    const entryPath = header.type === '5' && header.path.endsWith('/') ? header.path.slice(0, -1) : header.path
+    const relative = destinationOf(entryPath, options.githubPath)
     if (relative === undefined || relative.length === 0) continue
     const destination = resolve(target, ...relative)
     if (!pathInside(target, destination)) {

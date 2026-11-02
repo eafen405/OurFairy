@@ -147,6 +147,20 @@ async function callTool(identity, sessionId, args, anchor = 'PROBE: use the work
   return { call, result, isError: result.data.message.isError === true, text, value }
 }
 
+/** One real `read` tool call, for the read-only resource assertions. */
+async function readPath(identity, sessionId, path) {
+  const before = new Set((await readEvents(identity, sessionId)).filter(event => event.type === 'tool/call').map(event => event.data.callId))
+  await send(identity, sessionId, `[[read:${path}]]`)
+  const events = await readEvents(identity, sessionId)
+  const call = events.filter(event => event.type === 'tool/call' && event.data.name === 'read'
+    && !before.has(event.data.callId)).at(-1)
+  assert.ok(call, 'the log must contain the new read call')
+  const result = events.find(event => event.type === 'tool/result' && event.data.message.toolCallId === call.data.callId)
+  assert.ok(result, `the log must contain the result for ${call.data.callId}`)
+  const text = (result.data.message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
+  return { isError: result.data.message.isError === true, text }
+}
+
 /** A complete package as the model would submit it. */
 function packageFiles(name, { description = 'Use when running the shared workflow.', body = '# Workflow\n\nDo the shared thing.', extra = {} } = {}) {
   return [
@@ -189,17 +203,19 @@ before(async () => {
       return Array.isArray(content) ? content : []
     })
     const commandIndex = flat.findLastIndex(block => block.type === 'text' && typeof block.text === 'string'
-      && /\[\[tool:[a-z_]+:[\s\S]*\]\]/u.test(block.text))
+      && /\[\[(?:tool:[a-z_]+:|read:)[\s\S]*\]\]/u.test(block.text))
     const answered = commandIndex >= 0 && flat.slice(commandIndex + 1).some(block => block.type === 'tool_result')
     const text = commandIndex < 0 ? '' : flat[commandIndex].text
     const command = commandIndex >= 0 ? /\[\[tool:([a-z_]+):([\s\S]*?)\]\]/u.exec(text) : null
+    const readCall = commandIndex >= 0 ? /^\[\[read:([\s\S]+?)\]\]$/u.exec(text.trim()) : null
     response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
     const emit = event => response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
     emit({ type: 'message_start', message: { id: 'skill-sharing-double', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
-    if (command !== null && !answered) {
+    if ((command !== null || readCall !== null) && !answered) {
       const callId = `mock-call-${++callNo}`
-      const input = JSON.parse(command[2])
-      emit({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: callId, name: command[1], input: {} } })
+      const name = readCall !== null ? 'read' : command[1]
+      const input = readCall !== null ? { file_path: readCall[1] } : JSON.parse(command[2])
+      emit({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: callId, name, input: {} } })
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(input) } })
       emit({ type: 'content_block_stop', index: 0 })
       emit({ type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: 3 } })
@@ -475,6 +491,9 @@ describe('archive and restore', () => {
   test('a common skill is archived and restored by Phaethon only, invalidating every user catalog', async () => {
     await send(bob, sessions.bob, 'plain turn before the common archive')
     assert.ok(catalogNames(latestCatalog(requests.at(-1)), 'shared-release'), 'bob enabled the common skill')
+    const commonDir = packageDirectory(ids.common.versionId)
+    const readable = await readPath(bob, sessions.bob, join(commonDir, 'SKILL.md'))
+    assert.equal(readable.isError, false, `an enabled common skill's resources are readable: ${readable.text}`)
 
     const refused = await httpJson(port, '/skills/archive', {
       token: alice.token, body: { skillId: ids.common.skillId }, expect: false,
@@ -496,6 +515,9 @@ describe('archive and restore', () => {
     await send(bob, sessions.bob, 'plain turn after the common archive')
     assert.ok(!catalogNames(latestCatalog(requests.at(-1)), 'shared-release'),
       'a common archive leaves every user catalog at once')
+    const archivedRead = await readPath(bob, sessions.bob, join(commonDir, 'SKILL.md'))
+    assert.equal(archivedRead.isError, true, 'an archived version directory is no longer a read-only resource')
+    assert.ok(!archivedRead.text.includes('Do the shared thing'), 'the refusal leaks no package content')
 
     const restored = await request('/skills/restore', admin.token, { skillId: ids.common.skillId })
     assert.equal(restored.ok, true)
@@ -507,6 +529,8 @@ describe('archive and restore', () => {
     await send(bob, sessions.bob, 'plain turn after the common restore')
     assert.ok(catalogNames(latestCatalog(requests.at(-1)), 'shared-release'),
       'the restored, still-enabled common skill is in the next catalog')
+    const restoredRead = await readPath(bob, sessions.bob, join(commonDir, 'SKILL.md'))
+    assert.equal(restoredRead.isError, false, `restore contributes the resource again: ${restoredRead.text}`)
   })
 
   test('archiving a skill keeps its content, history and review material available to its reviewer', async () => {

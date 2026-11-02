@@ -172,8 +172,15 @@ describe('archive extraction', () => {
   }
 
   test('accepts a single top-level package directory and a SKILL.md at the archive root', () => {
-    const nested = extract(skillPackageEntries('demo'))
+    // Real archive writers emit directory entries with a trailing slash; they
+    // name a directory, not an empty path segment.
+    const nested = extract([
+      { path: 'demo/', type: 'dir' },
+      { path: 'demo/references/', type: 'dir' },
+      ...skillPackageEntries('demo', { extra: { 'references/guide.md': 'GUIDE' } }),
+    ])
     assert.equal(readFileSync(join(nested, 'SKILL.md'), 'utf8').includes('name: installed-skill'), true)
+    assert.equal(readFileSync(join(nested, 'references', 'guide.md'), 'utf8'), 'GUIDE')
 
     const flat = extract([{ path: 'SKILL.md', content: '---\nname: flat\ndescription: Flat.\n---\n\n# Flat\n' }])
     assert.equal(existsSync(join(flat, 'SKILL.md')), true)

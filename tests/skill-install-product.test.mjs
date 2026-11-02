@@ -143,9 +143,9 @@ async function allMessages(identity, sessionId) {
 }
 
 /** One real model-issued `skill_manage` call. */
-async function callTool(identity, sessionId, name, args = {}) {
+async function callTool(identity, sessionId, name, args = {}, anchor = 'PROBE: use the workflow') {
   const before = new Set((await readEvents(identity, sessionId)).filter(event => event.type === 'tool/call').map(event => event.data.callId))
-  await send(identity, sessionId, `[[tool:${name}:${JSON.stringify(args)}]]`)
+  await send(identity, sessionId, `${anchor}\n[[tool:${name}:${JSON.stringify(args)}]]`)
   const events = await readEvents(identity, sessionId)
   const call = events.filter(event => event.type === 'tool/call' && event.data.name === name && !before.has(event.data.callId)).at(-1)
   assert.ok(call, `the log must contain the new ${name} call`)
@@ -185,6 +185,12 @@ function repositoryArchive(sha) {
 
 /** The scenario both installed skills can actually run from the package copy. */
 const scenario = { name: 'package is readable', command: 'test -f SKILL.md', uses: ['SKILL.md'] }
+
+/** The administrator's own live session, created on first use. */
+let phaethonSession
+function sessionSessionPhaethon() {
+  return phaethonSession
+}
 
 /** Boot the real backend against the shared model double. */
 async function start() {
@@ -296,11 +302,11 @@ before(async () => {
       return Array.isArray(content) ? content : []
     })
     const commandIndex = flat.findLastIndex(block => block.type === 'text' && typeof block.text === 'string'
-      && (block.text.startsWith('[[tool:') || block.text.startsWith('[[skill:')))
+      && /\[\[skill:[\s\S]+?\]\]/u.test(block.text) || (block.type === 'text' && typeof block.text === 'string' && /\[\[tool:[a-z_]+:[\s\S]*\]\]/u.test(block.text)))
     const answered = commandIndex >= 0 && flat.slice(commandIndex + 1).some(block => block.type === 'tool_result')
     const text = commandIndex < 0 ? '' : flat[commandIndex].text
-    const toolCall = commandIndex >= 0 && !answered ? /^\[\[tool:([a-z_]+):([\s\S]*)\]\]$/u.exec(text) : null
-    const skillCall = commandIndex >= 0 && !answered ? /^\[\[skill:([\s\S]+?)\]\]$/u.exec(text) : null
+    const toolCall = commandIndex >= 0 && !answered ? /\[\[tool:([a-z_]+):([\s\S]*?)\]\]/u.exec(text) : null
+    const skillCall = commandIndex >= 0 && !answered ? /\[\[skill:([\s\S]+?)\]\]/u.exec(text) : null
     response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
     const emit = event => response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
     emit({ type: 'message_start', message: { id: 'skill-install-double', type: 'message', role: 'assistant', model: 'test', content: [], usage: { input_tokens: 3, output_tokens: 0 } } })
@@ -329,6 +335,7 @@ before(async () => {
   admin = await request('/identity/sign-in', undefined, { name: 'phaethon', password })
   alice = await registerUser(port, admin.token, 'skill-installer', password)
   sessionAlice = (await request('/sessions/create', alice.token)).session.id
+  phaethonSession = (await request('/sessions/create', admin.token)).session.id
   await send(alice, sessionAlice, 'PROBE: install a skill from its address')
 })
 
@@ -459,6 +466,33 @@ describe('address install through the product', () => {
     assert.equal(existsSync(join(home, 'escaped.txt')), false, 'no archive path escapes the skill data root')
     assert.equal(existsSync(join(home, 'dsh-home', 'escaped.txt')), false)
     assert.equal(stubRequests.length > stubBefore, true, 'each network case actually reached the stub')
+  })
+
+  test('a common install keeps the explicit sharing consent and fixed source, without raw session data', async () => {
+    const installed = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 2, address: `${stubBase}/direct/direct-check.tar.gz`, scenarios: [scenario],
+    }, '把这个共享给大家安装')
+    assert.equal(installed.isError, false, installed.text)
+    const skill = rows("SELECT * FROM skill WHERE name = 'direct-check' AND scope = 2 AND deleted_at IS NULL")[0]
+    assert.ok(skill, 'the common install created a common identity')
+    assert.equal(skill.owner_short_id, null)
+    assert.equal(skill.proposed_by, alice.user.shortId)
+    const version = versionOf(installed.value.versionId)
+    const source = JSON.parse(version.source_location)
+    assert.match(source.consent.text, /共享|大家/u)
+    assert.equal(source.sessionId, undefined, 'common review material carries no raw session id')
+    assert.equal(source.focus, undefined)
+    assert.equal(source.address, `${stubBase}/direct/direct-check.tar.gz`)
+    assert.match(source.resolvedVersion, /^[0-9a-f]{64}$/u)
+    const adminPending = (await request('/skills/list', admin.token)).pending
+    assert.ok(adminPending.some(item => item.versionId === installed.value.versionId))
+    const alicePending = (await request('/skills/list', alice.token)).pending
+    assert.deepEqual(alicePending.find(item => item.versionId === installed.value.versionId).nextActions, [],
+      'the proposer cannot decide the common install')
+    const rejected = await callTool(admin, sessionSessionPhaethon(), 'skill_manage', {
+      action: 'review', versionId: installed.value.versionId, decision: 'reject', note: 'fixture only',
+    })
+    assert.equal(rejected.isError, false, rejected.text)
   })
 
   test('an installed candidate joins the ordinary review display and pending entry', async () => {
