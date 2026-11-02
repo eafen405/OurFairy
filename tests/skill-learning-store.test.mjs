@@ -273,3 +273,35 @@ test('a learning state freezes one cut and one child, and no failure advances th
     store.close()
   }
 })
+
+test('the creation recheck drops a later-revoked signal and refuses a claim that no longer has two sessions', async () => {
+  const { store } = await open('recheck')
+  try {
+    const { validJobSignals, creationThresholdHolds } = await import('../backend/skill-creator/dist/deep-creation.js')
+    store.insertSignals([signal({ sourceSession: 'source-a' })])
+    const revoked = store.insertSignals([signal({ sourceSession: 'source-b' })])
+    const claimed = store.claimCreationJob({ ownerShortId: 7, taskKey: 'release-checklist:changelog', childSession: 'child-1' })
+    assert.equal(claimed.claimed, true)
+
+    // The correction lands after the claim; the claim row keeps its frozen ids
+    // but the recheck must exclude the invalidated evidence.
+    store.insertSignals([{
+      ownerShortId: 7,
+      taskKey: 'release-checklist:changelog',
+      sourceSession: 'source-b',
+      evidenceStartSeq: 11,
+      evidenceEndSeq: 20,
+      status: 3,
+      revokesSignalId: revoked[0],
+    }])
+    const surviving = validJobSignals(store, claimed.job)
+    assert.deepEqual(surviving.map(row => row.source_session), ['source-a'])
+    assert.equal(creationThresholdHolds(surviving), false,
+      'one surviving session after the correction no longer reaches the two-session threshold')
+
+    // The claim itself already owns the key; a second claim is never created.
+    assert.equal(store.claimCreationJob({ ownerShortId: 7, taskKey: 'release-checklist:changelog', childSession: 'child-2' }).claimed, false)
+  } finally {
+    store.close()
+  }
+})

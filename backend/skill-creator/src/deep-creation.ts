@@ -320,11 +320,14 @@ export class SkillCreationEngine {
     this.#store.setCreationChild({ id: jobId, childSession })
     const parentSession = triggeringSession(signals, job)
     const policy = this.#prompt(job, signals)
+    const route = this.#sourceRoute(parentSession)
     return this.#ctx.agents.create({
       sessionId: childSession,
       meta: { parentSession: parentSession as SessionId, origin: 'subagent', agentPreset: SKILL_LEARNING_PRESET },
-      // No agentOptions: the creation child uses the deployment's shared
-      // (deep) route, not the detection light route.
+      // The deep creation runs on the route its triggering source session used,
+      // not the detection light route; a cold source falls back to the
+      // deployment's default selection.
+      ...(route === undefined ? {} : { agentOptions: route }),
       setup: agentCtx => {
         agentCtx.tools.restrict({ allow: [] })
         this.#registerTools(agentCtx, jobId, job, signals)
@@ -333,11 +336,24 @@ export class SkillCreationEngine {
     })
   }
 
+  /** The route one live source session currently uses, or undefined when it is cold. */
+  #sourceRoute(sourceSession: string): { readonly provider: string; readonly model: string } | undefined {
+    const live = this.#ctx.agents.get(sourceSession as SessionId)
+    const config = live?.session.requestHeader()?.config
+    if (config === undefined) return undefined
+    const { provider, model } = config as { provider?: unknown; model?: unknown }
+    return typeof provider === 'string' && provider !== '' && typeof model === 'string' && model !== ''
+      ? { provider, model }
+      : undefined
+  }
+
   /** Resume one persisted creation child with the same tools and prompt. */
   async #resumeChild(jobId: number, job: CreationJobRow, signals: readonly SignalRow[], childSession: SessionId): Promise<AgentHandle> {
     const policy = this.#prompt(job, signals)
+    const route = this.#sourceRoute(triggeringSession(signals, job))
     return this.#ctx.agents.resume({
       resumeSessionId: childSession,
+      ...(route === undefined ? {} : { agentOptions: route }),
       setup: agentCtx => {
         agentCtx.tools.restrict({ allow: [] })
         this.#registerTools(agentCtx, jobId, job, signals)

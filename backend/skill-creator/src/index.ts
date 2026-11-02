@@ -43,6 +43,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-skill'
 import type {} from '@ourfairy/dsh-chat'
 import type {} from '@ourfairy/dsh-identity'
@@ -51,7 +52,7 @@ import type {} from '@ourfairy/dsh-spaces'
 
 export const name = 'ourfairy-skill-creator'
 export const inject = ['skills', 'agents', 'tools', 'identity', 'webServer', 'connection', 'ourfairySpaces',
-  'sessionQuery', 'ourfairySessions', 'ourfairyChatRuntime']
+  'sessionPersistence', 'sessionQuery', 'ourfairySessions', 'ourfairyChatRuntime']
 
 /**
  * The row's configuration.

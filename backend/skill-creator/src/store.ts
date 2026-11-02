@@ -687,9 +687,11 @@ export class SkillStore {
         if (!isValidTaskKey(signal.taskKey)) {
           throw new SkillStoreError('skills/invalid-task-key', `a task key must be <task-type>:<artifact> kebab-case, at most 64 characters; got ${JSON.stringify(signal.taskKey)}`)
         }
+        // The watermark starts at -1 ("before the first event"), so the first
+        // interval's exclusive lower bound is -1 as well.
         if (!Number.isSafeInteger(signal.evidenceStartSeq) || !Number.isSafeInteger(signal.evidenceEndSeq)
-          || signal.evidenceStartSeq < 0 || signal.evidenceEndSeq <= signal.evidenceStartSeq) {
-          throw new SkillStoreError('skills/invalid-evidence-range', 'a signal needs an evidence range with 0 <= start < end')
+          || signal.evidenceStartSeq < -1 || signal.evidenceEndSeq <= signal.evidenceStartSeq) {
+          throw new SkillStoreError('skills/invalid-evidence-range', 'a signal needs an evidence range with -1 <= start < end')
         }
         const status = signal.status
         if (status !== SIGNAL_STATUS.success && status !== SIGNAL_STATUS.failure
