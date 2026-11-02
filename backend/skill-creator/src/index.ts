@@ -13,12 +13,13 @@
  * supplies per-user candidates and re-checks a version's integrity when the
  * native tool loads it.
  *
- * Creation and review are this ticket's surface: one `skill_manage` tool on
- * user sessions (create/list/inspect/review), the isolated candidate area, the
+ * Creation and review are one surface: one `skill_manage` tool on user
+ * sessions (create/list/inspect/review), the isolated candidate area, the
  * disposable verification runner, the deterministic review display row and the
  * pending entry that appends a system-context reference to the caller's primary
- * session. Install, sharing, evolution and background learning are later
- * tickets; their hooks are marked, not half-built.
+ * session. Background learning is the other surface: a per-source-session
+ * detection engine, its immutable reuse signals, and the cross-session
+ * deep-creation engine that turns repeated success into a pending candidate.
  *
  * @module @ourfairy/dsh-skill-creator
  */
@@ -27,7 +28,9 @@ import { sep } from 'node:path'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 import { mountRoutes } from '@ourfairy/dsh-http/http'
 import { SkillCreation } from './creation.js'
+import { SkillCreationEngine } from './deep-creation.js'
 import { SURFACE, skillHandlers } from './http.js'
+import { LearningEngine, readLearningSettings, type LearningField } from './learning.js'
 import { SkillProviders } from './provider.js'
 import { appendReviewEntry } from './review-open.js'
 import { SkillService } from './service.js'
@@ -80,13 +83,18 @@ export const Config = z.object({
   installMaxBytes: z.natural().default(10 * 1024 * 1024),
 })
 
-/** The row config as the loader hands it over; only the runtime fields are read here. */
+/** The row config as the loader hands it over; volatile fields are live refs. */
 export type SkillCreatorConfig = {
   readonly path: string
   readonly root: string
   readonly bundledSkillsDir: string
   readonly seedDir?: string
   readonly verifyTimeoutMs?: number
+  readonly learningTurns?: LearningField
+  readonly learningModel?: LearningField
+  readonly learningProvider?: LearningField
+  readonly learningMaxMaterialChars?: LearningField
+  readonly learningMaxTurns?: LearningField
 }
 
 /** Whether one absolute path is `root` or under it; the database belongs inside the data root. */
@@ -98,6 +106,17 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
   if (!insideRoot(config.root, config.path)) {
     throw new Error(`ourfairy-skill-creator: path ${config.path} must live inside root ${config.root}`)
   }
+  // The learning settings are volatile plugin config: every evaluation re-reads
+  // them, and an out-of-range persisted value fails the load here.
+  const learningSettings = () => readLearningSettings({
+    learningTurns: config.learningTurns,
+    learningModel: config.learningModel,
+    learningProvider: config.learningProvider,
+    learningMaxMaterialChars: config.learningMaxMaterialChars,
+    learningMaxTurns: config.learningMaxTurns,
+  })
+  learningSettings()
+
   const store = new SkillStore({ path: config.path })
   const service = new SkillService(store, { root: config.root, bundledSkillsDir: config.bundledSkillsDir })
   const creation = new SkillCreation(store, service, {
@@ -105,15 +124,23 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
     verifyTimeoutMs: config.verifyTimeoutMs ?? 120_000,
   })
   const providers = new SkillProviders(service)
-  ctx.effect(() => () => {
+  const logger = ctx.logger('ourfairy-skill-creator')
+  const creationEngine = new SkillCreationEngine(ctx, store, creation, service, {
+    settings: learningSettings,
+    log: (level, message) => { if (level === 'info') logger.info(message); else logger.warn(message) },
+  })
+  const learning = new LearningEngine(ctx, store, {
+    settings: learningSettings,
+    onSignals: owner => creationEngine.evaluate(owner),
+    log: (level, message) => { if (level === 'info') logger.info(message); else logger.warn(message) },
+  })
+  ctx.effect(() => () => (async () => {
+    // The engines may hold children and runs; close them before the store.
+    await learning.close()
+    await creationEngine.close()
     providers.dispose()
     store.close()
-  }, 'ourfairy-skill-creator: store and providers')
-
-  // The deployment seed runs before any agent is served: each top-level package
-  // becomes a common approved identity, and an existing active common identity
-  // with that name is never overwritten.
-  const logger = ctx.logger('ourfairy-skill-creator')
+  })(), 'ourfairy-skill-creator: store, providers and learning engines')
   service.importSeedDirectory(config.seedDir ?? '', (level, message) => {
     if (level === 'info') logger.info(message)
     else logger.warn(message)
@@ -151,6 +178,9 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
       invalidateOwner: shortId => providers.invalidateOwner(shortId),
       invalidateAll: () => providers.invalidateAll(),
     }, names)
+    // A user's own session is also a background-learning source; the engine's
+    // own predicate re-checks the header.
+    learning.watch(agent)
     return undefined
   }
   ctx.on('agent/created', ({ agent }: { agent: Agent }) => register(agent), { global: true })
@@ -159,6 +189,8 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
     toolRegistrations.delete(agent)
   }, { global: true })
   for (const agent of ctx.agents.list()) register(agent)
+  learning.start()
+  creationEngine.start()
 }
 
 export { buildReviewDisplay, canReview, parseSourceLocation, resolveFocus, REVIEW_ACTIONS, SkillCreation } from './creation.js'
@@ -170,3 +202,16 @@ export { runVerification, type VerificationReport } from './verify.js'
 export { PROVIDER_NAME, SkillProviders } from './provider.js'
 export { SKILL_SCOPE, SkillStore, SOURCE_TYPE, VERSION_STATUS } from './store.js'
 export { importReviewedPackage } from './seed.js'
+export { SkillCreationEngine, creationThresholdHolds, validJobSignals } from './deep-creation.js'
+export { LearningEngine, readLearningSettings } from './learning.js'
+export {
+  CREATION_POLICY,
+  DETECTION_POLICY,
+  MAX_EXISTING_TASK_KEYS,
+  MAX_SIGNALS_PER_SUBMISSION,
+  REVIEW_POLICY,
+  SKILL_LEARNING_PRESET,
+  TASK_KEY_MAX_CHARACTERS,
+  isValidTaskKey,
+} from './learning-policy.js'
+export { assembleLearningMaterial, closedUserTurns } from './material.js'

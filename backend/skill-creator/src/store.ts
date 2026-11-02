@@ -885,18 +885,40 @@ export class SkillStore {
   }
 
   /**
-   * Turn a failed claim back into a running one with its attempt counted, so a
-   * later tick resumes the same child instead of starting a second claim.
+   * Turn a failed (or restart-interrupted running) claim back into a running
+   * one with its attempt counted, so a later tick resumes the same child
+   * instead of starting a second claim.
    */
   resumeCreationJob({ id, childSession }: { readonly id: number; readonly childSession?: string }): boolean {
+    const now = Date.now()
     const result = this.#db.prepare(
       `UPDATE skill_creation_job
           SET state = ?, attempts = attempts + 1, next_retry_at = NULL, updated_at = ?
-        WHERE id = ? AND state = ? AND deleted_at IS NULL`,
-    ).run(CREATION_JOB_STATE.running, Date.now(), id, CREATION_JOB_STATE.failed) as ChangeResult
+        WHERE id = ? AND state IN (?, ?) AND deleted_at IS NULL`,
+    ).run(CREATION_JOB_STATE.running, now, id, CREATION_JOB_STATE.running, CREATION_JOB_STATE.failed) as ChangeResult
     if (Number(result.changes) > 0 && childSession !== undefined) {
-      this.#db.prepare('UPDATE skill_creation_job SET child_session = ?, updated_at = ? WHERE id = ?').run(childSession, Date.now(), id)
+      this.#db.prepare('UPDATE skill_creation_job SET child_session = ?, updated_at = ? WHERE id = ?').run(childSession, now, id)
     }
+    return Number(result.changes) > 0
+  }
+
+  /** Point a running claim at the child that will (or did) produce its outcome. */
+  setCreationChild({ id, childSession }: { readonly id: number; readonly childSession: string }): boolean {
+    const result = this.#db.prepare(
+      'UPDATE skill_creation_job SET child_session = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
+    ).run(childSession, Date.now(), id) as ChangeResult
+    return Number(result.changes) > 0
+  }
+
+  /**
+   * Record the one candidate a running claim submitted. A second call for the
+   * same claim changes nothing: one claim produces at most one candidate.
+   */
+  setCreationCandidate({ id, versionId }: { readonly id: number; readonly versionId: number }): boolean {
+    const result = this.#db.prepare(
+      `UPDATE skill_creation_job SET candidate_version_id = ?, updated_at = ?
+        WHERE id = ? AND state = ? AND candidate_version_id IS NULL AND deleted_at IS NULL`,
+    ).run(versionId, Date.now(), id, CREATION_JOB_STATE.running) as ChangeResult
     return Number(result.changes) > 0
   }
 
