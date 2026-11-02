@@ -796,6 +796,14 @@ export class SkillCreation {
 
       const directory = this.#service.versionDirectory(version)
       this.#readCandidate(version, skill, directory)
+      // A second draft can exist only from before the first approval (a new
+      // draft is refused once a current version exists). Publishing it would be
+      // a revision without the evolution ticket's parent/benefit rule, so the
+      // approval gate keeps that path closed here as well as in create.
+      if (skill.current_version_id !== null && version.parent_version_id === null) {
+        throw new SkillError(409, 'skills/revision-required',
+          `skill "${skill.name}" already has a current version; a new version needs a revision`)
+      }
       const verification = verificationOf(version)
       const blocked = verificationReason(verification)
       if (blocked !== undefined) throw new SkillError(409, 'skills/verification-incomplete', blocked)
@@ -823,6 +831,7 @@ export class SkillCreation {
           defaultEnable: true,
           recheck: (latestVersion, latestSkill) => latestVersion.status === VERSION_STATUS.pending
             && latestSkill.archived_at === null
+            && (latestSkill.current_version_id === null || latestVersion.parent_version_id !== null)
             && readSkillPackage(versionDir).manifestHash === latestVersion.manifest_hash,
         })
         return {

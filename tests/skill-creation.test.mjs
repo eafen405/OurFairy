@@ -527,6 +527,32 @@ describe('explicit skill creation, review and publish', () => {
     assert.ok(existsSync(packageDirectory(created.value.versionId)))
   })
 
+  test('a draft that predates the first approval cannot later publish as a silent revision', async () => {
+    const first = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' },
+      files: packageFiles('double-draft', { body: '# Workflow\n\nfirst' }), scenarios: [{ name: 'ok', command: 'true' }],
+    })
+    const second = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' },
+      files: packageFiles('double-draft', { body: '# Workflow\n\nsecond' }), scenarios: [{ name: 'ok', command: 'true' }],
+    })
+    assert.equal(first.isError, false, first.text)
+    assert.equal(second.isError, false, second.text)
+    assert.equal(second.value.skillId, first.value.skillId)
+
+    const published = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'review', versionId: first.value.versionId, decision: 'approve',
+    })
+    assert.equal(published.isError, false, published.text)
+    const late = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'review', versionId: second.value.versionId, decision: 'approve',
+    })
+    assert.equal(late.isError, true)
+    assert.match(late.text, /skills\/revision-required/u)
+    assert.equal(identityOf('double-draft').current_version_id, first.value.versionId, 'the first approval stays current')
+    assert.equal(versionOf(second.value.versionId).status, 0, 'the pre-existing draft stays pending for a real revision')
+  })
+
   test('request changes settles the draft; a new draft gets a new hash and the old approval/verification cannot be reused', async () => {
     const created = await callTool(alice, sessionAlice, 'skill_manage', {
       action: 'create', scope: 1, focus: { kind: 'task', text: 'turn the probe into a repeatable check' },
