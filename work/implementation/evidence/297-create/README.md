@@ -127,7 +127,7 @@ All commands ran in `/home/eafen405/projects/OurFairy/.worktrees/297-create` wit
 | Command | Result |
 | --- | --- |
 | `npm run build` | pass (all product projects emit) |
-| `node --test tests/skill-package.test.mjs tests/skill-creation-store.test.mjs tests/skill-verify.test.mjs tests/skill-creation.test.mjs tests/skill-runtime.test.mjs tests/projection-units.test.mjs tests/route-inventory.test.mjs tests/identity-http.test.mjs tests/model-double.test.mjs tests/memory-policy.test.mjs` | 95/95 pass (three suites) |
+| `node --test tests/skill-package.test.mjs tests/skill-creation-store.test.mjs tests/skill-verify.test.mjs tests/skill-creation.test.mjs tests/skill-runtime.test.mjs tests/projection-units.test.mjs tests/route-inventory.test.mjs tests/identity-http.test.mjs tests/model-double.test.mjs tests/memory-policy.test.mjs` | 96/96 pass (three suites) |
 | `npm test` | 526/526 pass, 19 suites (full gate on the final hand-off state) |
 | `npm run combo:verify` | pass (`ourfairy`, `dsh`, `android source`) |
 | `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug` | BUILD SUCCESSFUL; `:app:testDebugUnitTest`/`:ui:testDebugUnitTest`/`:highlight:testDebugUnitTest` 651 tests, 0 failures/errors; lintDebug clean |
