@@ -128,4 +128,11 @@
     <string name="skills_action_scope">Archive/restore scope: %1$s</string>
     <string name="skills_action_owner">this user only</string>
     <string name="skills_action_everyone">all users</string>
+    <string name="skills_section_results">Recent review results</string>
+    <string name="skills_results_empty">No review results yet.</string>
+    <string name="skills_result_approved">Approved</string>
+    <string name="skills_result_rejected">Rejected</string>
+    <string name="skills_result_changes_requested">Changes requested</string>
+    <string name="skills_archive_with_scope">Archive (%1$s)</string>
+    <string name="skills_restore_with_scope">Restore (%1$s)</string>
 </resources>

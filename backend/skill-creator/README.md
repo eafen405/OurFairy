@@ -4,15 +4,15 @@ The skill row owns the product's skill surface: one SQLite file, the immutable
 version directories outside every writable root, one skill provider per live
 user session, the read-only contribution that lets an activated package's files
 be read, the authenticated endpoints the Skills page uses, and the one
-`skill_manage` model tool that creates, inspects and reviews candidates. The
-native dsh rows (`skill`, `skill-filesystem`, `tool-skill`) supply catalog
-merging, the `skill` tool, `/name` suppression and the trusted bundled root;
-this package never re-implements them.
+`skill_manage` model tool that installs, creates, inspects, reviews and
+archives skills. The native dsh rows (`skill`, `skill-filesystem`,
+`tool-skill`) supply catalog merging, the `skill` tool, `/name` suppression and
+the trusted bundled root; this package never re-implements them.
 
-Installation from an address and shared proposals are later tickets in the same
-spec, and background learning follows them. Evolution and rollback are part of
-this row: they reuse the same create/review path, store, package algorithm and
-verification runner rather than adding a second one.
+Installation from an address, shared proposals, evolution and rollback are part
+of this row: they reuse the same create/review path, store, package algorithm
+and verification runner rather than adding a second one. Background learning is
+the one engine still to arrive; it extends this row, not a second creation path.
 
 ## What the row owns
 
@@ -26,8 +26,11 @@ verification runner rather than adding a second one.
 | Catalog | The per-agent provider `ourfairy-skills`, registered on `agent.ctx` for user sessions only |
 | Integrity | The provider's `get` and an approval both re-read the package and compare its canonical manifest hash with the stored version |
 | Resources | `contributeReadonlyFiles`: the trusted bundled root for every session, plus the current version directories of the caller's catalog winners |
-| Model tool | `skill_manage` on user sessions only: `list`, `inspect`, `create`, `review`, `rollback` |
-| Client surface | `/skills/list` (pool + pending + count), `/skills/detail`, `/skills/preference`, `/skills/review-open` (POST + JSON, caller from the bearer credential) |
+| Install source | Fixed on the version: `address`, `resolvedVersion` (commit SHA or archive digest), archive digest, fetch time, optional ETag/Last-Modified and license |
+| Lifecycle | `skill.archived_at`: archive removes the identity from every catalog and read-only resource but keeps content, history and preferences |
+| Evolution | Parent version, core-body growth, an optional post-display growth confirmation and rollback candidates, all through the same candidate/review path |
+| Model tool | `skill_manage` on user sessions only: `list`, `inspect`, `create` (files or `address`, new skill or revision), `review`, `rollback`, `archive`, `restore` |
+| Client surface | `/skills/list` (pool + pending + count + bounded `reviewResults`), `/skills/detail`, `/skills/preference`, `/skills/review-open`, `/skills/archive`, `/skills/restore` (POST + JSON, caller from the bearer credential) |
 
 The data root is `dshHomePath('skill')` by default:
 
@@ -59,9 +62,13 @@ The backend returns every derived fact; the client only renders it:
 
 - `state` numeric: 1 in catalog, 2 shadowed, 3 disabled, 4 archived.
 - `scope` numeric: 1 personal, 2 common.
-- `actions` numeric scope per action: 1 this user, 2 every user. Toggle is
-  always this user's own preference; archive/restore scope depends on the
-  identity's scope. This ticket only acts on toggle.
+- `actions` numeric scope per action: 0 not offered, 1 this user, 2 every user.
+  Toggle is always this user's own preference. A personal archive/restore is
+  offered to its owner (1); a common one only to Phaethon (2), and is 0 for
+  every other caller. The server enforces the permission; the 0 lets the client
+  hide a control it must not render.
+- A common candidate is visible to its proposer and Phaethon; only Phaethon
+  may decide it. A person's own name never widens either rule.
 - `shadowedBy` carries the personal identity that shadows a common item.
 - `pendingRevision` is true while the current version has a pending revision or
   a changes-requested draft that no newer draft has replaced; the client only
@@ -69,8 +76,9 @@ The backend returns every derived fact; the client only renders it:
 
 `/skills/preference` re-derives the pool after writing and invalidates that
 owner's live provider registration, so the next catalog reflects the change
-without a restart. An approval does the same for the owner (or every agent when
-a later ticket publishes a common version).
+without a restart. A personal archive/restore invalidates its owner; a common
+one invalidates every live agent. An approval does the same for the owner, or
+for every agent when it publishes a common version.
 
 ## Package and manifest
 
@@ -120,9 +128,10 @@ failed call and the chat projection shows no activation row.
   a numbered turn, or the latest turn plus the user's task statement. The
   resolved range (`turn`, `startSeq`, `endSeq`, the tool names it requested and
   the session id) is the version's provenance in `source_location`.
-- The caller's owner and session are derived, never submitted. Only personal
-  scope is accepted in this ticket; a common candidate needs the sharing
-  ticket's explicit-turn rule.
+- The caller's owner and session are derived, never submitted. `scope` is 1
+  (personal) or 2 (common); a common proposal is accepted only when the user
+  turn that opened the current turn contains one of `共有`, `共享`, `所有人` or
+  `大家`, and its message id and text are recorded as the sharing consent.
 - `files` must contain `SKILL.md` and the complete package. The backend stages,
   validates and hashes it; the model cannot choose a landing path, a manifest
   hash or a verification result.
@@ -199,6 +208,70 @@ publishes, and the other keeps its draft for a rebase.
   and, above 110%, the fourth block carries the exact `确认增长` instruction.
   Reused scenarios print as `↺ … → 复用自版本 N`.
 
+## Installing from an address
+
+`skill_manage create` accepts `address` instead of `files`; the scenarios are
+still required. `src/install.ts` supports:
+
+- `https://github.com/<owner>/<repo>/tree/<ref>/<path...>` — resolve `<ref>` to a
+  commit through the GitHub API, then download
+  `<codeload>/<owner>/<repo>/tar.gz/<sha>` and extract only `<path>`;
+- the same URL with `/blob/.../SKILL.md` (the package directory is its parent);
+- `github:<owner>/<repo>/<path>@<ref>`;
+- a direct `http(s)` URL ending in `.tar.gz` or `.tgz`. A `.zip` is refused with
+  `skills/unsupported-archive` rather than read by an untested extractor.
+
+`OURFAIRY_GITHUB_API_BASE` and `OURFAIRY_GITHUB_CODELOAD_BASE` override the two
+GitHub hosts (tests point them at a loopback stub); `OURFAIRY_SKILL_INSTALL_MAX_BYTES`
+bounds the download, the inflated archive and the package. The fetch is bounded
+by redirect count, timeout and response size.
+
+The extractor accepts only regular files and directories. It refuses absolute
+paths, `..`, backslashes, NUL, symlinks, hardlinks, devices and FIFOs, and
+applies a byte and entry-count bound. Extraction happens under
+`tmp/install-<uuid>/` in the skill data root, which is not a native scan root;
+only the skill subtree is kept and the fetched package is then copied through
+the ordinary candidate path. This module never executes package code, never
+registers a plugin and never bypasses review. The version records the address,
+the resolved commit or archive digest, the archive SHA-256, the fetch time, the
+optional ETag/Last-Modified and the package's license (frontmatter or a root
+`LICENSE*` file, which stays in the package). A later branch change cannot alter
+an already fetched or approved candidate.
+
+## Common proposals and lifecycle
+
+A common identity has no personal owner (`owner_short_id = NULL`), records
+`proposed_by`, and shares its name namespace with personal identities but not
+with another common identity. A second common proposal for a pending name by a
+different user is refused; the preparer may add a new draft after a change
+request. The proposer can inspect the cleaned review material (package, fixed
+source summary and verification report; no raw session or other personal
+skills), open its review conversation and see the decision result. Phaethon
+alone can approve, request changes, reject, archive or restore it. Approval
+writes no preference rows for anyone, so the common default (disabled) applies
+per user and the reviewer does not choose for other users.
+
+`skill_manage archive|restore` and `POST /skills/archive|restore {skillId}` set
+or clear `archived_at`. The store keeps the package, version history, source and
+every preference row. Archived identities stay in `/skills/list` with state 4
+so the client can restore them, but they are not pool winners, catalog entries
+or read-only resources. Restore re-derives the previous preference; a missing
+row again takes the scope default (personal enabled, common disabled). The
+background creation child has no `skill_manage` tool, so it can never archive
+or restore.
+
+## Review results and reminders
+
+`/skills/list` also returns a bounded, newest-first `reviewResults` view:
+`{versionId, skillId, name, scope, status, decidedAt, proposer}` for settled
+candidates visible to the caller (the owner's personal decisions; a common
+proposal's decision to its proposer; every common decision to Phaethon). There
+is no backend push and no notification table. The Android client keeps a
+per-account durable set of pending and decided version ids, and publishes at
+most one merged local notification per newly observed set, with an action that
+opens `Screen.Skills`; a suppressed (foreground or switched-off) reminder is
+recorded and never replayed.
+
 ## Review entry
 
 `POST /skills/review-open {versionId}` checks the caller may review that
@@ -230,9 +303,12 @@ user bubble. The client then opens the returned session id.
 
 ## Seams left for later tickets
 
-- No install-from-address, common candidate, archive/restore endpoint or
-  background-learning engine.
+- No background-learning engine yet. It is the one part of the spec this row
+  still does not serve; the Skill Creator content and the store are ready for
+  it.
 - `SkillService` takes the store and data root, not a Cordis context;
   `SkillProviders` owns registration and invalidation; `SkillCreation` owns the
-  candidate/review rules; `skillHandlers` owns the HTTP envelope; the row's
-  `index.ts` composes them.
+  candidate/review rules; `SkillInstall` owns the network fetch and extraction;
+  `SkillLifecycle` owns archive/restore; `SkillNotifications` owns the bounded
+  decision view; `skillHandlers` owns the HTTP envelope; the row's `index.ts`
+  composes them.

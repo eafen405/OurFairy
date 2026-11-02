@@ -23,6 +23,9 @@ import me.rerere.rikkahub.data.remote.RemoteChatBackend
 import me.rerere.rikkahub.data.remote.RemoteChatProjection
 import me.rerere.rikkahub.data.remote.SessionBackend
 import me.rerere.rikkahub.data.remote.SignedIn
+import me.rerere.rikkahub.data.remote.SkillPool
+import me.rerere.rikkahub.data.remote.SkillPoolItem
+import me.rerere.rikkahub.data.remote.SkillsBackend
 import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.identityModule
 import me.rerere.rikkahub.service.AndroidRemoteNotifications
@@ -83,6 +86,16 @@ private class NotificationSessions : SessionBackend {
     override suspend fun restore(token: String, sessionId: String) = error("not used")
 }
 
+/** The skills page's own backend; the reminder observation must not reach the blocked network. */
+private class QuietSkills : SkillsBackend {
+    override suspend fun list(token: String) = SkillPool()
+    override suspend fun detail(token: String, skillId: Long): SkillPoolItem = error("not used")
+    override suspend fun setEnabled(token: String, skillId: Long, enabled: Boolean): SkillPoolItem = error("not used")
+    override suspend fun reviewOpen(token: String, versionId: Long): String = error("not used")
+    override suspend fun archive(token: String, skillId: Long): SkillPoolItem = error("not used")
+    override suspend fun restore(token: String, skillId: Long): SkillPoolItem = error("not used")
+}
+
 /** A quiet session: it is open, and it is not doing anything. */
 private class NotificationChat : RemoteChatBackend {
     private val updates = mutableMapOf<String, MutableStateFlow<RemoteChatProjection>>()
@@ -138,6 +151,7 @@ open class NotificationColdStartApplication : Application() {
                     single<IdentityBackend> { NotificationAccount() }
                     single<SessionBackend> { NotificationSessions() }
                     single<RemoteChatBackend> { NotificationChat() }
+                    single<SkillsBackend> { QuietSkills() }
                 },
             )
         }
@@ -155,6 +169,11 @@ class NotificationColdStartTest {
         .putExtra(AndroidRemoteNotifications.EXTRA_ENDPOINT, BuildConfig.IDENTITY_ENDPOINT)
         .putExtra(AndroidRemoteNotifications.EXTRA_ACCOUNT, 2)
         .putExtra(AndroidRemoteNotifications.EXTRA_SESSION, sessionId)
+
+    /** The skills reminder intent, aimed at the same account. */
+    private fun skillsNotification(): Intent = Intent(AndroidRemoteNotifications.ACTION_OPEN_SKILLS)
+        .putExtra(AndroidRemoteNotifications.EXTRA_ENDPOINT, BuildConfig.IDENTITY_ENDPOINT)
+        .putExtra(AndroidRemoteNotifications.EXTRA_ACCOUNT, 2)
 
     /**
      * Report the app as foreground.
@@ -188,6 +207,38 @@ class NotificationColdStartTest {
         // and the page's "cannot open this conversation" fallback is not.
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
         compose.onNodeWithText("暂时无法打开此会话").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a skills reminder opens the skills page for its own account`() {
+        compose.mainClock.autoAdvance = false
+        foreground()
+        settle()
+        compose.onNodeWithText("退出登录").assertIsDisplayed()
+
+        compose.runOnUiThread { compose.activity.handleIntent(skillsNotification()) }
+        repeat(6) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
+
+        compose.onNodeWithText("还没有可用的已审核技能。").assertIsDisplayed()
+        compose.onNodeWithContentDescription("发送消息").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a skills reminder for another account is ignored`() {
+        compose.mainClock.autoAdvance = false
+        foreground()
+        settle()
+
+        compose.runOnUiThread {
+            compose.activity.handleIntent(
+                Intent(AndroidRemoteNotifications.ACTION_OPEN_SKILLS)
+                    .putExtra(AndroidRemoteNotifications.EXTRA_ENDPOINT, BuildConfig.IDENTITY_ENDPOINT)
+                    .putExtra(AndroidRemoteNotifications.EXTRA_ACCOUNT, 9),
+            )
+        }
+        repeat(6) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
+
+        compose.onNodeWithText("还没有可用的已审核技能。").assertDoesNotExist()
     }
 
     @Test

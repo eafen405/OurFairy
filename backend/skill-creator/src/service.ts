@@ -45,8 +45,8 @@ import {
 /** The selection pool's derived presentation state. */
 export const POOL_STATE = Object.freeze({ inCatalog: 1, shadowed: 2, disabled: 3, archived: 4 })
 
-/** Who one action affects: this user only, or every user of the deployment. */
-export const ACTION_SCOPE = Object.freeze({ owner: 1, everyone: 2 })
+/** Who one action affects, or 0 when this caller is not offered it. */
+export const ACTION_SCOPE = Object.freeze({ none: 0, owner: 1, everyone: 2 })
 
 /** One visible version together with the preference facts derived for the caller. */
 interface Candidate {
@@ -147,12 +147,12 @@ function defaultEnabled(scope: number): boolean {
   return scope === SKILL_SCOPE.personal
 }
 
-/** The action scopes one identity offers; common lifecycle actions affect every user. */
-function actionScopes(scope: number): PoolItem['actions'] {
+/** The action scopes one identity offers this caller; a common lifecycle action is Phaethon's. */
+function actionScopes(scope: number, isAdmin: boolean): PoolItem['actions'] {
   return {
     toggle: ACTION_SCOPE.owner,
-    archive: scope === SKILL_SCOPE.personal ? ACTION_SCOPE.owner : ACTION_SCOPE.everyone,
-    restore: scope === SKILL_SCOPE.personal ? ACTION_SCOPE.owner : ACTION_SCOPE.everyone,
+    archive: scope === SKILL_SCOPE.personal ? ACTION_SCOPE.owner : isAdmin ? ACTION_SCOPE.everyone : ACTION_SCOPE.none,
+    restore: scope === SKILL_SCOPE.personal ? ACTION_SCOPE.owner : isAdmin ? ACTION_SCOPE.everyone : ACTION_SCOPE.none,
   }
 }
 
@@ -191,17 +191,17 @@ export class SkillService {
   }
 
   /** The derived pool the authenticated user sees, in stable name/scope order. */
-  pool(shortId: number): PoolItem[] {
+  pool(shortId: number, isAdmin = false): PoolItem[] {
     const evaluation = this.#evaluate(shortId)
-    return evaluation.candidates.map(candidate => this.#poolItem(candidate, evaluation))
+    return evaluation.candidates.map(candidate => this.#poolItem(candidate, evaluation, isAdmin))
   }
 
   /** One visible skill's bounded detail; a skill outside the caller's scope is not found. */
-  detail(shortId: number, skillId: number): SkillDetail {
+  detail(shortId: number, skillId: number, isAdmin = false): SkillDetail {
     const evaluation = this.#evaluate(shortId)
     const candidate = evaluation.candidates.find(item => item.skill.id === skillId)
     if (candidate === undefined) throw new SkillError(404, 'skills/not-found', `skill ${skillId} is not visible to this user`)
-    const item = this.#poolItem(candidate, evaluation)
+    const item = this.#poolItem(candidate, evaluation, isAdmin)
     return {
       ...item,
       ownerShortId: candidate.skill.owner_short_id,
@@ -228,7 +228,7 @@ export class SkillService {
    * version. The scope comes from the identity, never from the request: a
    * common skill's preference is still this user's own.
    */
-  setPreference(shortId: number, skillId: number, enabled: boolean): PoolItem {
+  setPreference(shortId: number, skillId: number, enabled: boolean, isAdmin = false): PoolItem {
     const evaluation = this.#evaluate(shortId)
     const candidate = evaluation.candidates.find(item => item.skill.id === skillId)
     if (candidate === undefined) throw new SkillError(404, 'skills/not-found', `skill ${skillId} is not visible to this user`)
@@ -239,7 +239,7 @@ export class SkillService {
     const updated = this.#evaluate(shortId)
     const item = updated.candidates.find(entry => entry.skill.id === skillId)
     if (item === undefined) throw new SkillError(404, 'skills/not-found', `skill ${skillId} is not visible to this user`)
-    return this.#poolItem(item, updated)
+    return this.#poolItem(item, updated, isAdmin)
   }
 
   /**
@@ -457,7 +457,7 @@ export class SkillService {
   }
 
   /** One pool item from a candidate and the evaluation's state facts. */
-  #poolItem(candidate: Candidate, evaluation: Evaluation): PoolItem {
+  #poolItem(candidate: Candidate, evaluation: Evaluation, isAdmin: boolean): PoolItem {
     const state = evaluation.states.get(candidate.skill.id) ?? { state: POOL_STATE.disabled }
     return {
       skillId: candidate.skill.id,
@@ -468,7 +468,7 @@ export class SkillService {
       enabled: candidate.enabled,
       currentVersionId: candidate.skill.current_version_id,
       pendingRevision: evaluation.openDrafts.has(candidate.skill.id),
-      actions: actionScopes(candidate.skill.scope),
+      actions: actionScopes(candidate.skill.scope, isAdmin),
       ...(state.shadowedBy === undefined ? {} : { shadowedBy: state.shadowedBy }),
     }
   }

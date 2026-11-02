@@ -418,6 +418,18 @@ export type PendingDraftRow = SkillVersionRow & {
   readonly skill_archived_at: number | null
 }
 
+/** One settled version together with the identity facts a result view needs. */
+export type DecidedVersionRow = {
+  readonly id: number
+  readonly skill_id: number
+  readonly status: number
+  readonly reviewed_at: number | null
+  readonly updated_at: number
+  readonly skill_name: string
+  readonly skill_scope: number
+  readonly skill_proposed_by: number | null
+}
+
 /** One affected row count from a mutation. */
 type ChangeResult = { readonly changes: number | bigint }
 
@@ -1111,20 +1123,46 @@ export class SkillStore {
    * The pending candidates one caller may review, newest first and bounded.
    *
    * A personal draft is visible to its owner; a common draft to its proposer
-   * (the Phaethon branch is added by the sharing ticket at the one permission
-   * function, not here). Archived identities keep their drafts out; a draft of
-   * an archived identity is not reviewable.
+   * and to Phaethon. Archived identities keep their drafts out; a draft of an
+   * archived identity is not reviewable.
    */
-  pendingDrafts(shortId: number, limit = 50): PendingDraftRow[] {
+  pendingDrafts(shortId: number, isAdmin = false, limit = 50): PendingDraftRow[] {
     return rowsOf<PendingDraftRow>(this.#db.prepare(
       `SELECT v.*, s.name AS skill_name, s.scope AS skill_scope,
               s.owner_short_id AS skill_owner_short_id, s.proposed_by AS skill_proposed_by,
               s.archived_at AS skill_archived_at
          FROM skill_version v JOIN skill s ON s.id = v.skill_id
         WHERE v.status = ? AND v.deleted_at IS NULL AND s.deleted_at IS NULL AND s.archived_at IS NULL
-          AND ((s.scope = ? AND s.owner_short_id = ?) OR (s.scope = ? AND s.proposed_by = ?))
+          AND ((s.scope = ? AND s.owner_short_id = ?)
+            OR (s.scope = ? AND (s.proposed_by = ? OR ? = 1)))
         ORDER BY v.created_at DESC, v.id DESC LIMIT ?`,
-    ).all(VERSION_STATUS.pending, SKILL_SCOPE.personal, shortId, SKILL_SCOPE.common, shortId, limit))
+    ).all(VERSION_STATUS.pending, SKILL_SCOPE.personal, shortId, SKILL_SCOPE.common, shortId, isAdmin ? 1 : 0, limit))
+  }
+
+  /**
+   * The recently decided versions this caller may see as a result.
+   *
+   * A personal decision belongs to its owner; a common decision is visible to
+   * its proposer and to Phaethon. Only settled statuses are results (a
+   * changes-requested draft is still a live candidate for its author), and the
+   * read is bounded and newest-first.
+   */
+  recentDecisions({ shortId, isAdmin, limit }: {
+    readonly shortId: number
+    readonly isAdmin: boolean
+    readonly limit: number
+  }): DecidedVersionRow[] {
+    return rowsOf<DecidedVersionRow>(this.#db.prepare(
+      `SELECT v.id, v.skill_id, v.status, v.reviewed_at, v.updated_at,
+              s.name AS skill_name, s.scope AS skill_scope, s.proposed_by AS skill_proposed_by
+         FROM skill_version v JOIN skill s ON s.id = v.skill_id
+        WHERE v.deleted_at IS NULL AND s.deleted_at IS NULL AND v.reviewed_at IS NOT NULL
+          AND v.status IN (?, ?, ?)
+          AND ((s.scope = ? AND s.owner_short_id = ?)
+            OR (s.scope = ? AND (s.proposed_by = ? OR ? = 1)))
+        ORDER BY v.reviewed_at DESC, v.id DESC LIMIT ?`,
+    ).all(VERSION_STATUS.changesRequested, VERSION_STATUS.rejected, VERSION_STATUS.approvedCurrent,
+      SKILL_SCOPE.personal, shortId, SKILL_SCOPE.common, shortId, isAdmin ? 1 : 0, limit))
   }
 
   /** Store one version's verification report; only a pending row accepts a report. */

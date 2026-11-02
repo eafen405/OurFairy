@@ -381,7 +381,7 @@ export class SkillCreationEngine {
   /** The bounded list of existing candidates and current skills, so the child can dedupe. */
   #dedupeSection(ownerShortId: number): string {
     const lines: string[] = []
-    const pending = this.#store.pendingDrafts(ownerShortId, MAX_DEDUPE_ITEMS)
+    const pending = this.#store.pendingDrafts(ownerShortId, false, MAX_DEDUPE_ITEMS)
     lines.push(pending.length === 0
       ? '已有待审候选：无。'
       : `已有待审候选：\n${pending.map(row => `- ${row.skill_name}（版本 ${String(row.id)}）：${clip(this.#versionDescription(row), DEDUPE_DESCRIPTION_MAX)}`).join('\n')}`)

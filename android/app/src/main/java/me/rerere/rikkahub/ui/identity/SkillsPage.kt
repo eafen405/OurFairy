@@ -38,7 +38,9 @@ import me.rerere.rikkahub.data.remote.PendingSkill
 import me.rerere.rikkahub.data.remote.SkillActionTarget
 import me.rerere.rikkahub.data.remote.SkillPoolItem
 import me.rerere.rikkahub.data.remote.SkillPoolState
+import me.rerere.rikkahub.data.remote.SkillReviewResult
 import me.rerere.rikkahub.data.remote.SkillScope
+import me.rerere.rikkahub.data.remote.SkillVersionStatus
 import me.rerere.rikkahub.data.remote.SkillsBackend
 import me.rerere.rikkahub.data.remote.SkillsFailure
 import me.rerere.rikkahub.data.remote.SkillsSnapshot
@@ -55,11 +57,13 @@ import me.rerere.rikkahub.ui.fairy.StatusTone
  * The user's skill selection pool.
  *
  * The page renders only facts `/skills/list` derives: scope, the pool state (in catalog,
- * shadowed, disabled, archived), the effective switch value, the same-name shadower and the
- * numeric scope of each action. It never computes a winner or an archive itself. The switch is
- * the one pool action this ticket performs; archive and restore scopes are shown but not acted on
- * until their ticket. A pending item calls `/skills/review-open`, and the backend answers the
- * caller's primary session id, which the page hands to the host to open the conversation.
+ * shadowed, disabled, archived), the effective switch value, the same-name shadower, the
+ * numeric scope of each lifecycle action and the recently decided candidates. It never computes
+ * a winner, an archive or a review result itself. Archive and restore are offered only when the
+ * backend reports a non-zero action scope (personal: this user; common: Phaethon), and a
+ * zero-scope action is not rendered at all. A pending item calls `/skills/review-open`, and the
+ * backend answers the caller's primary session id, which the page hands to the host to open the
+ * conversation.
  */
 @Composable
 fun SkillsPage(
@@ -151,6 +155,8 @@ fun SkillsPage(
                             item = item,
                             enabled = !snapshot.working && token != null,
                             onToggle = { checked -> token?.let { state.setEnabled(it, item.skillId, checked) } },
+                            onArchive = { token?.let { state.archive(it, item.skillId) } },
+                            onRestore = { token?.let { state.restore(it, item.skillId) } },
                         )
                     }
 
@@ -177,6 +183,21 @@ fun SkillsPage(
                             )
                         }
                     }
+
+                    Spacer(Modifier.height(24.dp))
+                    SkillSectionTitle(stringResource(R.string.skills_section_results))
+                    if (snapshot.reviewResults.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.skills_results_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        snapshot.reviewResults.forEachIndexed { index, result ->
+                            if (index > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            SkillResultRow(result)
+                        }
+                    }
                 }
             }
 
@@ -201,7 +222,13 @@ private fun SkillSectionTitle(text: String) {
 }
 
 @Composable
-private fun SkillRow(item: SkillPoolItem, enabled: Boolean, onToggle: (Boolean) -> Unit) {
+private fun SkillRow(
+    item: SkillPoolItem,
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onArchive: () -> Unit,
+    onRestore: () -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("skill-item-${item.skillId}"),
         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -258,16 +285,77 @@ private fun SkillRow(item: SkillPoolItem, enabled: Boolean, onToggle: (Boolean) 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        val archiveScope = stringResource(
-            if (item.actions.archive == SkillActionTarget.EVERYONE) R.string.skills_action_everyone
-            else R.string.skills_action_owner,
+        val lifecycleScope = if (item.state == SkillPoolState.ARCHIVED) item.actions.restore else item.actions.archive
+        if (lifecycleScope != SkillActionTarget.NONE) {
+            val scopeLabel = stringResource(
+                if (lifecycleScope == SkillActionTarget.EVERYONE) R.string.skills_action_everyone
+                else R.string.skills_action_owner,
+            )
+            Text(
+                text = stringResource(R.string.skills_action_scope, scopeLabel),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (item.state == SkillPoolState.ARCHIVED) {
+                    OutlinedButton(
+                        onClick = onRestore,
+                        enabled = enabled,
+                        modifier = Modifier.testTag("skill-restore-${item.skillId}"),
+                    ) {
+                        Text(stringResource(R.string.skills_restore_with_scope, scopeLabel))
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onArchive,
+                        enabled = enabled,
+                        modifier = Modifier.testTag("skill-archive-${item.skillId}"),
+                    ) {
+                        Text(stringResource(R.string.skills_archive_with_scope, scopeLabel))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One recently decided candidate: the backend's status and scope, rendered plainly. */
+@Composable
+private fun SkillResultRow(result: SkillReviewResult) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("skill-result-${result.versionId}"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = result.name.ifBlank { "#${result.versionId}" },
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
         )
         Text(
-            text = stringResource(R.string.skills_action_scope, archiveScope),
+            text = stringResource(
+                if (result.scope == SkillScope.COMMON) R.string.skills_scope_common else R.string.skills_scope_personal,
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Text(
+            text = stringResource(resultStateLabel(result.status)),
+            style = MaterialTheme.typography.labelSmall,
+            color = when (result.status) {
+                SkillVersionStatus.APPROVED -> MaterialTheme.colorScheme.primary
+                SkillVersionStatus.REJECTED -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
     }
+}
+
+private fun resultStateLabel(status: Int): Int = when (status) {
+    SkillVersionStatus.APPROVED -> R.string.skills_result_approved
+    SkillVersionStatus.REJECTED -> R.string.skills_result_rejected
+    SkillVersionStatus.CHANGES_REQUESTED -> R.string.skills_result_changes_requested
+    else -> R.string.skills_state_unknown
 }
 
 private fun poolStateLabel(state: Int): Int = when (state) {
@@ -303,6 +391,13 @@ private fun PendingSkillRow(candidate: PendingSkill, enabled: Boolean, onOpen: (
                 modifier = Modifier.testTag("skill-growth-${candidate.versionId}"),
             )
         }
+        Text(
+            text = stringResource(
+                if (candidate.scope == SkillScope.COMMON) R.string.skills_scope_common else R.string.skills_scope_personal,
+            ),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Text(
             text = stringResource(R.string.skills_pending_item),
             style = MaterialTheme.typography.labelSmall,
