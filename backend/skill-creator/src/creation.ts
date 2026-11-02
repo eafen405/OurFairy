@@ -32,7 +32,8 @@ import {
   type PackageFileInput,
 } from './package.js'
 import { SKILL_SCOPE, SOURCE_TYPE, VERSION_STATUS, SkillStoreError } from './store.js'
-import { runVerification, type VerificationReport } from './verify.js'
+import { checkedTargetBenefit, growthOf, planVerificationReuse, type ReusedScenario } from './evolution.js'
+import { runVerification, type ScenarioRecord, type VerificationReport } from './verify.js'
 import { SkillError } from './service.js'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SkillRow, SkillStore, PendingDraftRow, SkillVersionRow } from './store.js'
@@ -100,6 +101,10 @@ export interface CreateCandidateInput {
   readonly comparisons?: readonly CandidateComparison[]
   readonly evidence?: readonly CandidateEvidence[]
   readonly license?: string
+  /** The current approved version this candidate revises (#299). */
+  readonly parentVersionId?: number
+  /** The proven benefit of a revision; required with {@link parentVersionId}. */
+  readonly targetBenefit?: string
   readonly signal?: AbortSignal
 }
 
@@ -629,14 +634,6 @@ export function buildReviewDisplay(review: ReviewPackage): string {
   return boundDisplay(lines.join('\n'))
 }
 
-/** The growth calculation shared by inspect, the display and approval. */
-function growthOf(version: SkillVersionRow, parent: SkillVersionRow | undefined): ReviewPackage['growth'] {
-  const oldCharacters = parent?.core_characters ?? null
-  const newCharacters = version.core_characters
-  const exceeded = oldCharacters !== null && newCharacters > Math.floor(oldCharacters * 1.1)
-  return { exceeded, oldCharacters, newCharacters, ratio: oldCharacters === null ? null : newCharacters / oldCharacters }
-}
-
 /** The review-package differences between one manifest and its parent's. */
 function changesOf(manifest: readonly ManifestEntry[], parent: readonly ManifestEntry[] | undefined): ReviewChanges {
   if (parent === undefined) {
@@ -758,21 +755,24 @@ export class SkillCreation {
   }
 
   /**
-   * Validate, stage, record and verify one explicit candidate.
+   * Validate, stage, record and verify one explicit candidate or revision.
    *
    * The file set is written to `tmp/<uuid>/`, re-read by the one package
    * algorithm, moved into `candidates/<uuid>/` and only then inserted. A name
-   * that already has an approved current version is refused as a conflict: a
-   * revision is the evolution ticket's path. The candidate never enters a
-   * provider; only an approved version is served.
+   * that already has an approved current version needs `parentVersionId` (the
+   * evolution path, `source_type: 3`); without it the conflict is refused. A
+   * revision is a complete rewrite, so the package replaces the parent's files
+   * rather than patching them. The candidate never enters a provider; only an
+   * approved version is served.
    */
   async create(input: CreateCandidateInput): Promise<CreateCandidateResult> {
     try {
-      if (input.scope !== SKILL_SCOPE.personal) {
-        throw new SkillError(400, 'skills/common-unsupported', 'common skills need the sharing ticket; create a personal skill for now')
-      }
       if (!Array.isArray(input.files) || input.files.length === 0) {
         throw new SkillError(400, 'skills/invalid-package', 'create needs the complete package files, including SKILL.md')
+      }
+      const revision = this.#revisionContext(input)
+      if (revision === undefined && input.scope !== SKILL_SCOPE.personal) {
+        throw new SkillError(400, 'skills/common-unsupported', 'common skills need the sharing ticket; create a personal skill for now')
       }
       const focus = resolveFocus(input.events, input.focus)
       const evidence = checkedEvidence(input.evidence)
@@ -782,17 +782,23 @@ export class SkillCreation {
       try {
         writeSkillPackage(staging, input.files)
         const parsed = readSkillPackage(staging)
-        const existing = this.#store.activeIdentity({
-          scope: SKILL_SCOPE.personal,
-          ownerShortId: input.ownerShortId,
-          name: parsed.name,
-        })
-        if (existing !== undefined) {
-          if (existing.archived_at !== null) {
-            throw new SkillError(409, 'skills/archived', `skill "${existing.name}" is archived; restore it before creating a new draft`)
-          }
-          if (existing.current_version_id !== null) {
-            throw new SkillError(409, 'skills/name-conflict', `a skill named ${existing.name} already exists; use a revision`)
+        if (revision !== undefined && parsed.name !== revision.skill.name) {
+          throw new SkillError(400, 'skills/invalid-parent',
+            `a revision keeps the identity name "${revision.skill.name}"; got "${parsed.name}"`)
+        }
+        if (revision === undefined) {
+          const existing = this.#store.activeIdentity({
+            scope: SKILL_SCOPE.personal,
+            ownerShortId: input.ownerShortId,
+            name: parsed.name,
+          })
+          if (existing !== undefined) {
+            if (existing.archived_at !== null) {
+              throw new SkillError(409, 'skills/archived', `skill "${existing.name}" is archived; restore it before creating a new draft`)
+            }
+            if (existing.current_version_id !== null) {
+              throw new SkillError(409, 'skills/name-conflict', `a skill named ${existing.name} already exists; use a revision`)
+            }
           }
         }
         const scenarios = checkedScenarios(input.scenarios, new Set(parsed.manifest.map(entry => entry.path)), this.#verifyTimeoutMs)
@@ -800,14 +806,16 @@ export class SkillCreation {
         mkdirSync(join(this.#root, 'candidates'), { recursive: true })
         candidateDir = join(this.#root, 'candidates', candidateId)
         renameSync(staging, candidateDir)
+        const growth = growthOf(parsed.coreCharacters, revision?.parent.core_characters ?? null)
         const location: SourceProvenance = {
           sessionId: input.sessionId,
           focus,
           ...(evidence.length === 0 ? {} : { evidence }),
+          ...(revision === undefined ? {} : { benefit: revision.benefit }),
         }
         const draft = this.#store.createDraft({
           name: parsed.name,
-          scope: SKILL_SCOPE.personal,
+          scope: revision?.skill.scope ?? SKILL_SCOPE.personal,
           ownerShortId: input.ownerShortId,
           createdBy: input.ownerShortId,
           packagePath: `candidates/${candidateId}`,
@@ -817,15 +825,19 @@ export class SkillCreation {
           ...(input.license === undefined
             ? (parsed.license === undefined ? {} : { license: parsed.license })
             : { license: input.license }),
-          sourceType: SOURCE_TYPE.explicit,
+          ...(revision === undefined
+            ? { sourceType: SOURCE_TYPE.explicit }
+            : { sourceType: SOURCE_TYPE.evolution, parentVersionId: revision.parent.id, growthExceeded: growth.exceeded }),
           sourceLocation: JSON.stringify(location),
         })
+        const reuse = revision === undefined ? undefined : this.#reusePlan(revision.parent, parsed.manifest, scenarios)
         const verification = await runVerification({
           root: this.#root,
           packageDir: candidateDir,
-          scenarios,
+          scenarios: reuse === undefined ? scenarios : reuse.rerun,
           comparisons,
           timeoutMs: this.#verifyTimeoutMs,
+          ...(reuse === undefined ? {} : { reused: reuse.reused }),
           ...(input.signal === undefined ? {} : { signal: input.signal }),
         })
         this.#store.updateVerification(draft.versionId, JSON.stringify(verification))
@@ -849,6 +861,71 @@ export class SkillCreation {
   }
 
   /**
+   * Resolve the parent a revision must name, or undefined for a new skill.
+   *
+   * The parent is the skill's current approved version and belongs to the
+   * caller's personal identity; a common parent, another owner's parent or a
+   * stale/superseded version is refused with the same vocabulary the tool
+   * reports. The target benefit is required and bounded; it is provenance, not
+   * a model claim that approval can skip.
+   */
+  #revisionContext(input: CreateCandidateInput): { skill: SkillRow; parent: SkillVersionRow; benefit: string } | undefined {
+    if (input.parentVersionId === undefined) {
+      if (input.targetBenefit !== undefined) {
+        throw new SkillError(400, 'skills/invalid-request', 'targetBenefit only applies to a revision; pass parentVersionId with it')
+      }
+      return undefined
+    }
+    const benefit = checkedTargetBenefit(input.targetBenefit)
+    if (input.scope !== undefined && input.scope !== SKILL_SCOPE.personal) {
+      throw new SkillError(400, 'skills/invalid-parent', 'a revision keeps the parent skill scope')
+    }
+    const parent = this.#store.version(input.parentVersionId)
+    if (parent === undefined) {
+      throw new SkillError(400, 'skills/invalid-parent', `parentVersionId ${input.parentVersionId} is not a skill version`)
+    }
+    const skill = this.#store.identity(parent.skill_id)
+    if (skill === undefined || skill.scope !== SKILL_SCOPE.personal || skill.owner_short_id !== input.ownerShortId) {
+      throw new SkillError(404, 'skills/not-found', `skill version ${input.parentVersionId} is not visible to this user`)
+    }
+    if (skill.archived_at !== null) {
+      throw new SkillError(409, 'skills/archived', `skill "${skill.name}" is archived; restore it before creating a revision`)
+    }
+    if (parent.status !== VERSION_STATUS.approvedCurrent || skill.current_version_id !== parent.id) {
+      throw new SkillError(400, 'skills/invalid-parent',
+        `parentVersionId ${input.parentVersionId} is not the skill's current approved version`)
+    }
+    return { skill, parent, benefit }
+  }
+
+  /**
+   * The reuse decision against the parent's recorded verification report.
+   *
+   * The parent manifest is re-read from its immutable version directory, so a
+   * changed file can only make reuse stricter (the hashes stop matching); a
+   * parent whose report or package cannot be read simply reruns everything.
+   */
+  #reusePlan(parent: SkillVersionRow, candidateManifest: readonly ManifestEntry[], scenarios: readonly CandidateScenario[]): { reused: ReusedScenario[]; rerun: readonly CandidateScenario[] } {
+    const parentManifest = this.#readParentManifest(parent)
+    if (parentManifest === undefined) return { reused: [], rerun: [...scenarios] }
+    let report: { executed: ScenarioRecord[]; reused: ScenarioRecord[] } | undefined
+    try {
+      const parsed = parent.verification === null ? undefined : JSON.parse(parent.verification) as { executed?: ScenarioRecord[]; reused?: ScenarioRecord[] }
+      if (parsed !== undefined) report = { executed: parsed.executed ?? [], reused: parsed.reused ?? [] }
+    } catch {
+      report = undefined
+    }
+    const hashes = (manifest: readonly ManifestEntry[]) => new Map(manifest.map(entry => [entry.path, entry.sha256]))
+    return planVerificationReuse({
+      scenarios,
+      candidateHashes: hashes(candidateManifest),
+      parentHashes: hashes(parentManifest),
+      parentReport: report,
+      parentVersionId: parent.id,
+    })
+  }
+
+  /**
    * The read-only review package for one candidate, plus its deterministic
    * display and one explicitly bounded expansion.
    */
@@ -861,7 +938,7 @@ export class SkillCreation {
       const parent = version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)
       const parentManifest = parent === undefined ? undefined : this.#readParentManifest(parent)
       const verification = verificationOf(version)
-      const growth = growthOf(version, parent)
+      const growth = growthOf(version.core_characters, parent?.core_characters ?? null)
       const changes = changesOf(parsed.manifest, parentManifest)
       const review: ReviewPackage = {
         versionId: version.id,
@@ -980,7 +1057,7 @@ export class SkillCreation {
       // has no parent, so this branch is unreachable until #299 supplies the
       // message-reference validation. Refusing here keeps the approval gate
       // real rather than silently approving an unconfirmed growth.
-      if (growthOf(version, version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)).exceeded) {
+      if (growthOf(version.core_characters, (version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id))?.core_characters ?? null).exceeded) {
         throw new SkillError(409, 'skills/growth-confirmation-required', 'core body grew more than 10%; show the counts and collect the user confirmation first')
       }
 

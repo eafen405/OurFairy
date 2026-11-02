@@ -479,8 +479,13 @@ export class SkillStore {
           throw new SkillStoreError('skills/archived', `skill "${existing.name}" is archived; restore it before creating a new draft`)
         }
         if (existing.current_version_id !== null) {
-          throw new SkillStoreError('skills/name-conflict',
-            `a skill named ${existing.name} already exists; use a revision`)
+          // A draft may coexist with a current version only as a revision of
+          // exactly that version; anything else would be a second identity or
+          // a revision against a stale pointer.
+          if (version.parentVersionId === undefined || version.parentVersionId !== existing.current_version_id) {
+            throw new SkillStoreError('skills/name-conflict',
+              `a skill named ${existing.name} already exists; use a revision of its current version`)
+          }
         }
         skillId = existing.id
       }

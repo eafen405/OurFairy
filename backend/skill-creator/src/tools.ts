@@ -203,26 +203,30 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
         }) as unknown as SkillToolValue
       }
       case 'create': {
-        if (args.scope === undefined) throw new Error('skills/invalid-request: create needs scope 1 (personal)')
+        const parentVersionId = positiveInteger(args.parentVersionId, 'parentVersionId')
+        // A revision derives its scope from the parent identity; a new skill
+        // must still state the personal scope explicitly.
+        if (parentVersionId === undefined && args.scope === undefined) {
+          throw new Error('skills/invalid-request: create needs scope 1 (personal)')
+        }
         if (args.focus === undefined) throw new Error('skills/invalid-request: create needs focus')
         if (args.files === undefined) throw new Error('skills/invalid-request: create needs the complete package files')
         if (args.scenarios === undefined) throw new Error('skills/invalid-request: create needs at least one scenario')
         if (args.address !== undefined) throw new Error('skills/install-unsupported: installing from an address arrives with the sharing ticket')
-        if (args.parentVersionId !== undefined || args.targetBenefit !== undefined) {
-          throw new Error('skills/revision-unsupported: revisions arrive with the evolution ticket')
-        }
         const { events } = await readSessionEvents(deps.ctx, agent.session.id)
         const result = await deps.creation.create({
           ownerShortId: owner,
           sessionId: agent.session.id,
           events,
-          scope: args.scope,
+          scope: args.scope ?? 1,
           focus: args.focus,
           files: args.files,
           scenarios: args.scenarios,
           ...(args.comparisons === undefined ? {} : { comparisons: args.comparisons }),
           ...(args.evidence === undefined ? {} : { evidence: args.evidence }),
           ...(args.license === undefined ? {} : { license: args.license }),
+          ...(parentVersionId === undefined ? {} : { parentVersionId }),
+          ...(args.targetBenefit === undefined ? {} : { targetBenefit: args.targetBenefit }),
           signal: exec.signal,
         })
         return result as unknown as SkillToolValue
