@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import kotlinx.coroutines.CoroutineScope
@@ -74,7 +75,7 @@ class IdentitySessionListTest {
 
     @After fun close() { scope.cancel() }
 
-    private fun show() {
+    private fun show(onHome: () -> Unit = {}, onSettings: () -> Unit = {}) {
         state.bind("token")
         state.refresh()
         compose.setContent {
@@ -82,12 +83,35 @@ class IdentitySessionListTest {
                 state = state,
                 onOpen = {},
                 onClose = {},
-                onHome = {},
-                onSettings = {},
+                onHome = onHome,
+                onSettings = onSettings,
                 stopReply = { id -> events += "stop:$id" },
             )
         }
         compose.waitUntil(5_000) { !state.snapshot.value.loading }
+    }
+
+    @Test
+    fun `the default view is titled session list and its bottom entries are labelled icons`() {
+        var home = 0
+        var settings = 0
+        show(onHome = { home += 1 }, onSettings = { settings += 1 })
+
+        compose.onNodeWithText("会话列表").assertIsDisplayed()
+        compose.onNodeWithText("会话").assertDoesNotExist()
+        // The bottom row is icons now, but each keeps its own description and action.
+        compose.onNodeWithContentDescription("首页").assertIsDisplayed()
+        compose.onNodeWithContentDescription("设置").assertIsDisplayed()
+        compose.onNodeWithTag("session-list-home").performClick()
+        compose.onNodeWithTag("session-list-settings").performClick()
+        assertEquals(1, home)
+        assertEquals(1, settings)
+
+        // The archive view keeps its own header.
+        compose.onNodeWithText("已归档").performClick()
+        compose.waitUntil(5_000) { !state.archived.value.loading }
+        compose.onNodeWithText("已归档会话").assertIsDisplayed()
+        compose.onNodeWithText("会话列表").assertDoesNotExist()
     }
 
     @Test

@@ -1,7 +1,10 @@
 package me.rerere.rikkahub.ui.fairy
 
 import android.app.Application
+import android.content.res.Configuration
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -32,12 +35,18 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.Lifecycle
 import java.io.File
 import java.time.Duration
+import java.util.Locale
 import android.graphics.Bitmap
 import android.os.SystemClock
 import kotlinx.coroutines.CompletableDeferred
@@ -299,6 +308,11 @@ class FairyPagesTest {
 
         compose.onNodeWithText(RuntimeEnvironment.getApplication().getString(me.rerere.rikkahub.R.string.gateway_explain))
             .assertExists()
+        // The bar is shared with the conversation page, but this page keeps its back
+        // arrow and gains neither the settings gear nor the mini-screen home shortcut.
+        compose.onNodeWithContentDescription("返回").assertIsDisplayed()
+        compose.onNodeWithTag("fairy-window-settings").assertDoesNotExist()
+        compose.onNodeWithTag("fairy-window-home").assertDoesNotExist()
         compose.runOnIdle { assertEquals("the gateway page read the scope's backend", 1, gatewayReads) }
     }
 
@@ -307,6 +321,10 @@ class FairyPagesTest {
         compose.waitForIdle()
 
         compose.onNodeWithTag("impression_field").assertExists()
+        // Same shared bar, same inert mini screen: this page keeps the back arrow only.
+        compose.onNodeWithContentDescription("返回").assertIsDisplayed()
+        compose.onNodeWithTag("fairy-window-settings").assertDoesNotExist()
+        compose.onNodeWithTag("fairy-window-home").assertDoesNotExist()
         compose.runOnIdle { assertEquals("the impression page read the scope's backend", 1, impressionReads) }
     }
 
@@ -1441,6 +1459,215 @@ class FairyPagesTest {
         compose.runOnIdle { assertEquals(Screen.Conversation("main"), destination) }
         compose.onNodeWithContentDescription("切换会话").assertIsDisplayed()
         compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
+    }
+
+    @Test fun `home swipes left into the current conversation`() {
+        var destination: Screen? = null
+        home { destination = it }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        // Navigation settles on a frame; run the test clock for the gesture and the
+        // recomposition it triggers, then return to the paused clock the suite uses.
+        compose.mainClock.autoAdvance = true
+        compose.onRoot().performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+
+        compose.runOnIdle {
+            assertEquals("左滑与「进入会话」进入同一个当前会话", Screen.Conversation("main"), destination)
+        }
+        compose.onNodeWithContentDescription("发送消息").assertIsDisplayed()
+    }
+
+    @Test fun `home swipes left into the shared list without a current session`() {
+        listedSessions = OwnedSessions(emptyList(), null)
+        var destination: Screen? = null
+        home { destination = it }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(500)
+
+        compose.mainClock.autoAdvance = true
+        compose.onRoot().performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+
+        // The console is home already; with nothing to enter, the swipe opens the
+        // same shared list the button opens instead of inventing a destination.
+        compose.onNodeWithContentDescription("关闭会话列表").assertIsDisplayed()
+        compose.runOnIdle { assertNull("没有当前会话时左滑不是导航", destination) }
+    }
+
+    @Test
+    @Config(qualifiers = "zh-rCN-w411dp-h480dp")
+    fun `a vertical swipe on home scrolls instead of navigating`() {
+        var destination: Screen? = null
+        home { destination = it }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        // The narrow viewport leaves the bottom row below the fold.
+        compose.onNodeWithTag("console-settings").assertIsNotDisplayed()
+
+        compose.onRoot().performTouchInput { swipeUp(startY = bottom - 10f, endY = top + 10f) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle { assertNull("垂直滑动不得切页", destination) }
+        compose.onNodeWithTag("console-settings").assertIsDisplayed()
+    }
+
+    @Test fun `a swipe does not navigate while the shared session list is open`() {
+        var destination: Screen? = null
+        home { destination = it }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText("全部会话").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("关闭会话列表").assertIsDisplayed()
+
+        compose.onRoot().performTouchInput { swipeLeft() }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle { assertNull("会话列表打开时滑动不导航", destination) }
+    }
+
+    @Test fun `the conversation page swipes right home`() {
+        var destination by mutableStateOf<Screen>(Screen.Conversation("main"))
+        show {
+            DestinationHost(destination) { destination = it }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.mainClock.autoAdvance = true
+        compose.onRoot().performTouchInput { swipeRight() }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+
+        compose.runOnIdle {
+            assertEquals("右滑与对话页的返回同一条路：回到首页", Screen.Home, destination)
+        }
+        compose.onNodeWithText("进入会话").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun `the shared swipe gesture obeys its enabled gate and direction`() {
+        var enabled by mutableStateOf(false)
+        var left = 0
+        var right = 0
+        show {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .fairySwipeNavigation(
+                        enabled = enabled,
+                        onSwipeLeft = { left += 1 },
+                        onSwipeRight = { right += 1 },
+                    )
+                    .testTag("swipe-surface"),
+            )
+        }
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("swipe-surface").performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("禁用时左滑不触发", 0, left) }
+
+        compose.runOnIdle { enabled = true }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("swipe-surface").performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("启用后左滑触发一次", 1, left) }
+
+        compose.onNodeWithTag("swipe-surface").performTouchInput { swipeRight() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals("右滑不冒用左滑", 1, left)
+            assertEquals("启用后右滑触发一次", 1, right)
+        }
+    }
+
+    /** A conversation whose eye screen is folded, so the bar's mini screen is on stage. */
+    private fun settledConversation() {
+        updates["main"] = MutableStateFlow(RemoteChatProjection(
+            sessionId = "main", cursor = 0, durableThroughSeq = 0,
+            events = eventCoverage(0, 0),
+            messages = listOf(RemoteChatMessage("history", 0, 0, role = 1, status = 2, text = "你好，Fairy")),
+            activity = RemoteActivity(1),
+        ))
+    }
+
+    @Test fun `the conversation bar opens settings without a more menu`() {
+        settledConversation()
+        var destination by mutableStateOf<Screen>(Screen.Conversation("main"))
+        show {
+            DestinationHost(destination) { destination = it }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        // The three-dot overflow trigger is gone, so its 首页/设置 entries cannot exist.
+        compose.onNodeWithContentDescription("菜单").assertDoesNotExist()
+        compose.onNodeWithText("首页").assertDoesNotExist()
+        compose.onNodeWithText("设置").assertDoesNotExist()
+        compose.onNodeWithTag("fairy-window-settings").assertIsDisplayed().performClick()
+        compose.mainClock.advanceTimeBy(600)
+        compose.waitForIdle()
+
+        compose.runOnIdle { assertEquals("齿轮直接进入设置", Screen.Settings, destination) }
+    }
+
+    @Test fun `the conversation bar's fairy screen returns home`() {
+        settledConversation()
+        var destination by mutableStateOf<Screen>(Screen.Conversation("main"))
+        show {
+            DestinationHost(destination) { destination = it }
+        }
+        compose.waitUntil { !receive.owned.snapshot.value.loading }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("fairy-window-home").assertIsDisplayed().performClick()
+        compose.mainClock.advanceTimeBy(600)
+        compose.waitForIdle()
+
+        compose.runOnIdle { assertEquals("点击 Fairy 小屏与右划等价，回到首页", Screen.Home, destination) }
+    }
+
+    @Test fun `user-facing identity strings say server instead of backend`() {
+        val context = RuntimeEnvironment.getApplication()
+        val touched = listOf(
+            me.rerere.rikkahub.R.string.identity_unreachable,
+            me.rerere.rikkahub.R.string.gateway_explain,
+            me.rerere.rikkahub.R.string.gateway_route_api_key_env_hint,
+            me.rerere.rikkahub.R.string.gateway_route_credential_configured,
+            me.rerere.rikkahub.R.string.gateway_route_credential_missing,
+            me.rerere.rikkahub.R.string.gateway_asr_unavailable,
+            me.rerere.rikkahub.R.string.impression_unreachable,
+        )
+        touched.forEach { id ->
+            val chinese = context.getString(id)
+            val name = context.resources.getResourceName(id)
+            assertTrue("$name 仍说「后端」：$chinese", !chinese.contains("后端"))
+            assertTrue("$name 应说「服务端」：$chinese", chinese.contains("服务端"))
+        }
+        val englishConfiguration = Configuration(context.resources.configuration).apply {
+            setLocale(Locale.ENGLISH)
+        }
+        val english = context.createConfigurationContext(englishConfiguration).resources
+        touched.forEach { id ->
+            val name = english.getResourceName(id)
+            val text = english.getString(id)
+            assertTrue("$name 仍说 backend：$text", !text.contains("backend", ignoreCase = true))
+            assertTrue("$name 应说 server：$text", text.contains("server", ignoreCase = true))
+        }
     }
 
     @Test fun `selecting the open session in the list neither navigates nor rebuilds`() {

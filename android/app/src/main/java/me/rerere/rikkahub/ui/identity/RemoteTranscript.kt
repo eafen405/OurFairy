@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,6 +31,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,6 +59,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.rikkahub.data.remote.RemoteChatAttachment
 import me.rerere.rikkahub.data.remote.RemoteChatAttempt
@@ -101,6 +106,9 @@ internal fun RemoteTranscript(
 
     var detail by remember { mutableStateOf<RemoteChatMessage?>(null) }
     var menuRowKey by remember { mutableStateOf<String?>(null) }
+    // Expansion belongs to the row identity, so a growing attempt keeps its own choice and a
+    // newly arrived step starts collapsed.
+    val expandedToolRows = remember { mutableStateMapOf<String, Boolean>() }
     val clipboard = LocalClipboard.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -202,7 +210,13 @@ internal fun RemoteTranscript(
                     val tools = message?.tools ?: attempt?.tools.orEmpty()
                     if (tools.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
-                        ToolCallLines(tools)
+                        ToolCallLines(
+                            tools = tools,
+                            expanded = expandedToolRows[row.key] == true,
+                            onToggleExpanded = {
+                                expandedToolRows[row.key] = expandedToolRows[row.key] != true
+                            },
+                        )
                     }
                     if (message != null) {
                         if (message.attachments.isNotEmpty()) {
@@ -288,21 +302,44 @@ private fun streamingPrefix(current: String, target: String): String {
 }
 
 /**
- * The tools one step requested, one visible line per name.
- *
- * Only the name reaches the screen: the request arguments and the tool's output stay in the
- * native session. The line reuses the message's small-label style rather than introducing a chip
- * or an icon, which keeps a tool step reading as part of its message.
+ * The tools one step requested. A step is one action, so collapsed it shows only the newest name;
+ * the arrow reveals the step's calls in request order. Only names reach the screen: the request
+ * arguments and the tool's output stay in the native session. The line reuses the message's
+ * small-label style rather than introducing a chip or a per-tool icon, which keeps a tool step
+ * reading as part of its message.
  */
 @Composable
-private fun ToolCallLines(tools: List<String>) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        tools.forEach { name ->
-            Text(
-                text = "调用工具 · $name",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+private fun ToolCallLines(
+    tools: List<String>,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+) {
+    val visible = if (expanded) tools else tools.takeLast(1)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            visible.forEach { name ->
+                Text(
+                    text = "调用工具 · $name",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (tools.size > 1) {
+            IconButton(
+                onClick = onToggleExpanded,
+                modifier = Modifier.size(24.dp),
+            ) {
+                Icon(
+                    imageVector = if (expanded) HugeIcons.ArrowUp02 else HugeIcons.ArrowDown01,
+                    contentDescription = if (expanded) "收起工具调用" else "展开工具调用",
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

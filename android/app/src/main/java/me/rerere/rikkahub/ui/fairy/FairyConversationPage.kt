@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -142,6 +141,10 @@ fun FairyConversationPage(
         Box(
             Modifier
                 .fillMaxSize()
+                .fairySwipeNavigation(
+                    enabled = !overlay.isOpen,
+                    onSwipeRight = onBack,
+                )
                 .then(host.modifier),
         ) {
             FairyBackground(watermark = false)
@@ -191,10 +194,8 @@ fun FairyConversationPage(
                 },
                 onNavigateBack = onBack,
                 onOpenSessions = overlay::open,
-                moreMenuContent = { dismiss ->
-                    DropdownMenuItem(text = { Text("首页") }, onClick = { dismiss(); onBack() })
-                    DropdownMenuItem(text = { Text("设置") }, onClick = { dismiss(); onSettings() })
-                },
+                onOpenSettings = onSettings,
+                onNavigateHome = onBack,
             )
         }
     }
