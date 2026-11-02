@@ -216,6 +216,34 @@ export type ImportedVersion = {
   readonly createdSkill: boolean
 }
 
+/** One pending draft the creation path inserts before verification runs. */
+export type DraftVersion = {
+  readonly name: string
+  readonly scope: number
+  readonly ownerShortId?: number
+  readonly proposedBy?: number
+  readonly createdBy: number
+  /** POSIX path relative to the skill data root, under `candidates/`. */
+  readonly packagePath: string
+  readonly manifest: string
+  readonly manifestHash: string
+  readonly coreCharacters: number
+  readonly license?: string
+  readonly sourceType: number
+  readonly sourceLocation?: string
+  readonly parentVersionId?: number
+  readonly growthExceeded?: boolean
+}
+
+/** One pending draft together with the identity fields a reviewer needs. */
+export type PendingDraftRow = SkillVersionRow & {
+  readonly skill_name: string
+  readonly skill_scope: number
+  readonly skill_owner_short_id: number | null
+  readonly skill_proposed_by: number | null
+  readonly skill_archived_at: number | null
+}
+
 /** One affected row count from a mutation. */
 type ChangeResult = { readonly changes: number | bigint }
 
@@ -232,6 +260,32 @@ function rowOf<T extends Record<string, SQLOutputValue>>(row: Record<string, SQL
 /** Every row of one query, read as the row shape its table declares. */
 function rowsOf<T extends Record<string, SQLOutputValue>>(rows: Record<string, SQLOutputValue>[]): T[] {
   return rows as T[]
+}
+
+/**
+ * The facts one draft must carry before the store writes it.
+ *
+ * A draft package lives under `candidates/` in the immutable-path vocabulary;
+ * the store refuses anything else so no caller can make a row point at an
+ * approved `versions/` directory.
+ */
+function validateDraft(version: DraftVersion): void {
+  if (version.scope !== SKILL_SCOPE.personal && version.scope !== SKILL_SCOPE.common) {
+    throw new SkillStoreError('skills/invalid-scope', `unknown skill scope ${String(version.scope)}`)
+  }
+  if (version.scope === SKILL_SCOPE.personal && version.ownerShortId === undefined) {
+    throw new SkillStoreError('skills/invalid-owner', 'a personal skill needs an owner short number')
+  }
+  if (version.scope === SKILL_SCOPE.common && version.ownerShortId !== undefined) {
+    throw new SkillStoreError('skills/invalid-owner', 'a common skill has no owner short number')
+  }
+  const parts = version.packagePath.split('/')
+  if (parts[0] !== 'candidates' || parts.length < 2 || parts.some(part => part === '' || part === '.' || part === '..')) {
+    throw new SkillStoreError('skills/invalid-path', `a draft package path must be under candidates/: ${version.packagePath}`)
+  }
+  if (version.manifest === '' || version.manifestHash === '') {
+    throw new SkillStoreError('skills/invalid-package', 'a draft needs a manifest and its hash')
+  }
 }
 
 export class SkillStore {
@@ -393,6 +447,163 @@ export class SkillStore {
         }
       }
       return { skillId, versionId, createdSkill }
+    })
+  }
+
+  /**
+   * Insert one pending draft and, when the identity does not exist yet, the
+   * identity itself in the same transaction.
+   *
+   * A second draft is allowed only while the identity has no approved current
+   * version: that is the request-changes path (the reviewer asked for a new
+   * draft). Once a version is approved, the name is established and a new
+   * version there would be a revision, which the evolution ticket owns; this
+   * method refuses with a message the caller reports as the conflict.
+   */
+  createDraft(version: DraftVersion): ImportedVersion {
+    validateDraft(version)
+    return this.#transaction(() => {
+      const now = Date.now()
+      const existing = this.activeIdentity({ scope: version.scope, ownerShortId: version.ownerShortId, name: version.name })
+      let skillId: number
+      let createdSkill = false
+      if (existing === undefined) {
+        const inserted = this.#db.prepare(
+          'INSERT INTO skill (name, scope, owner_short_id, created_by, updated_by, proposed_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        ).run(version.name, version.scope, version.ownerShortId ?? null, version.createdBy,
+          version.createdBy, version.proposedBy ?? null, now, now) as { readonly lastInsertRowid: number | bigint }
+        skillId = Number(inserted.lastInsertRowid)
+        createdSkill = true
+      } else {
+        if (existing.archived_at !== null) {
+          throw new SkillStoreError('skills/archived', `skill "${existing.name}" is archived; restore it before creating a new draft`)
+        }
+        if (existing.current_version_id !== null) {
+          throw new SkillStoreError('skills/name-conflict',
+            `a skill named ${existing.name} already exists; use a revision`)
+        }
+        skillId = existing.id
+      }
+      const inserted = this.#db.prepare(
+        `INSERT INTO skill_version
+          (skill_id, parent_version_id, package_path, manifest, manifest_hash, core_characters, license,
+           source_type, source_location, status, growth_exceeded, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(skillId, version.parentVersionId ?? null, version.packagePath, version.manifest, version.manifestHash,
+        version.coreCharacters, version.license ?? null, version.sourceType, version.sourceLocation ?? null,
+        VERSION_STATUS.pending, version.growthExceeded === true ? 1 : 0, version.createdBy, now, now) as {
+        readonly lastInsertRowid: number | bigint
+      }
+      return { skillId, versionId: Number(inserted.lastInsertRowid), createdSkill }
+    })
+  }
+
+  /**
+   * The pending candidates one caller may review, newest first and bounded.
+   *
+   * A personal draft is visible to its owner; a common draft to its proposer
+   * (the Phaethon branch is added by the sharing ticket at the one permission
+   * function, not here). Archived identities keep their drafts out; a draft of
+   * an archived identity is not reviewable.
+   */
+  pendingDrafts(shortId: number, limit = 50): PendingDraftRow[] {
+    return rowsOf<PendingDraftRow>(this.#db.prepare(
+      `SELECT v.*, s.name AS skill_name, s.scope AS skill_scope,
+              s.owner_short_id AS skill_owner_short_id, s.proposed_by AS skill_proposed_by,
+              s.archived_at AS skill_archived_at
+         FROM skill_version v JOIN skill s ON s.id = v.skill_id
+        WHERE v.status = ? AND v.deleted_at IS NULL AND s.deleted_at IS NULL AND s.archived_at IS NULL
+          AND ((s.scope = ? AND s.owner_short_id = ?) OR (s.scope = ? AND s.proposed_by = ?))
+        ORDER BY v.created_at DESC, v.id DESC LIMIT ?`,
+    ).all(VERSION_STATUS.pending, SKILL_SCOPE.personal, shortId, SKILL_SCOPE.common, shortId, limit))
+  }
+
+  /** Store one version's verification report; only a pending row accepts a report. */
+  updateVerification(versionId: number, verification: string): boolean {
+    const result = this.#db.prepare(
+      'UPDATE skill_version SET verification = ?, updated_at = ? WHERE id = ? AND status = ? AND deleted_at IS NULL',
+    ).run(verification, Date.now(), versionId, VERSION_STATUS.pending) as ChangeResult
+    return Number(result.changes) > 0
+  }
+
+  /**
+   * Record one terminal review decision for a pending version.
+   *
+   * The predicate `status = pending` is part of the UPDATE, so a repeated or
+   * concurrent decision changes exactly one row and the loser gets `false`.
+   */
+  recordReviewDecision({ versionId, status, reviewer, reviewedAt, note }: {
+    readonly versionId: number
+    readonly status: number
+    readonly reviewer: number
+    readonly reviewedAt: number
+    readonly note?: string
+  }): boolean {
+    if (status !== VERSION_STATUS.changesRequested && status !== VERSION_STATUS.rejected) {
+      throw new SkillStoreError('skills/invalid-decision', `review decision ${String(status)} is not a settled draft state`)
+    }
+    const result = this.#db.prepare(
+      'UPDATE skill_version SET status = ?, reviewer = ?, reviewed_at = ?, review_note = ?, updated_at = ? WHERE id = ? AND status = ? AND deleted_at IS NULL',
+    ).run(status, reviewer, reviewedAt, note ?? null, Date.now(), versionId, VERSION_STATUS.pending) as ChangeResult
+    return Number(result.changes) > 0
+  }
+
+  /**
+   * Publish one pending draft as the identity's single current version.
+   *
+   * Everything that can invalidate an approval is re-read inside one
+   * `BEGIN IMMEDIATE` transaction: the version is still pending, the identity
+   * is not archived, and the caller's `recheck` (the on-disk manifest hash)
+   * still holds. The previous current version is superseded in the same
+   * transaction as the pointer move, so no reader sees zero or two current
+   * versions. The first personal approval with no preference row enables the
+   * owner; an explicit preference always survives.
+   */
+  publishDraft({ versionId, packagePath, reviewer, reviewedAt, ownerShortId, defaultEnable, recheck }: {
+    readonly versionId: number
+    readonly packagePath: string
+    readonly reviewer: number
+    readonly reviewedAt: number
+    /** The personal owner whose default preference this approval may establish. */
+    readonly ownerShortId?: number
+    readonly defaultEnable: boolean
+    readonly recheck: (version: SkillVersionRow, skill: SkillRow) => boolean
+  }): { readonly skillId: number; readonly previousVersionId: number | null } {
+    return this.#transaction(() => {
+      const now = Date.now()
+      const version = this.version(versionId)
+      if (version === undefined || version.status !== VERSION_STATUS.pending) {
+        throw new SkillStoreError('skills/not-pending', `skill version ${versionId} is no longer pending`)
+      }
+      const skill = this.identity(version.skill_id)
+      if (skill === undefined) throw new SkillStoreError('skills/not-found', `skill version ${versionId} has no identity`)
+      if (skill.archived_at !== null) {
+        throw new SkillStoreError('skills/archived', `skill "${skill.name}" is archived`)
+      }
+      if (!recheck(version, skill)) {
+        throw new SkillStoreError('skills/changed', 'the candidate content or state changed after it was inspected; re-check it before approving')
+      }
+      const previous = rowOf<{ id: number }>(this.#db.prepare(
+        'SELECT id FROM skill_version WHERE skill_id = ? AND status = ? AND deleted_at IS NULL',
+      ).get(skill.id, VERSION_STATUS.approvedCurrent))
+      // Supersede before approving: the one-current unique index forbids two
+      // approved rows even for the instant between the two updates.
+      if (previous !== undefined && previous.id !== versionId) {
+        this.#db.prepare('UPDATE skill_version SET status = ?, updated_at = ? WHERE id = ?')
+          .run(VERSION_STATUS.superseded, now, previous.id)
+      }
+      this.#db.prepare(
+        'UPDATE skill_version SET status = ?, package_path = ?, reviewer = ?, reviewed_at = ?, updated_at = ? WHERE id = ?',
+      ).run(VERSION_STATUS.approvedCurrent, packagePath, reviewer, reviewedAt, now, versionId)
+      this.#db.prepare('UPDATE skill SET current_version_id = ?, updated_by = ?, updated_at = ? WHERE id = ?')
+        .run(versionId, reviewer, now, skill.id)
+      if (defaultEnable && skill.scope === SKILL_SCOPE.personal && ownerShortId !== undefined
+        && skill.owner_short_id === ownerShortId && this.preference(ownerShortId, skill.id) === undefined) {
+        this.#db.prepare(
+          'INSERT INTO skill_user_preference (short_id, skill_id, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        ).run(ownerShortId, skill.id, 1, now, now)
+      }
+      return { skillId: skill.id, previousVersionId: previous?.id ?? null }
     })
   }
 
