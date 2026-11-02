@@ -6,7 +6,7 @@
  * assembled by hand here.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -113,6 +113,12 @@ export function removeHome(path) {
  * the machine paths of the checkout it was made in. The build info is filtered
  * out: a copy that kept it would let a build in the copy report success while
  * leaving a missing artifact behind.
+ *
+ * The pinned pnpm cache is linked rather than copied for the same reason the
+ * worktree shares it across isolated homes: it is a tool cache, not product
+ * state. Without it the copy's `COREPACK_HOME` is empty, so every `doctor`
+ * downloads the pinned pnpm from the registry — minutes per copied run when the
+ * registry is slow, and a network dependency the suite does not otherwise have.
  * @param {string} [prefix] - temporary directory prefix.
  * @returns {string} the copied repository root; the caller removes it.
  */
@@ -124,6 +130,11 @@ export function copyProductRepo(prefix = 'ourfairy-repo-') {
       recursive: true,
       filter: source => !source.endsWith('.tsbuildinfo'),
     })
+  }
+  const pnpmCache = join(repoRoot, '.corepack', 'v1', 'pnpm')
+  if (existsSync(pnpmCache)) {
+    mkdirSync(join(root, '.corepack', 'v1'), { recursive: true })
+    symlinkSync(pnpmCache, join(root, '.corepack', 'v1', 'pnpm'), 'dir')
   }
   linkTypes(root)
   return root

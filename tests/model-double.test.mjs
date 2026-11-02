@@ -84,6 +84,7 @@ test('one real turn reaches the external model double, registers tools, and pers
     'pdf_render_pages',
     'read',
     'read_image',
+    'skill',
     'todo_write',
     'working_directory',
     'write',

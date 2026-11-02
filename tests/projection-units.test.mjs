@@ -125,7 +125,7 @@ test('the stateVersion constants bind the README contract', () => {
   // The README is read, not restated: the numbers below are this suite's
   // expectation, and the documented sentence must name the same ones, so a
   // version bump that forgets the prose fails here instead of shipping drift.
-  const versions = { ourfairyTranscript: 4, ourfairyWork: 2 }
+  const versions = { ourfairyTranscript: 5, ourfairyWork: 2 }
   const documented = { ourfairyTranscript: /transcript `(\d+)`/u, ourfairyWork: /\bwork `(\d+)`/u }
   const readme = readFileSync(new URL('../backend/chat/README.md', import.meta.url), 'utf8')
   for (const definition of [units.transcriptDefinition, units.workDefinition]) {
@@ -264,6 +264,135 @@ test('a repeated tool-call id keeps its first name and an unnamed record adds no
     { type: 'tool-call-chunks', time0: 3, index: 1, dt: [0], id: 'c2', args: ['{}'] },
   ]
   assert.deepEqual(units.attemptTools(stream), ['bash'])
+})
+
+test('a successful skill call derives exactly one activation row at the result seq', () => {
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'assistant/message', { turn: 1, step: 1, message: toolCallMessage('a1', '', [
+      { id: 'call-skill', name: 'skill', arguments: '{"name":"pdf"}' },
+    ]), stream: [] }, { surfaceOp: 'append' }),
+    event(2, 'tool/call', { turn: 1, step: 1, callId: 'call-skill', name: 'skill', arguments: '{"name":"pdf"}' }),
+    event(3, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+      content: [{ type: 'text', text: '<skill_content name="pdf">body</skill_content>' }],
+      source: { kind: 'tool' }, toolCallId: 'call-skill' } }, { surfaceOp: 'append' }),
+    event(4, 'tool/result', { turn: 1, step: 1, message: { id: 't2', role: 'tool',
+      content: [{ type: 'text', text: 'unrelated' }], source: { kind: 'tool' }, toolCallId: 'other' } }, { surfaceOp: 'append' }),
+  ]
+  const state = fold(units.transcriptDefinition, log)
+  const rows = units.transcriptAt(state)
+
+  const activation = rows.filter(row => row.role === 3)
+  assert.equal(activation.length, 1, 'one successful skill result makes one activation row')
+  assert.deepEqual(activation[0], {
+    messageId: 'skill-activation:call-skill',
+    position: 1,
+    seq: 3,
+    requestId: null,
+    role: 3,
+    status: 2,
+    text: '加载了skill:pdf',
+    kind: 1,
+    toolCallId: 'call-skill',
+  })
+  assert.deepEqual(Object.keys(state.skillCalls), [], 'the matching result consumes the pending call')
+})
+
+test('a failed skill result consumes the call without an activation row', () => {
+  const log = [
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'bad-skill', name: 'skill', arguments: '{"name":"missing"}' }),
+    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+      content: [{ type: 'text', text: 'Error: skill "missing" is unknown' }], source: { kind: 'tool' },
+      toolCallId: 'bad-skill', isError: true } }, { surfaceOp: 'append' }),
+  ]
+  const state = fold(units.transcriptDefinition, log)
+  assert.deepEqual(units.transcriptAt(state), [])
+  assert.deepEqual(Object.keys(state.skillCalls), [], 'a failed result still consumes the pending call')
+})
+
+test('only the skill tool pairs; other tools and malformed arguments do not', () => {
+  const log = [
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'read', arguments: '{"file_path":"/x"}' }),
+    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool', content: [],
+      source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' }),
+    event(2, 'tool/call', { turn: 1, step: 1, callId: 'c2', name: 'skill', arguments: 'not json' }),
+    event(3, 'tool/result', { turn: 1, step: 1, message: { id: 't2', role: 'tool', content: [],
+      source: { kind: 'tool' }, toolCallId: 'c2' } }, { surfaceOp: 'append' }),
+  ]
+  assert.deepEqual(units.transcriptAt(fold(units.transcriptDefinition, log)), [],
+    'an unrelated tool and a skill call without a name produce no activation row')
+})
+
+test('a duplicated skill result keeps the first appearance and adds no transition', () => {
+  const log = [
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'skill', arguments: '{"name":"pdf"}' }),
+    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool', content: [],
+      source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' }),
+    event(2, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'skill', arguments: '{"name":"pdf"}' }),
+    event(3, 'tool/result', { turn: 1, step: 1, message: { id: 't2', role: 'tool', content: [],
+      source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' }),
+  ]
+  const state = fold(units.transcriptDefinition, log)
+  const rows = units.transcriptAt(state)
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].seq, 1, 'first appearance wins; the later duplicate does not move it')
+  assert.deepEqual(state.rows[0].transitions, [])
+})
+
+test('two skill calls in one step produce two rows in result order', () => {
+  const log = [
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'skill', arguments: '{"name":"alpha"}' }),
+    event(1, 'tool/call', { turn: 1, step: 1, callId: 'c2', name: 'skill', arguments: '{"name":"beta"}' }),
+    event(2, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool', content: [],
+      source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' }),
+    event(3, 'tool/result', { turn: 1, step: 1, message: { id: 't2', role: 'tool', content: [],
+      source: { kind: 'tool' }, toolCallId: 'c2' } }, { surfaceOp: 'append' }),
+  ]
+  assert.deepEqual(units.transcriptAt(fold(units.transcriptDefinition, log))
+    .map(message => [message.messageId, message.seq, message.text]),
+  [['skill-activation:c1', 2, '加载了skill:alpha'], ['skill-activation:c2', 3, '加载了skill:beta']])
+})
+
+test('catalog and /name-shaped user messages never become activation rows', () => {
+  const catalog = event(0, 'user/message', {
+    id: 'catalog-1', role: 'user',
+    content: [{ type: 'text', text: '<system-reminder><available_skills>- `pdf`: PDF</available_skills></system-reminder>' }],
+    source: { kind: 'skill-catalog', form: 'catalog', entries: [{ name: 'pdf', description: 'PDF' }] },
+  }, { surfaceOp: 'append' })
+  const gesture = event(1, 'user/message', {
+    id: 'n1', role: 'user', content: [{ type: 'text', text: 'please use /pdf' }],
+    source: { kind: 'skill-invocation', name: 'pdf', form: 'instructions' },
+  }, { surfaceOp: 'append' })
+  assert.deepEqual(units.transcriptAt(fold(units.transcriptDefinition, [catalog, gesture])), [],
+    'a catalog message and a /name gesture are not activations')
+})
+
+test('a cut before the skill result hides the activation row and a window at its seq carries it', () => {
+  const log = [
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'skill', arguments: '{"name":"pdf"}' }),
+    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool', content: [],
+      source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' }),
+  ]
+  const state = fold(units.transcriptDefinition, log)
+  assert.deepEqual(units.transcriptAt(state, 0), [])
+  assert.deepEqual(units.transcriptAt(state, 1).map(message => message.messageId), ['skill-activation:c1'])
+  assert.deepEqual(units.transcriptAt(state, 1, 1).map(message => message.messageId), ['skill-activation:c1'])
+  assert.deepEqual(units.transcriptAt(state, 1, 2), [])
+})
+
+test('a checkpointed skill call continues exactly like a cold replay', () => {
+  const log = [
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'skill', arguments: '{"name":"pdf"}' }),
+    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool', content: [],
+      source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' }),
+  ]
+  const header = { id: SESSION, version: 4, createdAt: 1, isSeeded: false }
+  const cold = fold(units.transcriptDefinition, log)
+  let state = units.transcriptDefinition.init(header, 0)
+  state = units.transcriptDefinition.apply(state, log[0])
+  const checkpoint = units.transcriptDefinition.stateSchema.parse(JSON.parse(JSON.stringify(state)))
+  state = units.transcriptDefinition.apply(checkpoint, log[1])
+  assert.deepEqual(JSON.parse(JSON.stringify(state)), cold)
 })
 
 test('a delivered message is not an assistant step and names no tools', () => {

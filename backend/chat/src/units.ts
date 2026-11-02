@@ -25,9 +25,10 @@
  *
  * `stateVersion` increments whenever this module's fold semantics or state
  * shape change; the registry then discards persisted rows of an older version
- * and refolds the log from `init`. The transcript is at version 4 (immutable
- * first appearance plus ordered transitions, a move index, and each row's tool
- * names); the work unit is at version 2 (the narrow pending id/kind index).
+ * and refolds the log from `init`. The transcript is at version 5 (immutable
+ * first appearance plus ordered transitions, a move index, each row's tool
+ * names, and the skill-call pairing that derives a `role: 3` activation row);
+ * the work unit is at version 2 (the narrow pending id/kind index).
  *
  * This module is the only fold of a chat session: the read path
  * (`runtime.ts`, `service.ts`) takes durable values from these units and
@@ -150,6 +151,10 @@ const transcriptRowSchema = z.object({
   messageId: z.string(),
   requestId: z.string().nullable(),
   role: z.number().int(),
+  /** Derived rows only: 1 skill activation. Ordinary messages carry none. */
+  kind: z.number().int().optional(),
+  /** The tool call a derived row was paired with; ordinary messages carry none. */
+  toolCallId: z.string().optional(),
   text: z.string(),
   /** `null` is the attempt shape, which carries no `attachments` field at all. */
   attachments: z.array(attachmentSchema).nullable(),
@@ -189,6 +194,13 @@ export const transcriptStateSchema = z.object({
   attemptsByTurn: z.record(z.string(), z.array(z.number().int())),
   turnEnds: z.record(z.string(), turnEndSchema),
   receipts: z.array(receiptSchema),
+  /**
+   * The skill calls whose results have not been folded yet, keyed by tool call
+   * id. Only a `tool/call` named `skill` enters this map, so it stays as small
+   * as the log's outstanding skill loads. `seq` is the call event's position;
+   * the activation row takes its own later result seq.
+   */
+  skillCalls: z.record(z.string(), z.object({ name: z.string(), seq: z.number().int() })),
   /**
    * Transitions that moved a row forward, in event-seq order. This is the
    * narrow side index that lets a read window start at `fromSeq` without
@@ -237,6 +249,25 @@ function rowAtCut(row: TranscriptRow, cut: number, position: number) {
     text: row.text,
     ...(row.attachments === null ? {} : { attachments: row.attachments }),
     ...(row.tools.length === 0 ? {} : { tools: row.tools }),
+    ...(row.kind === undefined ? {} : { kind: row.kind }),
+    ...(row.toolCallId === undefined ? {} : { toolCallId: row.toolCallId }),
+  }
+}
+
+/**
+ * The skill name a `skill` call requested, or undefined when the arguments are
+ * not a JSON object with a string `name`. A malformed call is skipped
+ * defensively: it cannot produce a trustworthy activation row, and its result
+ * will find no pending entry.
+ */
+function skillNameFromArguments(argumentsText: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(argumentsText)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+    const name = (parsed as { name?: unknown }).name
+    return typeof name === 'string' && name !== '' ? name : undefined
+  } catch {
+    return undefined
   }
 }
 
@@ -247,9 +278,9 @@ function rowAtCut(row: TranscriptRow, cut: number, position: number) {
  */
 export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', TranscriptState> = {
   key: 'ourfairyTranscript',
-  stateVersion: 4,
+  stateVersion: 5,
   stateSchema: transcriptStateSchema,
-  init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], moves: [] }),
+  init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], skillCalls: {}, moves: [] }),
   apply(state, event) {
     if (event.type === 'agent/inbox/spliced') {
       const inserted = event.data.inserted.filter(message => {
@@ -351,6 +382,42 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
           { seq: event.seq, status: interrupted ? 3 : 4, repositions: false }] }
       }
       return { ...state, rows, turnEnds }
+    }
+    if (event.type === 'tool/call' && event.data.name === 'skill') {
+      // The name comes from the call's own arguments, not from the result text:
+      // the tool-result pruner may rewrite that text, while arguments are
+      // immutable for the life of the log.
+      const name = skillNameFromArguments(event.data.arguments)
+      if (name === undefined) return state
+      const existing = state.skillCalls[event.data.callId]
+      if (existing !== undefined) return state
+      return { ...state, skillCalls: { ...state.skillCalls, [event.data.callId]: { name, seq: event.seq } } }
+    }
+    if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
+      const callId = event.data.message.toolCallId
+      const call = state.skillCalls[callId]
+      if (call === undefined) return state
+      // Any matching result consumes the pending call: a failed or interrupted
+      // activation must not leave the narrow map growing or pair a later result.
+      const { [callId]: _spent, ...skillCalls } = state.skillCalls
+      const rest = { ...state, skillCalls }
+      if (event.data.message.isError === true) return rest
+      const messageId = `skill-activation:${callId}`
+      // First appearance wins: a duplicated/replayed result changes nothing and
+      // adds no transition, so the row's position stays stable.
+      if (state.index[messageId] !== undefined) return rest
+      return appendRow(rest, {
+        messageId,
+        requestId: null,
+        role: 3,
+        kind: 1,
+        toolCallId: callId,
+        text: `加载了skill:${call.name}`,
+        attachments: null,
+        tools: [],
+        first: { seq: event.seq, status: 2 },
+        transitions: [],
+      })
     }
     return state
   },
