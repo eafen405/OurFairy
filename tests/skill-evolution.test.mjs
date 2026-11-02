@@ -491,6 +491,46 @@ describe('revision candidates', () => {
     assert.equal(versionOf(base.versionId).status, 4)
     assert.equal(versionOf(revision.value.versionId).status, 3)
   })
+
+  test('a revision runs its optional with/without comparison in the disposable environment', async () => {
+    const base = await publishNewSkill('comparison-demo', {
+      bodyLength: 1000, marker: 'V1',
+      files: packageFiles('comparison-demo', { bodyLength: 1000, marker: 'V1', extra: { 'references/guide.md': 'GUIDE V1' } }),
+      scenarios: [SCENARIO],
+    })
+    const revision = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' },
+      parentVersionId: base.versionId,
+      targetBenefit: 'prove the guide is the difference',
+      files: packageFiles('comparison-demo', { bodyLength: 1090, marker: 'V2', extra: { 'references/guide.md': 'GUIDE V2' } }),
+      scenarios: [SCENARIO],
+      comparisons: [{
+        name: 'guide presence',
+        withSkill: 'test -f references/guide.md && echo WITH-GUIDE',
+        withoutSkill: 'echo WITHOUT-GUIDE',
+      }],
+    })
+    assert.equal(revision.isError, false, revision.text)
+    const report = JSON.parse(versionOf(revision.value.versionId).verification)
+    assert.equal(report.comparisons.length, 1)
+    const [comparison] = report.comparisons
+    assert.equal(comparison.name, 'guide presence')
+    assert.equal(comparison.withSkill.exitCode, 0)
+    assert.match(comparison.withSkill.stdoutSummary, /WITH-GUIDE/u)
+    assert.equal(comparison.withoutSkill.exitCode, 0)
+    assert.match(comparison.withoutSkill.stdoutSummary, /WITHOUT-GUIDE/u)
+    assert.ok(comparison.withSkill.environment.cwd.includes(`${join(skillRoot, 'verify')}`),
+      'the comparison runs in the disposable verification directory')
+
+    const inspect = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'inspect', versionId: revision.value.versionId,
+    })
+    assert.equal(inspect.isError, false, inspect.text)
+    assert.equal(inspect.value.review.verification.comparisons.length, 1)
+    assert.ok(inspect.value.display.includes('比较 guide presence：有 Skill exit 0，无 Skill exit 0'), inspect.value.display)
+    const approved = await approve(revision.value.versionId)
+    assert.equal(approved.isError, false, 'a recorded comparison does not block approval: ' + approved.text)
+  })
 })
 
 describe('growth confirmation', () => {

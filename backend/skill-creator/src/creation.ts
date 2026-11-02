@@ -187,6 +187,7 @@ export interface ReviewPackage {
     readonly reused: VerificationReport['reused']
     readonly unexecuted: VerificationReport['unexecuted']
     readonly failed: VerificationReport['failed']
+    readonly comparisons: VerificationReport['comparisons']
     readonly environment: string
     readonly ranAt: number
   }
@@ -288,6 +289,7 @@ type BoundedReview = Omit<ReviewPackage, 'package' | 'changes' | 'verification' 
     reused: VerificationReport['reused'][number][]
     unexecuted: VerificationReport['unexecuted'][number][]
     failed: VerificationReport['failed'][number][]
+    comparisons: { name: string; withSkill: VerificationReport['executed'][number]; withoutSkill: VerificationReport['executed'][number] }[]
     environment: string
     ranAt: number
   }
@@ -334,6 +336,11 @@ export function boundInspectResult(result: InspectResult): InspectResult {
       reused: result.review.verification.reused.map(compactVerificationRecord),
       unexecuted: result.review.verification.unexecuted.map(compactVerificationRecord),
       failed: result.review.verification.failed.map(compactVerificationRecord),
+      comparisons: result.review.verification.comparisons.map(comparison => ({
+        name: comparison.name,
+        withSkill: compactVerificationRecord(comparison.withSkill),
+        withoutSkill: compactVerificationRecord(comparison.withoutSkill),
+      })),
       environment: clipText(result.review.verification.environment, 300),
       ranAt: result.review.verification.ranAt,
     },
@@ -363,6 +370,13 @@ export function boundInspectResult(result: InspectResult): InspectResult {
       break
     }
     if (dropped) continue
+    if (review.verification.comparisons.length > 0) {
+      const drop = Math.max(1, Math.ceil(review.verification.comparisons.length / 2))
+      review.verification.comparisons.splice(Math.max(0, review.verification.comparisons.length - drop), drop)
+      droppedVerification += drop
+      noteVerification()
+      continue
+    }
     const changeLists = [review.changes.added, review.changes.removed, review.changes.changed]
     let droppedChanges = false
     for (const list of changeLists) {
@@ -656,6 +670,9 @@ export function buildReviewDisplay(review: ReviewPackage): string {
     lines.push(`↺ ${record.name}: ${record.command} → ${source}`)
   }
   for (const record of verification.failed) lines.push(`✘ ${record.name}: ${record.command} → exit ${record.exitCode === null ? '—' : String(record.exitCode)}`)
+  for (const comparison of verification.comparisons) {
+    lines.push(`比较 ${comparison.name}：有 Skill exit ${String(comparison.withSkill.exitCode)}，无 Skill exit ${String(comparison.withoutSkill.exitCode)}`)
+  }
   if (verification.executed.length + verification.reused.length + verification.failed.length > 0) lines.push(`环境：${verification.environment}`)
   lines.push(`查看全文：skill_manage inspect versionId=${review.versionId} expand=skill（单文件：expand=files path=<path>）`)
   return boundDisplay(lines.join('\n'), review.growthConfirmation.required
@@ -716,6 +733,7 @@ function verificationOf(version: SkillVersionRow): ReviewPackage['verification']
     reused: [],
     unexecuted: [],
     failed: [],
+    comparisons: [],
     environment: '',
     ranAt: version.created_at,
   } satisfies ReviewPackage['verification']
@@ -728,6 +746,7 @@ function verificationOf(version: SkillVersionRow): ReviewPackage['verification']
       reused: parsed.reused ?? [],
       unexecuted: parsed.unexecuted ?? [],
       failed: parsed.failed ?? [],
+      comparisons: parsed.comparisons ?? [],
       environment: typeof parsed.environment === 'string' ? parsed.environment : '',
       ranAt: typeof parsed.ranAt === 'number' ? parsed.ranAt : version.created_at,
     }

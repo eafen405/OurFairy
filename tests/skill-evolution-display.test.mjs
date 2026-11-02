@@ -48,7 +48,7 @@ function review({ exceeded, command = 'true', scenarios = 1 }) {
     package: [],
     packageTotal: 0,
     changes: { added: [], removed: [], changed: ['SKILL.md'], summary: '相对父版本：新增 0 个，删除 0 个，修改 1 个' },
-    verification: { complete: true, executed, reused: [], unexecuted: [], failed: [], environment: 'bwrap', ranAt: 1 },
+    verification: { complete: true, executed, reused: [], unexecuted: [], failed: [], comparisons: [], environment: 'bwrap', ranAt: 1 },
     nextActions: ['approve', 'request_changes', 'reject'],
     growthConfirmation: {
       required: exceeded,
