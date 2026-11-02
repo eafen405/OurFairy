@@ -74,14 +74,21 @@ class SkillsPageTest {
     private class ScriptedSkills(
         var list: suspend () -> SkillPool,
         var setEnabled: suspend (Long, Boolean) -> Unit = { _, _ -> },
+        var reviewOpen: suspend (Long) -> String = { "ourfairy-user-2-primary" },
     ) : SkillsBackend {
         val writes = mutableListOf<Pair<Long, Boolean>>()
+        val opened = mutableListOf<Long>()
         var reads = 0
         override suspend fun list(token: String): SkillPool {
             reads += 1
             return list()
         }
         override suspend fun detail(token: String, skillId: Long): SkillPoolItem = error("not used")
+        override suspend fun reviewOpen(token: String, versionId: Long): String {
+            opened += versionId
+            return reviewOpen(versionId)
+        }
+
         override suspend fun setEnabled(token: String, skillId: Long, enabled: Boolean): SkillPoolItem {
             writes += skillId to enabled
             setEnabled(skillId, enabled)
@@ -110,14 +117,14 @@ class SkillsPageTest {
         ),
     )
 
-    private fun show(backend: SkillsBackend, onOpenPending: (Long) -> Unit = {}) {
+    private fun show(backend: SkillsBackend, onOpenConversation: (String) -> Unit = {}) {
         compose.mainClock.autoAdvance = false
         runBlocking { account.restore() }
         compose.setContent {
             CompositionLocalProvider(LocalDisplayPreferences provides DisplayPreferences()) {
                 FairyAppTheme {
                     ProvideAgoraMotionPolicy(appReduceMotion = true) {
-                        SkillsPage(onBack = {}, session = account, backend = backend, onOpenPending = onOpenPending)
+                        SkillsPage(onBack = {}, session = account, backend = backend, onOpenConversation = onOpenConversation)
                     }
                 }
             }
@@ -128,7 +135,7 @@ class SkillsPageTest {
 
     @Test
     fun `the page renders the backend's states, scopes, action scopes and pending entry`() {
-        var opened: Long? = null
+        var opened: String? = null
         val backend = ScriptedSkills(list = {
             SkillPool(
                 skills = listOf(
@@ -136,7 +143,7 @@ class SkillsPageTest {
                     item(2, "personal-skill", SkillScope.PERSONAL, SkillPoolState.IN_CATALOG, enabled = true),
                     item(3, "disabled-skill", SkillScope.COMMON, SkillPoolState.DISABLED, enabled = false),
                 ),
-                pending = listOf(PendingSkill(candidateId = 41, name = "pending-skill")),
+                pending = listOf(PendingSkill(versionId = 41, name = "pending-skill")),
                 pendingCount = 1,
             )
         })
@@ -151,7 +158,10 @@ class SkillsPageTest {
         compose.onAllNodesWithText("归档/恢复范围：全部用户").assertCountEquals(2)
         compose.onAllNodesWithText("归档/恢复范围：仅本人").assertCountEquals(1)
         compose.onNodeWithText("pending-skill").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(41L, opened) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals("the pending entry asks the backend for that candidate", listOf(41L), backend.opened)
+        compose.runOnIdle { assertEquals("ourfairy-user-2-primary", opened) }
     }
 
     @Test

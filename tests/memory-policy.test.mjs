@@ -143,6 +143,8 @@ test('the owned prompt and the maintenance child carry the memory policy at thei
   assert.match(sourceSystem, new RegExp(MAIN_POLICY_MARKER), 'the owned prompt carries the memory policy')
   assert.match(sourceSystem, /不要把你执行过的记忆增删改/, 'the owned prompt forbids meta-memories about memory operations')
   assert.match(sourceSystem, /不要记录带有「最近」「今天」「现在」「刚才」/, 'the owned prompt excludes time-bound observations')
+  assert.match(sourceSystem, /可复用的工作流.*skill_manage.*记忆/u, 'the owned prompt keeps the workflow→skill, fact→memory boundary')
+  assert.match(sourceSystem, /同一内容不要同时写进技能和记忆/u, 'the owned prompt forbids double-writing')
   const addTool = Array.isArray(source.tools) ? source.tools.find(tool => tool.name === 'memory_add') : undefined
   assert.ok(addTool !== undefined, 'the source request declares memory_add')
   assert.match(addTool.description, /session summaries/, 'memory_add names the no-summary/no-profile rule')
@@ -152,6 +154,8 @@ test('the owned prompt and the maintenance child carry the memory policy at thei
   assert.match(childSystem, /不要写会话摘要/, 'the maintenance child carries the same no-summary/no-profile rule')
   assert.match(childSystem, /不要把你执行过的记忆增删改/, 'the child forbids meta-memories about memory operations')
   assert.match(childSystem, /不要记录带有「最近」「今天」「现在」「刚才」/, 'the child excludes time-bound observations')
+  assert.match(childSystem, /可复用的工作流.*skill_manage.*记忆/u, 'the child carries the same workflow→skill boundary')
+
   assert.equal(childSystem.includes(MAIN_ONLY_MARKER), false, 'the owned prompt policy is not inherited by the child')
   assert.equal(childSystem.includes('Authorized file spaces'), false,
     'the spaces prompt context contributes nothing to the maintenance preset')

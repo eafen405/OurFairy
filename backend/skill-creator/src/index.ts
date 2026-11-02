@@ -144,7 +144,13 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
     providers.register(agent)
     const names = toolRegistrations.get(agent) ?? new Set<string>()
     toolRegistrations.set(agent, names)
-    registerSkillTools(agent, { ctx, creation, service }, names)
+    registerSkillTools(agent, {
+      ctx,
+      creation,
+      service,
+      invalidateOwner: shortId => providers.invalidateOwner(shortId),
+      invalidateAll: () => providers.invalidateAll(),
+    }, names)
     return undefined
   }
   ctx.on('agent/created', ({ agent }: { agent: Agent }) => register(agent), { global: true })

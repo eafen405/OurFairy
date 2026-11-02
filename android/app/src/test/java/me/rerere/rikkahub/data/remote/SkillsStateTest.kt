@@ -20,8 +20,10 @@ import org.junit.Test
 private class ScriptedSkills(
     var list: suspend () -> SkillPool = { pool() },
     var setEnabled: suspend (Long, Boolean) -> Unit = { _, _ -> },
+    var reviewOpen: suspend (Long) -> String = { "ourfairy-user-2-primary" },
 ) : SkillsBackend {
     val writes = mutableListOf<Pair<Long, Boolean>>()
+    val opened = mutableListOf<Long>()
     var reads = 0
 
     override suspend fun list(token: String): SkillPool {
@@ -30,6 +32,11 @@ private class ScriptedSkills(
     }
 
     override suspend fun detail(token: String, skillId: Long): SkillPoolItem = error("not used")
+
+    override suspend fun reviewOpen(token: String, versionId: Long): String {
+        opened += versionId
+        return reviewOpen(versionId)
+    }
 
     override suspend fun setEnabled(token: String, skillId: Long, enabled: Boolean): SkillPoolItem {
         writes += skillId to enabled
@@ -113,6 +120,47 @@ class SkillsStateTest {
         assertTrue(snapshot.failure?.message.orEmpty().contains("archived"))
         assertFalse(snapshot.working)
         assertEquals("a refused write does not trigger a read", 1, backend.reads)
+    }
+
+    @Test
+    fun `the pending entry asks the backend once and opens the primary session it answers`() = runTest {
+        val backend = ScriptedSkills(
+            list = { SkillPool(skills = listOf(ScriptedSkills.item(1)),
+                pending = listOf(PendingSkill(versionId = 41, name = "pending-skill")), pendingCount = 1) },
+        )
+        val state = SkillsState(backend, this)
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        var opened: String? = null
+        state.openPending("token-abc", 41) { opened = it }
+        advanceUntilIdle()
+
+        assertEquals(listOf(41L), backend.opened)
+        assertEquals("ourfairy-user-2-primary", opened)
+        assertEquals("the pending entry does not re-read the pool", 1, backend.reads)
+        assertFalse(state.snapshot.value.working)
+        assertNull(state.snapshot.value.failure)
+    }
+
+    @Test
+    fun `a refused pending entry keeps the pool and the backend's code`() = runTest {
+        val backend = ScriptedSkills(
+            list = { SkillPool(skills = listOf(ScriptedSkills.item(1))) },
+            reviewOpen = { throw IdentityRefused(404, "skills/not-found", "skill version 41 is not visible to this user") },
+        )
+        val state = SkillsState(backend, this)
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        var opened: String? = null
+        state.openPending("token-abc", 41) { opened = it }
+        advanceUntilIdle()
+
+        assertNull(opened)
+        assertEquals("skills/not-found", state.snapshot.value.failure?.code)
+        assertEquals(listOf("skill-1"), state.snapshot.value.skills.map { it.name })
+        assertFalse(state.snapshot.value.working)
     }
 
     @Test

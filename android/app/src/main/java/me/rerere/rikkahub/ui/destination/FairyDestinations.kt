@@ -98,6 +98,7 @@ object FairyDestinations {
             onBack = actions.pop,
             onOpenImpression = { actions.push(Screen.Impression) },
             onOpenSkills = { actions.push(Screen.Skills) },
+            skillsBackend = skillsBackend,
         )
     }
 
@@ -126,9 +127,9 @@ object FairyDestinations {
             onBack = actions.pop,
             session = session,
             backend = skillsBackend,
-            // The review ticket routes this to the caller's primary session with the candidate
-            // reference as system context; this ticket ships the seam, not the destination.
-            onOpenPending = {},
+            // The pending entry asks the backend to append the candidate reference to the caller's
+            // fixed primary session, then opens that conversation.
+            onOpenConversation = { sessionId -> actions.push(Screen.Conversation(sessionId)) },
         )
     }
 

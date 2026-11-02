@@ -148,6 +148,15 @@ export interface SkillToolDeps {
   readonly ctx: Context
   readonly creation: SkillCreation
   readonly service: SkillService
+  /** Invalidate one owner's live catalogs after a publish. */
+  readonly invalidateOwner: (shortId: number) => void
+  /** Invalidate every live catalog after a deployment-wide publish (sharing ticket). */
+  readonly invalidateAll: () => void
+}
+
+/** Whether a decision became a publish. */
+function decisionIsPublish(decision: ReviewDecision | undefined): boolean {
+  return decision === 'approve'
 }
 
 /** One positive integer argument, or undefined. */
@@ -227,6 +236,12 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
           decision: args.decision,
           ...(args.note === undefined ? {} : { note: args.note }),
         })
+        if (decisionIsPublish(args.decision)) {
+          // The published current version changes this owner's catalog; the
+          // next model step must observe it without a restart.
+          if (result.scope === 1) deps.invalidateOwner(owner)
+          else deps.invalidateAll()
+        }
         return result as unknown as SkillToolValue
       }
       default:

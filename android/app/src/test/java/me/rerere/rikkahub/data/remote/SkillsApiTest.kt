@@ -98,7 +98,14 @@ class SkillsApiTest {
         assertEquals(SkillActionTarget.OWNER, common.actions.toggle)
         assertEquals(SkillActionTarget.EVERYONE, common.actions.archive)
         assertEquals(false, common.pendingRevision)
-        assertTrue("the pending area is carried even when empty", pool.pending.isEmpty() && pool.pendingCount == 0)
+        val pending = pool.pending.single()
+        assertEquals(41L, pending.versionId)
+        assertEquals(4L, pending.skillId)
+        assertEquals("pending-skill", pending.name)
+        assertEquals(1, pending.scope)
+        assertEquals(false, pending.growthExceeded)
+        assertEquals(listOf("approve", "request_changes", "reject"), pending.nextActions)
+        assertEquals(1, pool.pendingCount)
         val personal = pool.skills.single { it.scope == SkillScope.PERSONAL }
         assertEquals(SkillPoolState.IN_CATALOG, personal.state)
         assertEquals(true, personal.enabled)
@@ -128,6 +135,20 @@ class SkillsApiTest {
         assertEquals("/skills/detail", request.path)
         assertEquals(Json.parseToJsonElement("""{"skillId":4}"""), Json.parseToJsonElement(request.body))
         assertEquals("demo-skill", item.name)
+    }
+
+    @Test
+    fun `reviewOpen posts the candidate version and answers the primary session id`() = runTest {
+        reply(200, """{"ok":true,"sessionId":"ourfairy-user-4-primary"}""")
+
+        val sessionId = api.reviewOpen("token-abc", 41)
+
+        val request = only()
+        assertEquals("POST", request.method)
+        assertEquals("/skills/review-open", request.path)
+        assertEquals("Bearer token-abc", request.authorization)
+        assertEquals(Json.parseToJsonElement("""{"versionId":41}"""), Json.parseToJsonElement(request.body))
+        assertEquals("ourfairy-user-4-primary", sessionId)
     }
 
     @Test
@@ -169,7 +190,9 @@ class SkillsApiTest {
            "currentVersionId":10,"pendingRevision":false,
            "shadowedBy":{"skillId":7,"name":"shadow-demo"},
            "actions":{"toggle":1,"archive":2,"restore":2}}
-        ],"pending":[],"pendingCount":0}
+        ],"pending":[{"versionId":41,"skillId":4,"name":"pending-skill","scope":1,
+           "sourceType":0,"createdAt":123,"growthExceeded":false,
+           "nextActions":["approve","request_changes","reject"]}],"pendingCount":1}
         """
 
         const val PREFERENCE = """
