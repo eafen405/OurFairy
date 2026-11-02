@@ -122,6 +122,21 @@ class RouteActivity : ComponentActivity() {
      * settled is only observable through this entry point.
      */
     internal fun handleIntent(intent: Intent) {
+        if (intent.action == AndroidRemoteNotifications.ACTION_OPEN_SKILLS) {
+            val backStack = navStack?.takeIf { identityReady } ?: run {
+                pendingIntents.addLast(intent)
+                return
+            }
+            val target = AndroidRemoteNotifications.skillsTarget(intent) ?: return
+            val identity = accountSession.identity.value ?: return
+            // The endpoint and account are the admission rule: a reminder for another deployment
+            // or another account must not open this device's skills page.
+            if (target.endpoint.trimEnd('/') != BuildConfig.IDENTITY_ENDPOINT.trimEnd('/')
+                || target.userShortId != identity.user.shortId) return
+            backStack.clear()
+            backStack.addAll(FairyDestinations.resumedStack(FairyDestinations.SKILLS_ROUTE, null))
+            return
+        }
         if (intent.action != AndroidRemoteNotifications.ACTION_OPEN_REMOTE) return
         val backStack = navStack?.takeIf { identityReady } ?: run {
             pendingIntents.addLast(intent)

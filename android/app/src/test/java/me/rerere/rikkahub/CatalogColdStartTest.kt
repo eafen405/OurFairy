@@ -21,6 +21,9 @@ import me.rerere.rikkahub.data.remote.RemoteChatBackend
 import me.rerere.rikkahub.data.remote.RemoteChatProjection
 import me.rerere.rikkahub.data.remote.SessionBackend
 import me.rerere.rikkahub.data.remote.SignedIn
+import me.rerere.rikkahub.data.remote.SkillPool
+import me.rerere.rikkahub.data.remote.SkillPoolItem
+import me.rerere.rikkahub.data.remote.SkillsBackend
 import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.identityModule
 import kotlinx.coroutines.flow.Flow
@@ -104,6 +107,16 @@ private class UnopenedChatBackend : RemoteChatBackend {
     override suspend fun stop(token: String, sessionId: String) = Unit
 }
 
+/** The skills reminder observation reads this fake, never the production API. */
+private class ColdStartSkills : SkillsBackend {
+    override suspend fun list(token: String) = SkillPool()
+    override suspend fun detail(token: String, skillId: Long): SkillPoolItem = error("not used")
+    override suspend fun setEnabled(token: String, skillId: Long, enabled: Boolean): SkillPoolItem = error("not used")
+    override suspend fun reviewOpen(token: String, versionId: Long): String = error("not used")
+    override suspend fun archive(token: String, skillId: Long): SkillPoolItem = error("not used")
+    override suspend fun restore(token: String, skillId: Long): SkillPoolItem = error("not used")
+}
+
 private class OwnImpression : ImpressionBackend {
     override suspend fun read(token: String) = Impression(content = "a remembered impression")
     override suspend fun edit(token: String, content: String) = Unit
@@ -140,6 +153,10 @@ open class SeededColdStartApplication(
                     single<SessionBackend> { SessionsBackend() }
                     single<RemoteChatBackend> { UnopenedChatBackend() }
                     single<ImpressionBackend> { OwnImpression() }
+                    // The reminder observation now consults the bounded skills
+                    // list on every cold start; its fake keeps the no-network
+                    // invariant of this suite.
+                    single<SkillsBackend> { ColdStartSkills() }
                 },
             )
         }

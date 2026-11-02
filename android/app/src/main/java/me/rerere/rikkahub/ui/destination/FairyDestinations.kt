@@ -37,6 +37,7 @@ object FairyDestinations {
 
     /** The route a conversation is stored under; its id is the second coordinate. */
     const val CONVERSATION_ROUTE = "conversation"
+    const val SKILLS_ROUTE = "skills"
 
     private val signIn = FairyDestination(
         route = "sign_in",
@@ -119,7 +120,7 @@ object FairyDestinations {
     }
 
     private val skills = FairyDestination(
-        route = "skills",
+        route = SKILLS_ROUTE,
         access = DestinationAccess.SignedIn,
         restore = DestinationRestore.Resume(listOf(Screen.Home, Screen.Settings, Screen.Skills)),
     ) {

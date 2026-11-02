@@ -295,6 +295,8 @@ class FairyPagesTest {
         override suspend fun detail(token: String, skillId: Long): SkillPoolItem = error("not used")
         override suspend fun setEnabled(token: String, skillId: Long, enabled: Boolean): SkillPoolItem = error("not used")
         override suspend fun reviewOpen(token: String, versionId: Long): String = "ourfairy-user-2-primary"
+        override suspend fun archive(token: String, skillId: Long): SkillPoolItem = error("not used")
+        override suspend fun restore(token: String, skillId: Long): SkillPoolItem = error("not used")
     }
 
     /** The account's own impression, already written. */

@@ -10,8 +10,12 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 
-/** Which scope one action affects: this user only, or every user. Mirrors the backend codes. */
+/**
+ * Which scope one action affects: not offered to this caller, this user only, or every user.
+ * Mirrors the backend codes; a common lifecycle action is 0 for every caller except Phaethon.
+ */
 object SkillActionTarget {
+    const val NONE = 0
     const val OWNER = 1
     const val EVERYONE = 2
 }
@@ -31,6 +35,13 @@ object SkillPoolState {
     const val SHADOWED = 2
     const val DISABLED = 3
     const val ARCHIVED = 4
+}
+
+/** The settled version states a review result can carry. Mirrors the backend codes. */
+object SkillVersionStatus {
+    const val CHANGES_REQUESTED = 1
+    const val REJECTED = 2
+    const val APPROVED = 3
 }
 
 /** The numeric scope each action offers, as `/skills/list` reports it. */
@@ -87,11 +98,27 @@ data class PendingSkill(
     val nextActions: List<String> = emptyList(),
 )
 
+/**
+ * One recently decided candidate the list response carries. The client merges these into its
+ * durable notification ledger; [proposer] is the backend's fact, not a client derivation.
+ */
+@Serializable
+data class SkillReviewResult(
+    val versionId: Long,
+    val skillId: Long = 0,
+    val name: String = "",
+    val scope: Int = SkillScope.PERSONAL,
+    val status: Int = SkillVersionStatus.APPROVED,
+    val decidedAt: Long = 0,
+    val proposer: Boolean = false,
+)
+
 /** The selection pool plus the separate review area, as one list response carries them. */
 data class SkillPool(
     val skills: List<SkillPoolItem> = emptyList(),
     val pending: List<PendingSkill> = emptyList(),
     val pendingCount: Int = 0,
+    val reviewResults: List<SkillReviewResult> = emptyList(),
 )
 
 /** The skills operations this app performs. [SkillsApi] is the HTTP implementation. */
@@ -107,6 +134,12 @@ interface SkillsBackend {
 
     /** Append the candidate reference to the user's primary session and answer that session id. */
     suspend fun reviewOpen(token: String, versionId: Long): String
+
+    /** Archive one visible skill the caller is allowed to manage; answer the re-derived item. */
+    suspend fun archive(token: String, skillId: Long): SkillPoolItem
+
+    /** Restore one archived skill the caller is allowed to manage; answer the re-derived item. */
+    suspend fun restore(token: String, skillId: Long): SkillPoolItem
 }
 
 @Serializable
@@ -116,6 +149,7 @@ internal data class SkillsEnvelope(
     val skill: SkillPoolItem? = null,
     val pending: List<PendingSkill> = emptyList(),
     val pendingCount: Int = 0,
+    val reviewResults: List<SkillReviewResult> = emptyList(),
     val sessionId: String? = null,
     val error: Failure? = null,
 ) {
@@ -131,6 +165,9 @@ private data class SkillPreferenceDocument(val skillId: Long, val enabled: Boole
 
 @Serializable
 private data class SkillReviewOpenDocument(val versionId: Long)
+
+@Serializable
+private data class SkillIdDocument(val skillId: Long)
 
 /**
  * The user's own skill selection endpoints, over the app's existing HTTP client.
@@ -150,7 +187,12 @@ class SkillsApi(
 
     override suspend fun list(token: String): SkillPool {
         val envelope = call("/skills/list", "{}", token)
-        return SkillPool(skills = envelope.skills, pending = envelope.pending, pendingCount = envelope.pendingCount)
+        return SkillPool(
+            skills = envelope.skills,
+            pending = envelope.pending,
+            pendingCount = envelope.pendingCount,
+            reviewResults = envelope.reviewResults,
+        )
     }
 
     override suspend fun detail(token: String, skillId: Long): SkillPoolItem {
@@ -169,6 +211,18 @@ class SkillsApi(
         val document = json.encodeToString(SkillReviewOpenDocument.serializer(), SkillReviewOpenDocument(versionId))
         return call("/skills/review-open", document, token).sessionId
             ?: throw IdentityUnreachable(IllegalStateException("the backend accepted a review open without a session"))
+    }
+
+    override suspend fun archive(token: String, skillId: Long): SkillPoolItem {
+        val document = json.encodeToString(SkillIdDocument.serializer(), SkillIdDocument(skillId))
+        return call("/skills/archive", document, token).skill
+            ?: throw IdentityUnreachable(IllegalStateException("the backend accepted an archive without an item"))
+    }
+
+    override suspend fun restore(token: String, skillId: Long): SkillPoolItem {
+        val document = json.encodeToString(SkillIdDocument.serializer(), SkillIdDocument(skillId))
+        return call("/skills/restore", document, token).skill
+            ?: throw IdentityUnreachable(IllegalStateException("the backend accepted a restore without an item"))
     }
 
     private suspend fun call(path: String, document: String, token: String): SkillsEnvelope =

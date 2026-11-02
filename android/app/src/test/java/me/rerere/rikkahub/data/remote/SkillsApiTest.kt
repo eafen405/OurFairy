@@ -109,6 +109,33 @@ class SkillsApiTest {
         val personal = pool.skills.single { it.scope == SkillScope.PERSONAL }
         assertEquals(SkillPoolState.IN_CATALOG, personal.state)
         assertEquals(true, personal.enabled)
+        val result = pool.reviewResults.single()
+        assertEquals(77L, result.versionId)
+        assertEquals("shared-skill", result.name)
+        assertEquals(SkillVersionStatus.APPROVED, result.status)
+        assertEquals(1234L, result.decidedAt)
+        assertEquals(true, result.proposer)
+    }
+
+    @Test
+    fun `archive and restore post only the skill id and answer the re-derived item`() = runTest {
+        reply(200, ARCHIVED)
+        val archived = api.archive("token-abc", 4)
+        var request = only()
+        assertEquals("POST", request.method)
+        assertEquals("/skills/archive", request.path)
+        assertEquals("Bearer token-abc", request.authorization)
+        assertEquals(Json.parseToJsonElement("""{"skillId":4}"""), Json.parseToJsonElement(request.body))
+        assertEquals(SkillPoolState.ARCHIVED, archived.state)
+        assertEquals(SkillActionTarget.NONE, archived.actions.restore)
+
+        recorded.clear()
+        reply(200, PREFERENCE)
+        val restored = api.restore("token-abc", 4)
+        request = only()
+        assertEquals("/skills/restore", request.path)
+        assertEquals(Json.parseToJsonElement("""{"skillId":4}"""), Json.parseToJsonElement(request.body))
+        assertEquals(SkillPoolState.IN_CATALOG, restored.state)
     }
 
     @Test
@@ -192,13 +219,21 @@ class SkillsApiTest {
            "actions":{"toggle":1,"archive":2,"restore":2}}
         ],"pending":[{"versionId":41,"skillId":4,"name":"pending-skill","scope":1,
            "sourceType":0,"createdAt":123,"growthExceeded":false,
-           "nextActions":["approve","request_changes","reject"]}],"pendingCount":1}
+           "nextActions":["approve","request_changes","reject"]}],"pendingCount":1,
+           "reviewResults":[{"versionId":77,"skillId":5,"name":"shared-skill","scope":2,
+             "status":3,"decidedAt":1234,"proposer":true}]}
         """
 
         const val PREFERENCE = """
         {"ok":true,"skill":{"skillId":4,"name":"demo-skill","description":"Demo.","scope":1,"state":1,
          "enabled":true,"currentVersionId":9,"pendingRevision":false,
          "actions":{"toggle":1,"archive":1,"restore":1}}}
+        """
+
+        const val ARCHIVED = """
+        {"ok":true,"skill":{"skillId":4,"name":"demo-skill","description":"Demo.","scope":2,"state":4,
+         "enabled":false,"currentVersionId":9,"pendingRevision":false,
+         "actions":{"toggle":1,"archive":0,"restore":0}}}
         """
     }
 }

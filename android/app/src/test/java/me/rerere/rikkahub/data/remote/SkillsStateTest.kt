@@ -21,8 +21,12 @@ private class ScriptedSkills(
     var list: suspend () -> SkillPool = { pool() },
     var setEnabled: suspend (Long, Boolean) -> Unit = { _, _ -> },
     var reviewOpen: suspend (Long) -> String = { "ourfairy-user-2-primary" },
+    var archive: suspend (Long) -> Unit = { _ -> },
+    var restore: suspend (Long) -> Unit = { _ -> },
 ) : SkillsBackend {
     val writes = mutableListOf<Pair<Long, Boolean>>()
+    val archived = mutableListOf<Long>()
+    val restored = mutableListOf<Long>()
     val opened = mutableListOf<Long>()
     var reads = 0
 
@@ -42,6 +46,18 @@ private class ScriptedSkills(
         writes += skillId to enabled
         setEnabled(skillId, enabled)
         return item(skillId, enabled = enabled, state = if (enabled) SkillPoolState.IN_CATALOG else SkillPoolState.DISABLED)
+    }
+
+    override suspend fun archive(token: String, skillId: Long): SkillPoolItem {
+        archived += skillId
+        archive(skillId)
+        return item(skillId, enabled = true, state = SkillPoolState.ARCHIVED)
+    }
+
+    override suspend fun restore(token: String, skillId: Long): SkillPoolItem {
+        restored += skillId
+        restore(skillId)
+        return item(skillId, enabled = true, state = SkillPoolState.IN_CATALOG)
     }
 
     companion object {
@@ -161,6 +177,68 @@ class SkillsStateTest {
         assertEquals("skills/not-found", state.snapshot.value.failure?.code)
         assertEquals(listOf("skill-1"), state.snapshot.value.skills.map { it.name })
         assertFalse(state.snapshot.value.working)
+    }
+
+    @Test
+    fun `the review results are published with the pool and never derived`() = runTest {
+        val result = SkillReviewResult(
+            versionId = 41,
+            skillId = 4,
+            name = "shared-skill",
+            scope = SkillScope.COMMON,
+            status = SkillVersionStatus.APPROVED,
+            decidedAt = 1234,
+            proposer = true,
+        )
+        val backend = ScriptedSkills(list = { SkillPool(skills = listOf(ScriptedSkills.item(1)), reviewResults = listOf(result)) })
+        val state = SkillsState(backend, this)
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        assertEquals(listOf(result), state.snapshot.value.reviewResults)
+    }
+
+    @Test
+    fun `an accepted archive is followed by a fresh read`() = runTest {
+        var archived = false
+        val backend = ScriptedSkills(
+            list = {
+                ScriptedSkills.pool(ScriptedSkills.item(3, enabled = !archived,
+                    state = if (archived) SkillPoolState.ARCHIVED else SkillPoolState.IN_CATALOG))
+            },
+            archive = { archived = true },
+        )
+        val state = SkillsState(backend, this)
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        state.archive("token-abc", 3)
+        advanceUntilIdle()
+
+        assertEquals(listOf(3L), backend.archived)
+        assertEquals("the write is followed by a fresh read", 2, backend.reads)
+        assertEquals(SkillPoolState.ARCHIVED, state.snapshot.value.skills.single().state)
+        assertFalse(state.snapshot.value.working)
+    }
+
+    @Test
+    fun `a refused archive keeps the last read pool and the backend's code`() = runTest {
+        val backend = ScriptedSkills(
+            list = { ScriptedSkills.pool(ScriptedSkills.item(1, name = "shared-skill")) },
+            archive = { throw IdentityRefused(403, "skills/forbidden", "only Phaethon may archive or restore the common skill \"shared-skill\"") },
+        )
+        val state = SkillsState(backend, this)
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        state.archive("token-abc", 1)
+        advanceUntilIdle()
+
+        val snapshot = state.snapshot.value
+        assertEquals("the last read pool stays visible", listOf("shared-skill"), snapshot.skills.map { it.name })
+        assertEquals("skills/forbidden", snapshot.failure?.code)
+        assertEquals("a refused write does not trigger a read", 1, backend.reads)
+        assertFalse(snapshot.working)
     }
 
     @Test
