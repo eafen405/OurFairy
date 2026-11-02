@@ -25,6 +25,7 @@ import {
   PackageError,
   assertPackagePath,
   canonicalManifest,
+  copySkillPackage,
   readSkillPackage,
   readSkillFrontmatter,
   writeSkillPackage,
@@ -32,7 +33,7 @@ import {
   type PackageFileInput,
 } from './package.js'
 import { SKILL_SCOPE, SOURCE_TYPE, VERSION_STATUS, SkillStoreError } from './store.js'
-import { checkedTargetBenefit, confirmationCandidate, confirmationOf, growthOf, planVerificationReuse, type GrowthConfirmation, type ReusedScenario } from './evolution.js'
+import { checkedTargetBenefit, confirmationCandidate, confirmationOf, growthOf, planVerificationReuse, rollbackScenarios, type GrowthConfirmation, type ReusedScenario } from './evolution.js'
 import { runVerification, type ScenarioRecord, type VerificationReport } from './verify.js'
 import { SkillError } from './service.js'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -210,6 +211,16 @@ export interface InspectResult {
   /** True when the result budget cut the requested content expansion. */
   readonly contentTruncated?: boolean
   readonly file?: { readonly path: string; readonly content: string; readonly truncated: boolean }
+}
+
+/** What one rollback produced. */
+export interface RollbackResult {
+  readonly ok: true
+  readonly skillId: number
+  readonly versionId: number
+  readonly status: number
+  readonly nextActions: string[]
+  readonly verification: VerificationReport
 }
 
 /** One review outcome. */
@@ -411,6 +422,8 @@ interface SourceProvenance {
   readonly address?: string
   readonly resolvedVersion?: string
   readonly benefit?: string
+  /** The historical version a rollback candidate restores (#299). */
+  readonly rollbackOf?: number
 }
 
 /** The latest event seq in one log prefix, or 0 for an empty log. */
@@ -870,6 +883,120 @@ export class SkillCreation {
         }
       } catch (error) {
         // A failed write or insert must not leave a readable candidate behind.
+        rmSync(staging, { recursive: true, force: true })
+        if (candidateDir !== undefined) rmSync(candidateDir, { recursive: true, force: true })
+        asSkillError(error)
+      }
+    } catch (error) {
+      asSkillError(error)
+    }
+  }
+
+  /**
+   * Copy one approved historical version into a fresh pending candidate.
+   *
+   * A rollback never moves the current pointer: it restores the historical
+   * package bytes through the same candidate and review path as a revision, so
+   * the current version keeps serving while the rollback waits for review. The
+   * copied package is re-hashed against the historical row before it leaves
+   * staging, the historical verification commands run again (or reuse the
+   * current report where the content still matches), and a repeat rollback of
+   * the content that is already current is refused as a no-op.
+   */
+  async rollback({ shortId, sessionId, versionId }: {
+    readonly shortId: number
+    readonly sessionId: string
+    readonly versionId: number
+  }): Promise<RollbackResult> {
+    try {
+      const source = this.#store.version(versionId)
+      if (source === undefined) {
+        throw new SkillError(404, 'skills/not-found', `skill version ${versionId} is not visible to this user`)
+      }
+      const skill = this.#store.identity(source.skill_id)
+      if (skill === undefined || !canReview(shortId, skill)) {
+        throw new SkillError(404, 'skills/not-found', `skill version ${versionId} is not visible to this user`)
+      }
+      if (skill.archived_at !== null) {
+        throw new SkillError(409, 'skills/archived', `skill "${skill.name}" is archived; restore it before rolling back`)
+      }
+      if (source.status !== VERSION_STATUS.superseded) {
+        throw new SkillError(409, 'skills/invalid-rollback',
+          'rollback needs an approved historical version that a later approval superseded')
+      }
+      const current = skill.current_version_id === null ? undefined : this.#store.version(skill.current_version_id)
+      if (current === undefined) {
+        throw new SkillError(409, 'skills/invalid-rollback', `skill "${skill.name}" has no current version to roll back from`)
+      }
+      if (current.manifest_hash === source.manifest_hash) {
+        throw new SkillError(409, 'skills/invalid-rollback',
+          `the current version of "${skill.name}" already has this content; a rollback would change nothing`)
+      }
+      const sourceDirectory = this.#service.versionDirectory(source)
+      const sourcePackage = readSkillPackage(sourceDirectory)
+      if (sourcePackage.manifestHash !== source.manifest_hash) {
+        throw new SkillError(500, 'skills/integrity', `skill package integrity check failed for ${skill.name}`)
+      }
+      const scenarios = rollbackScenarios(verificationOf(source))
+      if (scenarios.length === 0) {
+        throw new SkillError(409, 'skills/invalid-rollback',
+          `version ${versionId} has no recorded verification scenario to roll back with`)
+      }
+
+      const staging = join(this.#root, 'tmp', randomUUID())
+      const candidateId = randomUUID()
+      let candidateDir: string | undefined
+      try {
+        copySkillPackage(sourceDirectory, staging)
+        const parsed = readSkillPackage(staging)
+        if (parsed.manifestHash !== source.manifest_hash) {
+          throw new SkillError(500, 'skills/integrity', `the rollback copy of ${skill.name} does not match its approved manifest`)
+        }
+        const checked = checkedScenarios(scenarios, new Set(parsed.manifest.map(entry => entry.path)), this.#verifyTimeoutMs)
+        mkdirSync(join(this.#root, 'candidates'), { recursive: true })
+        candidateDir = join(this.#root, 'candidates', candidateId)
+        renameSync(staging, candidateDir)
+        const growth = growthOf(parsed.coreCharacters, current.core_characters)
+        const location: SourceProvenance = {
+          sessionId,
+          benefit: `回滚到版本 ${source.id} 的已审核内容`,
+          rollbackOf: source.id,
+        }
+        const draft = this.#store.createDraft({
+          name: parsed.name,
+          scope: skill.scope,
+          ownerShortId: shortId,
+          createdBy: shortId,
+          packagePath: `candidates/${candidateId}`,
+          manifest: canonicalManifest(parsed.manifest),
+          manifestHash: parsed.manifestHash,
+          coreCharacters: parsed.coreCharacters,
+          ...(source.license === null
+            ? (parsed.license === undefined ? {} : { license: parsed.license })
+            : { license: source.license }),
+          sourceType: SOURCE_TYPE.rollback,
+          parentVersionId: current.id,
+          growthExceeded: growth.exceeded,
+          sourceLocation: JSON.stringify(location),
+        })
+        const reuse = this.#reusePlan(current, parsed.manifest, checked)
+        const verification = await runVerification({
+          root: this.#root,
+          packageDir: candidateDir,
+          scenarios: reuse.rerun,
+          timeoutMs: this.#verifyTimeoutMs,
+          ...(reuse.reused.length === 0 ? {} : { reused: reuse.reused }),
+        })
+        this.#store.updateVerification(draft.versionId, JSON.stringify(verification))
+        return {
+          ok: true,
+          skillId: draft.skillId,
+          versionId: draft.versionId,
+          status: VERSION_STATUS.pending,
+          nextActions: ['inspect', 'review'],
+          verification,
+        }
+      } catch (error) {
         rmSync(staging, { recursive: true, force: true })
         if (candidateDir !== undefined) rmSync(candidateDir, { recursive: true, force: true })
         asSkillError(error)

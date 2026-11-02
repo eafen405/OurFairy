@@ -59,7 +59,7 @@ export type SkillToolValue = InferValue<typeof TOOL_OUTPUT.schema>
 
 /** The literal parameter schema, as the dsh tool contract consumes it. */
 export const SKILL_MANAGE_PARAMETERS = {
-  action: { type: 'string', required: true, enum: ['list', 'inspect', 'create', 'review'] },
+  action: { type: 'string', required: true, enum: ['list', 'inspect', 'create', 'review', 'rollback'] },
   versionId: { type: 'integer' },
   skillId: { type: 'integer' },
   scope: { type: 'integer', enum: [1, 2] },
@@ -256,6 +256,11 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
           if (result.scope === 1) deps.invalidateOwner(owner)
           else deps.invalidateAll()
         }
+        return result as unknown as SkillToolValue
+      }
+      case 'rollback': {
+        const versionId = requiredPositiveInteger(args.versionId, 'versionId')
+        const result = await deps.creation.rollback({ shortId: owner, sessionId: agent.session.id, versionId })
         return result as unknown as SkillToolValue
       }
       default:

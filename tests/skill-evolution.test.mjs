@@ -775,3 +775,96 @@ describe('atomic version switching and the pool revision state', () => {
     assert.equal((await read()).pendingRevision, false, 'an approved current version has no revision in progress')
   })
 })
+
+describe('rollback', () => {
+  test('a historical approved version becomes a new pending candidate with verification, never a pointer move', async () => {
+    const base = await publishNewSkill('rollback-demo', {
+      bodyLength: 1000, marker: 'V1',
+      files: packageFiles('rollback-demo', {
+        bodyLength: 1000, marker: 'V1', extra: { 'references/guide.md': 'GUIDE V1' },
+      }),
+      scenarios: [SCENARIO, { name: 'no dependencies', command: 'true' }],
+    })
+    const revision = await createRevision('rollback-demo', base.versionId, {
+      bodyLength: 1090, marker: 'V2', benefit: 'recover the failing comparison',
+      files: packageFiles('rollback-demo', {
+        bodyLength: 1090, marker: 'V2', extra: { 'references/guide.md': 'GUIDE V2' },
+      }),
+      scenarios: [SCENARIO, { name: 'no dependencies', command: 'true' }],
+    })
+    assert.equal(revision.isError, false, revision.text)
+    const approvedRevision = await approve(revision.value.versionId)
+    assert.equal(approvedRevision.isError, false, approvedRevision.text)
+    assert.equal(versionOf(base.versionId).status, 4)
+
+    // A pending candidate is not a rollback source, and neither is the current.
+    const pendingSibling = await createRevision('rollback-demo', revision.value.versionId, {
+      bodyLength: 1080, marker: 'V2b', benefit: 'a smaller follow-up revision',
+      files: packageFiles('rollback-demo', {
+        bodyLength: 1080, marker: 'V2b', extra: { 'references/guide.md': 'GUIDE V2' },
+      }),
+      scenarios: [SCENARIO, { name: 'no dependencies', command: 'true' }],
+    })
+    assert.equal(pendingSibling.isError, false, pendingSibling.text)
+    const fromPending = await callTool(alice, sessionAlice, 'skill_manage', { action: 'rollback', versionId: pendingSibling.value.versionId })
+    assert.equal(fromPending.isError, true)
+    assert.match(fromPending.text, /skills\/invalid-rollback/u, fromPending.text)
+    const fromCurrent = await callTool(alice, sessionAlice, 'skill_manage', { action: 'rollback', versionId: revision.value.versionId })
+    assert.equal(fromCurrent.isError, true)
+    assert.match(fromCurrent.text, /skills\/invalid-rollback/u, fromCurrent.text)
+    const unknown = await callTool(alice, sessionAlice, 'skill_manage', { action: 'rollback', versionId: 999_999 })
+    assert.equal(unknown.isError, true)
+    assert.match(unknown.text, /skills\/not-found/u, unknown.text)
+
+    const rollback = await callTool(alice, sessionAlice, 'skill_manage', { action: 'rollback', versionId: base.versionId })
+    assert.equal(rollback.isError, false, rollback.text)
+    assert.equal(rollback.value.status, 0)
+    assert.deepEqual(rollback.value.nextActions, ['inspect', 'review'])
+    const rolled = versionOf(rollback.value.versionId)
+    assert.equal(rolled.parent_version_id, revision.value.versionId, 'the rollback candidate revises the current version')
+    assert.equal(rolled.source_type, 4, 'a rollback is source type rollback')
+    assert.equal(rolled.manifest_hash, versionOf(base.versionId).manifest_hash, 'the clean historical bytes are copied')
+    assert.equal(rolled.core_characters, 1000)
+    assert.match(rolled.package_path, /^candidates\//u)
+    assert.equal(identityOf('rollback-demo').current_version_id, revision.value.versionId,
+      'rollback never moves the pointer without review')
+    const report = JSON.parse(rolled.verification)
+    assert.equal(report.complete, true)
+    assert.ok(report.reused.length >= 1, 'an unchanged scenario reuses the current version run')
+    assert.ok(report.executed.length >= 1, 'a scenario depending on the changed guide reruns')
+    assert.deepEqual(report.reused.map(record => record.name), ['no dependencies'])
+    assert.deepEqual(report.executed.map(record => record.name), [SCENARIO.name])
+    const provenance = JSON.parse(rolled.source_location)
+    assert.equal(provenance.rollbackOf, base.versionId)
+    assert.match(provenance.benefit, /回滚/u)
+
+    const inspect = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: rollback.value.versionId })
+    assert.equal(inspect.isError, false, inspect.text)
+    assert.equal(inspect.value.review.source.type, 4)
+    assert.equal(inspect.value.review.parentVersionId, revision.value.versionId)
+    assert.equal(inspect.value.review.growth.exceeded, false)
+    assert.match(inspect.value.review.benefit, /回滚/u)
+
+    // Another user cannot inspect or review the rollback candidate.
+    const bobRollback = await callTool(bob, sessionBob, 'skill_manage', { action: 'rollback', versionId: base.versionId })
+    assert.equal(bobRollback.isError, true)
+    assert.match(bobRollback.text, /skills\/not-found/u, bobRollback.text)
+
+    // The normal review publishes it and the historical body serves again.
+    const published = await approve(rollback.value.versionId)
+    assert.equal(published.isError, false, published.text)
+    assert.equal(identityOf('rollback-demo').current_version_id, rollback.value.versionId)
+    assert.equal(versionOf(revision.value.versionId).status, 4)
+    assert.equal(versionOf(base.versionId).status, 4, 'the historical row stays superseded history')
+    const activation = await nativeLoad(alice, sessionAlice, 'rollback-demo')
+    assert.equal(activation.isError, false)
+    assert.match(activation.text, /V1/u, 'the rolled-back content is the current version')
+    assert.ok(!activation.text.includes('V2'))
+
+    // Restoring the content that is already current is refused as a no-op.
+    const repeat = await callTool(alice, sessionAlice, 'skill_manage', { action: 'rollback', versionId: base.versionId })
+    assert.equal(repeat.isError, true)
+    assert.match(repeat.text, /skills\/invalid-rollback/u, repeat.text)
+    assert.match(repeat.text, /current/u, repeat.text)
+  })
+})
