@@ -80,11 +80,17 @@ class RemoteTranscriptSkillActivationTest {
     }
 
     @Test
-    fun `a kind-2 row is reserved and renders nothing until the review ticket`() {
-        val review = activation.copy(messageId = "skill-review:call-2", kind = 2, text = "审核材料")
+    fun `a kind-2 row renders the backend review panel verbatim, not a bubble`() {
+        val display = "技能候选 demo（个人，版本 7，哈希 abc）\n新技能，420 字符\n验证：实际执行 1，复用 0，未执行 0，失败 0"
+        val review = activation.copy(messageId = "skill-review:call-2", kind = 2, text = display)
         show(listOf(question, review))
 
-        compose.onNodeWithText("审核材料", useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithTag("skill-activation", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("skill-review", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("技能审核", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(display, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Fairy", useUnmergedTree = true).assertDoesNotExist()
+        compose.onAllNodesWithTag("skill-activation", useUnmergedTree = true).fetchSemanticsNodes().let {
+            assertEquals("a review row is not an activation line", 0, it.size)
+        }
     }
 }

@@ -288,12 +288,13 @@ class FairyPagesTest {
                         state = 4,
                     ),
                 ),
-                pending = listOf(PendingSkill(candidateId = 41, name = "pending-skill")),
+                pending = listOf(PendingSkill(versionId = 41, name = "pending-skill")),
                 pendingCount = 1,
             )
         }
         override suspend fun detail(token: String, skillId: Long): SkillPoolItem = error("not used")
         override suspend fun setEnabled(token: String, skillId: Long, enabled: Boolean): SkillPoolItem = error("not used")
+        override suspend fun reviewOpen(token: String, versionId: Long): String = "ourfairy-user-2-primary"
     }
 
     /** The account's own impression, already written. */
@@ -1144,6 +1145,33 @@ class FairyPagesTest {
         compose.onNodeWithText("没有等待审核的项目。").assertDoesNotExist()
         compose.onNodeWithText("pending-skill").assertExists()
         compose.runOnIdle { assertEquals("the skills page read the scope's backend", 1, skillReads) }
+    }
+
+    @Test fun `the pending skill entry opens the primary conversation the backend answers`() {
+        var destination: Screen? = null
+        destination(Screen.Skills) { destination = it }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("pending-skill").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(Screen.Conversation("ourfairy-user-2-primary"), destination)
+        }
+    }
+
+    @Test fun `settings shows the pending skill badge from the backend count`() {
+        show {
+            FairySettingsPage(
+                {}, {}, account, backend = identityBackend, onBack = {},
+                onOpenSkills = {}, skillsBackend = skillsBackend,
+            )
+        }
+        compose.mainClock.autoAdvance = true
+
+        compose.onNodeWithText("技能").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("待审 1").assertExists()
     }
 
     @Test fun `settings opens the skill selection pool`() {

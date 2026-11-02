@@ -25,9 +25,10 @@
  *
  * `stateVersion` increments whenever this module's fold semantics or state
  * shape change; the registry then discards persisted rows of an older version
- * and refolds the log from `init`. The transcript is at version 5 (immutable
+ * and refolds the log from `init`. The transcript is at version 6 (immutable
  * first appearance plus ordered transitions, a move index, each row's tool
- * names, and the skill-call pairing that derives a `role: 3` activation row);
+ * names, the skill-call pairing that derives a `role: 3` activation row, and
+ * the successful `skill_manage` result that derives a `kind: 2` review row);
  * the work unit is at version 2 (the narrow pending id/kind index).
  *
  * This module is the only fold of a chat session: the read path
@@ -151,7 +152,7 @@ const transcriptRowSchema = z.object({
   messageId: z.string(),
   requestId: z.string().nullable(),
   role: z.number().int(),
-  /** Derived rows only: 1 skill activation. Ordinary messages carry none. */
+  /** Derived rows only: 1 skill activation, 2 skill review. Ordinary messages carry none. */
   kind: z.number().int().optional(),
   /** The tool call a derived row was paired with; ordinary messages carry none. */
   toolCallId: z.string().optional(),
@@ -272,13 +273,36 @@ function skillNameFromArguments(argumentsText: string): string | undefined {
 }
 
 /**
+ * The review display a successful `skill_manage` result carries, or undefined.
+ *
+ * The product renders every tool value as one JSON text block; a review result
+ * names `kind: 'skill-review'` and carries the backend-composed `display`.
+ * Parsing is defensive: any other result, a malformed block or a failed call
+ * derives no row.
+ */
+function reviewDisplayOf(message: { readonly content?: readonly ContentBlock[] }): string | undefined {
+  const text = (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
+  if (text === '') return undefined
+  try {
+    const parsed: unknown = JSON.parse(text)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+    const candidate = parsed as { kind?: unknown; display?: unknown }
+    return candidate.kind === 'skill-review' && typeof candidate.display === 'string' && candidate.display !== ''
+      ? candidate.display
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * The transcript unit: messages the human saw, in first-appearance order (the
  * old Map fold's order, which is not seq order), plus the receipts map
  * `service.ts` answers from without scanning the log.
  */
 export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', TranscriptState> = {
   key: 'ourfairyTranscript',
-  stateVersion: 5,
+  stateVersion: 6,
   stateSchema: transcriptStateSchema,
   init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], skillCalls: {}, moves: [] }),
   apply(state, event) {
@@ -396,23 +420,44 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
     if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
       const callId = event.data.message.toolCallId
       const call = state.skillCalls[callId]
-      if (call === undefined) return state
-      // Any matching result consumes the pending call: a failed or interrupted
-      // activation must not leave the narrow map growing or pair a later result.
-      const { [callId]: _spent, ...skillCalls } = state.skillCalls
-      const rest = { ...state, skillCalls }
-      if (event.data.message.isError === true) return rest
-      const messageId = `skill-activation:${callId}`
-      // First appearance wins: a duplicated/replayed result changes nothing and
-      // adds no transition, so the row's position stays stable.
-      if (state.index[messageId] !== undefined) return rest
-      return appendRow(rest, {
+      if (call !== undefined) {
+        // Any matching result consumes the pending call: a failed or interrupted
+        // activation must not leave the narrow map growing or pair a later result.
+        const { [callId]: _spent, ...skillCalls } = state.skillCalls
+        const rest = { ...state, skillCalls }
+        if (event.data.message.isError === true) return rest
+        const messageId = `skill-activation:${callId}`
+        // First appearance wins: a duplicated/replayed result changes nothing and
+        // adds no transition, so the row's position stays stable.
+        if (state.index[messageId] !== undefined) return rest
+        return appendRow(rest, {
+          messageId,
+          requestId: null,
+          role: 3,
+          kind: 1,
+          toolCallId: callId,
+          text: `加载了skill:${call.name}`,
+          attachments: null,
+          tools: [],
+          first: { seq: event.seq, status: 2 },
+          transitions: [],
+        })
+      }
+      // A successful `skill_manage` result that names a review display derives
+      // the second role-3 row. The backend composed the display; the fold only
+      // parses it, so the same log always produces the same row.
+      if (event.data.message.isError === true) return state
+      const display = reviewDisplayOf(event.data.message)
+      if (display === undefined) return state
+      const messageId = `skill-review:${callId}`
+      if (state.index[messageId] !== undefined) return state
+      return appendRow(state, {
         messageId,
         requestId: null,
         role: 3,
-        kind: 1,
+        kind: 2,
         toolCallId: callId,
-        text: `加载了skill:${call.name}`,
+        text: display,
         attachments: null,
         tools: [],
         first: { seq: event.seq, status: 2 },

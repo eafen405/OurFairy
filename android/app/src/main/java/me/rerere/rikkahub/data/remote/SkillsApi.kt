@@ -71,15 +71,20 @@ data class SkillPoolItem(
 )
 
 /**
- * One pending candidate in the review area. The backend returns none in this ticket; the shape
- * and the page's callback are the seam #297 fills.
+ * One pending candidate in the review area, exactly as the backend derives it. The pending entry
+ * opens the caller's primary conversation through `/skills/review-open`; the id that route takes is
+ * [versionId], the candidate identity.
  */
 @Serializable
 data class PendingSkill(
-    val candidateId: Long,
+    val versionId: Long,
+    val skillId: Long = 0,
     val name: String = "",
     val scope: Int = SkillScope.PERSONAL,
-    val state: Int = 0,
+    val sourceType: Int = 0,
+    val createdAt: Long = 0,
+    val growthExceeded: Boolean = false,
+    val nextActions: List<String> = emptyList(),
 )
 
 /** The selection pool plus the separate review area, as one list response carries them. */
@@ -99,6 +104,9 @@ interface SkillsBackend {
 
     /** Set this credential's own enable preference and answer the backend's updated item. */
     suspend fun setEnabled(token: String, skillId: Long, enabled: Boolean): SkillPoolItem
+
+    /** Append the candidate reference to the user's primary session and answer that session id. */
+    suspend fun reviewOpen(token: String, versionId: Long): String
 }
 
 @Serializable
@@ -108,6 +116,7 @@ internal data class SkillsEnvelope(
     val skill: SkillPoolItem? = null,
     val pending: List<PendingSkill> = emptyList(),
     val pendingCount: Int = 0,
+    val sessionId: String? = null,
     val error: Failure? = null,
 ) {
     @Serializable
@@ -119,6 +128,9 @@ private data class SkillDetailDocument(val skillId: Long)
 
 @Serializable
 private data class SkillPreferenceDocument(val skillId: Long, val enabled: Boolean)
+
+@Serializable
+private data class SkillReviewOpenDocument(val versionId: Long)
 
 /**
  * The user's own skill selection endpoints, over the app's existing HTTP client.
@@ -151,6 +163,12 @@ class SkillsApi(
         val document = json.encodeToString(SkillPreferenceDocument.serializer(), SkillPreferenceDocument(skillId, enabled))
         return call("/skills/preference", document, token).skill
             ?: throw IdentityUnreachable(IllegalStateException("the backend accepted a preference write without an item"))
+    }
+
+    override suspend fun reviewOpen(token: String, versionId: Long): String {
+        val document = json.encodeToString(SkillReviewOpenDocument.serializer(), SkillReviewOpenDocument(versionId))
+        return call("/skills/review-open", document, token).sessionId
+            ?: throw IdentityUnreachable(IllegalStateException("the backend accepted a review open without a session"))
     }
 
     private suspend fun call(path: String, document: String, token: String): SkillsEnvelope =

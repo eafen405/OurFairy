@@ -55,15 +55,16 @@ import me.rerere.rikkahub.ui.fairy.FairyWindowTopBar
  * The page renders only facts `/skills/list` derives: scope, the pool state (in catalog,
  * shadowed, disabled, archived), the effective switch value, the same-name shadower and the
  * numeric scope of each action. It never computes a winner or an archive itself. The switch is
- * the one action this ticket performs; archive and restore scopes are shown but not acted on
- * until their ticket, and the pending section has its callback seam ready for the review ticket.
+ * the one pool action this ticket performs; archive and restore scopes are shown but not acted on
+ * until their ticket. A pending item calls `/skills/review-open`, and the backend answers the
+ * caller's primary session id, which the page hands to the host to open the conversation.
  */
 @Composable
 fun SkillsPage(
     onBack: () -> Unit,
     session: AccountSession,
     backend: SkillsBackend,
-    onOpenPending: (Long) -> Unit = {},
+    onOpenConversation: (String) -> Unit = {},
 ) {
     val identity by session.identity.collectAsStateWithLifecycle()
     val token = identity?.token
@@ -161,7 +162,17 @@ fun SkillsPage(
                         )
                     } else {
                         snapshot.pending.forEach { candidate ->
-                            PendingSkillRow(candidate, onOpenPending)
+                            PendingSkillRow(
+                                candidate = candidate,
+                                enabled = !snapshot.working && token != null,
+                                onOpen = {
+                                    token?.let { current ->
+                                        state.openPending(current, candidate.versionId) { sessionId ->
+                                            onOpenConversation(sessionId)
+                                        }
+                                    }
+                                },
+                            )
                         }
                     }
                 }
@@ -259,18 +270,18 @@ private fun poolStateLabel(state: Int): Int = when (state) {
 }
 
 @Composable
-private fun PendingSkillRow(candidate: PendingSkill, onOpenPending: (Long) -> Unit) {
+private fun PendingSkillRow(candidate: PendingSkill, enabled: Boolean, onOpen: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpenPending(candidate.candidateId) }
+            .clickable(enabled = enabled, onClick = onOpen)
             .padding(vertical = 10.dp)
-            .testTag("skill-pending-${candidate.candidateId}"),
+            .testTag("skill-pending-${candidate.versionId}"),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = candidate.name.ifBlank { "#${candidate.candidateId}" },
+            text = candidate.name.ifBlank { "#${candidate.versionId}" },
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )

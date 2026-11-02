@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import me.rerere.rikkahub.data.remote.IdentityBackend
 import me.rerere.rikkahub.data.remote.IdentityRefused
 import me.rerere.rikkahub.data.remote.IdentityUnreachable
+import me.rerere.rikkahub.data.remote.SkillsBackend
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +48,7 @@ import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.ui.identity.RemoteAppUpdateEntry
 import me.rerere.rikkahub.ui.identity.RemoteDisplayPreferences
@@ -69,11 +72,26 @@ fun FairySettingsPage(
     updateContent: @Composable () -> Unit = { RemoteAppUpdateEntry() },
     onOpenImpression: () -> Unit = {},
     onOpenSkills: () -> Unit = {},
+    /** The skill list's pending count; absent in direct page tests that do not stub it. */
+    skillsBackend: SkillsBackend? = null,
 ) {
     val tokens = LocalFairyTokens.current
     val identity by session.identity.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var open by remember { mutableStateOf<String?>("account") }
+    // The pending badge is the same `/skills/list` count the page renders; the settings row never
+    // derives it. It loads when the skills group opens, like the roster group, so a restored
+    // settings page still needs no network until the user asks for that section.
+    var pendingSkills by remember { mutableStateOf(0) }
+    LaunchedEffect(open, identity?.token, skillsBackend) {
+        val token = identity?.token
+        val backend = skillsBackend
+        pendingSkills = if (open != "skills" || token == null || backend == null) {
+            0
+        } else {
+            runCatching { backend.list(token).pendingCount }.getOrDefault(0)
+        }
+    }
 
     Box(
         Modifier
@@ -162,6 +180,20 @@ fun FairySettingsPage(
                 onToggle = { open = if (open == "skills") null else "skills" },
             ) {
                 GroupRow("技能选择池", "查看、启用与停用", onClick = onOpenSkills)
+                if (pendingSkills > 0) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        StatusChip(
+                            text = stringResource(R.string.skills_pending_badge, pendingSkills),
+                            tone = StatusTone.SIGNAL,
+                        )
+                        Text(
+                            text = "有待审核的候选，进入技能页打开审核对话。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = tokens.textMuted,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = "只显示已审核技能；完整的创建与审核在 Fairy 对话中完成。",

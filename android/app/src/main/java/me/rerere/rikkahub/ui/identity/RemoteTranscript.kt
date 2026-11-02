@@ -171,11 +171,12 @@ internal fun RemoteTranscript(
         items(rows, key = { it.key }) { row ->
             val message = row.message
             // A derived row is neither the user nor Fairy: it has no bubble, no heading, no
-            // attachments and no long-press copy menu. kind 2 is reserved for the skill review
-            // row (#297) and falls through as nothing until that ticket renders it.
+            // attachments and no long-press copy menu. kind 1 is the quiet activation line;
+            // kind 2 is the backend-composed skill review panel.
             if (message?.role == 3) {
                 when (message.kind) {
                     1 -> SkillActivationLine(message.text, Modifier.fillMaxWidth())
+                    2 -> SkillReviewPanel(message.text, Modifier.fillMaxWidth())
                     else -> Unit
                 }
                 return@items
@@ -282,6 +283,34 @@ internal fun RemoteTranscript(
 }
 
 /** A quiet full-width system line: what Fairy loaded, not something either side said. */
+/**
+ * The skill review display: the backend's four deterministic blocks, rendered as a multi-line
+ * system panel rather than a message. The text is presented verbatim; the client never recomposes
+ * a diff, a verification count or a growth percentage.
+ */
+@Composable
+private fun SkillReviewPanel(text: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .padding(horizontal = FairyMessagePaddingH, vertical = 4.dp)
+            .fairyDialogPanel(active = false)
+            .padding(horizontal = FairyDialogPaddingH, vertical = FairyDialogPaddingV)
+            .testTag("skill-review"),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = "技能审核",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = LocalFairyTokens.current.textPrimary,
+        )
+    }
+}
+
 @Composable
 private fun SkillActivationLine(text: String, modifier: Modifier = Modifier) {
     Row(

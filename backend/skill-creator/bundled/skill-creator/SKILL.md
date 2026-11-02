@@ -9,6 +9,14 @@ user-invocable: false
 A skill is a reusable procedure packaged as a folder. It is not a transcript
 summary, a knowledge base, or a place to record one-off facts.
 
+## When to use it
+
+Load this skill when the user explicitly asks to save the current procedure as
+a skill, or when a workflow has been completed successfully and is likely to be
+repeated. Explicit creation is one successful exchange, not a repetition
+threshold: the user's request is enough. Do not create a skill from a casual
+conversation, an unfinished attempt, or a workflow you only imagined.
+
 ## Workflow or fact
 
 - Reusable **procedure** (ordered steps, inputs, outputs, tools, checks) → skill.
@@ -17,7 +25,8 @@ summary, a knowledge base, or a place to record one-off facts.
 
 Do not write the same content to both memory and a skill. When the material is a
 procedure, keep the stable facts it needs in the skill's own instructions and
-leave unrelated user facts out.
+leave unrelated user facts out. A workflow belongs to the skill; a durable fact
+the user stated belongs to memory.
 
 ## Package shape
 
@@ -34,8 +43,17 @@ leave unrelated user facts out.
 ---
 name: kebab-case-name
 description: When to use this skill, in one or two sentences.
+whenToUse: A longer applicability note, optional.
+not-applicable: When this skill must not be used, optional.
 ---
+
+# Workflow
 ```
+
+Frontmatter is a **flat** map of single-line `key: value` entries. Quoted
+scalars and `true`/`false` are accepted. Nested maps or lists, block scalars,
+anchors and tags are refused rather than silently misread, so keep every entry
+on its own line.
 
 Rules checked by the backend:
 
@@ -48,48 +66,67 @@ Rules checked by the backend:
   `..`, symlinks, or paths outside the package. Network access is available.
 - `user-invocable: false` is the runtime's choice for product skills; do not add
   a second activation path.
+- Optional `license` names the package licence in one line.
 
-## Workflow
+## Create through skill_manage
 
-1. **Extract the actual work.** Read the current task's steps, tool calls,
-   corrections and input/output shapes. Do not invent steps that were not used.
-2. **State applicability.** Write when the skill applies, what it needs before
-   starting, and when it must not be used. The description carries the routing
-   signal; the body carries the procedure.
-3. **Write the shortest complete procedure.** Keep commands, file formats,
-   decision points and failure handling. Remove chatter, greetings, one-off
-   paths, unrelated private information, and narrative about how the skill was
-   produced. A reader must be able to follow the current workflow without
-   earlier revisions.
-4. **Package supporting material separately.** Long references, examples and
-   scripts go into their own files. Reference them relatively; describe the
-   input and output of a script rather than pasting its whole source into the
-   body.
-5. **Check the package hygiene.** No secrets, no author-machine absolute paths,
-   no symlinks, no non-regular files. Executable scripts keep an executable bit
-   only when they are meant to be run.
+Call `skill_manage` with `action: "create"` and this payload:
 
-## Verify before proposing
+```
+scope: 1                     // personal, owned by the calling user
+focus: {kind: "turn"}        // current/latest turn, {kind:"turn",turn:N}, or {kind:"task",text:"..."}
+files: [{path, content, executable?}]   // the complete package, including SKILL.md
+scenarios: [{name, command, description?, uses?, timeoutMs?}]   // at least one
+evidence: [{kind: "session"|"test"|"observation", ref, note?}]  // optional
+license: "..."               // optional, when the package carries none
+```
 
-- Define at least one representative scenario that exercises the workflow end
-  to end, and run it for real in a disposable directory.
-- Record what was executed, the exact command, its exit code and an output
-  summary; separately mark anything not executed. A static read of the skill is
-  not effect verification.
-- A revision must name a concrete benefit: a verified failure it fixes, a new
-  repeated scenario it covers, or a shorter body with comparable regression
-  results. If there is no benefit, keep the current version.
-- Never claim a verification result you did not observe.
+- `focus` bounds the material you read. Use the current turn by default; use a
+  numbered turn only when the user names one; use `task` when the user restates
+  the goal and the latest turn is the right range. The backend records the
+  resolved range as provenance.
+- `files` must contain the complete package. You cannot choose where it lands;
+  the backend stages it in an isolated candidate area and computes the manifest
+  hash itself.
+- Only personal creation is available through this tool. Shared creation,
+  installation from an address and revisions are later capabilities; do not
+  pretend one succeeded.
+- A name that already has an approved skill is refused. Tell the user it needs a
+  revision instead of inventing a second identity.
+
+## Scenarios and evidence
+
+- Define one to three representative closed-loop commands, run from the package
+  copy: read the files the workflow needs, execute the script or check, and
+  print a result. A static read of `SKILL.md` is not effect verification.
+- `uses` names the package-relative files each scenario depends on. The backend
+  uses it for verification reuse, so name them accurately.
+- The backend runs the scenarios for real in a disposable confined directory and
+  records the command, exit code, timeout, environment and bounded output. You
+  never author those facts, and you may not claim a verification result you did
+  not receive.
+- Cite evidence for content you could not execute: a session observation, a
+  test that covers it, or a stated user preference. Uncited one-off details do
+  not belong in the package.
 
 ## Review before use
 
-Every new skill, revision or externally sourced package is a candidate until a
-human reviews it. Use the `skill_manage` tool for list, inspect, create, review,
-archive and restore; its result names the next allowed action. Do not hand-write
-files into the version area, do not choose an owner or reviewer, and do not
-install a host plugin or run untrusted setup while preparing a candidate.
+Every skill package is a candidate until its owner approves it in conversation:
 
-Personal skills belong to their author and default to enabled after approval.
-Common skills affect every user, require Phaethon's approval, and default to
-disabled for each user. Never promote one user's private material into a common
-candidate without that user's explicit request in the current turn.
+1. `skill_manage create` returns the candidate identity, status and next
+   actions. Nothing enters the model catalog yet.
+2. `skill_manage inspect` returns the review package and a deterministic
+   display: identity and hash, core-body change, applicability and benefit,
+   package changes and the real executed/unexecuted records, and how to expand
+   the full text with `expand: "skill"` or `expand: "files"`.
+3. Present the display to the user and wait for their decision. They may
+   approve, request changes or reject; only they decide.
+4. `skill_manage review` records that decision. A change request means a new
+   draft with a new hash and a fresh verification; an old approval and an old
+   report never carry over. A rejected draft stays settled.
+
+Never claim approval yourself, never approve on the user's behalf, and never
+hand-write files into a version area or choose an owner or reviewer. Personal
+skills belong to their author and default to enabled after approval. If a later
+deployment offers shared skills, never promote one user's private material
+without that user's explicit request in the current turn.

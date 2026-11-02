@@ -71,6 +71,28 @@ class SkillsState(
         }
     }
 
+    /**
+     * Open one pending candidate's review entry: the backend appends the system-context reference to
+     * the caller's primary session and answers its id, which the page uses to open the conversation.
+     * The pool does not change, so this write does not re-read it.
+     */
+    fun openPending(token: String, versionId: Long, onOpened: (String) -> Unit) {
+        scope.launch {
+            writes.withLock {
+                mutable.value = mutable.value.copy(working = true, failure = null)
+                try {
+                    val sessionId = backend.reviewOpen(token, versionId)
+                    mutable.value = mutable.value.copy(working = false)
+                    onOpened(sessionId)
+                } catch (refused: IdentityRefused) {
+                    mutable.value = mutable.value.copy(working = false, failure = refused.failure())
+                } catch (unreachable: IdentityUnreachable) {
+                    mutable.value = mutable.value.copy(working = false, failure = SkillsFailure(unreachable = true))
+                }
+            }
+        }
+    }
+
     /** Toggle one skill, then re-read the pool; the backend decides the new state. */
     fun setEnabled(token: String, skillId: Long, enabled: Boolean) {
         scope.launch {

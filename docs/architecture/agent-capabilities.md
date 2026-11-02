@@ -56,7 +56,7 @@
 - [`tests/agent-capabilities.test.mjs`](../../tests/agent-capabilities.test.mjs)：用户会话、
   维护子、有 owner 且有 parent、无 owner 且无 preset 等 header 形状都锁在判定上。
 - [`tests/model-double.test.mjs`](../../tests/model-double.test.mjs)：用户主会话的模型工具
-  目录仍是 25 个工具。
+  目录仍是 26 个工具（含 #297 的 `skill_manage`）。
 - [`tests/memory-maintenance.test.mjs`](../../tests/memory-maintenance.test.mjs)：维护子仍
   恰好看到 memory 的五个记忆工具。
 - [`tests/row-addressability.test.mjs`](../../tests/row-addressability.test.mjs)：禁用

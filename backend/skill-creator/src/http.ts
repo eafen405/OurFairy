@@ -6,15 +6,17 @@
  * winner. The service derives the pool state and catalog from the database, so
  * the client never recomputes either.
  *
- * `pending` is deliberately empty in this ticket: the review area belongs to
- * the creation ticket. The response carries it now so the page's pending
- * section and its badge seam have one stable shape from the start.
+ * `/skills/list` also carries the caller's pending candidates and their count:
+ * the same derivation `skill_manage list` answers with. `/skills/review-open`
+ * is the pending entry's one write: it appends a system-context reference to
+ * the caller's primary session and answers that session id.
  *
  * @module @ourfairy/dsh-skill-creator/src/http
  */
 import { freezeSurface, postHandler } from '@ourfairy/dsh-http/http'
 import { SkillError, type PoolItem, type SkillDetail } from './service.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { SkillCreation, PendingItem } from './creation.js'
 import type { SkillService } from './service.js'
 
 /** The addresses this row publishes, in the order the carrier registers them. */
@@ -22,6 +24,7 @@ export const SURFACE = freezeSurface([
   { path: '/skills/list', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'skills' },
   { path: '/skills/detail', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'skills' },
   { path: '/skills/preference', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'skills' },
+  { path: '/skills/review-open', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'skills' },
 ])
 
 /** Paths this row owns, in the order the carrier registers them. */
@@ -50,11 +53,14 @@ function positiveInteger(body: Record<string, unknown>, field: string): number {
  * @param fence - the carrier's Host/Origin admission.
  * @param invalidateOwner - bump the affected live agents' catalog after a write.
  */
-export function skillHandlers({ service, authenticate, fence, invalidateOwner }: {
+export function skillHandlers({ service, creation, authenticate, fence, invalidateOwner, openReview }: {
   readonly service: SkillService
+  readonly creation: SkillCreation
   readonly authenticate: (request: IncomingMessage) => RouteCaller | undefined
   readonly fence: (request: IncomingMessage) => unknown
   readonly invalidateOwner: (shortId: number) => void
+  /** Append the candidate reference to the caller's primary session, once. */
+  readonly openReview: (shortId: number, versionId: number) => Promise<{ readonly sessionId: string }>
 }): Map<string, SkillHandler> {
   const callerOf = (request: IncomingMessage): number => {
     const user = authenticate(request)
@@ -81,6 +87,17 @@ export function skillHandlers({ service, authenticate, fence, invalidateOwner }:
     actions: { ...item.actions },
     ...(item.shadowedBy === undefined ? {} : { shadowedBy: { ...item.shadowedBy } }),
   })
+  /** One pending candidate, exactly as `skill_manage list` derives it. */
+  const pendingView = (item: PendingItem): Record<string, unknown> => ({
+    versionId: item.versionId,
+    skillId: item.skillId,
+    name: item.name,
+    scope: item.scope,
+    sourceType: item.sourceType,
+    createdAt: item.createdAt,
+    growthExceeded: item.growthExceeded,
+    nextActions: [...item.nextActions],
+  })
   const detailView = (detail: SkillDetail): Record<string, unknown> => ({
     ...poolView(detail),
     ownerShortId: detail.ownerShortId,
@@ -90,13 +107,12 @@ export function skillHandlers({ service, authenticate, fence, invalidateOwner }:
   return new Map([
     ['/skills/list', post(async (_body, request) => {
       const shortId = callerOf(request)
+      const pending = creation.pending(shortId)
       return {
         ok: true,
         skills: service.pool(shortId).map(poolView),
-        // The creation ticket fills these; this ticket's page renders the empty
-        // pending section and its callback seam.
-        pending: [],
-        pendingCount: 0,
+        pending: pending.map(pendingView),
+        pendingCount: pending.length,
       }
     })],
     ['/skills/detail', post(async (body, request) => {
@@ -114,6 +130,12 @@ export function skillHandlers({ service, authenticate, fence, invalidateOwner }:
       // The caller's next catalog must reflect the preference without a restart.
       invalidateOwner(shortId)
       return { ok: true, skill: poolView(updated) }
+    })],
+    ['/skills/review-open', post(async (body, request) => {
+      const shortId = callerOf(request)
+      const versionId = positiveInteger(body, 'versionId')
+      const opened = await openReview(shortId, versionId)
+      return { ok: true, sessionId: opened.sessionId }
     })],
   ])
 }
