@@ -12,7 +12,10 @@ the trusted bundled root; this package never re-implements them.
 Installation from an address, shared proposals, evolution and rollback are part
 of this row: they reuse the same create/review path, store, package algorithm
 and verification runner rather than adding a second one. Background learning is
-the one engine still to arrive; it extends this row, not a second creation path.
+the row's other engine: a per-source-session detection child produces immutable
+reuse signals, and a cross-session claim turns repeated success into a pending
+candidate through that same create/verify/review path. It adds no second
+creation surface.
 
 ## What the row owns
 
@@ -30,6 +33,9 @@ the one engine still to arrive; it extends this row, not a second creation path.
 | Lifecycle | `skill.archived_at`: archive removes the identity from every catalog and read-only resource but keeps content, history and preferences |
 | Evolution | Parent version, core-body growth, an optional post-display growth confirmation and rollback candidates, all through the same candidate/review path |
 | Model tool | `skill_manage` on user sessions only: `list`, `inspect`, `create` (files or `address`, new skill or revision), `review`, `rollback`, `archive`, `restore` |
+| Learning state | `skill_learning_state`: one row per source session — completed watermark, frozen cut, detection child, status and retry time |
+| Reuse evidence | `skill_reuse_signal`: immutable rows (owner, canonical task key, source session, evidence range, success/failure/uncertain/revoked, judged time, processing state) |
+| Creation claims | `skill_creation_job`: one claim per owner and task key — contributing signal ids, creation child, state, candidate version, attempts and retry time |
 | Client surface | `/skills/list` (pool + pending + count + bounded `reviewResults`), `/skills/detail`, `/skills/preference`, `/skills/review-open`, `/skills/archive`, `/skills/restore` (POST + JSON, caller from the bearer credential) |
 
 The data root is `dshHomePath('skill')` by default:
@@ -301,14 +307,113 @@ user bubble. The client then opens the returned session id.
   skills before a boot. Tests must not rebuild the manifest hash themselves;
   the import is the only writer of reviewed versions outside `skill_manage`.
 
-## Seams left for later tickets
+## Background learning
 
-- No background-learning engine yet. It is the one part of the spec this row
-  still does not serve; the Skill Creator content and the store are ready for
-  it.
+The row runs two engines on a one-second tick. They share the store and the
+candidate path with the interactive surface; neither is reachable from a user
+session's tools.
+
+**Detection (`src/learning.ts`)**
+
+- One `skill_learning_state` row per source session. A source session is a
+  user's own session only: owned, no `parentSession`, no `agentPreset`.
+- A source opens one interval when it has at least `learningTurns` closed user
+  turns after its watermark and is silent (no live agent, or `idle`). The claim
+  freezes `cut_seq` in one `BEGIN IMMEDIATE` transaction, so anything appended
+  after the claim belongs to the next interval.
+- The detection child is an ordinary dsh Agent with meta
+  `{parentSession, origin: 'subagent', agentPreset: 'ourfairy:skill-learning'}` and
+  deliberately **no header owner**; the owner is captured from the source and
+  passed through the setup closure. Its scoped setup calls
+  `tools.restrict({ allow: [] })` and self-registers exactly one structured tool,
+  `submit_signals`, plus the detection prompt. It uses the light
+  `learningModel`/`learningProvider` route.
+- The child's single user message is the frozen material (`src/material.ts`):
+  `(watermark, cut]` user messages, Fairy replies, attachment names, tool calls
+  with bounded arguments (file bodies summarized to a length), bounded results
+  and a file-change summary. It never contains the environment or a whole log,
+  and it is bounded by `learningMaxMaterialChars`.
+- Completion is judged only from the durable log: the run's last `turn/end`
+  must be `completed` **and** the run must contain exactly one successful
+  `submit_signals` call. The engine validates that submission again and only
+  then writes the rows, so a crash cannot half-write an interval. Zero signals
+  complete the interval and advance the watermark; any other ending keeps the
+  watermark and leaves the same child for a resume. `learningMaxTurns` bounds
+  consecutive failed runs before the interval is released and re-claimed.
+- The prompt carries at most 30 of the owner's existing canonical task keys.
+  A task key is `<task-type>:<artifact>`, both lower-case kebab-case, at most
+  64 characters; the store validates the same grammar. Signals are grouped
+  only within one owner.
+- An ambiguous-but-valuable signal (`status: 2 uncertain`) is resolved by one
+  independent review child with the same material and a structured
+  `submit_review` returning success/failure/uncertain. An uncertain outcome
+  never triggers automatic creation. Clear evidence is used directly.
+- A later interval may revoke an earlier success: the child submits
+  `status: 3` with `revokesSignalId` from the bounded list of that session's
+  earlier successes. The engine inserts a new row; the original evidence row's
+  status and range are never updated. Valid success = `status 0` and no later
+  revocation.
+
+**Cross-session creation (`src/deep-creation.ts`)**
+
+- At least two distinct source sessions with valid success signals for one
+  owner and task key, no active/retrying claim, and at least one signal newer
+  than that key's last completed claim's `through_signal_id` make a candidate
+  threshold group.
+- `claimCreationJob` re-reads those facts inside one `BEGIN IMMEDIATE`
+  transaction, inserts the claim (freezing the contributing ids and the
+  through id) and marks the signals used; a partial unique index is the second
+  guarantee. Concurrent detections therefore produce exactly one claim.
+- Before a child is created, the claim's surviving signals are re-read: a
+  later revocation drops its evidence, and if fewer than two sessions remain
+  the claim completes as an explicit no-op without touching any detection
+  watermark.
+- The creation child is ownerless in its header, carries
+  `parentSession` = the newest contributing source, the same learning preset,
+  and exactly `read_evidence`, `submit_candidate`, `run_verification` and
+  `finish_no_improvement`. It runs on the triggering source's model route (the
+  deep route), reuses the shipped Skill Creator body from
+  `bundledSkillsDir`, and is told the existing pending candidates and current
+  personal skills for dedupe.
+- `submit_candidate` stages a complete package through the ordinary candidate
+  path (`source_type: 2`, background provenance, deferred verification) and
+  `run_verification` executes the recorded scenarios in the same disposable
+  environment the interactive path uses; the system writes the report. A
+  candidate without a system-recorded verification is not a settled outcome.
+- A claim settles as `candidate`, `no_improvement` (the child called
+  `finish_no_improvement`) or `failed`. A failed creation keeps its claim and
+  child and is retried independently; it never rolls back a detection
+  watermark. A restart rebuilds both engines from the three tables and resumes
+  the persisted children.
+
+**Configuration** (volatile row config; the bundle reads the environment):
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `learningTurns` | 5 | closed user turns after the watermark that open one interval (1–50) |
+| `learningModel` / `learningProvider` | `MiniMax-M3.1-Flash` / `minimax-cn` | light route for detection and review children |
+| `learningMaxMaterialChars` | 12000 | total material bound (500–100000) |
+| `learningMaxTurns` | 4 | consecutive failed runs before the interval is released (1–20) |
+
+The background candidate appears through the ordinary pending list; the client's
+existing pending badge and reminder-once ledger publish one merged reminder.
+There is no backend push or notification table.
+
+Real-model acceptance for this surface is `npm run acceptance:skill`
+(`scripts/skill-acceptance.ts`); it refuses a loopback model double, records
+light/deep call counts and token usage from the durable session logs, and is
+not part of `npm test`.
+
+## Composition and seams
+
 - `SkillService` takes the store and data root, not a Cordis context;
   `SkillProviders` owns registration and invalidation; `SkillCreation` owns the
   candidate/review rules; `SkillInstall` owns the network fetch and extraction;
   `SkillLifecycle` owns archive/restore; `SkillNotifications` owns the bounded
-  decision view; `skillHandlers` owns the HTTP envelope; the row's `index.ts`
+  decision view; `LearningEngine` owns detection; `SkillCreationEngine` owns
+  claims; `skillHandlers` owns the HTTP envelope; the row's `index.ts`
   composes them.
+- The learning engines register their child tools in the child's own setup,
+  never on a user session. The memory row likewise registers its tools only on
+  a user session or its own maintenance child, so a learning child sees exactly
+  the tools its engine gave it.
