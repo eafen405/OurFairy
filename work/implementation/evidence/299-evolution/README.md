@@ -110,10 +110,23 @@ All commands ran in `/home/eafen405/projects/OurFairy/.worktrees/299-evolution` 
 | Command | Result |
 | --- | --- |
 | `npm run build` | pass |
-| `node --test tests/skill-evolution.test.mjs tests/skill-evolution-display.test.mjs tests/skill-creation.test.mjs tests/skill-creation-store.test.mjs tests/skill-package.test.mjs tests/skill-runtime.test.mjs tests/skill-verify.test.mjs tests/route-inventory.test.mjs tests/identity-http.test.mjs tests/docs.test.mjs` | 72/72 pass (focused backend set) |
-| `npm test` | see the final hand-off run recorded below |
+| `node --test tests/skill-evolution.test.mjs tests/skill-evolution-display.test.mjs tests/skill-creation.test.mjs tests/skill-creation-store.test.mjs tests/skill-package.test.mjs tests/skill-runtime.test.mjs tests/skill-verify.test.mjs tests/route-inventory.test.mjs tests/identity-http.test.mjs tests/docs.test.mjs` | 74/74 pass (focused backend set) |
+| `npm test` | 541/541 pass, 23 suites (final hand-off state, after the merge) |
 | `npm run combo:verify` | pass (`ourfairy`, `dsh`, `android source`) |
-| `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug` | see the final hand-off run recorded below |
+| `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug` | BUILD SUCCESSFUL; 653 unit tests, 0 failures/errors; `lintDebug` clean |
+
+The merge of `integration/spec-295` before hand-off was a no-op: the
+integration tip was still `e38bd9f1c9` and no #298 commit had landed, so there
+was no conflict to resolve. The ticket branch is based on and contains that
+tip.
+
+**Environment note:** one earlier full-suite attempt hung for >15 minutes at
+the end of four unrelated session suites (`owned-sessions`, `session-archive`,
+`session-rename`, `session-title`) while another worktree was running its own
+full suite on the same machine. Each of those files passed alone in ~10 s, and
+the final serial hand-off run of `npm test` passed all 541 tests in 145 s. The
+hung run is recorded here rather than silently dropped; it is an environment
+scheduling artifact, not a product assertion failure.
 
 No raw logs are committed; the commands above are the record.
 
@@ -152,6 +165,10 @@ No raw logs are committed; the commands above are the record.
   scenario whose description or `timeoutMs` changed is still reused because neither changes what
   was executed. A parent report without `uses` (a row written before this ticket) never reuses a
   scenario that declares `uses`.
+- **Comparisons:** an optional with/without comparison runs in the disposable environment and is
+  stored on the version; the review package and display now show both exit codes. A comparison
+  failure does not block approval — the design treats it as reviewer material, not as required
+  verification evidence.
 - **Rollback scenarios:** rollback reuses the historical report's recorded commands. A historical
   approved version with no recorded scenario (not expected: approval requires executed or reused
   evidence) is refused rather than inventing a scenario.

@@ -238,6 +238,9 @@ export interface ReviewResult {
 /** The display bound; the full text is always available through `expand`. */
 export const DISPLAY_MAX_CHARACTERS = 4_000
 
+/** The one instruction a growth-exceeded display must never lose. */
+export const GROWTH_INSTRUCTION = '篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」'
+
 /**
  * The inspect tool result budget, in serialized characters.
  *
@@ -311,6 +314,17 @@ type BoundedReview = Omit<ReviewPackage, 'package' | 'changes' | 'verification' 
 export function boundInspectResult(result: InspectResult): InspectResult {
   let bounded: InspectResult = { ...result }
   let display = result.display
+  // The growth instruction is the one line the user must act on; every later
+  // clip of the display reserves room for it and appends it again.
+  const tail = result.review.growthConfirmation.required ? GROWTH_INSTRUCTION : undefined
+  const boundDisplayText = (text: string, max: number): string => {
+    if (tail === undefined) return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`
+    const reserved = [...tail].length + 1
+    if (max <= reserved) return tail
+    const limit = max - reserved
+    const body = text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 1))}…`
+    return `${body}\n${tail}`
+  }
   const review: BoundedReview = {
     ...result.review,
     source: {
@@ -398,7 +412,7 @@ export function boundInspectResult(result: InspectResult): InspectResult {
       continue
     }
     if (display.length > INSPECT_DISPLAY_FLOOR) {
-      display = clipText(display, Math.max(INSPECT_DISPLAY_FLOOR, display.length - 1_000))
+      display = boundDisplayText(display, Math.max(INSPECT_DISPLAY_FLOOR, display.length - 1_000))
       continue
     }
     break
@@ -407,7 +421,7 @@ export function boundInspectResult(result: InspectResult): InspectResult {
   // that the JSON stays parseable and the review marker survives.
   if (length() > INSPECT_RESULT_MAX_CHARACTERS) {
     const withoutDisplay = JSON.stringify({ ...bounded, review, display: '' }).length
-    display = clipText(display, Math.max(1, INSPECT_RESULT_MAX_CHARACTERS - withoutDisplay - 1))
+    display = boundDisplayText(display, Math.max(1, INSPECT_RESULT_MAX_CHARACTERS - withoutDisplay - 1))
   }
   const boundedReview = review as ReviewPackage
   return { ...bounded, review: boundedReview, display }
@@ -675,9 +689,7 @@ export function buildReviewDisplay(review: ReviewPackage): string {
   }
   if (verification.executed.length + verification.reused.length + verification.failed.length > 0) lines.push(`环境：${verification.environment}`)
   lines.push(`查看全文：skill_manage inspect versionId=${review.versionId} expand=skill（单文件：expand=files path=<path>）`)
-  return boundDisplay(lines.join('\n'), review.growthConfirmation.required
-    ? '篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」'
-    : undefined)
+  return boundDisplay(lines.join('\n'), review.growthConfirmation.required ? GROWTH_INSTRUCTION : undefined)
 }
 
 /** The review-package differences between one manifest and its parent's. */
