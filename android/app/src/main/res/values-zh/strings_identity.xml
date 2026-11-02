@@ -102,4 +102,27 @@
     <string name="impression_counter">%1$d / %2$d 字符</string>
     <string name="impression_save">保存整份印象</string>
     <string name="impression_signed_out">请先登录以读取本人印象。</string>
+    <string name="skills_title">技能</string>
+    <string name="skills_explain">这些是已审核、可由 Fairy 为你加载的技能。共有技能按用户单独启停，个人技能属于你本人。完整工作流只在需要时加载，加载成功会在对话中显示一条轻提示。</string>
+    <string name="skills_loading">正在读取技能…</string>
+    <string name="skills_unreachable">无法连接服务端。</string>
+    <string name="skills_read_failed">未能读取你的技能。</string>
+    <string name="skills_retry">重新读取</string>
+    <string name="skills_signed_out">请先登录以读取你的技能。</string>
+    <string name="skills_section_pool">选择池</string>
+    <string name="skills_empty">还没有可用的已审核技能。</string>
+    <string name="skills_section_pending">待审核</string>
+    <string name="skills_pending_empty">没有等待审核的项目。</string>
+    <string name="skills_pending_item">待审核</string>
+    <string name="skills_scope_personal">个人</string>
+    <string name="skills_scope_common">共有</string>
+    <string name="skills_state_in_catalog">进入目录</string>
+    <string name="skills_state_shadowed">被同名个人技能遮蔽</string>
+    <string name="skills_state_disabled">已禁用</string>
+    <string name="skills_state_archived">已归档</string>
+    <string name="skills_state_unknown">未知状态</string>
+    <string name="skills_shadowed_by">与个人技能「%1$s」同名；由该个人技能进入目录。</string>
+    <string name="skills_action_scope">归档/恢复范围：%1$s</string>
+    <string name="skills_action_owner">仅本人</string>
+    <string name="skills_action_everyone">全部用户</string>
 </resources>

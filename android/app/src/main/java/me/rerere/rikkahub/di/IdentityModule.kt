@@ -34,6 +34,8 @@ import me.rerere.rikkahub.data.remote.ImpressionApi
 import me.rerere.rikkahub.data.remote.ImpressionBackend
 import me.rerere.rikkahub.data.remote.SessionApi
 import me.rerere.rikkahub.data.remote.SessionBackend
+import me.rerere.rikkahub.data.remote.SkillsApi
+import me.rerere.rikkahub.data.remote.SkillsBackend
 import okhttp3.OkHttpClient
 import org.koin.dsl.module
 
@@ -64,6 +66,10 @@ val identityModule = module {
 
     single<ImpressionBackend> {
         ImpressionApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
+    }
+
+    single<SkillsBackend> {
+        SkillsApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
     }
 
     single<RemoteAttachmentBackend> { RemoteAttachmentApi(identityEndpoint, get<OkHttpClient>()) }

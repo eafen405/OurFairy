@@ -68,6 +68,7 @@ fun FairySettingsPage(
     onBack: () -> Unit,
     updateContent: @Composable () -> Unit = { RemoteAppUpdateEntry() },
     onOpenImpression: () -> Unit = {},
+    onOpenSkills: () -> Unit = {},
 ) {
     val tokens = LocalFairyTokens.current
     val identity by session.identity.collectAsStateWithLifecycle()
@@ -148,6 +149,22 @@ fun FairySettingsPage(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = "只保存每次互动都需要的整体认识，不包含长期记忆条目。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tokens.textMuted,
+                )
+            }
+
+            FairySettingsGroup(
+                title = "技能",
+                tag = "SKILLS",
+                summary = "选择、启停与待审",
+                open = open == "skills",
+                onToggle = { open = if (open == "skills") null else "skills" },
+            ) {
+                GroupRow("技能选择池", "查看、启用与停用", onClick = onOpenSkills)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "只显示已审核技能；完整的创建与审核在 Fairy 对话中完成。",
                     style = MaterialTheme.typography.bodySmall,
                     color = tokens.textMuted,
                 )

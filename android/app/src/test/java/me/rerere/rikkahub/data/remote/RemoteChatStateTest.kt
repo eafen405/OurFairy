@@ -274,6 +274,31 @@ class RemoteChatStateTest {
         assertEquals(-1L, state.snapshot.value.consumedThrough)
     }
 
+    @Test fun `a skill activation row keeps its place, merges once and is not Fairy output`() = runTest {
+        val backend = Backend().apply { ack = 7 }
+        val state = RemoteChatState(backend, backgroundScope, MemoryChatSyncStore(), "https://fairy")
+        state.bind("alice", "s1", 1)
+        runCurrent()
+        runCurrent()
+        val flow = backend.events.getValue("alice/s1")
+        val user = RemoteChatMessage("u1", 0, 2, "r1", 1, 2, "go")
+        val activation = RemoteChatMessage(
+            "skill-activation:c1", 1, 7, null, 3, 2, "加载了skill:pdf", kind = 1, toolCallId = "c1",
+        )
+        flow.emit(projection("s1", 1).copy(messages = listOf(user, activation)))
+        runCurrent()
+        flow.emit(projection("s1", 2).copy(messages = listOf(user, activation)))
+        runCurrent()
+
+        val view = state.snapshot.value.projection!!
+        assertEquals(listOf("u1", "skill-activation:c1"), view.messages.map { it.messageId })
+        assertEquals(1L, view.messages[1].position)
+        assertEquals(1, view.messages[1].kind)
+        assertEquals("c1", view.messages[1].toolCallId)
+        assertEquals(RemoteMessageFormat.PLAIN, remoteMessageFormat(view.messages[1]))
+        assertNull("a derived row is not a landed Fairy reply", view.messages.newestFairyOutput())
+    }
+
     @Test fun `the newest Fairy output is the greatest seq, not the last row`() {
         // Position orders the transcript, so a row that settled last can sit
         // before the newest output. The reminder and the perf measurement ask

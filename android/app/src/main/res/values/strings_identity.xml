@@ -102,4 +102,27 @@
     <string name="impression_counter">%1$d / %2$d characters</string>
     <string name="impression_save">Save the whole impression</string>
     <string name="impression_signed_out">Sign in to read your impression.</string>
+    <string name="skills_title">Skills</string>
+    <string name="skills_explain">These are the reviewed skills Fairy may load for you. A common skill is enabled per user; a personal skill belongs to you. The full workflow is loaded only when Fairy needs it, and the conversation shows a quiet notice when it is.</string>
+    <string name="skills_loading">Reading your skills…</string>
+    <string name="skills_unreachable">The server could not be reached.</string>
+    <string name="skills_read_failed">Your skills could not be read.</string>
+    <string name="skills_retry">Try reading again</string>
+    <string name="skills_signed_out">Sign in to read your skills.</string>
+    <string name="skills_section_pool">Selection pool</string>
+    <string name="skills_empty">No reviewed skills are available yet.</string>
+    <string name="skills_section_pending">Pending review</string>
+    <string name="skills_pending_empty">Nothing is waiting for review.</string>
+    <string name="skills_pending_item">Pending review</string>
+    <string name="skills_scope_personal">Personal</string>
+    <string name="skills_scope_common">Common</string>
+    <string name="skills_state_in_catalog">In the catalog</string>
+    <string name="skills_state_shadowed">Shadowed by a personal skill</string>
+    <string name="skills_state_disabled">Disabled</string>
+    <string name="skills_state_archived">Archived</string>
+    <string name="skills_state_unknown">Unknown state</string>
+    <string name="skills_shadowed_by">Same name as the personal skill \"%1$s\"; that one enters the catalog.</string>
+    <string name="skills_action_scope">Archive/restore scope: %1$s</string>
+    <string name="skills_action_owner">this user only</string>
+    <string name="skills_action_everyone">all users</string>
 </resources>
