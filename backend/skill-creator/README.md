@@ -81,7 +81,9 @@ again on activation:
   of the canonical JSON of that array. File times, owners and the rest of the
   mode bits are excluded.
 - Package paths must be relative, use `/`, and contain no empty, `.`, `..`,
-  drive-letter or control-character segment.
+  drive-letter or control-character segment. Text files must not embed an author-machine absolute
+  home path (`/home/<name>/…` or `/Users/<name>/…`); use a relative package path or a neutral
+  example. Binary resources are skipped by that scan.
 - Import copies the package through `tmp/<uuid>/`, re-reads the staged copy and
   compares its hash with the validated source before the store transaction
   moves it to `versions/<skillId>/<uuid>/`. A source that changed between

@@ -126,6 +126,18 @@ test('the package reader refuses symlinks, bad names, over-budget bodies and uns
 
   const backslash = writePackage(join(temp('skill-pkg-path-'), 'pkg'), { files: { 'a\\b.md': 'x' } })
   assert.throws(() => readSkillPackage(backslash), /separators/u)
+
+  const hostPath = writePackage(join(temp('skill-pkg-host-'), 'pkg'), {
+    files: { 'references/notes.md': 'copy /home/alice/private/file.txt before running' },
+  })
+  assert.throws(() => readSkillPackage(hostPath), /host home path/u,
+    'a package must not carry an author-machine absolute path')
+
+  // A deployment-neutral path or an ordinary URL is not a host home path.
+  const neutral = writePackage(join(temp('skill-pkg-neutral-'), 'pkg'), {
+    files: { 'references/notes.md': 'See https://example.com/docs/workflow and references/guide.md.' },
+  })
+  assert.equal(readSkillPackage(neutral).name, 'demo-skill')
 })
 
 test('the store creates schema v1 in WAL and enforces the active identity rule', async () => {

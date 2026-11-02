@@ -199,6 +199,28 @@ function parseFrontmatterValue(key: string, raw: string, line: number): Frontmat
   return raw
 }
 
+/** An author-machine home path; a package must use relative paths or neutral examples. */
+const HOST_HOME_PATH = /\/(?:home|Users)\/[A-Za-z0-9._-]+/u
+
+/** Refuse text content that embeds an author-machine absolute home path. */
+function assertNoHostPaths(files: readonly { readonly path: string; readonly bytes: Buffer }[]): void {
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  for (const file of files) {
+    // A NUL byte is the product's cheap binary marker; binary resources are not
+    // instruction text and cannot carry a usable host path for the reader.
+    if (file.bytes.includes(0)) continue
+    let text: string
+    try {
+      text = decoder.decode(file.bytes)
+    } catch {
+      continue
+    }
+    if (HOST_HOME_PATH.test(text)) {
+      throw new PackageError(`${file.path} contains an absolute host home path; use a relative package path or a deployment-neutral example`)
+    }
+  }
+}
+
 /** The directory root of a package, refusing a symlink at the package itself. */
 function assertPackageRoot(dir: string): void {
   const info = lstatSync(dir, { throwIfNoEntry: false })
@@ -284,6 +306,7 @@ export function readSkillPackage(dir: string, bounds: { readonly maxBytes?: numb
   if (walked.bytes > maxBytes) {
     throw new PackageError(`skill package is ${walked.bytes} bytes; the limit is ${maxBytes}`)
   }
+  assertNoHostPaths(walked.files)
   const skill = walked.files.find(file => file.path === 'SKILL.md')
   if (skill === undefined) throw new PackageError('skill package needs a top-level SKILL.md')
   const parsed = parseSkillMarkdown(skill.bytes.toString('utf8'))
