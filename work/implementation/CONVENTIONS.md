@@ -7,9 +7,11 @@
 ## 0. 权威来源（按优先级）
 
 1. 父规格：<https://github.com/eafen405/OurFairy/issues/23>（本地副本 [`docs/specs/ourfairy-v1.md`](../../docs/specs/ourfairy-v1.md)）是产品总权威。
-   与它并列登记的是记忆与上下文治理的现行规格：[#240 Fairy 记忆与上下文治理](https://github.com/eafen405/OurFairy/issues/240)
-   （本地副本 [`docs/specs/fairy-memory.md`](../../docs/specs/fairy-memory.md)）。#240 的边界是长期记忆、印象、上下文压缩与维护设置
-   这一增量：它不重述也不覆盖父规格的用户、会话与权限语义，两者冲突时以父规格为准。
+   与它并列登记的现行增量规格：
+   - [#240 Fairy 记忆与上下文治理](https://github.com/eafen405/OurFairy/issues/240)（本地副本 [`docs/specs/fairy-memory.md`](../../docs/specs/fairy-memory.md)）：边界是长期记忆、印象、上下文压缩与维护设置。
+   - [#295 Fairy Skill 系统与工作流学习](https://github.com/eafen405/OurFairy/issues/295)（本地副本 [`docs/specs/fairy-skills.md`](../../docs/specs/fairy-skills.md)）：边界是 Skill 运行时、创建、学习、审核与客户端维护。
+
+   这些增量不重述也不覆盖父规格的用户、会话与权限语义，冲突时以父规格为准。
 2. 实施路线最终决议：<https://github.com/eafen405/OurFairy/issues/22#issuecomment-6167313227>（本地副本 [`docs/decisions/v1-implementation-route.md`](../../docs/decisions/v1-implementation-route.md)）
 3. 实施票：GitHub issue 为准；单票副本位于 `work/tickets/<票号>/`，首版 #24–#45 的票集见 [`work/tickets/ourfairy-v1/README.md`](../../work/tickets/ourfairy-v1/README.md)，票的读写方式见 [`docs/agents/issue-tracker.md`](../../docs/agents/issue-tracker.md)
 4. 研究：目录索引与研究基线说明见 [`docs/research/README.md`](../../docs/research/README.md)
