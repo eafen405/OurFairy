@@ -170,6 +170,16 @@ internal fun RemoteTranscript(
     ) {
         items(rows, key = { it.key }) { row ->
             val message = row.message
+            // A derived row is neither the user nor Fairy: it has no bubble, no heading, no
+            // attachments and no long-press copy menu. kind 2 is reserved for the skill review
+            // row (#297) and falls through as nothing until that ticket renders it.
+            if (message?.role == 3) {
+                when (message.kind) {
+                    1 -> SkillActivationLine(message.text, Modifier.fillMaxWidth())
+                    else -> Unit
+                }
+                return@items
+            }
             val fairy = message == null || message.role == 2
             val tokens = LocalFairyTokens.current
             Box(Modifier.fillMaxWidth()) {
@@ -268,6 +278,22 @@ internal fun RemoteTranscript(
                 }
             }
         }
+    }
+}
+
+/** A quiet full-width system line: what Fairy loaded, not something either side said. */
+@Composable
+private fun SkillActivationLine(text: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.padding(horizontal = FairyMessagePaddingH, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("skill-activation"),
+        )
     }
 }
 

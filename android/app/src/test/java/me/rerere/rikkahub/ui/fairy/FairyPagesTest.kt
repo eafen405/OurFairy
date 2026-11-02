@@ -239,6 +239,7 @@ class FairyPagesTest {
             identityBackend = identityBackend,
             gatewayBackend = gatewayBackend,
             impressionBackend = impressionBackend,
+            skillsBackend = skillsBackend,
             fairy = fairy,
         )
         FairyDestinations.destinationOf(destination).Content(destination, scope)
@@ -265,6 +266,34 @@ class FairyPagesTest {
         override suspend fun saveAsr(token: String, asr: GatewayAsrDraft) = error("not used")
         override suspend fun saveCompaction(token: String, compaction: GatewayCompactionDraft) = error("not used")
         override suspend fun saveMaintenance(token: String, maintenance: GatewayMaintenanceDraft) = error("not used")
+    }
+
+    /** How many times the skills page asked its backend. */
+    private var skillReads = 0
+
+    /**
+     * The skills page's pool: the state text is a value only the backend could derive, so the
+     * page test proves the client renders the backend's decision instead of recomputing it.
+     */
+    private val skillsBackend = object : SkillsBackend {
+        override suspend fun list(token: String): SkillPool {
+            skillReads += 1
+            return SkillPool(
+                skills = listOf(
+                    SkillPoolItem(
+                        skillId = 9,
+                        name = "backend-derived-skill",
+                        description = "后端派生状态",
+                        scope = 2,
+                        state = 4,
+                    ),
+                ),
+                pending = listOf(PendingSkill(candidateId = 41, name = "pending-skill")),
+                pendingCount = 1,
+            )
+        }
+        override suspend fun detail(token: String, skillId: Long): SkillPoolItem = error("not used")
+        override suspend fun setEnabled(token: String, skillId: Long, enabled: Boolean): SkillPoolItem = error("not used")
     }
 
     /** The account's own impression, already written. */
@@ -1104,6 +1133,33 @@ class FairyPagesTest {
         compose.waitForIdle()
         compose.onNodeWithText("本人印象").performScrollTo().performClick()
         compose.runOnIdle { assertTrue("the impression row opens the user's page", opened) }
+    }
+
+    @Test fun `the skill selection pool composes through the catalog`() {
+        destination(Screen.Skills)
+        compose.waitForIdle()
+
+        compose.onNodeWithText("backend-derived-skill").assertExists()
+        compose.onNodeWithText("已归档").assertExists()
+        compose.onNodeWithText("没有等待审核的项目。").assertDoesNotExist()
+        compose.onNodeWithText("pending-skill").assertExists()
+        compose.runOnIdle { assertEquals("the skills page read the scope's backend", 1, skillReads) }
+    }
+
+    @Test fun `settings opens the skill selection pool`() {
+        var opened = false
+        show {
+            FairySettingsPage(
+                {}, {}, account, backend = identityBackend, onBack = {},
+                onOpenSkills = { opened = true },
+            )
+        }
+        compose.mainClock.autoAdvance = true
+
+        compose.onNodeWithText("技能").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("技能选择池").performScrollTo().performClick()
+        compose.runOnIdle { assertTrue("the skill row opens the user's skill page", opened) }
     }
 
     @Test fun `settings shows the other agents' names when their group is opened`() {

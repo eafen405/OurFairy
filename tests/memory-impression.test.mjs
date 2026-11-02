@@ -107,9 +107,10 @@ function latestUserText(body) {
     if (!Array.isArray(content)) return ''
     return content.map(block => typeof block?.text === 'string' ? block.text : '').join('')
   })
-  // dsh appends its own runtime-context user message; the note is the one
-  // before it.
-  return texts.filter(text => text !== '' && !text.startsWith('Current runtime context.')).at(-1) ?? ''
+  // dsh appends its own runtime-context user message and the native skill
+  // catalog is a user message too; the note is the last real user text.
+  return texts.filter(text => text !== '' && !text.startsWith('Current runtime context.')
+    && !text.startsWith('<system-reminder>')).at(-1) ?? ''
 }
 
 /**

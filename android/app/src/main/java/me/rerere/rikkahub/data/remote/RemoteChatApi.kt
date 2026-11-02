@@ -32,7 +32,13 @@ data class RemoteChatAttachment(
 )
 
 /**
- * Wire role: 1 user, 2 Fairy. Status: 1 pending, 2 complete, 3 interrupted, 4 failed.
+ * Wire role: 1 user, 2 Fairy, 3 derived display row. Status: 1 pending, 2 complete,
+ * 3 interrupted, 4 failed.
+ *
+ * A role-3 row is projection-only and never a message either side sent. `kind` names what it
+ * displays: 1 is a skill activation (`加载了skill:<name>`), derived by the backend from a
+ * successful native `skill` tool result; 2 is reserved for the skill review row. `toolCallId`
+ * is the tool call the row was paired with, so a replay can be recognised without parsing text.
  *
  * `position` is the message's place in the session's presentation order, derived by the backend from
  * the row's first appearance: unique within the session, and stable for one message across pages
@@ -58,6 +64,10 @@ data class RemoteChatMessage(
     val text: String,
     val attachments: List<RemoteChatAttachment> = emptyList(),
     val tools: List<String> = emptyList(),
+    /** Derived rows only: 1 skill activation; 2 is reserved for the skill review row. */
+    val kind: Int? = null,
+    /** The tool call a derived row was paired with; ordinary messages carry none. */
+    val toolCallId: String? = null,
 )
 
 /**

@@ -38,6 +38,8 @@ import { IMPRESSION_PATHS, SURFACE as IMPRESSION_SURFACE } from '../backend/memo
 import { impressionHandlers } from '../backend/memory/dist/impression.js'
 import { SURFACE as ATTACHMENTS_SURFACE } from '../backend/attachments/dist/index.js'
 import { SURFACE as SPEECH_SURFACE } from '../backend/speech/dist/index.js'
+import { SKILL_PATHS, SURFACE as SKILL_SURFACE } from '../backend/skill-creator/dist/index.js'
+import { skillHandlers } from '../backend/skill-creator/dist/http.js'
 
 /** Each row in package order, with the surface that package publishes. */
 const ROWS = [
@@ -48,6 +50,7 @@ const ROWS = [
   ['memory', IMPRESSION_SURFACE],
   ['attachments', ATTACHMENTS_SURFACE],
   ['speech', SPEECH_SURFACE],
+  ['skills', SKILL_SURFACE],
 ]
 
 /** Every published address, tagged with the row that serves it. */
@@ -90,11 +93,12 @@ const MATRIX = {
   memory: { 'POST/json/json': 2 },
   attachments: { 'POST/json/json': 2, 'POST/binary/json': 1, 'POST/json/binary': 1 },
   speech: { 'GET/none/json': 1, 'POST/binary/json': 1 },
+  skills: { 'POST/json/json': 3 },
 }
 
-test('the seven rows publish 38 unique addresses, read-only and grouped as declared', () => {
-  assert.equal(ALL.length, 38, 'the product HTTP surface is 38 addresses')
-  assert.equal(new Set(ALL.map(entry => entry.path)).size, 38, 'every published path is unique')
+test('the eight rows publish 41 unique addresses, read-only and grouped as declared', () => {
+  assert.equal(ALL.length, 41, 'the product HTTP surface is 41 addresses')
+  assert.equal(new Set(ALL.map(entry => entry.path)).size, 41, 'every published path is unique')
 
   for (const [row, surface] of ROWS) {
     assert.ok(Object.isFrozen(surface), `${row} must publish its SURFACE as a read-only array`)
@@ -111,7 +115,7 @@ test('the seven rows publish 38 unique addresses, read-only and grouped as decla
   }
 
   assert.deepEqual(countsOf(ALL.map(entry => entry.row)), {
-    identity: 6, sessions: 7, chat: 10, gateway: 7, memory: 2, attachments: 4, speech: 2,
+    identity: 6, sessions: 7, chat: 10, gateway: 7, memory: 2, attachments: 4, speech: 2, skills: 3,
   }, 'the rows must publish the declared number of addresses')
 
   // The chat row owns nine chat addresses and serves the session family's one
@@ -119,7 +123,7 @@ test('the seven rows publish 38 unique addresses, read-only and grouped as decla
   assert.deepEqual(countsOf(CHAT_SURFACE.map(entry => entry.prefix)), { chat: 9, sessions: 1 },
     'the chat row publishes nine chat addresses and the one session rename')
   assert.deepEqual(countsOf(ALL.map(entry => entry.prefix)), {
-    identity: 6, sessions: 8, chat: 9, gateway: 7, impression: 2, attachments: 4, speech: 2,
+    identity: 6, sessions: 8, chat: 9, gateway: 7, impression: 2, attachments: 4, speech: 2, skills: 3,
   }, 'the error-prefix grouping is the one the addresses answer with')
 
   const renames = CHAT_SURFACE.filter(entry => entry.prefix === 'sessions')
@@ -136,11 +140,11 @@ test('each row serves the method/body/response matrix it publishes', () => {
     )
   }
 
-  assert.deepEqual(countsOf(ALL.map(entry => entry.method)), { POST: 37, GET: 1 },
+  assert.deepEqual(countsOf(ALL.map(entry => entry.method)), { POST: 40, GET: 1 },
     'every address is POST except the speech availability read')
-  assert.deepEqual(countsOf(ALL.map(entry => entry.body)), { json: 35, binary: 2, none: 1 },
+  assert.deepEqual(countsOf(ALL.map(entry => entry.body)), { json: 38, binary: 2, none: 1 },
     '35 addresses read a JSON object; chunk and transcriptions read raw bytes; the GET reads none')
-  assert.deepEqual(countsOf(ALL.map(entry => entry.response)), { json: 36, sse: 1, binary: 1 },
+  assert.deepEqual(countsOf(ALL.map(entry => entry.response)), { json: 39, sse: 1, binary: 1 },
     'every address answers JSON except the SSE and download responses')
 })
 
@@ -152,6 +156,7 @@ test('the handler table each row builds holds exactly its published addresses, i
     ['gateway', GATEWAY_SURFACE, gatewayHandlers({ service: {}, authenticate: () => undefined, fence })],
     ['memory', IMPRESSION_SURFACE,
       impressionHandlers({ service: {}, authenticate: () => undefined, fence })],
+    ['skills', SKILL_SURFACE, skillHandlers({ service: {}, authenticate: () => undefined, fence, invalidateOwner: () => {} })],
   ]
   for (const [row, surface, handlers] of tables) {
     assert.deepEqual([...handlers.keys()], surface.map(entry => entry.path),
@@ -164,6 +169,7 @@ test('the paths each row already exported are the same list as its surface', () 
   assert.deepEqual([...SESSION_PATHS], SESSIONS_SURFACE.map(entry => entry.path))
   assert.deepEqual([...GATEWAY_PATHS], GATEWAY_SURFACE.map(entry => entry.path))
   assert.deepEqual([...IMPRESSION_PATHS], IMPRESSION_SURFACE.map(entry => entry.path))
+  assert.deepEqual([...SKILL_PATHS], SKILL_SURFACE.map(entry => entry.path))
 })
 
 test('the boundary doc points at this inventory', () => {

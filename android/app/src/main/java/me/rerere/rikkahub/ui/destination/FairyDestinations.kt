@@ -12,6 +12,7 @@ import me.rerere.rikkahub.ui.identity.IdentityRegisterPage
 import me.rerere.rikkahub.ui.identity.IdentityScope
 import me.rerere.rikkahub.ui.identity.IdentitySignInPage
 import me.rerere.rikkahub.ui.identity.ImpressionPage
+import me.rerere.rikkahub.ui.identity.SkillsPage
 
 /**
  * Where a cold start lands when the stored coordinates name nothing that can be
@@ -96,6 +97,7 @@ object FairyDestinations {
             backend = identityBackend,
             onBack = actions.pop,
             onOpenImpression = { actions.push(Screen.Impression) },
+            onOpenSkills = { actions.push(Screen.Skills) },
         )
     }
 
@@ -115,9 +117,24 @@ object FairyDestinations {
         ImpressionPage(onBack = actions.pop, session = session, backend = impressionBackend)
     }
 
+    private val skills = FairyDestination(
+        route = "skills",
+        access = DestinationAccess.SignedIn,
+        restore = DestinationRestore.Resume(listOf(Screen.Home, Screen.Settings, Screen.Skills)),
+    ) {
+        SkillsPage(
+            onBack = actions.pop,
+            session = session,
+            backend = skillsBackend,
+            // The review ticket routes this to the caller's primary session with the candidate
+            // reference as system context; this ticket ships the seam, not the destination.
+            onOpenPending = {},
+        )
+    }
+
     /** Every destination the product has, in the order the table declares them. */
     val entries: List<FairyDestination> = listOf(
-        signIn, register, home, conversation, settings, gateway, impression,
+        signIn, register, home, conversation, settings, gateway, impression, skills,
     )
 
     /**
@@ -137,6 +154,7 @@ object FairyDestinations {
         Screen.Settings -> settings
         Screen.Gateway -> gateway
         Screen.Impression -> impression
+        Screen.Skills -> skills
     }
 
     /** The destination the top of the stack is, or null for an empty stack. */

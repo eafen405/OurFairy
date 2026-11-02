@@ -1,0 +1,200 @@
+package me.rerere.rikkahub.ui.identity
+
+import android.app.Application
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
+import me.rerere.rikkahub.data.datastore.DisplayPreferences
+import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
+import me.rerere.rikkahub.data.remote.AccountSession
+import me.rerere.rikkahub.data.remote.AgentSummary
+import me.rerere.rikkahub.data.remote.IdentityBackend
+import me.rerere.rikkahub.data.remote.IdentityRefused
+import me.rerere.rikkahub.data.remote.IdentityUser
+import me.rerere.rikkahub.data.remote.InMemoryCredentialStore
+import me.rerere.rikkahub.data.remote.PendingSkill
+import me.rerere.rikkahub.data.remote.SignedIn
+import me.rerere.rikkahub.data.remote.SkillActionScopes
+import me.rerere.rikkahub.data.remote.SkillPool
+import me.rerere.rikkahub.data.remote.SkillPoolItem
+import me.rerere.rikkahub.data.remote.SkillPoolState
+import me.rerere.rikkahub.data.remote.SkillScope
+import me.rerere.rikkahub.data.remote.SkillsBackend
+import me.rerere.rikkahub.ui.fairy.FairyAppTheme
+import me.rerere.rikkahub.ui.fairy.ProvideAgoraMotionPolicy
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/**
+ * The skills page renders the backend's derived facts and performs only the one action this
+ * ticket owns: the per-item enable switch. Scope labels, pool states, the shadow, and the
+ * archive scope are asserted as strings the backend sent, not values the page could derive.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [35], qualifiers = "zh-rCN-w411dp-h891dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class SkillsPageTest {
+    @get:Rule val compose = createComposeRule()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val user = IdentityUser(2, "agent-two")
+    private val identityBackend = object : IdentityBackend {
+        override suspend fun session(token: String) = user
+        override suspend fun signIn(name: String, password: String) = SignedIn("test", user)
+        override suspend fun register(inviteCode: String, name: String, password: String) = error("not used")
+        override suspend fun createInvite(token: String) = error("not used")
+        override suspend fun agents(token: String): List<AgentSummary> = emptyList()
+        override suspend fun signOut(token: String) = Unit
+    }
+    private val account = AccountSession(identityBackend, InMemoryCredentialStore("test"))
+
+    @After
+    fun close() {
+        scope.cancel()
+    }
+
+    private class ScriptedSkills(
+        var list: suspend () -> SkillPool,
+        var setEnabled: suspend (Long, Boolean) -> Unit = { _, _ -> },
+    ) : SkillsBackend {
+        val writes = mutableListOf<Pair<Long, Boolean>>()
+        var reads = 0
+        override suspend fun list(token: String): SkillPool {
+            reads += 1
+            return list()
+        }
+        override suspend fun detail(token: String, skillId: Long): SkillPoolItem = error("not used")
+        override suspend fun setEnabled(token: String, skillId: Long, enabled: Boolean): SkillPoolItem {
+            writes += skillId to enabled
+            setEnabled(skillId, enabled)
+            return SkillPoolItem(skillId, "skill-$skillId", scope = SkillScope.PERSONAL, state = SkillPoolState.IN_CATALOG, enabled = enabled)
+        }
+    }
+
+    private fun item(
+        id: Long,
+        name: String,
+        scope: Int,
+        state: Int,
+        enabled: Boolean,
+    ) = SkillPoolItem(
+        skillId = id,
+        name = name,
+        description = "后端派生描述",
+        scope = scope,
+        state = state,
+        enabled = enabled,
+        currentVersionId = 10 + id,
+        actions = SkillActionScopes(
+            toggle = 1,
+            archive = if (scope == SkillScope.COMMON) 2 else 1,
+            restore = if (scope == SkillScope.COMMON) 2 else 1,
+        ),
+    )
+
+    private fun show(backend: SkillsBackend, onOpenPending: (Long) -> Unit = {}) {
+        compose.mainClock.autoAdvance = false
+        runBlocking { account.restore() }
+        compose.setContent {
+            CompositionLocalProvider(LocalDisplayPreferences provides DisplayPreferences()) {
+                FairyAppTheme {
+                    ProvideAgoraMotionPolicy(appReduceMotion = true) {
+                        SkillsPage(onBack = {}, session = account, backend = backend, onOpenPending = onOpenPending)
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun `the page renders the backend's states, scopes, action scopes and pending entry`() {
+        var opened: Long? = null
+        val backend = ScriptedSkills(list = {
+            SkillPool(
+                skills = listOf(
+                    item(1, "archived-skill", SkillScope.COMMON, SkillPoolState.ARCHIVED, enabled = true),
+                    item(2, "personal-skill", SkillScope.PERSONAL, SkillPoolState.IN_CATALOG, enabled = true),
+                    item(3, "disabled-skill", SkillScope.COMMON, SkillPoolState.DISABLED, enabled = false),
+                ),
+                pending = listOf(PendingSkill(candidateId = 41, name = "pending-skill")),
+                pendingCount = 1,
+            )
+        })
+        show(backend) { opened = it }
+
+        compose.onNodeWithText("archived-skill").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("已归档").assertExists()
+        compose.onNodeWithText("已禁用").assertExists()
+        compose.onNodeWithText("进入目录").assertExists()
+        compose.onAllNodesWithText("共有").assertCountEquals(2)
+        compose.onAllNodesWithText("个人").assertCountEquals(1)
+        compose.onAllNodesWithText("归档/恢复范围：全部用户").assertCountEquals(2)
+        compose.onAllNodesWithText("归档/恢复范围：仅本人").assertCountEquals(1)
+        compose.onNodeWithText("pending-skill").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(41L, opened) }
+    }
+
+    @Test
+    fun `a toggle asks the backend and the switch follows the fresh read`() {
+        var enabled = true
+        val backend = ScriptedSkills(
+            list = {
+                SkillPool(skills = listOf(item(2, "personal-skill", SkillScope.PERSONAL,
+                    if (enabled) SkillPoolState.IN_CATALOG else SkillPoolState.DISABLED, enabled)))
+            },
+            setEnabled = { _, next -> enabled = next },
+        )
+        show(backend)
+
+        compose.onNodeWithTag("skill-switch-2").assertIsOn().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        assertEquals(listOf(2L to false), backend.writes)
+        assertEquals("the page re-read the pool after the accepted write", 2, backend.reads)
+        compose.onNodeWithTag("skill-switch-2").assertIsOff()
+        compose.onNodeWithText("已禁用").assertExists()
+    }
+
+    @Test
+    fun `a refused toggle keeps the pool and shows the backend's code`() {
+        val backend = ScriptedSkills(
+            list = {
+                // The page read the item before it was archived; the toggle is refused because
+                // the backend has since archived it.
+                SkillPool(skills = listOf(item(1, "archived-skill", SkillScope.COMMON, SkillPoolState.IN_CATALOG, enabled = true)))
+            },
+            setEnabled = { _, _ ->
+                throw IdentityRefused(409, "skills/archived", "skill \"archived-skill\" is archived")
+            },
+        )
+        show(backend)
+
+        compose.onNodeWithTag("skill-switch-1").assertIsOn().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithText("skills/archived: skill \"archived-skill\" is archived").assertExists()
+        compose.onNodeWithText("archived-skill").assertExists()
+    }
+}

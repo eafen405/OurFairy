@@ -53,6 +53,7 @@ import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.GatewayBackend
 import me.rerere.rikkahub.data.remote.IdentityBackend
 import me.rerere.rikkahub.data.remote.ImpressionBackend
+import me.rerere.rikkahub.data.remote.SkillsBackend
 import me.rerere.rikkahub.ui.fairy.FairyInteraction
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.service.AndroidRemoteNotifications
@@ -79,6 +80,7 @@ class RouteActivity : ComponentActivity() {
     private val identityBackend by inject<IdentityBackend>()
     private val gatewayBackend by inject<GatewayBackend>()
     private val impressionBackend by inject<ImpressionBackend>()
+    private val skillsBackend by inject<SkillsBackend>()
     private val fairy by inject<FairyInteraction>()
     private var navStack: MutableList<NavKey>? = null
     private var identityReady = false
@@ -200,6 +202,7 @@ class RouteActivity : ComponentActivity() {
                             identityBackend = identityBackend,
                             gatewayBackend = gatewayBackend,
                             impressionBackend = impressionBackend,
+                            skillsBackend = skillsBackend,
                             fairy = fairy,
                         )
                         NavDisplay(
@@ -239,4 +242,5 @@ sealed interface Screen : NavKey {
     @Serializable data object Settings : Screen
     @Serializable data object Gateway : Screen
     @Serializable data object Impression : Screen
+    @Serializable data object Skills : Screen
 }

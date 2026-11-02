@@ -82,6 +82,7 @@ function currentUserText(body) {
   const current = users.findLast(message => {
     const text = textOf(message)
     return text !== '' && !text.startsWith('Current runtime context.')
+      && !text.startsWith('<system-reminder>')
   })
   return current === undefined ? '' : textOf(current)
 }

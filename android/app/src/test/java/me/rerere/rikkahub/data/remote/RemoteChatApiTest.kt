@@ -535,6 +535,21 @@ class RemoteChatApiTest {
         assertEquals(600000L, attachment.bytes)
     }
 
+    @Test
+    fun `a skill activation row decodes its kind and tool call id and is not Fairy output`() = runTest {
+        reply(200, """{"ok":true,"projection":$SKILL_SNAPSHOT}""")
+
+        val projection = api.read(TOKEN, "s-1")
+
+        val activation = projection.messages.single { it.role == 3 }
+        assertEquals(3, activation.role)
+        assertEquals(1, activation.kind)
+        assertEquals("call-skill-1", activation.toolCallId)
+        assertEquals("加载了skill:pdf", activation.text)
+        assertEquals(RemoteMessageFormat.PLAIN, remoteMessageFormat(activation))
+        assertNull("an activation row is never the notification preview", projection.messages.newestFairyOutput())
+    }
+
     private companion object {
         const val TOKEN = "cred-alice"
         const val TEXT = "  hello\n\tworld  "
@@ -567,6 +582,14 @@ class RemoteChatApiTest {
             """{"sessionId":"s-1","generation":"gen-1","version":2,"cursor":2,"durableThroughSeq":2,""" +
                 """"messages":[{"messageId":"a-1","position":0,"seq":2,"role":2,"status":2,"text":"","attachments":[],"tools":["bash","read"]},""" +
                 """{"messageId":"u-1","position":1,"seq":3,"role":1,"status":2,"text":"next"}],""" +
+                """"attempt":null,"replyStatus":0,"error":null}"""
+
+        /** A derived skill activation row beside the user turn that caused it. */
+        const val SKILL_SNAPSHOT =
+            """{"sessionId":"s-1","generation":"gen-1","version":1,"cursor":4,"durableThroughSeq":4,""" +
+                """"messages":[{"messageId":"u-1","position":0,"seq":2,"requestId":"r-1","role":1,"status":2,"text":"加载 pdf","attachments":[]},""" +
+                """{"messageId":"skill-activation:call-skill-1","position":1,"seq":4,"requestId":null,"role":3,"kind":1,""" +
+                """"status":2,"text":"加载了skill:pdf","toolCallId":"call-skill-1"}],""" +
                 """"attempt":null,"replyStatus":0,"error":null}"""
 
         /** A committed Fairy delivery beside an independent running attempt. */
