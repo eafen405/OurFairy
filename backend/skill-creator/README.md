@@ -9,9 +9,10 @@ archives skills. The native dsh rows (`skill`, `skill-filesystem`,
 `tool-skill`) supply catalog merging, the `skill` tool, `/name` suppression and
 the trusted bundled root; this package never re-implements them.
 
-Evolution and background learning are later tickets in the same spec. They
-extend this row's store, service and tool; they do not add a second creation
-path.
+Installation from an address, shared proposals, evolution and rollback are part
+of this row: they reuse the same create/review path, store, package algorithm
+and verification runner rather than adding a second one. Background learning is
+the one engine still to arrive; it extends this row, not a second creation path.
 
 ## What the row owns
 
@@ -27,7 +28,8 @@ path.
 | Resources | `contributeReadonlyFiles`: the trusted bundled root for every session, plus the current version directories of the caller's catalog winners |
 | Install source | Fixed on the version: `address`, `resolvedVersion` (commit SHA or archive digest), archive digest, fetch time, optional ETag/Last-Modified and license |
 | Lifecycle | `skill.archived_at`: archive removes the identity from every catalog and read-only resource but keeps content, history and preferences |
-| Model tool | `skill_manage` on user sessions only: `list`, `inspect`, `create` (files or `address`), `review`, `archive`, `restore` |
+| Evolution | Parent version, core-body growth, an optional post-display growth confirmation and rollback candidates, all through the same candidate/review path |
+| Model tool | `skill_manage` on user sessions only: `list`, `inspect`, `create` (files or `address`, new skill or revision), `review`, `rollback`, `archive`, `restore` |
 | Client surface | `/skills/list` (pool + pending + count + bounded `reviewResults`), `/skills/detail`, `/skills/preference`, `/skills/review-open`, `/skills/archive`, `/skills/restore` (POST + JSON, caller from the bearer credential) |
 
 The data root is `dshHomePath('skill')` by default:
@@ -51,9 +53,10 @@ For one owner the visible identities are every common identity plus their own
 personal ones. A name has at most one personal and one common identity. A
 personal identity wins when it is enabled and not archived; otherwise a common
 identity wins when it is enabled and not archived. Archived identities never
-enter a catalog but stay in the pool so their state is visible. A candidate has
-no current version and is not a pool item at all; it appears only in the
-separate pending area.
+enter a catalog but stay in the pool so their state is visible. A candidate is
+not a pool item; it appears only in the separate pending area. A pending or
+newest changes-requested version of a skill with a current version marks that
+pool item `pendingRevision`.
 
 The backend returns every derived fact; the client only renders it:
 
@@ -67,8 +70,9 @@ The backend returns every derived fact; the client only renders it:
 - A common candidate is visible to its proposer and Phaethon; only Phaethon
   may decide it. A person's own name never widens either rule.
 - `shadowedBy` carries the personal identity that shadows a common item.
-- `pendingRevision` is always false in this ticket; revisions arrive with the
-  version-review ticket.
+- `pendingRevision` is true while the current version has a pending revision or
+  a changes-requested draft that no newer draft has replaced; the client only
+  renders it.
 
 `/skills/preference` re-derives the pool after writing and invalidates that
 owner's live provider registration, so the next catalog reflects the change
@@ -131,17 +135,24 @@ failed call and the chat projection shows no activation row.
 - `files` must contain `SKILL.md` and the complete package. The backend stages,
   validates and hashes it; the model cannot choose a landing path, a manifest
   hash or a verification result.
-- A name that already has an approved current version is refused; that path
-  needs a revision (evolution ticket). While an identity has no approved
+- A name that already has an approved current version is refused for a plain
+  create; that path needs a revision. While an identity has no approved
   version, a new draft may join it — that is how a change request becomes a
   re-verified draft with a new hash.
+- A revision passes `parentVersionId` (the skill's current approved version)
+  and a non-empty `targetBenefit` (at most 500 characters). The files are a
+  complete rewrite of the package on the same identity, the row records
+  `source_type: 3`, the parent and the growth flag. An unknown, stale or
+  other-owner parent and a renamed package are refused; no benefit means no
+  candidate.
 - At least one representative scenario is required. `src/verify.ts` copies the
   candidate into a fresh `verify/<uuid>/work/`, runs each `/bin/bash -lc`
   command under bwrap with a disposable HOME/TMPDIR/cache and network shared,
   and records the real exit code, duration, environment and bounded output.
   The shared environment root, spaces roots and session roots are not mounted.
-  A missing bwrap marks the report incomplete; approval refuses it. `reused`
-  stays empty in this ticket (the evolution ticket fills it).
+  A missing bwrap marks the report incomplete; approval refuses it. A revision
+  may pass recorded parent runs as `reused`; those are listed separately from
+  executed scenarios and never count as a fresh execution.
 - The candidate never enters a provider. Only an approved `versions/` package
   becomes a catalog winner.
 
@@ -154,14 +165,48 @@ package-relative `path`). The display is bounded; the full text is opt-in.
 
 `skill_manage review` records the owner's decision for a pending version.
 Approval re-reads the version status, the on-disk manifest hash, a complete
-verification report and the archive state, then renames the candidate into
-`versions/<skillId>/<uuid>/` and moves the current pointer in one
-`BEGIN IMMEDIATE` transaction (the previous current becomes superseded). A
-failure renames the directory back. The first personal approval with no
-preference row enables the owner; an explicit preference always survives.
+verification report, the archive state, the current pointer a revision was
+written against, and — above 110% core-body growth — the user's growth
+confirmation. It then renames the candidate into `versions/<skillId>/<uuid>/`
+and moves the current pointer in one `BEGIN IMMEDIATE` transaction (the
+previous current becomes superseded). A failure renames the directory back. The
+first personal approval with no preference row enables the owner; an explicit
+preference always survives, including across a version switch.
 `request_changes` and `reject` settle the row; an old approval or verification
 never carries over to a new hash, and repeated approvals lose the
-`status = pending` predicate, so exactly one decision wins.
+`status = pending` predicate, so exactly one decision wins. Two revisions of the
+same parent can both be pending; only the one whose parent is still current
+publishes, and the other keeps its draft for a rebase.
+
+### Evolution, growth and rollback
+
+- Core-body length is the Unicode character count of `SKILL.md` after the
+  frontmatter. A revision is abnormal when `new > floor(old * 1.1)`: 109% and
+  exactly 110% need nothing extra, 111% does.
+- The stored `growth_exceeded` flag is computed once at creation; approval
+  recomputes the rule from the immutable parent and refuses an inconsistent
+  row.
+- An abnormal revision can only be approved with `growthConfirmMessageId`: the
+  id of the user's own chat message whose exact text is `确认增长`, in the
+  reviewing session, sent after the latest successful `skill_manage inspect`
+  call that displayed that version. The model cannot read durable message ids
+  from its context, so `skill_manage list` reports the same id after the user
+  replied; approval re-reads the message from the log by id and never trusts the
+  list value alone. The confirmer, time and message id are stored on the
+  version, and a newer draft is a new hash with a fresh inspect and
+  confirmation.
+- Verification reuse compares the candidate scenario with the parent's
+  recorded run: same name, same command and every `uses` path resolving to the
+  same file hashes. Reused records keep the parent's facts and name the source
+  version; everything else reruns in a fresh disposable environment.
+- `rollback {versionId}` copies an approved **superseded** version's clean
+  package into a new pending candidate (`source_type: 4`, parent = current),
+  runs its recorded scenarios again with the same reuse rule, and requires
+  normal review. It never moves the pointer; rolling back content that is
+  already current is refused as a no-op.
+- The review display's first block carries `核心正文 <old> → <new> 字符（±N%）`
+  and, above 110%, the fourth block carries the exact `确认增长` instruction.
+  Reused scenarios print as `↺ … → 复用自版本 N`.
 
 ## Installing from an address
 
@@ -258,14 +303,9 @@ user bubble. The client then opens the returned session id.
 
 ## Seams left for later tickets
 
-- No evolution or background-learning engine yet. `skill_version` carries the
-  growth and confirmation columns, and the review path keeps the
-  growth/confirmation hook: a version with a parent computes the 110% rule and
-  refuses approval without the user's confirmation, which the evolution ticket
-  completes with the message-reference validation. No current path sets a parent
-  on a candidate, so the rule never fires yet.
-- `pendingRevision` in the pool stays false until the evolution ticket derives
-  it from a pending revision of an approved identity.
+- No background-learning engine yet. It is the one part of the spec this row
+  still does not serve; the Skill Creator content and the store are ready for
+  it.
 - `SkillService` takes the store and data root, not a Cordis context;
   `SkillProviders` owns registration and invalidation; `SkillCreation` owns the
   candidate/review rules; `SkillInstall` owns the network fetch and extraction;

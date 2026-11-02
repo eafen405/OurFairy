@@ -93,4 +93,23 @@ class RemoteTranscriptSkillActivationTest {
             assertEquals("a review row is not an activation line", 0, it.size)
         }
     }
+
+    @Test
+    fun `a growth review row renders the backend's characters and confirmation instruction verbatim`() {
+        val display = "技能候选 growth（个人，版本 9，哈希 abc）\n" +
+            "相对父版本：新增 0 个，删除 0 个，修改 1 个\n" +
+            "核心正文 1000 → 1110 字符（+11.0%）\n" +
+            "目标收益：add two verified steps\n" +
+            "验证：实际执行 1，复用 0，未执行 0，失败 0\n" +
+            "✔ check: true → exit 0\n" +
+            "查看全文：skill_manage inspect versionId=9 expand=skill\n" +
+            "篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」"
+        val review = activation.copy(messageId = "skill-review:call-9", kind = 2, text = display)
+        show(listOf(question, review))
+
+        compose.onNodeWithTag("skill-review", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(display, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("核心正文 1000 → 1110 字符（+11.0%）", substring = true, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("确认增长", substring = true, useUnmergedTree = true).assertExists()
+    }
 }

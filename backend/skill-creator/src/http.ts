@@ -131,7 +131,7 @@ export function skillHandlers({ service, creation, lifecycle, notifications, aut
   return new Map([
     ['/skills/list', post(async (_body, request) => {
       const caller = callerOf(request)
-      const pending = creation.pending(caller.shortId, caller.isAdmin)
+      const pending = creation.pending(caller.shortId, { isAdmin: caller.isAdmin })
       return {
         ok: true,
         skills: service.pool(caller.shortId, caller.isAdmin).map(poolView),

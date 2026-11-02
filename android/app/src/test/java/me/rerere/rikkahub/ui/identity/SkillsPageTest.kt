@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -182,6 +183,35 @@ class SkillsPageTest {
         compose.waitForIdle()
         assertEquals("the pending entry asks the backend for that candidate", listOf(41L), backend.opened)
         compose.runOnIdle { assertEquals("ourfairy-user-2-primary", opened) }
+    }
+
+    @Test
+    fun `the page shows the backend's pending-revision state and growth flag without computing them`() {
+        val backend = ScriptedSkills(list = {
+            SkillPool(
+                skills = listOf(
+                    item(2, "revised-skill", SkillScope.PERSONAL, SkillPoolState.IN_CATALOG, enabled = true)
+                        .copy(pendingRevision = true),
+                    item(4, "plain-skill", SkillScope.PERSONAL, SkillPoolState.IN_CATALOG, enabled = true),
+                ),
+                pending = listOf(
+                    PendingSkill(versionId = 42, name = "growth-skill", growthExceeded = true),
+                    PendingSkill(versionId = 43, name = "small-skill", growthExceeded = false),
+                ),
+                pendingCount = 2,
+            )
+        })
+        show(backend)
+
+        // The chip sits inside a merged clickable row, so its tag lives in the
+        // unmerged tree.
+        compose.onNodeWithTag("skill-pending-revision-2", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("有待审修订", useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithTag("skill-pending-revision-4", useUnmergedTree = true).assertCountEquals(0)
+
+        compose.onNodeWithTag("skill-growth-42", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("需确认增长", useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodesWithTag("skill-growth-43", useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test

@@ -12,8 +12,9 @@
  * The runner records what happened — command, exit code, timeout/abort reason,
  * duration, environment and bounded output — because those facts must not be
  * authored by the model. The report names executed/failed/unexecuted items and
- * whether the run was complete; an approval consumes it later. `reused` stays
- * empty here: verification reuse is the evolution ticket's seam.
+ * whether the run was complete; an approval consumes it later. A revision may
+ * pass recorded parent runs as `reused`: they are reported separately from
+ * executed scenarios and never count as a fresh execution.
  *
  * @module @ourfairy/dsh-skill-creator/src/verify
  */
@@ -59,6 +60,10 @@ export interface ScenarioRecord {
   readonly stderrSummary: string
   /** Why the scenario did not run or did not pass, in the system's words. */
   readonly reason?: string
+  /** The package files this scenario declared it depends on. */
+  readonly uses?: readonly string[]
+  /** The parent version whose recorded run this evidence was reused from. */
+  readonly reusedFrom?: number
 }
 
 /** Both sides of one optional comparison, each recorded like a scenario. */
@@ -244,6 +249,7 @@ function recordOf(scenario: VerificationScenario, outcome: CommandOutcome, verif
     stdoutSummary: outcome.stdout,
     stderrSummary: outcome.stderr,
     ...(reason === undefined ? {} : { reason }),
+    ...(scenario.uses === undefined ? {} : { uses: scenario.uses }),
   }
 }
 
@@ -262,14 +268,23 @@ export async function runVerification(options: {
   readonly timeoutMs: number
   readonly signal?: AbortSignal
   readonly bwrapPath?: string
+  /** Recorded parent runs this revision may reuse instead of executing again. */
+  readonly reused?: readonly ScenarioRecord[]
 }): Promise<VerificationReport> {
   const ranAt = Date.now()
   const verifyRoot = join(options.root, 'verify', randomUUID())
   const bwrapPath = options.bwrapPath ?? 'bwrap'
+  const reused = [...(options.reused ?? [])]
+  // Reuse-only reports run nothing, so no namespace is needed and the machine's
+  // bwrap state cannot turn valid parent evidence into an incomplete report.
+  if (options.scenarios.length === 0 && (options.comparisons ?? []).length === 0) {
+    return { complete: true, executed: [], reused, unexecuted: [], failed: [], comparisons: [],
+      environment: ENVIRONMENT_NOTE, ranAt }
+  }
   const empty = (reason: string, complete = false): VerificationReport => ({
     complete,
     executed: [],
-    reused: [],
+    reused,
     unexecuted: options.scenarios.map(scenario => unexecutedRecord(scenario, reason)),
     failed: [],
     comparisons: [],
@@ -335,7 +350,7 @@ export async function runVerification(options: {
     return {
       complete,
       executed,
-      reused: [],
+      reused,
       unexecuted,
       failed,
       comparisons,

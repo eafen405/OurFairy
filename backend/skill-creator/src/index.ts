@@ -13,12 +13,13 @@
  * supplies per-user candidates and re-checks a version's integrity when the
  * native tool loads it.
  *
- * Creation and review are this ticket's surface: one `skill_manage` tool on
- * user sessions (create/list/inspect/review), the isolated candidate area, the
- * disposable verification runner, the deterministic review display row and the
- * pending entry that appends a system-context reference to the caller's primary
- * session. Install, sharing, evolution and background learning are later
- * tickets; their hooks are marked, not half-built.
+ * The row's surface is one `skill_manage` tool on user sessions
+ * (create/install/list/inspect/review/rollback/archive/restore), the isolated
+ * candidate area, the disposable verification runner, the deterministic review
+ * display row, shared proposals with Phaethon-only approval, the lifecycle
+ * rules and the pending entry that appends a system-context reference to the
+ * caller's primary session. Background learning is the one later engine; its
+ * hooks are marked, not half-built.
  *
  * @module @ourfairy/dsh-skill-creator
  */

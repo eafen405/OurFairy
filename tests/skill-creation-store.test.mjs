@@ -204,3 +204,83 @@ test('verification is stored on the version and pending drafts are bounded', asy
     store.close()
   }
 })
+
+test('a revision draft publishes only against its own parent and only with the growth confirmation', async () => {
+  const { store } = await open('revision-publish')
+  try {
+    const first = store.createDraft(draft({ name: 'evolve' }))
+    store.publishDraft({
+      versionId: first.versionId, packagePath: 'versions/1/one', reviewer: 7, reviewedAt: 1,
+      ownerShortId: 7, defaultEnable: true, recheck: () => true,
+    })
+    store.setPreference({ shortId: 7, skillId: first.skillId, enabled: false })
+
+    const revision = store.createDraft(draft({
+      name: 'evolve', parentVersionId: first.versionId, growthExceeded: true,
+    }))
+    assert.equal(revision.createdSkill, false, 'a revision joins the approved identity')
+    assert.throws(() => store.createDraft(draft({ name: 'evolve', parentVersionId: 999_999 })), /revision/u,
+      'a draft coexisting with a current version must name exactly that current version')
+
+    const withoutConfirmation = () => store.publishDraft({
+      versionId: revision.versionId, packagePath: 'versions/1/two', reviewer: 7, reviewedAt: 2,
+      ownerShortId: 7, defaultEnable: true, recheck: () => true,
+    })
+    assert.throws(withoutConfirmation, /confirmation/u, 'an exceeded growth cannot publish without the confirmation')
+    assert.equal(store.version(revision.versionId).status, 0)
+
+    const published = store.publishDraft({
+      versionId: revision.versionId, packagePath: 'versions/1/two', reviewer: 7, reviewedAt: 3,
+      ownerShortId: 7, defaultEnable: true,
+      confirmGrowth: { confirmedBy: 7, confirmedAt: 123, messageId: 'message-1' },
+      recheck: () => true,
+    })
+    assert.equal(published.previousVersionId, first.versionId)
+    const stored = store.version(revision.versionId)
+    assert.equal(stored.status, 3)
+    assert.equal(stored.growth_confirmed_by, 7)
+    assert.equal(stored.growth_confirmed_at, 123)
+    assert.equal(stored.growth_confirm_message, 'message-1')
+    assert.equal(store.preference(7, first.skillId).enabled, 0, 'the version switch preserves the preference')
+
+    const stale = store.createDraft(draft({ name: 'evolve', parentVersionId: revision.versionId }))
+    const newer = store.createDraft(draft({ name: 'evolve', parentVersionId: revision.versionId }))
+    store.publishDraft({
+      versionId: newer.versionId, packagePath: 'versions/1/three', reviewer: 7, reviewedAt: 4,
+      ownerShortId: 7, defaultEnable: true, recheck: () => true,
+    })
+    assert.throws(() => store.publishDraft({
+      versionId: stale.versionId, packagePath: 'versions/1/four', reviewer: 7, reviewedAt: 5,
+      ownerShortId: 7, defaultEnable: true, recheck: () => true,
+    }), /changed/u, 'a revision whose parent is no longer current cannot publish')
+    assert.equal(store.version(stale.versionId).status, 0)
+    assert.equal(store.identity(first.skillId).current_version_id, newer.versionId)
+  } finally {
+    store.close()
+  }
+})
+
+test('openDraftSkillIds counts a pending sibling and a newest changes-requested one only', async () => {
+  const { store } = await open('open-drafts')
+  try {
+    const first = store.createDraft(draft({ name: 'in-progress' }))
+    store.publishDraft({
+      versionId: first.versionId, packagePath: 'versions/1/one', reviewer: 7, reviewedAt: 1,
+      ownerShortId: 7, defaultEnable: true, recheck: () => true,
+    })
+    assert.equal(store.openDraftSkillIds(7).has(first.skillId), false)
+
+    const requested = store.createDraft(draft({ name: 'in-progress', parentVersionId: first.versionId }))
+    store.recordReviewDecision({ versionId: requested.versionId, status: 1, reviewer: 7, reviewedAt: 2 })
+    assert.equal(store.openDraftSkillIds(7).has(first.skillId), true,
+      'a newest changes-requested revision still marks the current version')
+    assert.equal(store.openDraftSkillIds(8).has(first.skillId), false, 'another owner sees no draft')
+
+    const settled = store.createDraft(draft({ name: 'in-progress', parentVersionId: first.versionId }))
+    store.recordReviewDecision({ versionId: settled.versionId, status: 2, reviewer: 7, reviewedAt: 3 })
+    assert.equal(store.openDraftSkillIds(7).has(first.skillId), false,
+      'a newer settled draft replaces the older changes-requested state')
+  } finally {
+    store.close()
+  }
+})

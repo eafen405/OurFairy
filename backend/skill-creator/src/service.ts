@@ -61,6 +61,8 @@ interface Evaluation {
   readonly candidates: Candidate[]
   readonly winners: Map<string, Candidate>
   readonly states: Map<number, { state: number; shadowedBy?: { skillId: number; name: string } }>
+  /** The identities whose current version has a pending/changes-requested revision. */
+  readonly openDrafts: ReadonlySet<number>
 }
 
 /** One selection-pool item as the client reads it. */
@@ -387,6 +389,7 @@ export class SkillService {
    */
   #evaluate(shortId: number): Evaluation {
     const preferences = new Map<number, PreferenceRow>(this.#store.preferences(shortId).map(row => [row.skill_id, row]))
+    const openDrafts = this.#store.openDraftSkillIds(shortId)
     const candidates: Candidate[] = []
     for (const skill of this.#store.visibleIdentities(shortId)) {
       if (skill.current_version_id === null) continue
@@ -436,7 +439,7 @@ export class SkillService {
       }
       states.set(candidate.skill.id, { state: POOL_STATE.disabled })
     }
-    return { candidates, winners, states }
+    return { candidates, winners, states, openDrafts }
   }
 
   /** Read one version's description for display, tolerating a missing/broken file. */
@@ -459,7 +462,7 @@ export class SkillService {
       state: state.state,
       enabled: candidate.enabled,
       currentVersionId: candidate.skill.current_version_id,
-      pendingRevision: false,
+      pendingRevision: evaluation.openDrafts.has(candidate.skill.id),
       actions: actionScopes(candidate.skill.scope, isAdmin),
       ...(state.shadowedBy === undefined ? {} : { shadowedBy: state.shadowedBy }),
     }

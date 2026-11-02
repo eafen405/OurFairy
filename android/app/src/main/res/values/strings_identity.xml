@@ -113,6 +113,8 @@
     <string name="skills_empty">No reviewed skills are available yet.</string>
     <string name="skills_section_pending">Pending review</string>
     <string name="skills_pending_empty">Nothing is waiting for review.</string>
+    <string name="skills_pending_revision">Revision in review</string>
+    <string name="skills_growth_required">Growth confirmation needed</string>
     <string name="skills_pending_item">Pending review</string>
     <string name="skills_pending_badge">Pending %1$d</string>
     <string name="skills_scope_personal">Personal</string>

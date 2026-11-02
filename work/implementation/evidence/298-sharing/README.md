@@ -2,8 +2,11 @@
 
 Ticket: [#298](https://github.com/eafen405/OurFairy/issues/298), spec [#295](../../../../docs/specs/fairy-skills.md).
 Branch: `ticket/298-sharing`, worktree `.worktrees/298-sharing`, based on
-`integration/spec-295` tip `e38bd9f1c9` (after #297). The integration tip was
-merged again before hand-off; see the report for the final SHA.
+`integration/spec-295` tip `e38bd9f1c9` (after #297). Before hand-off the tip
+advanced to `a6f3a63289` (merge of #299, evolution and version review); it was
+merged into this branch and the conflicts in `creation.ts`, `tools.ts`,
+`service.ts` and the README were resolved by keeping both tickets' behaviour.
+The final branch/merge SHA is in the report.
 
 ## What changed
 
@@ -92,6 +95,28 @@ merged again before hand-off; see the report for the final SHA.
   reception runs; `RemoteReceiveController` also observes on app start/stop and
   identity changes.
 
+## Merge with #299
+
+#299 (evolution, revision review, rollback) merged first at `a6f3a63289`.
+Conflicts:
+
+- `creation.ts`: #299's revision/growth/reuse path and #298's install/common
+  consent path are one `create`. A revision is personal (from its parent
+  identity); a new common candidate goes through the consent rule. `pending`
+  now takes both the reviewing log (growth confirmation discovery) and the
+  caller's administrator bit (common-candidate visibility).
+- `tools.ts`: one action enum (`list`, `inspect`, `create`, `review`,
+  `rollback`, `archive`, `restore`), one description and one execute switch;
+  the revision inputs (`parentVersionId`, `targetBenefit`,
+  `growthConfirmMessageId`) and the install/lifecycle inputs coexist.
+- `service.ts`: `pendingRevision` from #299's open drafts plus #298's
+  caller-aware lifecycle action scopes.
+- README: one table and seam list for both tickets.
+- `#visible` became `#visible(shortId, isAdmin, versionId, action)`; rollback
+  keeps the personal-only #299 rule (`canReview(..., false, ...)`), while
+  inspect/review/rollback display use the shared permission functions.
+- `reviewTarget` and the /skills/list pending call carry the administrator bit.
+
 ## Tests and results
 
 Focused backend (real launcher, real SQLite, real bwrap, loopback GitHub-shaped
@@ -105,12 +130,15 @@ node --test tests/skill-install.test.mjs tests/skill-install-product.test.mjs \
   tests/route-inventory.test.mjs tests/identity-http.test.mjs
 ```
 
-Result: see the report for the final counts; the suites cover address parsing,
-GitHub commit resolution, direct archives, fixed-version immutability, traversal/
-symlink/oversize refusals, no scan-root write, review-required install, common
-consent/visibility/permissions/defaults, archive/restore permissions,
-preference preservation, catalog and read-only resource removal/restore,
-provider invalidation, `reviewResults`, and the 44-address inventory/fence.
+Result on the merged tree: 33/33 in the install/sharing/route suites and
+89/89 across the whole focused skill set (the #297 creation suite, the #299
+evolution/display suites, runtime, store, package, verify and the route
+inventory). The suites cover address parsing, GitHub commit resolution, direct
+archives, fixed-version immutability, traversal/symlink/oversize refusals, no
+scan-root write, review-required install, common consent/visibility/permissions/
+defaults, archive/restore permissions, preference preservation, catalog and
+read-only resource removal/restore, provider invalidation, `reviewResults`, and
+the 44-address inventory/fence.
 
 Android focused:
 
@@ -125,13 +153,20 @@ ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew :app:testDebugUnitTest \
   --tests 'me.rerere.rikkahub.ui.fairy.FairyPagesTest'
 ```
 
-Full gates: `npm test`, `npm run combo:verify`, and
-`cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug`
-were run on the ticket tip after merging `integration/spec-295`; the report
-records the final result. Full-suite runs of the pre-existing `skill-creation`
-and `skill-runtime` suites showed occasional load-timing flakes under the
-parallel full suite; each suite passes repeatedly when run alone (recorded in
-the report rather than hidden).
+Full gates on the merged tree:
+
+- `npm test`: **569/569 pass**.
+- `npm run combo:verify`: all three rows `ok` (product worktree based on the
+  integration tip, dsh pinned commit unchanged, Android source declaration).
+- `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug`:
+  **BUILD SUCCESSFUL**, 596 app unit-test cases plus lint (`test` and
+  `lintDebug` in one run).
+
+Full-suite runs of the pre-existing `skill-creation` and `skill-runtime` suites
+showed occasional load-timing flakes under the parallel full suite (one case
+each, in different runs); each suite passes repeatedly when run alone, and the
+final merged `npm test` passed in full. The flakes are recorded rather than
+hidden because they are not introduced by #298 and no #298 assertion failed.
 
 ## Not executed
 

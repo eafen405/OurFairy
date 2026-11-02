@@ -113,6 +113,8 @@
     <string name="skills_empty">还没有可用的已审核技能。</string>
     <string name="skills_section_pending">待审核</string>
     <string name="skills_pending_empty">没有等待审核的项目。</string>
+    <string name="skills_pending_revision">有待审修订</string>
+    <string name="skills_growth_required">需确认增长</string>
     <string name="skills_pending_item">待审核</string>
     <string name="skills_pending_badge">待审 %1$d</string>
     <string name="skills_scope_personal">个人</string>

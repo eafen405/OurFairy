@@ -43,14 +43,16 @@ export const SKILL_MANAGE_NAME = 'skill_manage'
  * to both. `list`/`inspect` are the only way to read candidates; approval is
  * always the user's decision.
  */
-export const SKILL_MANAGE_DESCRIPTION = 'Manage reusable Fairy skills. Use it when the user asks to save a reusable workflow as a skill, to install a skill from an address, or to review a skill candidate. '
+export const SKILL_MANAGE_DESCRIPTION = 'Manage reusable Fairy skills. Use it when the user asks to save a reusable workflow as a skill, to install a skill from an address, to revise an existing skill, or to review a skill candidate. '
   + 'A reusable procedure (ordered steps, inputs, outputs, tools, checks) belongs in a skill; a stable fact or preference about the user belongs in memory. Never write the same content to both. '
-  + 'Actions: `list` returns the caller\'s bounded pending candidates, the reviewed selection pool with backend-derived states and actions, and recently decided candidates; '
-  + '`create` validates a complete package drafted by you, or a package fetched from `address` (a GitHub repository tree/blob path, github:<owner>/<repo>/<path>@<ref>, or a direct .tar.gz/.tgz URL), and turns it into a pending candidate. The backend derives the owner from the calling session; scope 2 (common) is accepted only when the anchoring user turn explicitly asks to share, and records that turn as the consent. A remote package is fetched at its fixed commit/archive version and never reviewed for you. The representative scenarios run for real, so never claim a verification result you did not receive; '
-  + '`inspect` returns one pending candidate\'s read-only review package and a deterministic display (identity/hash and core-character change, applicability and target benefit, package and verification evidence, how to expand the full text, and whether growth confirmation is required), and produces the `skill-review` display row the user reads; use `expand: "skill"` or `expand: "files"` with `path` for the full text instead of asking for everything at once; '
+  + 'Actions: `list` returns the caller\'s bounded pending candidates, the reviewed selection pool with backend-derived states and actions, and recently decided candidates; it names the user\'s own growth confirmation message when one exists; '
+  + '`create` validates a complete package drafted by you, or a package fetched from `address` (a GitHub repository tree/blob path, github:<owner>/<repo>/<path>@<ref>, or a direct .tar.gz/.tgz URL), and turns it into a pending candidate. The backend derives the owner from the calling session; scope 2 (common) is accepted only when the anchoring user turn explicitly asks to share, and records that turn as the consent. A remote package is fetched at its fixed commit/archive version and is never reviewed for you. The representative scenarios run for real, so never claim a verification result you did not receive. '
+  + 'With `parentVersionId` (the skill\'s current approved version) and a non-empty `targetBenefit`, create writes a revision: the package is a complete rewrite, unchanged scenarios reuse the parent\'s recorded verification, and the core-body growth is recorded; a revision without a proven benefit must not be created. '
+  + '`inspect` returns one pending candidate\'s read-only review package and a deterministic display (identity/hash and old/new core-body characters with the growth percentage, applicability and target benefit, package and verification evidence, how to expand the full text). When growth exceeds 10% the display tells the user to reply exactly 确认增长 in a separate turn; use `expand: "skill"` or `expand: "files"` with `path` instead of asking for everything at once; '
   + '`review` records `approve`, `request_changes` or `reject` for a pending candidate after the user decides. A personal candidate is decided by its owner; a common candidate only by Phaethon, and its proposer can read but not approve it. Never claim approval yourself and never approve on the user\'s behalf. '
-  + '`archive` and `restore` change one skill\'s lifecycle: a personal skill only by its owner, a common skill only by Phaethon. Archive removes it from the catalog and selectable pool but keeps its content, history and preferences; restore does not reset preferences. The model cannot submit an owner, a reviewer, a current-version pointer, a landing path, a manifest hash or a verification result. '
-  + 'A name that already has an approved current version is refused: that needs a revision, which this tool does not offer yet.'
+  + '`rollback` copies an approved historical version into a fresh pending candidate; it never moves the current pointer. '
+  + '`archive` and `restore` change one skill\'s lifecycle: a personal skill only by its owner, a common skill only by Phaethon. Archive removes it from the catalog and selectable pool but keeps its content, history and preferences; restore does not reset preferences. '
+  + 'The model cannot submit an owner, a reviewer, a current-version pointer, a landing path, a manifest hash or a verification result. '
 
 /** How every call renders: one JSON object, so the chat projection can parse the review row. */
 export const TOOL_OUTPUT = {
@@ -63,7 +65,7 @@ export type SkillToolValue = InferValue<typeof TOOL_OUTPUT.schema>
 
 /** The literal parameter schema, as the dsh tool contract consumes it. */
 export const SKILL_MANAGE_PARAMETERS = {
-  action: { type: 'string', required: true, enum: ['list', 'inspect', 'create', 'review', 'archive', 'restore'] },
+  action: { type: 'string', required: true, enum: ['list', 'inspect', 'create', 'review', 'rollback', 'archive', 'restore'] },
   versionId: { type: 'integer' },
   skillId: { type: 'integer' },
   scope: { type: 'integer', enum: [1, 2] },
@@ -206,13 +208,15 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
   const isAdmin = deps.isAdmin(owner)
   try {
     switch (args.action) {
-      case 'list':
+      case 'list': {
+        const { events } = await readSessionEvents(deps.ctx, agent.session.id)
         return {
           ok: true,
-          pending: deps.creation.pending(owner, isAdmin),
+          pending: deps.creation.pending(owner, { events, isAdmin }),
           pool: deps.service.pool(owner, isAdmin),
           reviewResults: deps.notifications.reviewResults(owner, isAdmin),
         } as unknown as SkillToolValue
+      }
       case 'inspect': {
         const versionId = requiredPositiveInteger(args.versionId, 'versionId')
         return deps.creation.inspect(owner, isAdmin, versionId, {
@@ -221,8 +225,18 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
         }) as unknown as SkillToolValue
       }
       case 'create': {
-        if (args.scope === undefined) throw new Error('skills/invalid-request: create needs scope 1 (personal) or 2 (common)')
-        if (args.scope !== 1 && args.scope !== 2) throw new Error('skills/invalid-request: scope must be 1 or 2')
+        const parentVersionId = positiveInteger(args.parentVersionId, 'parentVersionId')
+        // A revision derives its scope from the parent identity; a new skill
+        // must still state its scope explicitly.
+        if (parentVersionId === undefined && args.scope === undefined) {
+          throw new Error('skills/invalid-request: create needs scope 1 (personal) or 2 (common)')
+        }
+        if (args.scope !== undefined && args.scope !== 1 && args.scope !== 2) {
+          throw new Error('skills/invalid-request: scope must be 1 or 2')
+        }
+        if (parentVersionId !== undefined && args.address !== undefined) {
+          throw new Error('skills/invalid-request: a revision is written from package files, not an install address')
+        }
         if (args.address !== undefined && args.files !== undefined) {
           throw new Error('skills/invalid-request: create accepts either package files or an address, not both')
         }
@@ -233,9 +247,6 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
           throw new Error('skills/invalid-request: create needs focus')
         }
         if (args.scenarios === undefined) throw new Error('skills/invalid-request: create needs at least one scenario')
-        if (args.parentVersionId !== undefined || args.targetBenefit !== undefined) {
-          throw new Error('skills/revision-unsupported: revisions arrive with the evolution ticket')
-        }
         const { events } = await readSessionEvents(deps.ctx, agent.session.id)
         const fetched = args.address === undefined ? undefined : await deps.install.fetch(args.address)
         try {
@@ -244,7 +255,7 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
             ownerShortId: owner,
             sessionId: agent.session.id,
             events,
-            scope: args.scope,
+            scope: args.scope ?? 1,
             scenarios: args.scenarios,
             ...(args.focus === undefined ? {} : { focus: args.focus }),
             ...(args.files === undefined ? {} : { files: args.files }),
@@ -252,6 +263,8 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
             ...(args.comparisons === undefined ? {} : { comparisons: args.comparisons }),
             ...(args.evidence === undefined ? {} : { evidence: args.evidence }),
             ...(license === undefined ? {} : { license }),
+            ...(parentVersionId === undefined ? {} : { parentVersionId }),
+            ...(args.targetBenefit === undefined ? {} : { targetBenefit: args.targetBenefit }),
             signal: exec.signal,
           })
           return result as unknown as SkillToolValue
@@ -262,12 +275,16 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
       case 'review': {
         const versionId = requiredPositiveInteger(args.versionId, 'versionId')
         if (args.decision === undefined) throw new Error('skills/invalid-request: review needs decision approve, request_changes or reject')
+        const { events } = await readSessionEvents(deps.ctx, agent.session.id)
         const result = deps.creation.review({
           shortId: owner,
           isAdmin,
           versionId,
           decision: args.decision,
+          sessionOwnerShortId: owner,
+          events,
           ...(args.note === undefined ? {} : { note: args.note }),
+          ...(args.growthConfirmMessageId === undefined ? {} : { growthConfirmMessageId: args.growthConfirmMessageId }),
         })
         if (decisionIsPublish(args.decision)) {
           // The published current version changes the affected catalog; the
@@ -275,6 +292,11 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
           if (result.scope === 1) deps.invalidateOwner(owner)
           else deps.invalidateAll()
         }
+        return result as unknown as SkillToolValue
+      }
+      case 'rollback': {
+        const versionId = requiredPositiveInteger(args.versionId, 'versionId')
+        const result = await deps.creation.rollback({ shortId: owner, sessionId: agent.session.id, versionId })
         return result as unknown as SkillToolValue
       }
       case 'archive':

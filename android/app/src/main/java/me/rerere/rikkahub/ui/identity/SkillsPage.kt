@@ -50,6 +50,8 @@ import me.rerere.rikkahub.ui.fairy.FairyPresence
 import me.rerere.rikkahub.ui.fairy.FairyWindowBarHeight
 import me.rerere.rikkahub.ui.fairy.FairyWindowState
 import me.rerere.rikkahub.ui.fairy.FairyWindowTopBar
+import me.rerere.rikkahub.ui.fairy.StatusChip
+import me.rerere.rikkahub.ui.fairy.StatusTone
 
 /**
  * The user's skill selection pool.
@@ -269,6 +271,13 @@ private fun SkillRow(
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
             },
         )
+        if (item.pendingRevision) {
+            StatusChip(
+                text = stringResource(R.string.skills_pending_revision),
+                tone = StatusTone.SIGNAL,
+                modifier = Modifier.testTag("skill-pending-revision-${item.skillId}"),
+            )
+        }
         item.shadowedBy?.let { shadower ->
             Text(
                 text = stringResource(R.string.skills_shadowed_by, shadower.name),
@@ -373,6 +382,15 @@ private fun PendingSkillRow(candidate: PendingSkill, enabled: Boolean, onOpen: (
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
+        // The backend derives whether the growth confirmation is due; the page
+        // only renders that boolean and never computes a percentage itself.
+        if (candidate.growthExceeded) {
+            StatusChip(
+                text = stringResource(R.string.skills_growth_required),
+                tone = StatusTone.WARNING,
+                modifier = Modifier.testTag("skill-growth-${candidate.versionId}"),
+            )
+        }
         Text(
             text = stringResource(
                 if (candidate.scope == SkillScope.COMMON) R.string.skills_scope_common else R.string.skills_scope_personal,

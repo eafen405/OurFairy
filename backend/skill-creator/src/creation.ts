@@ -12,9 +12,9 @@
  *
  * The model can never submit an owner, a reviewer, a landing path, a manifest
  * hash or a verification result: those are derived here from the calling
- * session, the package bytes and the recorded run. Common proposals, installs,
- * revisions and growth confirmation belong to later tickets; the hooks they
- * extend are marked, not half-built.
+ * session, the package bytes and the recorded run. Revisions, growth
+ * confirmation and rollback extend this same create/review flow through
+ * `./evolution`; common proposals and installs belong to the sharing ticket.
  *
  * @module @ourfairy/dsh-skill-creator/src/creation
  */
@@ -33,7 +33,8 @@ import {
   type PackageFileInput,
 } from './package.js'
 import { SKILL_SCOPE, SOURCE_TYPE, VERSION_STATUS, SkillStoreError } from './store.js'
-import { runVerification, type VerificationReport } from './verify.js'
+import { checkedTargetBenefit, confirmationCandidate, confirmationOf, growthOf, planVerificationReuse, rollbackScenarios, type GrowthConfirmation, type ReusedScenario } from './evolution.js'
+import { runVerification, type ScenarioRecord, type VerificationReport } from './verify.js'
 import { SkillError } from './service.js'
 import { canInspect, canReview, requireSharingConsent, type SharingConsent } from './sharing.js'
 import type { InstallSource } from './install.js'
@@ -97,9 +98,9 @@ export interface CreateCandidateInput {
   /** The caller's durable log, read by the tool before the call. */
   readonly events: readonly SessionEvent[]
   readonly scope: number
-  /** The explicit-creation provenance; omitted for an address install. */
+  /** Present for an explicit create/revision; absent for an address install. */
   readonly focus?: SkillFocusInput
-  /** Model-drafted files for an explicit create; mutually exclusive with `packageDir`. */
+  /** Model-drafted files; mutually exclusive with `packageDir`. */
   readonly files?: readonly CandidateFile[]
   /**
    * A package fetched by the install path; the creation path copies it into its
@@ -112,6 +113,10 @@ export interface CreateCandidateInput {
   readonly comparisons?: readonly CandidateComparison[]
   readonly evidence?: readonly CandidateEvidence[]
   readonly license?: string
+  /** The current approved version this candidate revises (#299). */
+  readonly parentVersionId?: number
+  /** The proven benefit of a revision; required with {@link parentVersionId}. */
+  readonly targetBenefit?: string
   readonly signal?: AbortSignal
 }
 
@@ -134,6 +139,8 @@ export interface PendingItem {
   readonly sourceType: number
   readonly createdAt: number
   readonly growthExceeded: boolean
+  /** The user's own confirmation message the model may cite for approval, when one exists. */
+  readonly growthConfirmMessageId?: string
   readonly nextActions: string[]
 }
 
@@ -192,6 +199,7 @@ export interface ReviewPackage {
     readonly reused: VerificationReport['reused']
     readonly unexecuted: VerificationReport['unexecuted']
     readonly failed: VerificationReport['failed']
+    readonly comparisons: VerificationReport['comparisons']
     readonly environment: string
     readonly ranAt: number
   }
@@ -218,6 +226,16 @@ export interface InspectResult {
   readonly file?: { readonly path: string; readonly content: string; readonly truncated: boolean }
 }
 
+/** What one rollback produced. */
+export interface RollbackResult {
+  readonly ok: true
+  readonly skillId: number
+  readonly versionId: number
+  readonly status: number
+  readonly nextActions: string[]
+  readonly verification: VerificationReport
+}
+
 /** One review outcome. */
 export interface ReviewResult {
   readonly ok: true
@@ -231,6 +249,9 @@ export interface ReviewResult {
 
 /** The display bound; the full text is always available through `expand`. */
 export const DISPLAY_MAX_CHARACTERS = 4_000
+
+/** The one instruction a growth-exceeded display must never lose. */
+export const GROWTH_INSTRUCTION = '篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」'
 
 /**
  * The inspect tool result budget, in serialized characters.
@@ -283,6 +304,7 @@ type BoundedReview = Omit<ReviewPackage, 'package' | 'changes' | 'verification' 
     reused: VerificationReport['reused'][number][]
     unexecuted: VerificationReport['unexecuted'][number][]
     failed: VerificationReport['failed'][number][]
+    comparisons: { name: string; withSkill: VerificationReport['executed'][number]; withoutSkill: VerificationReport['executed'][number] }[]
     environment: string
     ranAt: number
   }
@@ -304,6 +326,17 @@ type BoundedReview = Omit<ReviewPackage, 'package' | 'changes' | 'verification' 
 export function boundInspectResult(result: InspectResult): InspectResult {
   let bounded: InspectResult = { ...result }
   let display = result.display
+  // The growth instruction is the one line the user must act on; every later
+  // clip of the display reserves room for it and appends it again.
+  const tail = result.review.growthConfirmation.required ? GROWTH_INSTRUCTION : undefined
+  const boundDisplayText = (text: string, max: number): string => {
+    if (tail === undefined) return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`
+    const reserved = [...tail].length + 1
+    if (max <= reserved) return tail
+    const limit = max - reserved
+    const body = text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 1))}…`
+    return `${body}\n${tail}`
+  }
   const review: BoundedReview = {
     ...result.review,
     source: {
@@ -329,6 +362,11 @@ export function boundInspectResult(result: InspectResult): InspectResult {
       reused: result.review.verification.reused.map(compactVerificationRecord),
       unexecuted: result.review.verification.unexecuted.map(compactVerificationRecord),
       failed: result.review.verification.failed.map(compactVerificationRecord),
+      comparisons: result.review.verification.comparisons.map(comparison => ({
+        name: comparison.name,
+        withSkill: compactVerificationRecord(comparison.withSkill),
+        withoutSkill: compactVerificationRecord(comparison.withoutSkill),
+      })),
       environment: clipText(result.review.verification.environment, 300),
       ranAt: result.review.verification.ranAt,
     },
@@ -358,6 +396,13 @@ export function boundInspectResult(result: InspectResult): InspectResult {
       break
     }
     if (dropped) continue
+    if (review.verification.comparisons.length > 0) {
+      const drop = Math.max(1, Math.ceil(review.verification.comparisons.length / 2))
+      review.verification.comparisons.splice(Math.max(0, review.verification.comparisons.length - drop), drop)
+      droppedVerification += drop
+      noteVerification()
+      continue
+    }
     const changeLists = [review.changes.added, review.changes.removed, review.changes.changed]
     let droppedChanges = false
     for (const list of changeLists) {
@@ -379,7 +424,7 @@ export function boundInspectResult(result: InspectResult): InspectResult {
       continue
     }
     if (display.length > INSPECT_DISPLAY_FLOOR) {
-      display = clipText(display, Math.max(INSPECT_DISPLAY_FLOOR, display.length - 1_000))
+      display = boundDisplayText(display, Math.max(INSPECT_DISPLAY_FLOOR, display.length - 1_000))
       continue
     }
     break
@@ -388,7 +433,7 @@ export function boundInspectResult(result: InspectResult): InspectResult {
   // that the JSON stays parseable and the review marker survives.
   if (length() > INSPECT_RESULT_MAX_CHARACTERS) {
     const withoutDisplay = JSON.stringify({ ...bounded, review, display: '' }).length
-    display = clipText(display, Math.max(1, INSPECT_RESULT_MAX_CHARACTERS - withoutDisplay - 1))
+    display = boundDisplayText(display, Math.max(1, INSPECT_RESULT_MAX_CHARACTERS - withoutDisplay - 1))
   }
   const boundedReview = review as ReviewPackage
   return { ...bounded, review: boundedReview, display }
@@ -423,6 +468,8 @@ interface SourceProvenance {
   /** The user turn that explicitly consented to a common proposal. */
   readonly consent?: SharingConsent
   readonly benefit?: string
+  /** The historical version a rollback candidate restores (#299). */
+  readonly rollbackOf?: number
 }
 
 /** The latest event seq in one log prefix, or 0 for an empty log. */
@@ -612,12 +659,23 @@ function percentText(ratio: number): string {
 function characterChange(review: Pick<ReviewPackage, 'growth' | 'coreCharacters'>): string {
   const old = review.growth.oldCharacters
   if (old === null) return `新技能，${review.coreCharacters} 字符`
+  // A zero-length parent body has no meaningful percentage; name the counts.
+  if (old === 0) return `核心正文 0 → ${review.coreCharacters} 字符`
   return `核心正文 ${old} → ${review.coreCharacters} 字符（${percentText(review.coreCharacters / old)}）`
 }
 
-/** Bound a display string, keeping the four blocks useful for normal packages. */
-function boundDisplay(text: string): string {
-  return text.length <= DISPLAY_MAX_CHARACTERS ? text : `${text.slice(0, DISPLAY_MAX_CHARACTERS - 1)}…`
+/**
+ * Bound a display string while preserving a required instruction line.
+ *
+ * The growth instruction is the one line the user must act on, so it is never
+ * the part a long verification list clips away: the body is cut first and the
+ * tail is appended after it.
+ */
+function boundDisplay(text: string, tail?: string): string {
+  const reserved = tail === undefined ? 0 : tail.length + 1
+  const budget = Math.max(1, DISPLAY_MAX_CHARACTERS - reserved)
+  const body = text.length <= budget ? text : `${text.slice(0, budget - 1)}…`
+  return tail === undefined ? body : `${body}\n${tail}`
 }
 
 /**
@@ -639,21 +697,17 @@ export function buildReviewDisplay(review: ReviewPackage): string {
   const verification = review.verification
   lines.push(`验证：实际执行 ${verification.executed.length}，复用 ${verification.reused.length}，未执行 ${verification.unexecuted.length}，失败 ${verification.failed.length}`)
   for (const record of verification.executed) lines.push(`✔ ${record.name}: ${record.command} → exit ${String(record.exitCode)}`)
-  for (const record of verification.failed) lines.push(`✘ ${record.name}: ${record.command} → exit ${record.exitCode === null ? '—' : String(record.exitCode)}`)
-  if (verification.executed.length + verification.failed.length > 0) lines.push(`环境：${verification.environment}`)
-  lines.push(`查看全文：skill_manage inspect versionId=${review.versionId} expand=skill（单文件：expand=files path=<path>）`)
-  if (review.growthConfirmation.required) {
-    lines.push(`篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」`)
+  for (const record of verification.reused) {
+    const source = typeof record.reusedFrom === 'number' ? `复用自版本 ${record.reusedFrom}` : '复用'
+    lines.push(`↺ ${record.name}: ${record.command} → ${source}`)
   }
-  return boundDisplay(lines.join('\n'))
-}
-
-/** The growth calculation shared by inspect, the display and approval. */
-function growthOf(version: SkillVersionRow, parent: SkillVersionRow | undefined): ReviewPackage['growth'] {
-  const oldCharacters = parent?.core_characters ?? null
-  const newCharacters = version.core_characters
-  const exceeded = oldCharacters !== null && newCharacters > Math.floor(oldCharacters * 1.1)
-  return { exceeded, oldCharacters, newCharacters, ratio: oldCharacters === null ? null : newCharacters / oldCharacters }
+  for (const record of verification.failed) lines.push(`✘ ${record.name}: ${record.command} → exit ${record.exitCode === null ? '—' : String(record.exitCode)}`)
+  for (const comparison of verification.comparisons) {
+    lines.push(`比较 ${comparison.name}：有 Skill exit ${String(comparison.withSkill.exitCode)}，无 Skill exit ${String(comparison.withoutSkill.exitCode)}`)
+  }
+  if (verification.executed.length + verification.reused.length + verification.failed.length > 0) lines.push(`环境：${verification.environment}`)
+  lines.push(`查看全文：skill_manage inspect versionId=${review.versionId} expand=skill（单文件：expand=files path=<path>）`)
+  return boundDisplay(lines.join('\n'), review.growthConfirmation.required ? GROWTH_INSTRUCTION : undefined)
 }
 
 /** The review-package differences between one manifest and its parent's. */
@@ -709,6 +763,7 @@ function verificationOf(version: SkillVersionRow): ReviewPackage['verification']
     reused: [],
     unexecuted: [],
     failed: [],
+    comparisons: [],
     environment: '',
     ranAt: version.created_at,
   } satisfies ReviewPackage['verification']
@@ -721,6 +776,7 @@ function verificationOf(version: SkillVersionRow): ReviewPackage['verification']
       reused: parsed.reused ?? [],
       unexecuted: parsed.unexecuted ?? [],
       failed: parsed.failed ?? [],
+      comparisons: parsed.comparisons ?? [],
       environment: typeof parsed.environment === 'string' ? parsed.environment : '',
       ranAt: typeof parsed.ranAt === 'number' ? parsed.ranAt : version.created_at,
     }
@@ -732,7 +788,9 @@ function verificationOf(version: SkillVersionRow): ReviewPackage['verification']
 /** The approval verdict a verification report must satisfy. */
 function verificationReason(report: ReviewPackage['verification']): string | undefined {
   if (!report.complete) return 'the verification report is incomplete; run it again'
-  if (report.executed.length === 0) return 'the verification report has no actually executed scenario'
+  if (report.executed.length === 0 && report.reused.length === 0) {
+    return 'the verification report has no executed or reused scenario'
+  }
   if (report.unexecuted.length > 0) return 'the verification report has unexecuted scenarios'
   if (report.failed.length > 0) return 'a verification scenario failed; change the candidate and verify it again'
   return undefined
@@ -763,22 +821,32 @@ export class SkillCreation {
     return this.#root
   }
 
-  /** The pending candidates one caller may review, newest first and bounded. */
-  pending(shortId: number, isAdmin = false): PendingItem[] {
-    return this.#store.pendingDrafts(shortId, isAdmin).map(row => this.#pendingItem(row, isAdmin))
+  /**
+   * The pending candidates one caller may review, newest first and bounded.
+   *
+   * When the caller's durable log is supplied, a growth-exceeded candidate also
+   * carries the id of the user's own confirmation message that followed its
+   * latest inspect display. The model cannot read durable message ids from its
+   * context, so this is the one discovery path; approval re-reads the same
+   * message by id and never trusts this value alone.
+   */
+  pending(shortId: number, context: { readonly events?: readonly SessionEvent[]; readonly isAdmin?: boolean } = {}): PendingItem[] {
+    return this.#store.pendingDrafts(shortId, context.isAdmin === true).map(row => this.#pendingItem(row,
+      context.isAdmin === true,
+      row.growth_exceeded === 1 && context.events !== undefined
+        ? confirmationCandidate(context.events, row.id)
+        : undefined))
   }
 
   /**
-   * Validate, stage, record and verify one candidate.
+   * Validate, stage, record and verify one explicit candidate or revision.
    *
-   * An explicit create writes the model's files to `tmp/<uuid>/`; an install
-   * copies the already-fetched package there instead. Both are then re-read by
-   * the one package algorithm, moved into `candidates/<uuid>/` and inserted. A
-   * common candidate additionally needs the explicit sharing consent read from
-   * the anchoring user turn, and records its proposer; the review material then
-   * contains only the cleaned package and source summary. A name that already
-   * has an approved current version is refused as a conflict: a revision is the
-   * evolution ticket's path. The candidate never enters a provider; only an
+   * The file set is written to `tmp/<uuid>/`, re-read by the one package
+   * algorithm, moved into `candidates/<uuid>/` and only then inserted. A name
+   * that already has an approved current version needs `parentVersionId` (the
+   * evolution path, `source_type: 3`); without it the conflict is refused. A
+   * revision is a complete rewrite, so the package replaces the parent's files
+   * rather than patching them. The candidate never enters a provider; only an
    * approved version is served.
    */
   async create(input: CreateCandidateInput): Promise<CreateCandidateResult> {
@@ -786,7 +854,8 @@ export class SkillCreation {
       if (input.scope !== SKILL_SCOPE.personal && input.scope !== SKILL_SCOPE.common) {
         throw new SkillError(400, 'skills/invalid-scope', `unknown skill scope ${String(input.scope)}`)
       }
-      const common = input.scope === SKILL_SCOPE.common
+      const revision = this.#revisionContext(input)
+      const common = revision === undefined && input.scope === SKILL_SCOPE.common
       const consent = common ? requireSharingConsent(input.events) : undefined
       if (input.packageDir !== undefined && input.files !== undefined) {
         throw new SkillError(400, 'skills/invalid-package', 'create accepts either package files or a fetched package, not both')
@@ -809,22 +878,28 @@ export class SkillCreation {
         if (input.packageDir === undefined) writeSkillPackage(staging, input.files as readonly CandidateFile[])
         else copySkillPackage(input.packageDir, staging)
         const parsed = readSkillPackage(staging)
-        const identityOwner = common ? undefined : input.ownerShortId
-        const existing = this.#store.activeIdentity({
-          scope: input.scope,
-          ownerShortId: identityOwner,
-          name: parsed.name,
-        })
-        if (existing !== undefined) {
-          if (existing.archived_at !== null) {
-            throw new SkillError(409, 'skills/archived', `skill "${existing.name}" is archived; restore it before creating a new draft`)
-          }
-          if (existing.current_version_id !== null) {
-            throw new SkillError(409, 'skills/name-conflict', `a skill named ${existing.name} already exists; use a revision`)
-          }
-          if (common && existing.proposed_by !== input.ownerShortId) {
-            throw new SkillError(409, 'skills/name-conflict',
-              `a common skill named ${existing.name} already has a candidate proposed by another user`)
+        if (revision !== undefined && parsed.name !== revision.skill.name) {
+          throw new SkillError(400, 'skills/invalid-parent',
+            `a revision keeps the identity name "${revision.skill.name}"; got "${parsed.name}"`)
+        }
+        if (revision === undefined) {
+          const identityOwner = common ? undefined : input.ownerShortId
+          const existing = this.#store.activeIdentity({
+            scope: input.scope,
+            ownerShortId: identityOwner,
+            name: parsed.name,
+          })
+          if (existing !== undefined) {
+            if (existing.archived_at !== null) {
+              throw new SkillError(409, 'skills/archived', `skill "${existing.name}" is archived; restore it before creating a new draft`)
+            }
+            if (existing.current_version_id !== null) {
+              throw new SkillError(409, 'skills/name-conflict', `a skill named ${existing.name} already exists; use a revision`)
+            }
+            if (common && existing.proposed_by !== input.ownerShortId) {
+              throw new SkillError(409, 'skills/name-conflict',
+                `a common skill named ${existing.name} already has a candidate proposed by another user`)
+            }
           }
         }
         const scenarios = checkedScenarios(input.scenarios, new Set(parsed.manifest.map(entry => entry.path)), this.#verifyTimeoutMs)
@@ -832,6 +907,7 @@ export class SkillCreation {
         mkdirSync(join(this.#root, 'candidates'), { recursive: true })
         candidateDir = join(this.#root, 'candidates', candidateId)
         renameSync(staging, candidateDir)
+        const growth = growthOf(parsed.coreCharacters, revision?.parent.core_characters ?? null)
         const install = input.install
         const location: SourceProvenance = {
           ...(common
@@ -840,6 +916,7 @@ export class SkillCreation {
                 sessionId: input.sessionId,
                 ...(focus === undefined ? {} : { focus }),
                 ...(evidence.length === 0 ? {} : { evidence }),
+                ...(revision === undefined ? {} : { benefit: revision.benefit }),
               }),
           ...(install === undefined
             ? {}
@@ -854,8 +931,8 @@ export class SkillCreation {
         }
         const draft = this.#store.createDraft({
           name: parsed.name,
-          scope: input.scope,
-          ...(identityOwner === undefined ? {} : { ownerShortId: identityOwner }),
+          scope: revision?.skill.scope ?? input.scope,
+          ...(common ? {} : { ownerShortId: input.ownerShortId }),
           ...(common ? { proposedBy: input.ownerShortId } : {}),
           createdBy: input.ownerShortId,
           packagePath: `candidates/${candidateId}`,
@@ -865,15 +942,21 @@ export class SkillCreation {
           ...(input.license === undefined
             ? (parsed.license === undefined ? {} : { license: parsed.license })
             : { license: input.license }),
-          sourceType: install === undefined ? SOURCE_TYPE.explicit : SOURCE_TYPE.install,
+          ...(install === undefined
+            ? (revision === undefined
+                ? { sourceType: SOURCE_TYPE.explicit }
+                : { sourceType: SOURCE_TYPE.evolution, parentVersionId: revision.parent.id, growthExceeded: growth.exceeded })
+            : { sourceType: SOURCE_TYPE.install }),
           sourceLocation: JSON.stringify(location),
         })
+        const reuse = revision === undefined ? undefined : this.#reusePlan(revision.parent, parsed.manifest, scenarios)
         const verification = await runVerification({
           root: this.#root,
           packageDir: candidateDir,
-          scenarios,
+          scenarios: reuse === undefined ? scenarios : reuse.rerun,
           comparisons,
           timeoutMs: this.#verifyTimeoutMs,
+          ...(reuse === undefined ? {} : { reused: reuse.reused }),
           ...(input.signal === undefined ? {} : { signal: input.signal }),
         })
         this.#store.updateVerification(draft.versionId, JSON.stringify(verification))
@@ -897,6 +980,185 @@ export class SkillCreation {
   }
 
   /**
+   * Copy one approved historical version into a fresh pending candidate.
+   *
+   * A rollback never moves the current pointer: it restores the historical
+   * package bytes through the same candidate and review path as a revision, so
+   * the current version keeps serving while the rollback waits for review. The
+   * copied package is re-hashed against the historical row before it leaves
+   * staging, the historical verification commands run again (or reuse the
+   * current report where the content still matches), and a repeat rollback of
+   * the content that is already current is refused as a no-op.
+   */
+  async rollback({ shortId, sessionId, versionId }: {
+    readonly shortId: number
+    readonly sessionId: string
+    readonly versionId: number
+  }): Promise<RollbackResult> {
+    try {
+      const source = this.#store.version(versionId)
+      if (source === undefined) {
+        throw new SkillError(404, 'skills/not-found', `skill version ${versionId} is not visible to this user`)
+      }
+      const skill = this.#store.identity(source.skill_id)
+      if (skill === undefined || !canReview(shortId, false, skill)) {
+        throw new SkillError(404, 'skills/not-found', `skill version ${versionId} is not visible to this user`)
+      }
+      if (skill.archived_at !== null) {
+        throw new SkillError(409, 'skills/archived', `skill "${skill.name}" is archived; restore it before rolling back`)
+      }
+      if (source.status !== VERSION_STATUS.superseded) {
+        throw new SkillError(409, 'skills/invalid-rollback',
+          'rollback needs an approved historical version that a later approval superseded')
+      }
+      const current = skill.current_version_id === null ? undefined : this.#store.version(skill.current_version_id)
+      if (current === undefined) {
+        throw new SkillError(409, 'skills/invalid-rollback', `skill "${skill.name}" has no current version to roll back from`)
+      }
+      if (current.manifest_hash === source.manifest_hash) {
+        throw new SkillError(409, 'skills/invalid-rollback',
+          `the current version of "${skill.name}" already has this content; a rollback would change nothing`)
+      }
+      const sourceDirectory = this.#service.versionDirectory(source)
+      const sourcePackage = readSkillPackage(sourceDirectory)
+      if (sourcePackage.manifestHash !== source.manifest_hash) {
+        throw new SkillError(500, 'skills/integrity', `skill package integrity check failed for ${skill.name}`)
+      }
+      const scenarios = rollbackScenarios(verificationOf(source))
+      if (scenarios.length === 0) {
+        throw new SkillError(409, 'skills/invalid-rollback',
+          `version ${versionId} has no recorded verification scenario to roll back with`)
+      }
+
+      const staging = join(this.#root, 'tmp', randomUUID())
+      const candidateId = randomUUID()
+      let candidateDir: string | undefined
+      try {
+        copySkillPackage(sourceDirectory, staging)
+        const parsed = readSkillPackage(staging)
+        if (parsed.manifestHash !== source.manifest_hash) {
+          throw new SkillError(500, 'skills/integrity', `the rollback copy of ${skill.name} does not match its approved manifest`)
+        }
+        const checked = checkedScenarios(scenarios, new Set(parsed.manifest.map(entry => entry.path)), this.#verifyTimeoutMs)
+        mkdirSync(join(this.#root, 'candidates'), { recursive: true })
+        candidateDir = join(this.#root, 'candidates', candidateId)
+        renameSync(staging, candidateDir)
+        const growth = growthOf(parsed.coreCharacters, current.core_characters)
+        const location: SourceProvenance = {
+          sessionId,
+          benefit: `回滚到版本 ${source.id} 的已审核内容`,
+          rollbackOf: source.id,
+        }
+        const draft = this.#store.createDraft({
+          name: parsed.name,
+          scope: skill.scope,
+          ownerShortId: shortId,
+          createdBy: shortId,
+          packagePath: `candidates/${candidateId}`,
+          manifest: canonicalManifest(parsed.manifest),
+          manifestHash: parsed.manifestHash,
+          coreCharacters: parsed.coreCharacters,
+          ...(source.license === null
+            ? (parsed.license === undefined ? {} : { license: parsed.license })
+            : { license: source.license }),
+          sourceType: SOURCE_TYPE.rollback,
+          parentVersionId: current.id,
+          growthExceeded: growth.exceeded,
+          sourceLocation: JSON.stringify(location),
+        })
+        const reuse = this.#reusePlan(current, parsed.manifest, checked)
+        const verification = await runVerification({
+          root: this.#root,
+          packageDir: candidateDir,
+          scenarios: reuse.rerun,
+          timeoutMs: this.#verifyTimeoutMs,
+          ...(reuse.reused.length === 0 ? {} : { reused: reuse.reused }),
+        })
+        this.#store.updateVerification(draft.versionId, JSON.stringify(verification))
+        return {
+          ok: true,
+          skillId: draft.skillId,
+          versionId: draft.versionId,
+          status: VERSION_STATUS.pending,
+          nextActions: ['inspect', 'review'],
+          verification,
+        }
+      } catch (error) {
+        rmSync(staging, { recursive: true, force: true })
+        if (candidateDir !== undefined) rmSync(candidateDir, { recursive: true, force: true })
+        asSkillError(error)
+      }
+    } catch (error) {
+      asSkillError(error)
+    }
+  }
+
+  /**
+   * Resolve the parent a revision must name, or undefined for a new skill.
+   *
+   * The parent is the skill's current approved version and belongs to the
+   * caller's personal identity; a common parent, another owner's parent or a
+   * stale/superseded version is refused with the same vocabulary the tool
+   * reports. The target benefit is required and bounded; it is provenance, not
+   * a model claim that approval can skip.
+   */
+  #revisionContext(input: CreateCandidateInput): { skill: SkillRow; parent: SkillVersionRow; benefit: string } | undefined {
+    if (input.parentVersionId === undefined) {
+      if (input.targetBenefit !== undefined) {
+        throw new SkillError(400, 'skills/invalid-request', 'targetBenefit only applies to a revision; pass parentVersionId with it')
+      }
+      return undefined
+    }
+    const benefit = checkedTargetBenefit(input.targetBenefit)
+    if (input.scope !== undefined && input.scope !== SKILL_SCOPE.personal) {
+      throw new SkillError(400, 'skills/invalid-parent', 'a revision keeps the parent skill scope')
+    }
+    const parent = this.#store.version(input.parentVersionId)
+    if (parent === undefined) {
+      throw new SkillError(400, 'skills/invalid-parent', `parentVersionId ${input.parentVersionId} is not a skill version`)
+    }
+    const skill = this.#store.identity(parent.skill_id)
+    if (skill === undefined || skill.scope !== SKILL_SCOPE.personal || skill.owner_short_id !== input.ownerShortId) {
+      throw new SkillError(404, 'skills/not-found', `skill version ${input.parentVersionId} is not visible to this user`)
+    }
+    if (skill.archived_at !== null) {
+      throw new SkillError(409, 'skills/archived', `skill "${skill.name}" is archived; restore it before creating a revision`)
+    }
+    if (parent.status !== VERSION_STATUS.approvedCurrent || skill.current_version_id !== parent.id) {
+      throw new SkillError(400, 'skills/invalid-parent',
+        `parentVersionId ${input.parentVersionId} is not the skill's current approved version`)
+    }
+    return { skill, parent, benefit }
+  }
+
+  /**
+   * The reuse decision against the parent's recorded verification report.
+   *
+   * The parent manifest is re-read from its immutable version directory, so a
+   * changed file can only make reuse stricter (the hashes stop matching); a
+   * parent whose report or package cannot be read simply reruns everything.
+   */
+  #reusePlan(parent: SkillVersionRow, candidateManifest: readonly ManifestEntry[], scenarios: readonly CandidateScenario[]): { reused: ReusedScenario[]; rerun: readonly CandidateScenario[] } {
+    const parentManifest = this.#readParentManifest(parent)
+    if (parentManifest === undefined) return { reused: [], rerun: [...scenarios] }
+    let report: { executed: ScenarioRecord[]; reused: ScenarioRecord[] } | undefined
+    try {
+      const parsed = parent.verification === null ? undefined : JSON.parse(parent.verification) as { executed?: ScenarioRecord[]; reused?: ScenarioRecord[] }
+      if (parsed !== undefined) report = { executed: parsed.executed ?? [], reused: parsed.reused ?? [] }
+    } catch {
+      report = undefined
+    }
+    const hashes = (manifest: readonly ManifestEntry[]) => new Map(manifest.map(entry => [entry.path, entry.sha256]))
+    return planVerificationReuse({
+      scenarios,
+      candidateHashes: hashes(candidateManifest),
+      parentHashes: hashes(parentManifest),
+      parentReport: report,
+      parentVersionId: parent.id,
+    })
+  }
+
+  /**
    * The read-only review package for one candidate, plus its deterministic
    * display and one explicitly bounded expansion.
    */
@@ -909,7 +1171,7 @@ export class SkillCreation {
       const parent = version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)
       const parentManifest = parent === undefined ? undefined : this.#readParentManifest(parent)
       const verification = verificationOf(version)
-      const growth = growthOf(version, parent)
+      const growth = growthOf(version.core_characters, parent?.core_characters ?? null)
       const changes = changesOf(parsed.manifest, parentManifest)
       const review: ReviewPackage = {
         versionId: version.id,
@@ -939,12 +1201,16 @@ export class SkillCreation {
         packageTotal: parsed.manifest.length,
         changes,
         verification,
-        nextActions: version.status === VERSION_STATUS.pending && canReview(shortId, isAdmin, skill) ? [...REVIEW_ACTIONS] : [],
+        nextActions: version.status === VERSION_STATUS.pending
+          ? (canReview(shortId, isAdmin, skill) ? [...REVIEW_ACTIONS] : [])
+          : version.status === VERSION_STATUS.superseded && canReview(shortId, isAdmin, skill) ? ['rollback'] : [],
         growthConfirmation: {
           required: growth.exceeded,
           oldCharacters: growth.oldCharacters,
           newCharacters: growth.newCharacters,
-          percent: growth.ratio === null ? null : Math.round((growth.ratio - 1) * 1_000) / 10,
+          percent: growth.ratio === null || !Number.isFinite(growth.ratio)
+            ? null
+            : Math.round((growth.ratio - 1) * 1_000) / 10,
           instruction: growth.exceeded ? '超过旧版核心正文 10%；请在展示后单独回复「确认增长」，再批准。' : '',
         },
       }
@@ -975,17 +1241,24 @@ export class SkillCreation {
    *
    * Approval re-reads every authority before it moves bytes: the version is
    * still pending, the candidate still hashes to the recorded manifest, the
-   * verification report executed at least one scenario and failed none, the
-   * identity is not archived. Only then does the candidate directory become an
-   * immutable version and one transaction move the current pointer. A failure
-   * renames it back, so a half-published version is never readable.
+   * verification report has executed or reused evidence and no failure, the
+   * identity is not archived, a revision's parent is still the current version,
+   * and an exceeded growth carries the user's own post-display confirmation.
+   * Only then does the candidate directory become an immutable version and one
+   * transaction move the current pointer. A failure renames it back, so a
+   * half-published version is never readable.
    */
-  review({ shortId, isAdmin, versionId, decision, note }: {
+  review({ shortId, isAdmin, versionId, decision, note, events, sessionOwnerShortId, growthConfirmMessageId }: {
     readonly shortId: number
     readonly isAdmin: boolean
     readonly versionId: number
     readonly decision: ReviewDecision
     readonly note?: string
+    /** The reviewing session's durable log, read by the tool for the growth rule. */
+    readonly events?: readonly SessionEvent[]
+    /** The owner the reviewing session header names; must match the reviewer. */
+    readonly sessionOwnerShortId?: number
+    readonly growthConfirmMessageId?: string
   }): ReviewResult {
     try {
       if (!REVIEW_ACTIONS.includes(decision)) {
@@ -1026,12 +1299,32 @@ export class SkillCreation {
       const verification = verificationOf(version)
       const blocked = verificationReason(verification)
       if (blocked !== undefined) throw new SkillError(409, 'skills/verification-incomplete', blocked)
-      // Growth confirmation is the evolution ticket's rule; a #297 candidate
-      // has no parent, so this branch is unreachable until #299 supplies the
-      // message-reference validation. Refusing here keeps the approval gate
-      // real rather than silently approving an unconfirmed growth.
-      if (growthOf(version, version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)).exceeded) {
-        throw new SkillError(409, 'skills/growth-confirmation-required', 'core body grew more than 10%; show the counts and collect the user confirmation first')
+      // The stored growth flag is computed once at creation; the parent is
+      // immutable, so recomputing here can only detect a corrupted row.
+      const parent = version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)
+      const growth = growthOf(version.core_characters, parent?.core_characters ?? null)
+      if (growth.exceeded !== (version.growth_exceeded === 1)) {
+        throw new SkillError(500, 'skills/integrity', `skill version ${versionId} has an inconsistent growth flag`)
+      }
+      if (growthConfirmMessageId !== undefined && typeof growthConfirmMessageId !== 'string') {
+        throw new SkillError(400, 'skills/invalid-request', 'growthConfirmMessageId must be the user message id string')
+      }
+      let confirmGrowth: { confirmedBy: number; confirmedAt: number; messageId: string } | undefined
+      if (growth.exceeded) {
+        if (growthConfirmMessageId === undefined || growthConfirmMessageId === '') {
+          throw new SkillError(409, 'skills/growth-confirmation-required',
+            'core body grew more than 10%; inspect the candidate to show the counts, then collect the user\'s own 确认增长 reply')
+        }
+        if (events === undefined || sessionOwnerShortId !== shortId) {
+          throw new SkillError(409, 'skills/growth-confirmation-invalid',
+            'the growth confirmation must come from the reviewing user\'s own session')
+        }
+        const confirmation = confirmationOf({ events, versionId, messageId: growthConfirmMessageId })
+        if (confirmation === undefined) {
+          throw new SkillError(409, 'skills/growth-confirmation-invalid',
+            'growthConfirmMessageId must name the user\'s own exact 确认增长 message sent after this candidate\'s latest inspect display')
+        }
+        confirmGrowth = { confirmedBy: shortId, confirmedAt: confirmation.confirmedAt, messageId: confirmation.messageId }
       }
 
       const candidateDir = directory
@@ -1048,9 +1341,10 @@ export class SkillCreation {
           reviewedAt: now,
           ...(skill.owner_short_id === null ? {} : { ownerShortId: skill.owner_short_id }),
           defaultEnable: true,
+          ...(confirmGrowth === undefined ? {} : { confirmGrowth }),
           recheck: (latestVersion, latestSkill) => latestVersion.status === VERSION_STATUS.pending
             && latestSkill.archived_at === null
-            && (latestSkill.current_version_id === null || latestVersion.parent_version_id !== null)
+            && (latestVersion.parent_version_id === null || latestSkill.current_version_id === latestVersion.parent_version_id)
             && readSkillPackage(versionDir).manifestHash === latestVersion.manifest_hash,
         })
         return {
@@ -1085,7 +1379,7 @@ export class SkillCreation {
   }
 
   /** One pending row as both `skill_manage list` and `/skills/list` expose it. */
-  #pendingItem(row: PendingDraftRow, isAdmin: boolean): PendingItem {
+  #pendingItem(row: PendingDraftRow, isAdmin: boolean, confirmation: GrowthConfirmation | undefined): PendingItem {
     const decidable = row.skill_scope === SKILL_SCOPE.personal || isAdmin
     return {
       versionId: row.id,
@@ -1095,6 +1389,7 @@ export class SkillCreation {
       sourceType: row.source_type,
       createdAt: row.created_at,
       growthExceeded: row.growth_exceeded === 1,
+      ...(confirmation === undefined ? {} : { growthConfirmMessageId: confirmation.messageId }),
       nextActions: decidable ? [...REVIEW_ACTIONS] : [],
     }
   }
