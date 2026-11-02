@@ -504,6 +504,28 @@ export class SkillStore {
   }
 
   /**
+   * The identities whose current version has a revision in progress.
+   *
+   * A pending sibling always counts. A changes-requested sibling counts while
+   * it is the newest version row: once a newer draft exists, that draft (or its
+   * settled outcome) is the state the pool should present. Only identities the
+   * caller can review are counted, so the pool never leaks another user's draft.
+   */
+  openDraftSkillIds(shortId: number): Set<number> {
+    const rows = rowsOf<{ skill_id: number }>(this.#db.prepare(
+      `SELECT DISTINCT v.skill_id
+         FROM skill_version v JOIN skill s ON s.id = v.skill_id
+        WHERE v.deleted_at IS NULL AND s.deleted_at IS NULL AND s.archived_at IS NULL
+          AND ((s.scope = ? AND s.owner_short_id = ?) OR (s.scope = ? AND s.proposed_by = ?))
+          AND (v.status = ? OR (v.status = ? AND NOT EXISTS (
+                SELECT 1 FROM skill_version newer
+                 WHERE newer.skill_id = v.skill_id AND newer.deleted_at IS NULL AND newer.id > v.id)))`,
+    ).all(SKILL_SCOPE.personal, shortId, SKILL_SCOPE.common, shortId,
+      VERSION_STATUS.pending, VERSION_STATUS.changesRequested))
+    return new Set(rows.map(row => row.skill_id))
+  }
+
+  /**
    * The pending candidates one caller may review, newest first and bounded.
    *
    * A personal draft is visible to its owner; a common draft to its proposer
@@ -564,7 +586,7 @@ export class SkillStore {
    * versions. The first personal approval with no preference row enables the
    * owner; an explicit preference always survives.
    */
-  publishDraft({ versionId, packagePath, reviewer, reviewedAt, ownerShortId, defaultEnable, recheck }: {
+  publishDraft({ versionId, packagePath, reviewer, reviewedAt, ownerShortId, defaultEnable, confirmGrowth, recheck }: {
     readonly versionId: number
     readonly packagePath: string
     readonly reviewer: number
@@ -572,6 +594,8 @@ export class SkillStore {
     /** The personal owner whose default preference this approval may establish. */
     readonly ownerShortId?: number
     readonly defaultEnable: boolean
+    /** The validated user confirmation an exceeded-growth candidate was approved with. */
+    readonly confirmGrowth?: { readonly confirmedBy: number; readonly confirmedAt: number; readonly messageId: string }
     readonly recheck: (version: SkillVersionRow, skill: SkillRow) => boolean
   }): { readonly skillId: number; readonly previousVersionId: number | null } {
     return this.#transaction(() => {
@@ -588,6 +612,16 @@ export class SkillStore {
       if (!recheck(version, skill)) {
         throw new SkillStoreError('skills/changed', 'the candidate content or state changed after it was inspected; re-check it before approving')
       }
+      // A revision may only publish against the parent it was written for: if
+      // another version became current meanwhile, the candidate is stale.
+      if (version.parent_version_id !== null && skill.current_version_id !== version.parent_version_id) {
+        throw new SkillStoreError('skills/changed',
+          `skill "${skill.name}" changed its current version; create a new revision of the latest current version`)
+      }
+      if (version.growth_exceeded === 1 && confirmGrowth === undefined) {
+        throw new SkillStoreError('skills/growth-confirmation-required',
+          'core body grew more than 10%; show the counts and collect the user confirmation first')
+      }
       const previous = rowOf<{ id: number }>(this.#db.prepare(
         'SELECT id FROM skill_version WHERE skill_id = ? AND status = ? AND deleted_at IS NULL',
       ).get(skill.id, VERSION_STATUS.approvedCurrent))
@@ -598,8 +632,13 @@ export class SkillStore {
           .run(VERSION_STATUS.superseded, now, previous.id)
       }
       this.#db.prepare(
-        'UPDATE skill_version SET status = ?, package_path = ?, reviewer = ?, reviewed_at = ?, updated_at = ? WHERE id = ?',
-      ).run(VERSION_STATUS.approvedCurrent, packagePath, reviewer, reviewedAt, now, versionId)
+        `UPDATE skill_version
+            SET status = ?, package_path = ?, reviewer = ?, reviewed_at = ?,
+                growth_confirmed_by = ?, growth_confirmed_at = ?, growth_confirm_message = ?, updated_at = ?
+          WHERE id = ?`,
+      ).run(VERSION_STATUS.approvedCurrent, packagePath, reviewer, reviewedAt,
+        confirmGrowth?.confirmedBy ?? null, confirmGrowth?.confirmedAt ?? null, confirmGrowth?.messageId ?? null,
+        now, versionId)
       this.#db.prepare('UPDATE skill SET current_version_id = ?, updated_by = ?, updated_at = ? WHERE id = ?')
         .run(versionId, reviewer, now, skill.id)
       if (defaultEnable && skill.scope === SKILL_SCOPE.personal && ownerShortId !== undefined

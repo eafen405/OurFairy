@@ -32,7 +32,7 @@ import {
   type PackageFileInput,
 } from './package.js'
 import { SKILL_SCOPE, SOURCE_TYPE, VERSION_STATUS, SkillStoreError } from './store.js'
-import { checkedTargetBenefit, growthOf, planVerificationReuse, type ReusedScenario } from './evolution.js'
+import { checkedTargetBenefit, confirmationCandidate, confirmationOf, growthOf, planVerificationReuse, type GrowthConfirmation, type ReusedScenario } from './evolution.js'
 import { runVerification, type ScenarioRecord, type VerificationReport } from './verify.js'
 import { SkillError } from './service.js'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -127,6 +127,8 @@ export interface PendingItem {
   readonly sourceType: number
   readonly createdAt: number
   readonly growthExceeded: boolean
+  /** The user's own confirmation message the model may cite for approval, when one exists. */
+  readonly growthConfirmMessageId?: string
   readonly nextActions: string[]
 }
 
@@ -755,9 +757,20 @@ export class SkillCreation {
     return this.#root
   }
 
-  /** The pending candidates one caller may review, newest first and bounded. */
-  pending(shortId: number): PendingItem[] {
-    return this.#store.pendingDrafts(shortId).map(row => this.#pendingItem(row))
+  /**
+   * The pending candidates one caller may review, newest first and bounded.
+   *
+   * When the caller's durable log is supplied, a growth-exceeded candidate also
+   * carries the id of the user's own confirmation message that followed its
+   * latest inspect display. The model cannot read durable message ids from its
+   * context, so this is the one discovery path; approval re-reads the same
+   * message by id and never trusts this value alone.
+   */
+  pending(shortId: number, context: { readonly events?: readonly SessionEvent[] } = {}): PendingItem[] {
+    return this.#store.pendingDrafts(shortId).map(row => this.#pendingItem(row,
+      row.growth_exceeded === 1 && context.events !== undefined
+        ? confirmationCandidate(context.events, row.id)
+        : undefined))
   }
 
   /**
@@ -1014,11 +1027,16 @@ export class SkillCreation {
    * immutable version and one transaction move the current pointer. A failure
    * renames it back, so a half-published version is never readable.
    */
-  review({ shortId, versionId, decision, note }: {
+  review({ shortId, versionId, decision, note, events, sessionOwnerShortId, growthConfirmMessageId }: {
     readonly shortId: number
     readonly versionId: number
     readonly decision: ReviewDecision
     readonly note?: string
+    /** The reviewing session's durable log, read by the tool for the growth rule. */
+    readonly events?: readonly SessionEvent[]
+    /** The owner the reviewing session header names; must match the reviewer. */
+    readonly sessionOwnerShortId?: number
+    readonly growthConfirmMessageId?: string
   }): ReviewResult {
     try {
       if (!REVIEW_ACTIONS.includes(decision)) {
@@ -1059,12 +1077,32 @@ export class SkillCreation {
       const verification = verificationOf(version)
       const blocked = verificationReason(verification)
       if (blocked !== undefined) throw new SkillError(409, 'skills/verification-incomplete', blocked)
-      // Growth confirmation is the evolution ticket's rule; a #297 candidate
-      // has no parent, so this branch is unreachable until #299 supplies the
-      // message-reference validation. Refusing here keeps the approval gate
-      // real rather than silently approving an unconfirmed growth.
-      if (growthOf(version.core_characters, (version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id))?.core_characters ?? null).exceeded) {
-        throw new SkillError(409, 'skills/growth-confirmation-required', 'core body grew more than 10%; show the counts and collect the user confirmation first')
+      // The stored growth flag is computed once at creation; the parent is
+      // immutable, so recomputing here can only detect a corrupted row.
+      const parent = version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)
+      const growth = growthOf(version.core_characters, parent?.core_characters ?? null)
+      if (growth.exceeded !== (version.growth_exceeded === 1)) {
+        throw new SkillError(500, 'skills/integrity', `skill version ${versionId} has an inconsistent growth flag`)
+      }
+      if (growthConfirmMessageId !== undefined && typeof growthConfirmMessageId !== 'string') {
+        throw new SkillError(400, 'skills/invalid-request', 'growthConfirmMessageId must be the user message id string')
+      }
+      let confirmGrowth: { confirmedBy: number; confirmedAt: number; messageId: string } | undefined
+      if (growth.exceeded) {
+        if (growthConfirmMessageId === undefined || growthConfirmMessageId === '') {
+          throw new SkillError(409, 'skills/growth-confirmation-required',
+            'core body grew more than 10%; inspect the candidate to show the counts, then collect the user\'s own 确认增长 reply')
+        }
+        if (events === undefined || sessionOwnerShortId !== shortId) {
+          throw new SkillError(409, 'skills/growth-confirmation-invalid',
+            'the growth confirmation must come from the reviewing user\'s own session')
+        }
+        const confirmation = confirmationOf({ events, versionId, messageId: growthConfirmMessageId })
+        if (confirmation === undefined) {
+          throw new SkillError(409, 'skills/growth-confirmation-invalid',
+            'growthConfirmMessageId must name the user\'s own exact 确认增长 message sent after this candidate\'s latest inspect display')
+        }
+        confirmGrowth = { confirmedBy: shortId, confirmedAt: confirmation.confirmedAt, messageId: confirmation.messageId }
       }
 
       const candidateDir = directory
@@ -1081,9 +1119,10 @@ export class SkillCreation {
           reviewedAt: now,
           ...(skill.owner_short_id === null ? {} : { ownerShortId: skill.owner_short_id }),
           defaultEnable: true,
+          ...(confirmGrowth === undefined ? {} : { confirmGrowth }),
           recheck: (latestVersion, latestSkill) => latestVersion.status === VERSION_STATUS.pending
             && latestSkill.archived_at === null
-            && (latestSkill.current_version_id === null || latestVersion.parent_version_id !== null)
+            && (latestVersion.parent_version_id === null || latestSkill.current_version_id === latestVersion.parent_version_id)
             && readSkillPackage(versionDir).manifestHash === latestVersion.manifest_hash,
         })
         return {
@@ -1118,7 +1157,7 @@ export class SkillCreation {
   }
 
   /** One pending row as both `skill_manage list` and `/skills/list` expose it. */
-  #pendingItem(row: PendingDraftRow): PendingItem {
+  #pendingItem(row: PendingDraftRow, confirmation: GrowthConfirmation | undefined): PendingItem {
     return {
       versionId: row.id,
       skillId: row.skill_id,
@@ -1127,6 +1166,7 @@ export class SkillCreation {
       sourceType: row.source_type,
       createdAt: row.created_at,
       growthExceeded: row.growth_exceeded === 1,
+      ...(confirmation === undefined ? {} : { growthConfirmMessageId: confirmation.messageId }),
       nextActions: [...REVIEW_ACTIONS],
     }
   }

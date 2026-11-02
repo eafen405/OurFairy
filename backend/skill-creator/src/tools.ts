@@ -193,8 +193,14 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
   if (owner === undefined) throw new Error('skills/unauthorized: skill_manage needs a user-owned session')
   try {
     switch (args.action) {
-      case 'list':
-        return { ok: true, pending: deps.creation.pending(owner), pool: deps.service.pool(owner) } as unknown as SkillToolValue
+      case 'list': {
+        const { events } = await readSessionEvents(deps.ctx, agent.session.id)
+        return {
+          ok: true,
+          pending: deps.creation.pending(owner, { events }),
+          pool: deps.service.pool(owner),
+        } as unknown as SkillToolValue
+      }
       case 'inspect': {
         const versionId = requiredPositiveInteger(args.versionId, 'versionId')
         return deps.creation.inspect(owner, versionId, {
@@ -234,11 +240,15 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
       case 'review': {
         const versionId = requiredPositiveInteger(args.versionId, 'versionId')
         if (args.decision === undefined) throw new Error('skills/invalid-request: review needs decision approve, request_changes or reject')
+        const { events } = await readSessionEvents(deps.ctx, agent.session.id)
         const result = deps.creation.review({
           shortId: owner,
           versionId,
           decision: args.decision,
+          sessionOwnerShortId: owner,
+          events,
           ...(args.note === undefined ? {} : { note: args.note }),
+          ...(args.growthConfirmMessageId === undefined ? {} : { growthConfirmMessageId: args.growthConfirmMessageId }),
         })
         if (decisionIsPublish(args.decision)) {
           // The published current version changes this owner's catalog; the

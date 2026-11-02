@@ -174,16 +174,16 @@ async function callTool(identity, sessionId, name, args = {}) {
   return { call, result, isError: result.data.message.isError === true, text, value }
 }
 
-/** A core body of exactly `length` Unicode characters. */
-function bodyOf(length) {
+/** A core body of exactly `length` Unicode characters, ending in a marker. */
+function bodyOf(length, marker = 'a') {
   const prefix = '# Workflow\n\n'
-  assert.ok(length >= prefix.length, `the body must fit its own heading; got ${length}`)
-  return prefix + 'a'.repeat(length - prefix.length)
+  assert.ok(length >= prefix.length + marker.length, `the body must fit its own heading and marker; got ${length}`)
+  return prefix + 'a'.repeat(length - prefix.length - marker.length) + marker
 }
 
 /** A complete package as the model would submit it. */
-function packageFiles(name, { description = 'Use when running the reusable workflow.', body, bodyLength, extra = {} } = {}) {
-  const text = body ?? bodyOf(bodyLength)
+function packageFiles(name, { description = 'Use when running the reusable workflow.', body, bodyLength, marker, extra = {} } = {}) {
+  const text = body ?? bodyOf(bodyLength, marker)
   return [
     { path: 'SKILL.md', content: `---\nname: ${name}\ndescription: ${description}\n---\n\n${text}\n` },
     ...Object.entries(extra).map(([path, content]) => ({ path, content: typeof content === 'string' ? content : content.content })),
@@ -192,6 +192,36 @@ function packageFiles(name, { description = 'Use when running the reusable workf
 
 /** The shared verification scenario; reads the package copy it was given. */
 const SCENARIO = { name: 'reads the packaged reference', command: 'test -f references/guide.md && grep -q GUIDE references/guide.md', uses: ['references/guide.md'] }
+
+/** Approve one pending candidate as its owner, optionally citing a growth confirmation. */
+async function approve(versionId, growthConfirmMessageId) {
+  return callTool(alice, sessionAlice, 'skill_manage', {
+    action: 'review', versionId, decision: 'approve',
+    ...(growthConfirmMessageId === undefined ? {} : { growthConfirmMessageId }),
+  })
+}
+
+/** One pending row as `skill_manage list` answers it. */
+async function pendingOf(name) {
+  const list = await callTool(alice, sessionAlice, 'skill_manage', { action: 'list' })
+  assert.equal(list.isError, false, list.text)
+  return list.value.pending.find(item => item.name === name)
+}
+
+/** Activate one skill through the native `skill` tool and answer its result text. */
+async function nativeLoad(identity, sessionId, name) {
+  const before = new Set((await readEvents(identity, sessionId)).filter(event => event.type === 'tool/call').map(event => event.data.callId))
+  await send(identity, sessionId, `[[skill:${name}]]`)
+  const events = await readEvents(identity, sessionId)
+  const call = events.filter(event => event.type === 'tool/call' && event.data.name === 'skill' && !before.has(event.data.callId)).at(-1)
+  assert.ok(call, `the log must contain the new skill call for ${name}`)
+  const result = events.find(event => event.type === 'tool/result' && event.data.message.toolCallId === call.data.callId)
+  assert.ok(result, `the log must contain the result for ${call.data.callId}`)
+  return {
+    isError: result.data.message.isError === true,
+    text: (result.data.message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join(''),
+  }
+}
 
 /** Create one new skill and approve it; answer the approved version. */
 async function publishNewSkill(name, { bodyLength = 1000, files, scenarios = [{ name: 'ok', command: 'true' }] } = {}) {
@@ -208,12 +238,12 @@ async function publishNewSkill(name, { bodyLength = 1000, files, scenarios = [{ 
 }
 
 /** Create one revision candidate of an approved skill. */
-async function createRevision(name, parentVersionId, { bodyLength = 1090, files, scenarios = [{ name: 'ok', command: 'true' }], benefit = 'fix the failed step', extra = {} } = {}) {
+async function createRevision(name, parentVersionId, { bodyLength = 1090, marker, files, scenarios = [{ name: 'ok', command: 'true' }], benefit = 'fix the failed step', extra = {} } = {}) {
   return callTool(alice, sessionAlice, 'skill_manage', {
     action: 'create', scope: 1, focus: { kind: 'turn' },
     parentVersionId,
     targetBenefit: benefit,
-    files: files ?? packageFiles(name, { bodyLength, extra }),
+    files: files ?? packageFiles(name, { bodyLength, marker, extra }),
     scenarios,
   })
 }
@@ -283,12 +313,15 @@ before(async () => {
   alice = await registerUser(port, admin.token, 'skill-evolver', password)
   bob = await registerUser(port, admin.token, 'skill-evolution-outsider', password)
   sessionAlice = (await request('/sessions/create', alice.token)).session.id
-  sessionAliceSecond = (await request('/sessions/create', alice.token)).session.id
   sessionBob = (await request('/sessions/create', bob.token)).session.id
 
-  // One closed real turn so `focus` has a turn to resolve.
+  // One closed real turn so `focus` has a turn to resolve. A second session is
+  // requested only after the primary is non-empty, so the product hands out a
+  // distinct session instead of the still-empty primary.
   await send(alice, sessionAlice, 'PROBE: the workflow that will become a skill')
   await send(bob, sessionBob, 'PROBE: an outsider session')
+  sessionAliceSecond = (await request('/sessions/create', alice.token)).session.id
+  assert.notEqual(sessionAliceSecond, sessionAlice, 'the cross-session case needs a distinct session')
   await send(alice, sessionAliceSecond, 'PROBE: the second session of the same owner')
 })
 
@@ -446,5 +479,299 @@ describe('revision candidates', () => {
     assert.equal(approved.isError, false, 'verification that is partly reused still authorises approval: ' + approved.text)
     assert.equal(versionOf(base.versionId).status, 4)
     assert.equal(versionOf(revision.value.versionId).status, 3)
+  })
+})
+
+describe('growth confirmation', () => {
+  test('109% and 110% need no confirmation; 111% needs the user\'s own post-display message', async () => {
+    const base109 = await publishNewSkill('growth-109', { bodyLength: 1000, marker: 'V1' })
+    const revision109 = await createRevision('growth-109', base109.versionId, {
+      bodyLength: 1090, marker: 'V2', benefit: 'complete the failure branch',
+    })
+    assert.equal(revision109.isError, false, revision109.text)
+    assert.equal(versionOf(revision109.value.versionId).growth_exceeded, 0, '109% is under the limit')
+    const approved109 = await approve(revision109.value.versionId)
+    assert.equal(approved109.isError, false, `109% approves without a confirmation: ${approved109.text}`)
+    assert.equal(versionOf(revision109.value.versionId).status, 3)
+
+    const base110 = await publishNewSkill('growth-110', { bodyLength: 1000, marker: 'V1' })
+    const revision110 = await createRevision('growth-110', base110.versionId, {
+      bodyLength: 1100, marker: 'V2', benefit: 'add the verified fallback',
+    })
+    assert.equal(revision110.isError, false, revision110.text)
+    assert.equal(versionOf(revision110.value.versionId).growth_exceeded, 0, 'exactly 110% is not exceeded')
+    const approved110 = await approve(revision110.value.versionId)
+    assert.equal(approved110.isError, false, `110% approves without a confirmation: ${approved110.text}`)
+    assert.equal(versionOf(revision110.value.versionId).status, 3)
+
+    const base111 = await publishNewSkill('growth-111', { bodyLength: 1000, marker: 'OLD' })
+    const revision111 = await createRevision('growth-111', base111.versionId, {
+      bodyLength: 1110, marker: 'NEW', benefit: 'add two verified steps',
+    })
+    assert.equal(revision111.isError, false, revision111.text)
+    const versionId = revision111.value.versionId
+    assert.equal(versionOf(versionId).growth_exceeded, 1, '111% exceeds the limit')
+
+    // The owner disabled the skill earlier; approval must preserve that choice.
+    await request('/skills/preference', alice.token, { skillId: base111.skillId, enabled: false })
+
+    const blocked = await approve(versionId)
+    assert.equal(blocked.isError, true)
+    assert.match(blocked.text, /skills\/growth-confirmation-required/u, blocked.text)
+    assert.equal(versionOf(versionId).status, 0, 'the unconfirmed candidate stays pending')
+
+    const inspect = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId })
+    assert.equal(inspect.isError, false, inspect.text)
+    assert.equal(inspect.value.review.growth.exceeded, true)
+    assert.equal(inspect.value.review.growth.oldCharacters, 1000)
+    assert.equal(inspect.value.review.growth.newCharacters, 1110)
+    assert.equal(inspect.value.review.growthConfirmation.percent, 11)
+    assert.equal(inspect.value.review.growthConfirmation.required, true)
+    assert.ok(inspect.value.display.includes('核心正文 1000 → 1110 字符（+11.0%）'), inspect.value.display)
+    assert.ok(inspect.value.display.includes('篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」'), inspect.value.display)
+
+    // Before the user replies, the model has no confirmation message to cite.
+    assert.equal((await pendingOf('growth-111')).growthConfirmMessageId, undefined)
+
+    const confirmation = await sendUserMessage(alice, sessionAlice, '确认增长')
+    const pending = await pendingOf('growth-111')
+    assert.equal(pending.growthConfirmMessageId, confirmation.messageId,
+      'list names the user\'s own confirmation message so the model can cite it')
+
+    const approved = await approve(versionId, confirmation.messageId)
+    assert.equal(approved.isError, false, approved.text)
+    assert.equal(approved.value.status, 3)
+    const stored = versionOf(versionId)
+    assert.equal(stored.status, 3)
+    assert.equal(stored.growth_confirmed_by, alice.user.shortId)
+    assert.ok(stored.growth_confirmed_at > 0)
+    assert.equal(stored.growth_confirm_message, confirmation.messageId)
+    assert.equal(identityOf('growth-111').current_version_id, versionId)
+    assert.equal(versionOf(base111.versionId).status, 4)
+
+    const [preference] = rows('SELECT * FROM skill_user_preference WHERE short_id = ? AND skill_id = ?',
+      alice.user.shortId, base111.skillId)
+    assert.equal(preference.enabled, 0, 'a version switch preserves the explicit preference')
+    const pool = (await request('/skills/list', alice.token)).skills.find(item => item.skillId === base111.skillId)
+    assert.equal(pool.enabled, false)
+    assert.equal(pool.currentVersionId, versionId)
+
+    // Re-enabling after the switch serves the new current version, not history.
+    const reenabled = (await request('/skills/preference', alice.token, { skillId: base111.skillId, enabled: true })).skill
+    assert.equal(reenabled.enabled, true)
+    const activation = await nativeLoad(alice, sessionAlice, 'growth-111')
+    assert.equal(activation.isError, false)
+    assert.match(activation.text, /NEW/u, 'the approved revision is the only body the native loader serves')
+    assert.ok(!activation.text.endsWith('OLD</skill_instructions>\n</skill_content>'), 'the old body is gone')
+  })
+
+  test('a modeled boolean, wrong text, wrong order, another session or another user cannot confirm growth', async () => {
+    const base = await publishNewSkill('growth-forge', { bodyLength: 1000, marker: 'V1' })
+    const candidate = await createRevision('growth-forge', base.versionId, {
+      bodyLength: 1110, marker: 'V2', benefit: 'add the verified recovery branch',
+    })
+    assert.equal(candidate.isError, false, candidate.text)
+    const versionId = candidate.value.versionId
+    assert.equal(versionOf(versionId).growth_exceeded, 1)
+
+    // A model-authored boolean is not a user message reference.
+    const modeled = await approve(versionId, true)
+    assert.equal(modeled.isError, true, 'a boolean instead of a message id is refused')
+    assert.equal(versionOf(versionId).status, 0)
+
+    // The display must exist before any confirmation can count.
+    const inspect = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId })
+    assert.equal(inspect.isError, false, inspect.text)
+
+    const wrongText = await sendUserMessage(alice, sessionAlice, '确认增长吧')
+    const wrongTextApproval = await approve(versionId, wrongText.messageId)
+    assert.equal(wrongTextApproval.isError, true)
+    assert.match(wrongTextApproval.text, /skills\/growth-confirmation-invalid/u, wrongTextApproval.text)
+    assert.equal(versionOf(versionId).status, 0)
+    assert.equal(versionOf(versionId).growth_confirm_message, null)
+
+    const forged = await approve(versionId, 'not-a-real-message-id')
+    assert.equal(forged.isError, true)
+    assert.match(forged.text, /skills\/growth-confirmation-invalid/u, forged.text)
+
+    // Same owner, different session: the confirmation must be in this session.
+    const otherSession = await sendUserMessage(alice, sessionAliceSecond, '确认增长')
+    const crossSession = await approve(versionId, otherSession.messageId)
+    assert.equal(crossSession.isError, true)
+    assert.match(crossSession.text, /skills\/growth-confirmation-invalid/u, crossSession.text)
+
+    // Another user's exact message id cannot be borrowed either.
+    const otherUser = await sendUserMessage(bob, sessionBob, '确认增长')
+    const crossUser = await approve(versionId, otherUser.messageId)
+    assert.equal(crossUser.isError, true)
+    assert.match(crossUser.text, /skills\/growth-confirmation-invalid/u, crossUser.text)
+
+    // The real message in the right session and after the display approves it.
+    const confirmation = await sendUserMessage(alice, sessionAlice, '确认增长')
+    const accepted = await approve(versionId, confirmation.messageId)
+    assert.equal(accepted.isError, false, accepted.text)
+    assert.equal(versionOf(versionId).status, 3)
+
+    // Wrong order: a confirmation sent before the inspect display cannot count.
+    const base2 = await publishNewSkill('growth-order', { bodyLength: 1000, marker: 'V1' })
+    const early = await sendUserMessage(alice, sessionAlice, '确认增长')
+    const orderedCandidate = await createRevision('growth-order', base2.versionId, {
+      bodyLength: 1110, marker: 'V2', benefit: 'recover the second step',
+    })
+    assert.equal(orderedCandidate.isError, false, orderedCandidate.text)
+    const orderedInspect = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'inspect', versionId: orderedCandidate.value.versionId,
+    })
+    assert.equal(orderedInspect.isError, false, orderedInspect.text)
+    const prior = await approve(orderedCandidate.value.versionId, early.messageId)
+    assert.equal(prior.isError, true, 'a message that predates the latest display is stale')
+    assert.match(prior.text, /skills\/growth-confirmation-invalid/u, prior.text)
+    const after = await sendUserMessage(alice, sessionAlice, '确认增长')
+    const orderedApproval = await approve(orderedCandidate.value.versionId, after.messageId)
+    assert.equal(orderedApproval.isError, false, orderedApproval.text)
+
+    // A newer draft with a different hash invalidates the older confirmation:
+    // the old id predates the new candidate's display and cannot approve it.
+    const base3 = await publishNewSkill('growth-stale', { bodyLength: 1000, marker: 'V1' })
+    const firstDraft = await createRevision('growth-stale', base3.versionId, {
+      bodyLength: 1110, marker: 'V2', benefit: 'add the recovery branch',
+    })
+    assert.equal(firstDraft.isError, false, firstDraft.text)
+    await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: firstDraft.value.versionId })
+    const firstConfirmation = await sendUserMessage(alice, sessionAlice, '确认增长')
+    const secondDraft = await createRevision('growth-stale', base3.versionId, {
+      bodyLength: 1120, marker: 'V3', benefit: 'add the recovery branch and the retry note',
+    })
+    assert.equal(secondDraft.isError, false, secondDraft.text)
+    assert.notEqual(versionOf(secondDraft.value.versionId).manifest_hash, versionOf(firstDraft.value.versionId).manifest_hash)
+    const secondInspect = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'inspect', versionId: secondDraft.value.versionId,
+    })
+    assert.equal(secondInspect.isError, false, secondInspect.text)
+    const stale = await approve(secondDraft.value.versionId, firstConfirmation.messageId)
+    assert.equal(stale.isError, true, 'the confirmation for the older hash cannot approve the newer draft')
+    assert.match(stale.text, /skills\/growth-confirmation-invalid/u, stale.text)
+    const fresh = await sendUserMessage(alice, sessionAlice, '确认增长')
+    const freshApproval = await approve(secondDraft.value.versionId, fresh.messageId)
+    assert.equal(freshApproval.isError, false, freshApproval.text)
+    assert.equal(versionOf(firstDraft.value.versionId).status, 0, 'the superseded draft stays pending but cannot publish later')
+  })
+})
+
+describe('atomic version switching and the pool revision state', () => {
+  test('the old current version serves during review; the switch serves only the revision and keeps history out of resources', async () => {
+    const base = await publishNewSkill('switch-demo', {
+      bodyLength: 1000, marker: 'V1',
+      files: packageFiles('switch-demo', { bodyLength: 1000, marker: 'V1', extra: { 'references/guide.md': 'GUIDE V1' } }),
+      scenarios: [SCENARIO],
+    })
+    const before = (await request('/skills/list', alice.token)).skills.find(item => item.skillId === base.skillId)
+    assert.equal(before.currentVersionId, base.versionId)
+    assert.equal(before.pendingRevision, false)
+
+    const revision = await createRevision('switch-demo', base.versionId, {
+      bodyLength: 1090, marker: 'V2', benefit: 'recover the failing comparison',
+      files: packageFiles('switch-demo', { bodyLength: 1090, marker: 'V2', extra: { 'references/guide.md': 'GUIDE V2' } }),
+      scenarios: [SCENARIO],
+    })
+    assert.equal(revision.isError, false, revision.text)
+
+    // During review: the pool names the old current version and the pending
+    // revision, and the native loader still serves the old body.
+    const during = (await request('/skills/list', alice.token)).skills.find(item => item.skillId === base.skillId)
+    assert.equal(during.currentVersionId, base.versionId)
+    assert.equal(during.pendingRevision, true, 'the pool names the revision in progress')
+    assert.equal(during.state, 1)
+    const pendingEntry = (await request('/skills/list', alice.token)).pending.find(item => item.versionId === revision.value.versionId)
+    assert.ok(pendingEntry, 'the revision is in the separate pending area')
+    const oldActivation = await nativeLoad(alice, sessionAlice, 'switch-demo')
+    assert.equal(oldActivation.isError, false)
+    assert.match(oldActivation.text, /V1/u, 'the old current version stays usable during review')
+    assert.ok(!oldActivation.text.includes('V2'))
+
+    // The approved version directory is a read-only resource; the candidate is not.
+    const oldDirectory = packageDirectory(base.versionId)
+    const candidateDirectory = packageDirectory(revision.value.versionId)
+    const readOld = await callTool(alice, sessionAlice, 'read', { file_path: join(oldDirectory, 'SKILL.md') })
+    assert.equal(readOld.isError, false, `the current version is readable: ${readOld.text}`)
+    const readCandidate = await callTool(alice, sessionAlice, 'read', { file_path: join(candidateDirectory, 'SKILL.md') })
+    assert.equal(readCandidate.isError, true, 'an unapproved candidate is not a read-only resource')
+
+    // A second pending revision of the same parent can coexist; only one can publish.
+    const second = await createRevision('switch-demo', base.versionId, {
+      bodyLength: 1080, marker: 'V3', benefit: 'a smaller recovery that proves the same fix',
+      files: packageFiles('switch-demo', { bodyLength: 1080, marker: 'V3', extra: { 'references/guide.md': 'GUIDE V2' } }),
+      scenarios: [SCENARIO],
+    })
+    assert.equal(second.isError, false, second.text)
+    const [firstApproval, secondApproval] = await Promise.all([
+      approve(revision.value.versionId),
+      callTool(alice, sessionAliceSecond, 'skill_manage', { action: 'review', versionId: second.value.versionId, decision: 'approve' }),
+    ])
+    const winners = [firstApproval, secondApproval].filter(result => result.isError === false)
+    const losers = [firstApproval, secondApproval].filter(result => result.isError === true)
+    assert.equal(winners.length, 1, `exactly one revision publishes: ${JSON.stringify([firstApproval.text, secondApproval.text])}`)
+    assert.equal(losers.length, 1)
+    assert.match(losers[0].text, /skills\/changed/u, 'the loser publishes against a stale parent pointer')
+    const currentId = identityOf('switch-demo').current_version_id
+    assert.ok(currentId === revision.value.versionId || currentId === second.value.versionId)
+    const loserId = currentId === revision.value.versionId ? second.value.versionId : revision.value.versionId
+    assert.equal(versionOf(loserId).status, 0, 'the losing revision stays pending for a real rebase')
+    assert.equal(versionOf(base.versionId).status, 4)
+
+    // After the switch: only the new current version serves the catalog and
+    // the read-only resources; the superseded directory stays on disk for
+    // audit and rollback but is not a model-visible resource.
+    const after = (await request('/skills/list', alice.token)).skills.find(item => item.skillId === base.skillId)
+    assert.equal(after.currentVersionId, currentId)
+    assert.equal(after.pendingRevision, true, 'the losing revision still counts as a revision in progress')
+    const winningMarker = currentId === revision.value.versionId ? 'V2' : 'V3'
+    const winningDirectory = packageDirectory(currentId)
+    const newActivation = await nativeLoad(alice, sessionAlice, 'switch-demo')
+    assert.equal(newActivation.isError, false)
+    assert.match(newActivation.text, new RegExp(winningMarker, 'u'))
+    assert.ok(!newActivation.text.includes('V1'), 'the old body is not served after the switch')
+    const readOldAfter = await callTool(alice, sessionAlice, 'read', { file_path: join(oldDirectory, 'SKILL.md') })
+    assert.equal(readOldAfter.isError, true, 'a superseded version is not a read-only resource')
+    const readNew = await callTool(alice, sessionAlice, 'read', { file_path: join(winningDirectory, 'SKILL.md') })
+    assert.equal(readNew.isError, false, `the new current version is readable: ${readNew.text}`)
+    assert.ok(existsSync(join(oldDirectory, 'SKILL.md')), 'history keeps its package directory on disk')
+
+    // The losing revision cannot publish later against the old parent.
+    const late = await approve(loserId)
+    assert.equal(late.isError, true)
+    assert.match(late.text, /skills\/changed/u, late.text)
+  })
+
+  test('pendingRevision is true for a pending or changes-requested sibling and false once settled', async () => {
+    const base = await publishNewSkill('revision-state', { bodyLength: 1000 })
+    const read = async () => (await request('/skills/list', alice.token)).skills.find(item => item.skillId === base.skillId)
+    assert.equal((await read()).pendingRevision, false)
+
+    const pending = await createRevision('revision-state', base.versionId, { bodyLength: 1090 })
+    assert.equal(pending.isError, false, pending.text)
+    assert.equal((await read()).pendingRevision, true)
+
+    const changes = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'review', versionId: pending.value.versionId, decision: 'request_changes', note: 'tighten the failure branch',
+    })
+    assert.equal(changes.isError, false, changes.text)
+    assert.equal((await read()).pendingRevision, true, 'a changes-requested sibling still marks the revision in progress')
+
+    const rejectedCandidate = await createRevision('revision-state', base.versionId, { bodyLength: 1100 })
+    assert.equal(rejectedCandidate.isError, false, rejectedCandidate.text)
+    const rejected = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'review', versionId: rejectedCandidate.value.versionId, decision: 'reject',
+    })
+    assert.equal(rejected.isError, false, rejected.text)
+    assert.equal((await read()).pendingRevision, false,
+      'a newer settled draft clears the older changes-requested state')
+    const approvedCandidate = await createRevision('revision-state', base.versionId, { bodyLength: 1110, benefit: 'complete the recovery' })
+    assert.equal(approvedCandidate.isError, false, approvedCandidate.text)
+    await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: approvedCandidate.value.versionId })
+    const confirmation = await sendUserMessage(alice, sessionAlice, '确认增长')
+    const approved = await approve(approvedCandidate.value.versionId, confirmation.messageId)
+    assert.equal(approved.isError, false, approved.text)
+    assert.equal((await read()).pendingRevision, false, 'an approved current version has no revision in progress')
   })
 })
