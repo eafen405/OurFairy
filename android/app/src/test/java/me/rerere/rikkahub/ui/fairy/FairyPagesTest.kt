@@ -1147,6 +1147,19 @@ class FairyPagesTest {
         compose.runOnIdle { assertEquals("the skills page read the scope's backend", 1, skillReads) }
     }
 
+    @Test fun `the pending skill entry opens the primary conversation the backend answers`() {
+        var destination: Screen? = null
+        destination(Screen.Skills) { destination = it }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("pending-skill").performScrollTo().performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(Screen.Conversation("ourfairy-user-2-primary"), destination)
+        }
+    }
+
     @Test fun `settings shows the pending skill badge from the backend count`() {
         show {
             FairySettingsPage(

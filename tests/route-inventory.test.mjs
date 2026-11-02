@@ -82,8 +82,8 @@ function countsOf(values) {
  * download handlers all go through `postHandler` (JSON body, JSON response);
  * `/attachments/chunk` reads octet-stream bytes, `/attachments/download` writes
  * the original bytes, `/chat/observe` writes SSE, `/speech` is the one GET,
- * and `/speech/transcriptions` reads audio bytes. The counts are the acceptance
- * facts for the 35 JSON-after-fence addresses and the three handwritten ones.
+ * and `/speech/transcriptions` reads audio bytes. The matrix below is the
+ * acceptance fact for which shape each address serves.
  */
 const MATRIX = {
   identity: { 'POST/json/json': 6 },

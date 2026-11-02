@@ -475,6 +475,15 @@ describe('explicit skill creation, review and publish', () => {
     const catalog = latestCatalog(requests.at(-1))
     assert.ok(catalogNames(catalog, ids.candidateName), 'the published skill enters the next model catalog')
 
+    // A same-name candidate after approval is refused: that needs a revision.
+    const conflict = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' },
+      files: packageFiles(ids.candidateName), scenarios: [{ name: 'ok', command: 'true' }],
+    })
+    assert.equal(conflict.isError, true)
+    assert.match(conflict.text, /skills\/name-conflict/u)
+    assert.match(conflict.text, /revision/u)
+
     // And the native activation path serves the approved body.
     await send(alice, sessionAlice, `[[skill:${ids.candidateName}]]`)
     const rowsAfter = await allMessages(alice, sessionAlice)
