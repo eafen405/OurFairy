@@ -40,13 +40,15 @@ export const SKILL_MANAGE_NAME = 'skill_manage'
  * to both. `list`/`inspect` are the only way to read candidates; approval is
  * always the user's decision.
  */
-export const SKILL_MANAGE_DESCRIPTION = 'Manage reusable Fairy skills. Use it when the user asks to save a reusable workflow as a skill, or to review a skill candidate. '
+export const SKILL_MANAGE_DESCRIPTION = 'Manage reusable Fairy skills. Use it when the user asks to save a reusable workflow as a skill, revise an existing skill, or review a skill candidate. '
   + 'A reusable procedure (ordered steps, inputs, outputs, tools, checks) belongs in a skill; a stable fact or preference about the user belongs in memory. Never write the same content to both. '
-  + 'Actions: `list` returns the caller\'s bounded pending candidates and the reviewed selection pool with backend-derived states; '
-  + '`create` validates a complete package drafted by you and turns it into a pending candidate — the backend derives the owner from the calling session, accepts only scope 1 (personal) for now, and runs the representative scenarios for real, so never claim a verification result you did not receive; '
-  + '`inspect` returns one pending candidate\'s read-only review package and a deterministic display (the four blocks: identity/hash and core-character change, applicability and target benefit, package and verification evidence, how to expand the full text), and produces the `skill-review` display row the user reads; use `expand: "skill"` or `expand: "files"` with `path` for the full text instead of asking for everything at once; '
-  + '`review` records `approve`, `request_changes` or `reject` for a pending candidate after the user decides. Never claim approval yourself and never approve on the user\'s behalf. The model cannot submit an owner, a reviewer, a current-version pointer, a landing path, a manifest hash or a verification result. '
-  + 'A name that already has an approved current version is refused: that needs a revision, which this tool does not offer yet.'
+  + 'Actions: `list` returns the caller\'s bounded pending candidates and the reviewed selection pool with backend-derived states; it names the user\'s own growth confirmation message when one exists; '
+  + '`create` validates a complete package drafted by you and turns it into a pending candidate — the backend derives the owner from the calling session, accepts only scope 1 (personal) for now, and runs the representative scenarios for real, so never claim a verification result you did not receive. '
+  + 'With `parentVersionId` (the skill\'s current approved version) and a non-empty `targetBenefit`, create writes a revision: the package is a complete rewrite, unchanged scenarios reuse the parent\'s recorded verification, and the core-body growth is recorded; a revision without a proven benefit must not be created. '
+  + '`inspect` returns one pending candidate\'s read-only review package and a deterministic display (identity/hash and old/new core-body characters with the growth percentage, applicability and target benefit, package and verification evidence, how to expand the full text). When growth exceeds 10% the display tells the user to reply exactly 确认增长 in a separate turn; use `expand: "skill"` or `expand: "files"` with `path` instead of asking for everything at once; '
+  + '`review` records `approve`, `request_changes` or `reject` for a pending candidate after the user decides. Never claim approval yourself and never approve on the user\'s behalf. For an exceeded growth, approval additionally needs `growthConfirmMessageId`: the id `list` reports for that candidate, naming the user\'s own exact 确认增长 message sent after the inspect display — never a boolean or a message you invented; '
+  + '`rollback` copies an approved historical (superseded) version\'s clean package into a new pending candidate that goes through normal review; it never moves the current version directly. '
+  + 'The model cannot submit an owner, a reviewer, a current-version pointer, a landing path, a manifest hash or a verification result.'
 
 /** How every call renders: one JSON object, so the chat projection can parse the review row. */
 export const TOOL_OUTPUT = {

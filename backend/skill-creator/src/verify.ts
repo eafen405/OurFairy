@@ -12,8 +12,9 @@
  * The runner records what happened — command, exit code, timeout/abort reason,
  * duration, environment and bounded output — because those facts must not be
  * authored by the model. The report names executed/failed/unexecuted items and
- * whether the run was complete; an approval consumes it later. `reused` stays
- * empty here: verification reuse is the evolution ticket's seam.
+ * whether the run was complete; an approval consumes it later. A revision may
+ * pass recorded parent runs as `reused`: they are reported separately from
+ * executed scenarios and never count as a fresh execution.
  *
  * @module @ourfairy/dsh-skill-creator/src/verify
  */

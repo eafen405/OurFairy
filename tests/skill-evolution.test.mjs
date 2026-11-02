@@ -350,6 +350,9 @@ describe('revision candidates', () => {
     const blank = await createRevision('growth-demo', base.versionId, { benefit: '   ' })
     assert.equal(blank.isError, true)
     assert.match(blank.text, /skills\/benefit-required/u, blank.text)
+    const tooLong = await createRevision('growth-demo', base.versionId, { benefit: 'x'.repeat(501) })
+    assert.equal(tooLong.isError, true)
+    assert.match(tooLong.text, /skills\/benefit-required/u, tooLong.text)
     assert.equal(rows('SELECT * FROM skill_version WHERE skill_id = ?', base.skillId).length, 1,
       'a refused revision leaves no version row')
 
@@ -376,6 +379,14 @@ describe('revision candidates', () => {
     const provenance = JSON.parse(version.source_location)
     assert.equal(provenance.benefit, 'recover from the failing second step')
     assert.equal(provenance.focus.kind, 'turn')
+
+    const bobRevision = await callTool(bob, sessionBob, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' }, parentVersionId: base.versionId,
+      targetBenefit: 'borrow another user\'s skill',
+      files: packageFiles('growth-demo', { bodyLength: 1000 }), scenarios: [{ name: 'ok', command: 'true' }],
+    })
+    assert.equal(bobRevision.isError, true, 'another user cannot revise a personal skill')
+    assert.match(bobRevision.text, /skills\/not-found/u, bobRevision.text)
 
     const changed = await callTool(alice, sessionAlice, 'skill_manage', {
       action: 'create', scope: 1, focus: { kind: 'turn' }, parentVersionId: base.versionId,
@@ -671,7 +682,10 @@ describe('atomic version switching and the pool revision state', () => {
 
     const revision = await createRevision('switch-demo', base.versionId, {
       bodyLength: 1090, marker: 'V2', benefit: 'recover the failing comparison',
-      files: packageFiles('switch-demo', { bodyLength: 1090, marker: 'V2', extra: { 'references/guide.md': 'GUIDE V2' } }),
+      files: packageFiles('switch-demo', {
+        description: 'Use when the revised switch is needed.',
+        bodyLength: 1090, marker: 'V2', extra: { 'references/guide.md': 'GUIDE V2' },
+      }),
       scenarios: [SCENARIO],
     })
     assert.equal(revision.isError, false, revision.text)
@@ -700,7 +714,10 @@ describe('atomic version switching and the pool revision state', () => {
     // A second pending revision of the same parent can coexist; only one can publish.
     const second = await createRevision('switch-demo', base.versionId, {
       bodyLength: 1080, marker: 'V3', benefit: 'a smaller recovery that proves the same fix',
-      files: packageFiles('switch-demo', { bodyLength: 1080, marker: 'V3', extra: { 'references/guide.md': 'GUIDE V2' } }),
+      files: packageFiles('switch-demo', {
+        description: 'Use when the revised switch is needed.',
+        bodyLength: 1080, marker: 'V3', extra: { 'references/guide.md': 'GUIDE V2' },
+      }),
       scenarios: [SCENARIO],
     })
     assert.equal(second.isError, false, second.text)
@@ -727,6 +744,9 @@ describe('atomic version switching and the pool revision state', () => {
     assert.equal(after.pendingRevision, true, 'the losing revision still counts as a revision in progress')
     const winningMarker = currentId === revision.value.versionId ? 'V2' : 'V3'
     const winningDirectory = packageDirectory(currentId)
+    await send(alice, sessionAlice, 'plain turn after the version switch')
+    assert.ok(latestCatalog(requests.at(-1)).includes('Use when the revised switch is needed.'),
+      'the approval invalidated this owner\'s catalog without a restart')
     const newActivation = await nativeLoad(alice, sessionAlice, 'switch-demo')
     assert.equal(newActivation.isError, false)
     assert.match(newActivation.text, new RegExp(winningMarker, 'u'))
@@ -741,6 +761,17 @@ describe('atomic version switching and the pool revision state', () => {
     const late = await approve(loserId)
     assert.equal(late.isError, true)
     assert.match(late.text, /skills\/changed/u, late.text)
+
+    // Nor can a create still name the superseded parent.
+    const staleCreate = await createRevision('switch-demo', base.versionId, {
+      bodyLength: 1070, marker: 'V4', benefit: 'a stale rebase attempt',
+      files: packageFiles('switch-demo', {
+        bodyLength: 1070, marker: 'V4', extra: { 'references/guide.md': 'GUIDE V4' },
+      }),
+      scenarios: [SCENARIO],
+    })
+    assert.equal(staleCreate.isError, true)
+    assert.match(staleCreate.text, /skills\/invalid-parent/u, staleCreate.text)
   })
 
   test('pendingRevision is true for a pending or changes-requested sibling and false once settled', async () => {
@@ -838,6 +869,11 @@ describe('rollback', () => {
     assert.equal(provenance.rollbackOf, base.versionId)
     assert.match(provenance.benefit, /回滚/u)
 
+    const history = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: base.versionId })
+    assert.equal(history.isError, false, history.text)
+    assert.deepEqual(history.value.review.nextActions, ['rollback'],
+      'a historical approved version names rollback as its next action')
+
     const inspect = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: rollback.value.versionId })
     assert.equal(inspect.isError, false, inspect.text)
     assert.equal(inspect.value.review.source.type, 4)
@@ -866,5 +902,17 @@ describe('rollback', () => {
     assert.equal(repeat.isError, true)
     assert.match(repeat.text, /skills\/invalid-rollback/u, repeat.text)
     assert.match(repeat.text, /current/u, repeat.text)
+  })
+
+  test('the bundled Skill Creator carries the revision, growth and rollback contract', async () => {
+    const loaded = await nativeLoad(alice, sessionAlice, 'skill-creator')
+    assert.equal(loaded.isError, false)
+    assert.match(loaded.text, /## Revisions, rollback and growth/u)
+    assert.match(loaded.text, /parentVersionId/u)
+    assert.match(loaded.text, /targetBenefit/u)
+    assert.match(loaded.text, /complete rewrite/u)
+    assert.match(loaded.text, /110%/u)
+    assert.match(loaded.text, /确认增长/u)
+    assert.match(loaded.text, /skill_manage rollback/u)
   })
 })

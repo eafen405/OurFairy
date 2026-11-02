@@ -622,6 +622,9 @@ export class SkillStore {
         throw new SkillStoreError('skills/growth-confirmation-required',
           'core body grew more than 10%; show the counts and collect the user confirmation first')
       }
+      // Only an exceeded version records a confirmation; a supplied one for a
+      // normal revision is ignored rather than becoming a misleading audit row.
+      const recordedGrowth = version.growth_exceeded === 1 ? confirmGrowth : undefined
       const previous = rowOf<{ id: number }>(this.#db.prepare(
         'SELECT id FROM skill_version WHERE skill_id = ? AND status = ? AND deleted_at IS NULL',
       ).get(skill.id, VERSION_STATUS.approvedCurrent))
@@ -637,7 +640,7 @@ export class SkillStore {
                 growth_confirmed_by = ?, growth_confirmed_at = ?, growth_confirm_message = ?, updated_at = ?
           WHERE id = ?`,
       ).run(VERSION_STATUS.approvedCurrent, packagePath, reviewer, reviewedAt,
-        confirmGrowth?.confirmedBy ?? null, confirmGrowth?.confirmedAt ?? null, confirmGrowth?.messageId ?? null,
+        recordedGrowth?.confirmedBy ?? null, recordedGrowth?.confirmedAt ?? null, recordedGrowth?.messageId ?? null,
         now, versionId)
       this.#db.prepare('UPDATE skill SET current_version_id = ?, updated_by = ?, updated_at = ? WHERE id = ?')
         .run(versionId, reviewer, now, skill.id)

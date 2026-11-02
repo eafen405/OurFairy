@@ -12,9 +12,9 @@
  *
  * The model can never submit an owner, a reviewer, a landing path, a manifest
  * hash or a verification result: those are derived here from the calling
- * session, the package bytes and the recorded run. Common proposals, installs,
- * revisions and growth confirmation belong to later tickets; the hooks they
- * extend are marked, not half-built.
+ * session, the package bytes and the recorded run. Revisions, growth
+ * confirmation and rollback extend this same create/review flow through
+ * `./evolution`; common proposals and installs belong to the sharing ticket.
  *
  * @module @ourfairy/dsh-skill-creator/src/creation
  */
@@ -613,12 +613,23 @@ function percentText(ratio: number): string {
 function characterChange(review: Pick<ReviewPackage, 'growth' | 'coreCharacters'>): string {
   const old = review.growth.oldCharacters
   if (old === null) return `新技能，${review.coreCharacters} 字符`
+  // A zero-length parent body has no meaningful percentage; name the counts.
+  if (old === 0) return `核心正文 0 → ${review.coreCharacters} 字符`
   return `核心正文 ${old} → ${review.coreCharacters} 字符（${percentText(review.coreCharacters / old)}）`
 }
 
-/** Bound a display string, keeping the four blocks useful for normal packages. */
-function boundDisplay(text: string): string {
-  return text.length <= DISPLAY_MAX_CHARACTERS ? text : `${text.slice(0, DISPLAY_MAX_CHARACTERS - 1)}…`
+/**
+ * Bound a display string while preserving a required instruction line.
+ *
+ * The growth instruction is the one line the user must act on, so it is never
+ * the part a long verification list clips away: the body is cut first and the
+ * tail is appended after it.
+ */
+function boundDisplay(text: string, tail?: string): string {
+  const reserved = tail === undefined ? 0 : tail.length + 1
+  const budget = Math.max(1, DISPLAY_MAX_CHARACTERS - reserved)
+  const body = text.length <= budget ? text : `${text.slice(0, budget - 1)}…`
+  return tail === undefined ? body : `${body}\n${tail}`
 }
 
 /**
@@ -647,10 +658,9 @@ export function buildReviewDisplay(review: ReviewPackage): string {
   for (const record of verification.failed) lines.push(`✘ ${record.name}: ${record.command} → exit ${record.exitCode === null ? '—' : String(record.exitCode)}`)
   if (verification.executed.length + verification.reused.length + verification.failed.length > 0) lines.push(`环境：${verification.environment}`)
   lines.push(`查看全文：skill_manage inspect versionId=${review.versionId} expand=skill（单文件：expand=files path=<path>）`)
-  if (review.growthConfirmation.required) {
-    lines.push(`篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」`)
-  }
-  return boundDisplay(lines.join('\n'))
+  return boundDisplay(lines.join('\n'), review.growthConfirmation.required
+    ? '篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」'
+    : undefined)
 }
 
 /** The review-package differences between one manifest and its parent's. */
@@ -1113,12 +1123,16 @@ export class SkillCreation {
         packageTotal: parsed.manifest.length,
         changes,
         verification,
-        nextActions: version.status === VERSION_STATUS.pending ? [...REVIEW_ACTIONS] : [],
+        nextActions: version.status === VERSION_STATUS.pending
+          ? [...REVIEW_ACTIONS]
+          : version.status === VERSION_STATUS.superseded ? ['rollback'] : [],
         growthConfirmation: {
           required: growth.exceeded,
           oldCharacters: growth.oldCharacters,
           newCharacters: growth.newCharacters,
-          percent: growth.ratio === null ? null : Math.round((growth.ratio - 1) * 1_000) / 10,
+          percent: growth.ratio === null || !Number.isFinite(growth.ratio)
+            ? null
+            : Math.round((growth.ratio - 1) * 1_000) / 10,
           instruction: growth.exceeded ? '超过旧版核心正文 10%；请在展示后单独回复「确认增长」，再批准。' : '',
         },
       }
@@ -1149,10 +1163,12 @@ export class SkillCreation {
    *
    * Approval re-reads every authority before it moves bytes: the version is
    * still pending, the candidate still hashes to the recorded manifest, the
-   * verification report executed at least one scenario and failed none, the
-   * identity is not archived. Only then does the candidate directory become an
-   * immutable version and one transaction move the current pointer. A failure
-   * renames it back, so a half-published version is never readable.
+   * verification report has executed or reused evidence and no failure, the
+   * identity is not archived, a revision's parent is still the current version,
+   * and an exceeded growth carries the user's own post-display confirmation.
+   * Only then does the candidate directory become an immutable version and one
+   * transaction move the current pointer. A failure renames it back, so a
+   * half-published version is never readable.
    */
   review({ shortId, versionId, decision, note, events, sessionOwnerShortId, growthConfirmMessageId }: {
     readonly shortId: number
