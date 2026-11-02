@@ -701,6 +701,54 @@ describe('explicit skill creation, review and publish', () => {
     assert.equal(bobPending.some(entry => entry.versionId === ids.privateDraft), false)
   })
 
+  test('a large candidate still yields a parseable inspect result under the tool-result budget', async () => {
+    const extra = {}
+    for (let index = 0; index < 80; index += 1) {
+      extra[`references/file-${String(index).padStart(2, '0')}.md`] = `REFERENCE ${index}`
+    }
+    const padding = 'z'.repeat(220)
+    const scenarios = Array.from({ length: 8 }, (_, index) => ({
+      name: `long-scenario-${index}`,
+      command: `for n in $(seq 1 300); do printf 'xxxxxxxxxx'; done; # ${padding}`,
+    }))
+    const created = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' },
+      files: packageFiles('large-candidate', { extra }),
+      scenarios,
+    })
+    assert.equal(created.isError, false, `the large candidate must create: ${created.text.slice(0, 400)}`)
+    assert.equal(created.value.verification.executed.length, 8)
+
+    const inspect = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'inspect', versionId: created.value.versionId,
+    })
+    assert.equal(inspect.isError, false, inspect.text.slice(0, 400))
+    assert.ok(inspect.text.length < 8192,
+      `the serialized inspect result must stay under the 8192 tool-result threshold; got ${inspect.text.length}`)
+    const parsed = JSON.parse(inspect.text)
+    assert.equal(parsed.kind, 'skill-review', 'the review marker survives the budget')
+    assert.ok(typeof parsed.display === 'string' && parsed.display.length > 0, 'a non-empty display survives')
+    assert.equal(parsed.review.packageTotal, 81, 'the true package total survives the trim')
+    assert.ok(parsed.review.package.length < 81, 'the package list was trimmed')
+    assert.match(parsed.review.packageNote, /expand: 'files'/u)
+    assert.ok(parsed.review.verification.executed.length >= 1, 'the executed evidence is not trimmed away entirely')
+    assert.ok(typeof parsed.review.verificationNote === 'string' && parsed.review.verificationNote.length > 0,
+      'the verification note names what was omitted')
+    assert.match(parsed.display, /验证：实际执行 8/u, 'the display still states the true executed count')
+
+    // An explicit expansion is bounded the same way, so it also cannot be
+    // rewritten before it is appended; the enumeration stays parseable.
+    const expanded = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'inspect', versionId: created.value.versionId, expand: 'skill',
+    })
+    assert.equal(expanded.isError, false)
+    assert.ok(expanded.text.length < 8192, `the expanded result obeys the same budget; got ${expanded.text.length}`)
+    const expandedValue = JSON.parse(expanded.text)
+    assert.equal(expandedValue.kind, 'skill-review')
+    assert.ok(expandedValue.display.length > 0)
+    assert.match(expandedValue.content, /# Workflow/u)
+  })
+
   test('the bundled Skill Creator serves the creation contract through the native loader', async () => {
     await send(alice, sessionAlice, '[[skill:skill-creator]]')
     const events = await readEvents(alice, sessionAlice)

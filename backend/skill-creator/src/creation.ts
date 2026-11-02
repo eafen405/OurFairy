@@ -168,6 +168,10 @@ export interface ReviewPackage {
   readonly package: ReviewPackageFile[]
   /** The manifest entry count before the bounded display list. */
   readonly packageTotal: number
+  /** Present when the result budget omitted package entries; the total stays true. */
+  readonly packageNote?: string | undefined
+  /** Present when the result budget omitted verification records. */
+  readonly verificationNote?: string | undefined
   readonly changes: ReviewChanges
   readonly verification: {
     readonly complete: boolean
@@ -196,6 +200,8 @@ export interface InspectResult {
   readonly review: ReviewPackage
   readonly display: string
   readonly content?: string
+  /** True when the result budget cut the requested content expansion. */
+  readonly contentTruncated?: boolean
   readonly file?: { readonly path: string; readonly content: string; readonly truncated: boolean }
 }
 
@@ -212,6 +218,168 @@ export interface ReviewResult {
 
 /** The display bound; the full text is always available through `expand`. */
 export const DISPLAY_MAX_CHARACTERS = 4_000
+
+/**
+ * The inspect tool result budget, in serialized characters.
+ *
+ * The product's tool-result spill policy rewrites an oversized result before it
+ * is appended, and the chat projection can only derive a `skill-review` row
+ * while the result is still parseable JSON. The default inspect therefore keeps
+ * its whole serialized envelope well under the native 8192-character prune
+ * threshold; the package list, verification summaries and display shave down in
+ * a fixed order, and an explicit `expand` request is itself bounded the same
+ * way (with `truncated` flags) so it can never be silently rewritten either.
+ */
+export const INSPECT_RESULT_MAX_CHARACTERS = 7_600
+
+/** One verification record's stream summary bound inside the inspect result. */
+const INSPECT_STREAM_SUMMARY_MAX = 160
+/** One verification command bound inside the inspect result. */
+const INSPECT_COMMAND_MAX = 300
+/** The display may never be shaved below this before a result is refused as oversized. */
+const INSPECT_DISPLAY_FLOOR = 300
+/** The provenance/source string bound inside the inspect result. */
+const INSPECT_LOCATION_MAX = 1_000
+
+/** Cut one string to `max` characters with an ellipsis, never returning empty for a non-empty input. */
+function clipText(text: string, max: number): string {
+  if (text.length <= max) return text
+  return `${text.slice(0, Math.max(0, max - 1))}…`
+}
+
+/** One verification record with its long fields bounded for the inspect envelope. */
+function compactVerificationRecord(record: VerificationReport['executed'][number]): VerificationReport['executed'][number] {
+  return {
+    ...record,
+    command: clipText(record.command, INSPECT_COMMAND_MAX),
+    stdoutSummary: clipText(record.stdoutSummary, INSPECT_STREAM_SUMMARY_MAX),
+    stderrSummary: clipText(record.stderrSummary, INSPECT_STREAM_SUMMARY_MAX),
+    ...(record.reason === undefined ? {} : { reason: clipText(record.reason, INSPECT_STREAM_SUMMARY_MAX) }),
+  }
+}
+
+/** The mutable review shape the serializer shaves down. */
+type BoundedReview = Omit<ReviewPackage, 'package' | 'changes' | 'verification' | 'source' | 'applicability'> & {
+  readonly source: Omit<ReviewPackage['source'], 'location'> & { location: string | null }
+  readonly applicability: { readonly whenToUse: string; readonly notApplicable: string | null }
+  readonly package: ReviewPackage['package'][number][]
+  readonly changes: { added: string[]; removed: string[]; changed: string[]; summary: string }
+  readonly verification: {
+    complete: boolean
+    executed: VerificationReport['executed'][number][]
+    reused: VerificationReport['reused'][number][]
+    unexecuted: VerificationReport['unexecuted'][number][]
+    failed: VerificationReport['failed'][number][]
+    environment: string
+    ranAt: number
+  }
+  packageNote?: string | undefined
+  verificationNote?: string | undefined
+}
+
+/**
+ * Bound one inspect result's serialized size deterministically.
+ *
+ * The four display blocks are composed from the full package first, so the
+ * counts the user reads stay true even when the machine-readable lists below
+ * them are trimmed. The envelope is then shaved in a fixed order — package
+ * entries, verification records, changed-path lists, expanded content, and
+ * finally the display — until `JSON.stringify(result)` fits the budget. Notes
+ * name what was omitted and where to get it, and `packageTotal` always carries
+ * the true manifest count.
+ */
+export function boundInspectResult(result: InspectResult): InspectResult {
+  let bounded: InspectResult = { ...result }
+  let display = result.display
+  const review: BoundedReview = {
+    ...result.review,
+    source: {
+      ...result.review.source,
+      location: result.review.source.location === null ? null : clipText(result.review.source.location, INSPECT_LOCATION_MAX),
+    },
+    applicability: {
+      whenToUse: clipText(result.review.applicability.whenToUse, 500),
+      notApplicable: result.review.applicability.notApplicable === null
+        ? null
+        : clipText(result.review.applicability.notApplicable, 500),
+    },
+    package: [...result.review.package],
+    changes: {
+      added: [...result.review.changes.added],
+      removed: [...result.review.changes.removed],
+      changed: [...result.review.changes.changed],
+      summary: result.review.changes.summary,
+    },
+    verification: {
+      complete: result.review.verification.complete,
+      executed: result.review.verification.executed.map(compactVerificationRecord),
+      reused: result.review.verification.reused.map(compactVerificationRecord),
+      unexecuted: result.review.verification.unexecuted.map(compactVerificationRecord),
+      failed: result.review.verification.failed.map(compactVerificationRecord),
+      environment: clipText(result.review.verification.environment, 300),
+      ranAt: result.review.verification.ranAt,
+    },
+  }
+  const length = () => JSON.stringify({ ...bounded, review, display }).length
+  let droppedVerification = 0
+  const noteVerification = () => {
+    review.verificationNote = `已省略 ${droppedVerification} 条验证记录；完整报告保存在该版本的验证记录中。`
+  }
+  while (length() > INSPECT_RESULT_MAX_CHARACTERS) {
+    if (review.package.length > 0) {
+      const drop = Math.max(1, Math.ceil(review.package.length / 2))
+      review.package.splice(Math.max(0, review.package.length - drop), drop)
+      review.packageNote = `已省略 ${review.packageTotal - review.package.length} 个文件；用 expand: 'files' 与 path 读取单个文件。`
+      continue
+    }
+    const lists = [review.verification.unexecuted, review.verification.failed, review.verification.executed]
+    let dropped = false
+    for (const list of lists) {
+      const floor = list === review.verification.executed ? 1 : 0
+      if (list.length <= floor) continue
+      const drop = Math.max(1, Math.ceil((list.length - floor) / 2))
+      list.splice(Math.max(floor, list.length - drop), drop)
+      droppedVerification += drop
+      noteVerification()
+      dropped = true
+      break
+    }
+    if (dropped) continue
+    const changeLists = [review.changes.added, review.changes.removed, review.changes.changed]
+    let droppedChanges = false
+    for (const list of changeLists) {
+      if (list.length <= 1) continue
+      list.splice(Math.max(1, Math.ceil(list.length / 2)))
+      droppedChanges = true
+      break
+    }
+    if (droppedChanges) continue
+    if (bounded.content !== undefined && bounded.content.length > 400) {
+      bounded = { ...bounded, content: clipText(bounded.content, Math.max(400, bounded.content.length - 1_000)), contentTruncated: true }
+      continue
+    }
+    if (bounded.file !== undefined && bounded.file.content.length > 400) {
+      bounded = {
+        ...bounded,
+        file: { ...bounded.file, content: clipText(bounded.file.content, Math.max(400, bounded.file.content.length - 1_000)), truncated: true },
+      }
+      continue
+    }
+    if (display.length > INSPECT_DISPLAY_FLOOR) {
+      display = clipText(display, Math.max(INSPECT_DISPLAY_FLOOR, display.length - 1_000))
+      continue
+    }
+    break
+  }
+  // The floor path should always fit; this is the last deterministic guarantee
+  // that the JSON stays parseable and the review marker survives.
+  if (length() > INSPECT_RESULT_MAX_CHARACTERS) {
+    const withoutDisplay = JSON.stringify({ ...bounded, review, display: '' }).length
+    display = clipText(display, Math.max(1, INSPECT_RESULT_MAX_CHARACTERS - withoutDisplay - 1))
+  }
+  const boundedReview = review as ReviewPackage
+  return { ...bounded, review: boundedReview, display }
+}
 
 /** The full-file expansion bound; a larger file is cut with an explicit flag. */
 const EXPANSION_MAX_CHARACTERS = 32_000
@@ -734,7 +902,8 @@ export class SkillCreation {
       const display = buildReviewDisplay(review)
       const expand = options.expand ?? 'none'
       if (expand === 'skill') {
-        return { ok: true, action: 'inspect', kind: 'skill-review', review, display, content: this.#expandFile(directory, 'SKILL.md').content }
+        return boundInspectResult({ ok: true, action: 'inspect', kind: 'skill-review', review, display,
+          content: this.#expandFile(directory, 'SKILL.md').content })
       }
       if (expand === 'files') {
         if (typeof options.path !== 'string' || options.path === '') {
@@ -744,9 +913,9 @@ export class SkillCreation {
           throw new SkillError(404, 'skills/not-found', `${options.path} is not a file in this package`)
         }
         const file = this.#expandFile(directory, options.path)
-        return { ok: true, action: 'inspect', kind: 'skill-review', review, display, file }
+        return boundInspectResult({ ok: true, action: 'inspect', kind: 'skill-review', review, display, file })
       }
-      return { ok: true, action: 'inspect', kind: 'skill-review', review, display }
+      return boundInspectResult({ ok: true, action: 'inspect', kind: 'skill-review', review, display })
     } catch (error) {
       asSkillError(error)
     }

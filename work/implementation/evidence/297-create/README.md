@@ -59,9 +59,17 @@ Branch: `ticket/297-create`, worktree `.worktrees/297-create`, based on `integra
 **Inspect and review (`src/creation.ts`, `src/http.ts`, `src/review-open.ts`)**
 
 - `inspect` returns the read-only review package (source/provenance, growth, core characters,
-  applicability, package list bounded to 64 entries with the true total, parent diff, verification,
-  `next_actions`, growth-confirmation shape) and a deterministic four-block `display` bounded to
-  4000 characters; `expand: "skill"` / `expand: "files" path=…` return bounded full text.
+  applicability, package list, parent diff, verification, `next_actions`, growth-confirmation
+  shape) and a deterministic four-block `display` bounded to 4000 characters; `expand: "skill"` /
+  `expand: "files" path=…` return bounded full text.
+- **The whole serialized inspect result is budgeted to 7,600 characters**, well under the native
+  8192-character tool-result prune/spill boundary. The display is composed from the full package
+  first (so the counts the user reads stay true), then the envelope is shaved deterministically:
+  package entries (with `packageTotal` and a note pointing at `expand: "files"`), verification
+  records (with a note naming the omitted count), changed-path lists, expanded content/file (with
+  `contentTruncated`/`truncated` flags), and only then the display. This keeps `kind:
+  'skill-review'` and a non-empty `display` parseable, so the chat fold still derives the review
+  row under pressure instead of receiving a rewritten result.
 - `review` implements `approve` / `request_changes` / `reject` for the personal owner through one
   exported `canReview` function. Approval re-reads the pending row, archive state and the on-disk
   manifest hash, requires a complete report with at least one executed and no failed/unexecuted
@@ -119,8 +127,8 @@ All commands ran in `/home/eafen405/projects/OurFairy/.worktrees/297-create` wit
 | Command | Result |
 | --- | --- |
 | `npm run build` | pass (all product projects emit) |
-| `node --test tests/skill-package.test.mjs tests/skill-creation-store.test.mjs tests/skill-verify.test.mjs tests/skill-creation.test.mjs tests/skill-runtime.test.mjs tests/projection-units.test.mjs tests/route-inventory.test.mjs tests/identity-http.test.mjs tests/model-double.test.mjs tests/memory-policy.test.mjs` | 94/94 pass (three suites) |
-| `npm test` | 524/524 pass, 19 suites (full gate at the start of the hand-off commit) |
+| `node --test tests/skill-package.test.mjs tests/skill-creation-store.test.mjs tests/skill-verify.test.mjs tests/skill-creation.test.mjs tests/skill-runtime.test.mjs tests/projection-units.test.mjs tests/route-inventory.test.mjs tests/identity-http.test.mjs tests/model-double.test.mjs tests/memory-policy.test.mjs` | 95/95 pass (three suites) |
+| `npm test` | 526/526 pass, 19 suites (full gate on the final hand-off state) |
 | `npm run combo:verify` | pass (`ourfairy`, `dsh`, `android source`) |
 | `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug` | BUILD SUCCESSFUL; `:app:testDebugUnitTest`/`:ui:testDebugUnitTest`/`:highlight:testDebugUnitTest` 651 tests, 0 failures/errors; lintDebug clean |
 
@@ -156,12 +164,13 @@ No raw logs are committed; the commands above are the record.
   parent, so the branch is unreachable in this ticket.
 - **Verification reuse:** `reused` is always empty in #297; scenario `uses` is recorded so #299 can
   key reuse without a second format.
-- **Review result size:** the inspect result includes the review package plus the display. The
-  display is bounded (4000 chars) and the package list is capped at 64 entries, but a very large
-  verification report could make the whole tool result exceed the deployment's tool-result prune
-  threshold under compaction pressure; the native pruner would then rewrite the text and the
-  projection could not parse the `skill-review` marker for that one result (the tool result itself
-  still reaches the model). The backend still has the authoritative review package.
+- **Review result size (addressed):** the default and expanded inspect results are both serialized
+  under a 7,600-character budget, so the native tool-result rewrite cannot strip the
+  `kind: 'skill-review'` marker or the display for a normal or large candidate. The budget trims
+  the machine-readable package/verification lists (true totals and notes remain) before it trims
+  expanded content, so an explicit `expand` of a very large file is itself bounded and flagged
+  `truncated` rather than silently rewritten; the stored package and the version's full
+  verification report remain the durable authorities.
 - **Review reference lifetime:** the system-context reference is appended once per candidate and
   stays in the primary session log after the decision; #300/#298 may add expiry or a replacement
   policy. It is inert model context, not a user bubble.
