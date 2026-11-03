@@ -145,12 +145,18 @@ failed call and the chat projection shows no activation row.
   create; that path needs a revision. While an identity has no approved
   version, a new draft may join it — that is how a change request becomes a
   re-verified draft with a new hash.
-- A revision passes `parentVersionId` (the skill's current approved version)
-  and a non-empty `targetBenefit` (at most 500 characters). The files are a
-  complete rewrite of the package on the same identity, the row records
-  `source_type: 3`, the parent and the growth flag. An unknown, stale or
-  other-owner parent and a renamed package are refused; no benefit means no
-  candidate.
+- A revision passes `parentVersionId` (the skill's current approved version),
+  a non-empty `targetBenefit` (at most 500 characters) and at least one checked
+  `evidence` entry. The files are a complete rewrite of the package on the same
+  identity, the row records `source_type: 3`, the parent, the evidence and the
+  growth flag. An unknown, stale or invisible parent and a renamed package are
+  refused; no benefit or no evidence means no candidate. A new skill's
+  focus/turn is its provenance and needs no evidence entry.
+- A personal skill is revised by its owner; a common skill only by Phaethon,
+  through the same `canReview` rule its candidates use. A common revision keeps
+  the common identity (NULL owner) and its proposer can still read it.
+- The model never submits a `license`: the package's own frontmatter, or the
+  root `LICENSE*` file an install fetched, is the only licence recorded.
 - At least one representative scenario is required. `src/verify.ts` copies the
   candidate into a fresh `verify/<uuid>/work/`, runs each `/bin/bash -lc`
   command under bwrap with a disposable HOME/TMPDIR/cache and network shared,
@@ -209,7 +215,8 @@ publishes, and the other keeps its draft for a rebase.
   package into a new pending candidate (`source_type: 4`, parent = current),
   runs its recorded scenarios again with the same reuse rule, and requires
   normal review. It never moves the pointer; rolling back content that is
-  already current is refused as a no-op.
+  already current is refused as a no-op. A personal skill is rolled back by its
+  owner, a common one only by Phaethon.
 - The review display's first block carries `核心正文 <old> → <new> 字符（±N%）`
   and, above 110%, the fourth block carries the exact `确认增长` instruction.
   Reused scenarios print as `↺ … → 复用自版本 N`.
@@ -253,9 +260,9 @@ different user is refused; the preparer may add a new draft after a change
 request. The proposer can inspect the cleaned review material (package, fixed
 source summary and verification report; no raw session or other personal
 skills), open its review conversation and see the decision result. Phaethon
-alone can approve, request changes, reject, archive or restore it. Approval
-writes no preference rows for anyone, so the common default (disabled) applies
-per user and the reviewer does not choose for other users.
+alone can approve, request changes, reject, revise, roll back, archive or
+restore it. Approval writes no preference rows for anyone, so the common default
+(disabled) applies per user and the reviewer does not choose for other users.
 
 `skill_manage archive|restore` and `POST /skills/archive|restore {skillId}` set
 or clear `archived_at`. The store keeps the package, version history, source and
@@ -304,8 +311,12 @@ user bubble. The client then opens the returned session id.
   (disabled) applies.
 - `./seed` exports `importReviewedPackage(...)` with no Cordis context: the
   boot seed uses it, and tests use it to create reviewed personal or common
-  skills before a boot. Tests must not rebuild the manifest hash themselves;
-  the import is the only writer of reviewed versions outside `skill_manage`.
+  skills before a boot. The seed import and candidate creation both hash the
+  package through `readSkillPackage` (`src/package.ts`) and never rebuild the
+  manifest by hand; `node --test tests/skill-package.test.mjs
+  tests/skill-creation.test.mjs` exercises the import (`importReviewedPackage`)
+  and the tool path (`skill_manage create`) against a real store, and reads the
+  recorded hash back rather than recomputing it.
 
 ## Background learning
 

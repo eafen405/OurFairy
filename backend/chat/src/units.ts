@@ -25,10 +25,10 @@
  *
  * `stateVersion` increments whenever this module's fold semantics or state
  * shape change; the registry then discards persisted rows of an older version
- * and refolds the log from `init`. The transcript is at version 6 (immutable
+ * and refolds the log from `init`. The transcript is at version 7 (immutable
  * first appearance plus ordered transitions, a move index, each row's tool
- * names, the skill-call pairing that derives a `role: 3` activation row, and
- * the successful `skill_manage` result that derives a `kind: 2` review row);
+ * names, the narrow pairing map that derives a `role: 3` activation row, and
+ * the `skill_manage` call pairing that derives a `kind: 2` review row);
  * the work unit is at version 2 (the narrow pending id/kind index).
  *
  * This module is the only fold of a chat session: the read path
@@ -203,6 +203,13 @@ export const transcriptStateSchema = z.object({
    */
   skillCalls: z.record(z.string(), z.object({ name: z.string(), seq: z.number().int() })),
   /**
+   * The `skill_manage` calls whose results have not been folded yet, keyed by
+   * tool call id. Only a `tool/call` named `skill_manage` enters this map, so a
+   * result from any other tool (a `bash` command that prints the same JSON)
+   * cannot derive a review row.
+   */
+  manageCalls: z.record(z.string(), z.number().int()),
+  /**
    * Transitions that moved a row forward, in event-seq order. This is the
    * narrow side index that lets a read window start at `fromSeq` without
    * scanning every earlier row; `rows` itself stays in immutable
@@ -302,9 +309,9 @@ function reviewDisplayOf(message: { readonly content?: readonly ContentBlock[] }
  */
 export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', TranscriptState> = {
   key: 'ourfairyTranscript',
-  stateVersion: 6,
+  stateVersion: 7,
   stateSchema: transcriptStateSchema,
-  init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], skillCalls: {}, moves: [] }),
+  init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], skillCalls: {}, manageCalls: {}, moves: [] }),
   apply(state, event) {
     if (event.type === 'agent/inbox/spliced') {
       const inserted = event.data.inserted.filter(message => {
@@ -417,6 +424,12 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
       if (existing !== undefined) return state
       return { ...state, skillCalls: { ...state.skillCalls, [event.data.callId]: { name, seq: event.seq } } }
     }
+    if (event.type === 'tool/call' && event.data.name === 'skill_manage') {
+      // The review row pairs with the call that produced it, not with any
+      // result whose text happens to parse as the review marker.
+      if (state.manageCalls[event.data.callId] !== undefined) return state
+      return { ...state, manageCalls: { ...state.manageCalls, [event.data.callId]: event.seq } }
+    }
     if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
       const callId = event.data.message.toolCallId
       const call = state.skillCalls[callId]
@@ -443,15 +456,21 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
           transitions: [],
         })
       }
-      // A successful `skill_manage` result that names a review display derives
-      // the second role-3 row. The backend composed the display; the fold only
-      // parses it, so the same log always produces the same row.
-      if (event.data.message.isError === true) return state
+      // The second role-3 row only pairs with a `skill_manage` call: another
+      // tool whose result prints the same JSON must stay an ordinary result.
+      // Any matching result consumes the pending call, like the activation map,
+      // so a failed review call leaves no growing entry.
+      if (state.manageCalls[callId] === undefined) return state
+      const { [callId]: _managed, ...manageCalls } = state.manageCalls
+      const rest = { ...state, manageCalls }
+      if (event.data.message.isError === true) return rest
+      // The backend composed the display; the fold only parses it, so the same
+      // log always produces the same row.
       const display = reviewDisplayOf(event.data.message)
-      if (display === undefined) return state
+      if (display === undefined) return rest
       const messageId = `skill-review:${callId}`
-      if (state.index[messageId] !== undefined) return state
-      return appendRow(state, {
+      if (state.index[messageId] !== undefined) return rest
+      return appendRow(rest, {
         messageId,
         requestId: null,
         role: 3,

@@ -188,3 +188,10 @@ No raw logs are committed; the commands above are the record.
 - **Out-of-ticket observation:** `tests/route-inventory.test.mjs`'s header comment carried a stale
   "35 JSON-after-fence addresses" count from before #296; this ticket replaced the stale arithmetic
   with a pointer to the matrix it actually asserts, without changing behaviour.
+
+## Review fixes (spec #295)
+
+The two-axis review of the whole increment changed this ticket's create contract: revisions now
+require at least one `evidence` entry, the model's `license` input is gone (the package's own
+frontmatter/LICENSE is the only licence), and the tool description/Skill Creator say so. See the
+[spec review-fix evidence](../295-review/README.md) for the findings and the pinning tests.

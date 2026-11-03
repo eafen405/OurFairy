@@ -185,6 +185,23 @@ function boundRows(rows: readonly string[], maxCharacters: number): string {
 }
 
 /**
+ * Whether one interval contains any tool call.
+ *
+ * Detection uses this as its cheap pre-check: an interval with no tool call
+ * and no revocable earlier signal cannot carry an executed reusable workflow
+ * and cannot owe a revocation, so it is completed with zero signals without a
+ * model call. A pure-text interval that does name a revocable signal still goes
+ * to the child, because a late correction is exactly the case this pre-check
+ * must not drop.
+ *
+ * @param window - the observed events and the inclusive/exclusive bounds.
+ * @returns true when a `tool/call` lies inside `(watermarkSeq, cutSeq]`.
+ */
+export function intervalHasToolCalls({ events, watermarkSeq, cutSeq }: Pick<MaterialWindow, 'events' | 'watermarkSeq' | 'cutSeq'>): boolean {
+  return events.some(event => event.seq > watermarkSeq && event.seq <= cutSeq && event.type === 'tool/call')
+}
+
+/**
  * Project one frozen interval (or one signal evidence range) into the child's
  * user-visible material.
  *

@@ -173,13 +173,17 @@ fun FairySettingsPage(
             }
 
             FairySettingsGroup(
-                title = "技能",
+                title = stringResource(R.string.skills_settings_group),
                 tag = "SKILLS",
-                summary = "选择、启停与待审",
+                summary = stringResource(R.string.skills_settings_summary),
                 open = open == "skills",
                 onToggle = { open = if (open == "skills") null else "skills" },
             ) {
-                GroupRow("技能选择池", "查看、启用与停用", onClick = onOpenSkills)
+                GroupRow(
+                    stringResource(R.string.skills_settings_pool),
+                    stringResource(R.string.skills_settings_pool_summary),
+                    onClick = onOpenSkills,
+                )
                 if (pendingSkills > 0) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         StatusChip(
@@ -187,7 +191,7 @@ fun FairySettingsPage(
                             tone = StatusTone.SIGNAL,
                         )
                         Text(
-                            text = "有待审核的候选，进入技能页打开审核对话。",
+                            text = stringResource(R.string.skills_settings_pending_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = tokens.textMuted,
                         )
@@ -196,7 +200,7 @@ fun FairySettingsPage(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "只显示已审核技能；完整的创建与审核在 Fairy 对话中完成。",
+                    text = stringResource(R.string.skills_settings_explain),
                     style = MaterialTheme.typography.bodySmall,
                     color = tokens.textMuted,
                 )

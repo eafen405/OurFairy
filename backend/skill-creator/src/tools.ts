@@ -24,7 +24,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SkillCreation, CandidateComparison, CandidateEvidence, CandidateFile, CandidateScenario, ReviewDecision, SkillFocusInput } from './creation.js'
 import type { SkillService } from './service.js'
 import type { SkillInstall } from './install.js'
-import type { SkillLifecycle } from './sharing.js'
+import { invalidateLifecycleScope, type SkillLifecycle } from './sharing.js'
 import type { SkillNotifications } from './notify.js'
 // Type-only: the owned-session service and the narrow chat-runtime seam the
 // create/review paths read; they add no runtime dependency of their own.
@@ -47,9 +47,10 @@ export const SKILL_MANAGE_DESCRIPTION = 'Manage reusable Fairy skills. Use it wh
   + 'A reusable procedure (ordered steps, inputs, outputs, tools, checks) belongs in a skill; a stable fact or preference about the user belongs in memory. Never write the same content to both. '
   + 'Actions: `list` returns the caller\'s bounded pending candidates, the reviewed selection pool with backend-derived states and actions, and recently decided candidates; it names the user\'s own growth confirmation message when one exists; '
   + '`create` validates a complete package drafted by you, or a package fetched from `address` (a GitHub repository tree/blob path, github:<owner>/<repo>/<path>@<ref>, or a direct .tar.gz/.tgz URL), and turns it into a pending candidate. The backend derives the owner from the calling session; scope 2 (common) is accepted only when the anchoring user turn explicitly asks to share, and records that turn as the consent. A remote package is fetched at its fixed commit/archive version and is never reviewed for you. The representative scenarios run for real, so never claim a verification result you did not receive. '
-  + 'With `parentVersionId` (the skill\'s current approved version) and a non-empty `targetBenefit`, create writes a revision: the package is a complete rewrite, unchanged scenarios reuse the parent\'s recorded verification, and the core-body growth is recorded; a revision without a proven benefit must not be created. '
+  + 'With `parentVersionId` (the skill\'s current approved version), a non-empty `targetBenefit` and at least one `evidence` entry, create writes a revision: the package is a complete rewrite, unchanged scenarios reuse the parent\'s recorded verification, the evidence is recorded with the revision, and the core-body growth is recorded; a revision without a proven benefit or without evidence must not be created. '
   + '`inspect` returns one pending candidate\'s read-only review package and a deterministic display (identity/hash and old/new core-body characters with the growth percentage, applicability and target benefit, package and verification evidence, how to expand the full text). When growth exceeds 10% the display tells the user to reply exactly 确认增长 in a separate turn; use `expand: "skill"` or `expand: "files"` with `path` instead of asking for everything at once; '
   + '`review` records `approve`, `request_changes` or `reject` for a pending candidate after the user decides. A personal candidate is decided by its owner; a common candidate only by Phaethon, and its proposer can read but not approve it. Never claim approval yourself and never approve on the user\'s behalf. '
+  + 'A common skill may be revised or rolled back only by Phaethon; its proposer can read it but cannot evolve it. '
   + '`rollback` copies an approved historical version into a fresh pending candidate; it never moves the current pointer. '
   + '`archive` and `restore` change one skill\'s lifecycle: a personal skill only by its owner, a common skill only by Phaethon. Archive removes it from the catalog and selectable pool but keeps its content, history and preferences; restore does not reset preferences. '
   + 'The model cannot submit an owner, a reviewer, a current-version pointer, a landing path, a manifest hash or a verification result. '
@@ -131,7 +132,6 @@ export const SKILL_MANAGE_PARAMETERS = {
     },
   },
   address: { type: 'string' },
-  license: { type: 'string' },
   decision: { type: 'string', enum: ['approve', 'request_changes', 'reject'] },
   note: { type: 'string' },
   growthConfirmMessageId: { type: 'string' },
@@ -250,12 +250,17 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
         const { events } = await readSessionEvents(deps.ctx, agent.session.id)
         const fetched = args.address === undefined ? undefined : await deps.install.fetch(args.address)
         try {
-          const license = args.license ?? fetched?.license
+          // The licence is the package's own fact: the install path's
+          // frontmatter/LICENSE scan is the only source. The model cannot
+          // supply or override one.
+          const license = fetched?.license
           const result = await deps.creation.create({
             ownerShortId: owner,
+            isAdmin,
             sessionId: agent.session.id,
             events,
-            scope: args.scope ?? 1,
+            // A revision keeps the parent's scope; a new skill states one.
+            ...(parentVersionId === undefined ? { scope: args.scope ?? 1 } : {}),
             scenarios: args.scenarios,
             ...(args.focus === undefined ? {} : { focus: args.focus }),
             ...(args.files === undefined ? {} : { files: args.files }),
@@ -296,7 +301,7 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
       }
       case 'rollback': {
         const versionId = requiredPositiveInteger(args.versionId, 'versionId')
-        const result = await deps.creation.rollback({ shortId: owner, sessionId: agent.session.id, versionId })
+        const result = await deps.creation.rollback({ shortId: owner, isAdmin, sessionId: agent.session.id, versionId })
         return result as unknown as SkillToolValue
       }
       case 'archive':
@@ -305,8 +310,7 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
         const updated = args.action === 'archive'
           ? deps.lifecycle.archive({ shortId: owner, isAdmin, skillId })
           : deps.lifecycle.restore({ shortId: owner, isAdmin, skillId })
-        if (updated.scope === 1) deps.invalidateOwner(owner)
-        else deps.invalidateAll()
+        invalidateLifecycleScope(updated, owner, deps.invalidateOwner, deps.invalidateAll)
         return { ok: true, action: args.action, skill: updated.item } as unknown as SkillToolValue
       }
       default:

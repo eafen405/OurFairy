@@ -9,7 +9,8 @@ import org.junit.Test
  * The reminder-once rule for skill candidates and decisions.
  *
  * The backend's list is a double; the assertions are about what one observation publishes: one
- * merged notification per newly observed pending/decision set, a terminal common decision only for
+ * merged notification per newly observed background/common pending set or decision set, no reminder
+ * for a candidate the user created explicitly or by install, a terminal common decision only for
  * its proposer, and a suppressed attempt still consumed so a later background move cannot replay it.
  */
 private class ScriptedBackend(var pool: SkillPool) : SkillsBackend {
@@ -79,7 +80,7 @@ class SkillsReviewNotifierTest {
     @Test
     fun `one new pending set publishes one merged reminder and the same set never repeats`() = runTest {
         val backend = ScriptedBackend(SkillPool(
-            pending = listOf(PendingSkill(versionId = 41, name = "candidate")),
+            pending = listOf(PendingSkill(versionId = 41, name = "candidate", sourceType = 2)),
             pendingCount = 1,
         ))
         val notifier = notifier(backend, this)
@@ -95,7 +96,7 @@ class SkillsReviewNotifierTest {
         assertEquals("the same pending set is not re-announced", 1, platform.alerts.size)
 
         backend.pool = SkillPool(
-            pending = listOf(PendingSkill(versionId = 41), PendingSkill(versionId = 42, name = "second")),
+            pending = listOf(PendingSkill(versionId = 41, sourceType = 2), PendingSkill(versionId = 42, name = "second", sourceType = 2)),
             pendingCount = 2,
         )
         notifier.observeNow("token", 2)
@@ -139,6 +140,60 @@ class SkillsReviewNotifierTest {
     }
 
     @Test
+    fun `an explicit personal candidate is not a reminder, while a common proposal reaches Phaethon`() = runTest {
+        // The user just created this personal candidate; the page shows it, but a background
+        // reminder for their own action would be noise.
+        val backend = ScriptedBackend(SkillPool(
+            pending = listOf(PendingSkill(
+                versionId = 71,
+                skillId = 12,
+                name = "explicit-now",
+                scope = SkillScope.PERSONAL,
+                sourceType = 0,
+                nextActions = listOf("approve", "request_changes", "reject"),
+            )),
+            pendingCount = 1,
+        ))
+        val notifier = notifier(backend, this)
+        notifier.observeNow("token", 2)
+        assertEquals("an explicit personal candidate publishes no reminder", 0, platform.alerts.size)
+
+        // A common proposal is a proposal: only the caller who may decide it (Phaethon, whose
+        // backend answer carries review actions) is reminded, exactly once.
+        backend.pool = SkillPool(
+            pending = listOf(PendingSkill(
+                versionId = 72,
+                skillId = 13,
+                name = "shared-now",
+                scope = SkillScope.COMMON,
+                sourceType = 0,
+                nextActions = listOf("approve", "request_changes", "reject"),
+            )),
+            pendingCount = 1,
+        )
+        notifier.observeNow("token", 2)
+        assertEquals("a common proposal reaches its reviewer once", 1, platform.alerts.size)
+        assertTrue(platform.alerts.single().preview.contains("待审核"))
+        notifier.observeNow("token", 2)
+        assertEquals("the same common proposal is never re-announced", 1, platform.alerts.size)
+
+        // The proposer reads the same candidate with no review actions; that is not their reminder.
+        backend.pool = SkillPool(
+            pending = listOf(PendingSkill(
+                versionId = 73,
+                skillId = 14,
+                name = "shared-proposer",
+                scope = SkillScope.COMMON,
+                sourceType = 0,
+                nextActions = emptyList(),
+            )),
+            pendingCount = 1,
+        )
+        notifier.observeNow("token", 2)
+        assertEquals("a proposer is not reminded of their own proposal", 1, platform.alerts.size)
+    }
+
+    @Test
     fun `a terminal common decision reaches its proposer once, not another reviewer`() = runTest {
         val backend = ScriptedBackend(SkillPool(
             reviewResults = listOf(
@@ -162,7 +217,7 @@ class SkillsReviewNotifierTest {
     @Test
     fun `a new pending set and a new decision merge into one notification`() = runTest {
         val backend = ScriptedBackend(SkillPool(
-            pending = listOf(PendingSkill(versionId = 61, name = "candidate")),
+            pending = listOf(PendingSkill(versionId = 61, name = "candidate", sourceType = 2)),
             pendingCount = 1,
             reviewResults = listOf(result(62, "decided-skill", SkillVersionStatus.REJECTED, proposer = true)),
         ))
@@ -178,7 +233,7 @@ class SkillsReviewNotifierTest {
 
     @Test
     fun `a foreground or disabled reminder is consumed instead of replayed on the next observation`() = runTest {
-        val backend = ScriptedBackend(SkillPool(pending = listOf(PendingSkill(versionId = 71))))
+        val backend = ScriptedBackend(SkillPool(pending = listOf(PendingSkill(versionId = 71, sourceType = 2))))
 
         platform.foreground = true
         notifier(backend, this).observeNow("token", 2)
@@ -189,14 +244,14 @@ class SkillsReviewNotifierTest {
         assertEquals("a suppressed set was recorded and is not replayed", 0, platform.alerts.size)
 
         // A genuinely new candidate is still announced after the suppressed one.
-        backend.pool = SkillPool(pending = listOf(PendingSkill(versionId = 71), PendingSkill(versionId = 72)))
+        backend.pool = SkillPool(pending = listOf(PendingSkill(versionId = 71, sourceType = 2), PendingSkill(versionId = 72, sourceType = 2)))
         notifier(backend, this).observeNow("token", 2)
         assertEquals(1, platform.alerts.size)
     }
 
     @Test
     fun `a disabled notification switch records the set without publishing`() = runTest {
-        val backend = ScriptedBackend(SkillPool(pending = listOf(PendingSkill(versionId = 81))))
+        val backend = ScriptedBackend(SkillPool(pending = listOf(PendingSkill(versionId = 81, sourceType = 2))))
         notifier(backend, this, enabled = false).observeNow("token", 2)
         assertEquals(0, platform.alerts.size)
         assertEquals(1, ledger.writes)
@@ -204,7 +259,7 @@ class SkillsReviewNotifierTest {
 
     @Test
     fun `each account keeps its own ledger`() = runTest {
-        val backend = ScriptedBackend(SkillPool(pending = listOf(PendingSkill(versionId = 91))))
+        val backend = ScriptedBackend(SkillPool(pending = listOf(PendingSkill(versionId = 91, sourceType = 2))))
         val notifier = notifier(backend, this)
         notifier.observeNow("token", 2)
         notifier.observeNow("token", 3)

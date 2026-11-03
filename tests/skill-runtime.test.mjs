@@ -192,6 +192,9 @@ async function start() {
     OURFAIRY_PHAETHON_PASSWORD: password,
     MINIMAX_CN_API_KEY: 'mock-skill-key',
     OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${model.address().port}`,
+    // Keep the memory-maintenance child out of this suite's model double: the
+    // last-request assertions must read the user session's own request.
+    OURFAIRY_MEMORY_MAINTENANCE_TURNS: '50',
     OURFAIRY_SEED_SKILLS_DIR: seedDir,
   })
   port = startedPort(run)

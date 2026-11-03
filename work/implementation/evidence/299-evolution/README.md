@@ -174,3 +174,10 @@ No raw logs are committed; the commands above are the record.
   evidence) is refused rather than inventing a scenario.
 - **Out-of-ticket finding:** none beyond the cross-ticket seam above. The store schema already
   carried every growth/confirmation column in v1, so this ticket added no migration.
+
+## Review fixes (spec #295)
+
+The review closed two evolution gaps: `create` refuses a revision without at least one evidence
+entry, and common skills can now be revised and rolled back by Phaethon through the existing
+`canReview` rule (the tool passes the caller's admin bit; a common draft keeps its NULL owner).
+Personal behavior is unchanged. See the [spec review-fix evidence](../295-review/README.md).

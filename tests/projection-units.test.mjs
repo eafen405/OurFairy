@@ -125,7 +125,7 @@ test('the stateVersion constants bind the README contract', () => {
   // The README is read, not restated: the numbers below are this suite's
   // expectation, and the documented sentence must name the same ones, so a
   // version bump that forgets the prose fails here instead of shipping drift.
-  const versions = { ourfairyTranscript: 6, ourfairyWork: 2 }
+  const versions = { ourfairyTranscript: 7, ourfairyWork: 2 }
   const documented = { ourfairyTranscript: /transcript `(\d+)`/u, ourfairyWork: /\bwork `(\d+)`/u }
   const readme = readFileSync(new URL('../backend/chat/README.md', import.meta.url), 'utf8')
   for (const definition of [units.transcriptDefinition, units.workDefinition]) {
@@ -419,18 +419,38 @@ test('a successful skill_manage review result derives one kind-2 row with the ba
   })
 })
 
+test('a bash result that prints a review display derives no row; only a paired skill_manage result does', () => {
+  const display = 'a real backend display'
+  const reviewJson = JSON.stringify({ ok: true, kind: 'skill-review', display })
+  const log = [
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'bash-call', name: 'bash', arguments: '{"command":"printf ..."}' }),
+    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+      content: [{ type: 'text', text: reviewJson }], source: { kind: 'tool' }, toolCallId: 'bash-call' } }, { surfaceOp: 'append' }),
+    event(2, 'tool/call', { turn: 1, step: 2, callId: 'review-call', name: 'skill_manage', arguments: '{"action":"inspect","versionId":7}' }),
+    event(3, 'tool/result', { turn: 1, step: 2, message: { id: 't2', role: 'tool',
+      content: [{ type: 'text', text: reviewJson }], source: { kind: 'tool' }, toolCallId: 'review-call' } }, { surfaceOp: 'append' }),
+  ]
+  const rows = units.transcriptAt(fold(units.transcriptDefinition, log))
+  assert.equal(rows.length, 1, 'the unpaired bash result and the paired skill_manage result are not equal')
+  assert.equal(rows[0].messageId, 'skill-review:review-call')
+  assert.equal(rows[0].text, display)
+})
+
 test('a failed, malformed or unrelated skill_manage result derives no review row', () => {
   const failed = fold(units.transcriptDefinition, [
-    event(0, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'skill_manage', arguments: '{"action":"inspect"}' }),
+    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
       content: [{ type: 'text', text: JSON.stringify({ kind: 'skill-review', display: 'x' }) }],
       source: { kind: 'tool' }, toolCallId: 'c1', isError: true } }, { surfaceOp: 'append' }),
   ])
   assert.deepEqual(units.transcriptAt(failed), [], 'a failed call never publishes a review row')
 
   const malformed = fold(units.transcriptDefinition, [
-    event(0, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'skill_manage', arguments: '{"action":"inspect"}' }),
+    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
       content: [{ type: 'text', text: 'not json' }], source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' }),
-    event(1, 'tool/result', { turn: 1, step: 1, message: { id: 't2', role: 'tool',
+    event(2, 'tool/call', { turn: 1, step: 2, callId: 'c2', name: 'skill_manage', arguments: '{"action":"list"}' }),
+    event(3, 'tool/result', { turn: 1, step: 2, message: { id: 't2', role: 'tool',
       content: [{ type: 'text', text: JSON.stringify({ ok: true, pending: [], pool: [] }) }],
       source: { kind: 'tool' }, toolCallId: 'c2' } }, { surfaceOp: 'append' }),
   ])
@@ -438,14 +458,18 @@ test('a failed, malformed or unrelated skill_manage result derives no review row
 })
 
 test('a duplicated review result keeps the first row and adds no transition', () => {
-  const result = display => event(0, 'tool/result', { turn: 1, step: 1, message: { id: 't1', role: 'tool',
+  const result = (seq, display) => event(seq, 'tool/result', { turn: 1, step: 1, message: { id: `t${String(seq)}`, role: 'tool',
     content: [{ type: 'text', text: JSON.stringify({ kind: 'skill-review', display }) }],
     source: { kind: 'tool' }, toolCallId: 'c1' } }, { surfaceOp: 'append' })
-  const state = fold(units.transcriptDefinition, [result('first display'), { ...result('second display'), seq: 2 }])
+  const state = fold(units.transcriptDefinition, [
+    event(0, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'skill_manage', arguments: '{"action":"inspect"}' }),
+    result(1, 'first display'),
+    result(2, 'second display'),
+  ])
   const rows = units.transcriptAt(state)
   assert.equal(rows.length, 1)
   assert.equal(rows[0].text, 'first display')
-  assert.equal(rows[0].seq, 0)
+  assert.equal(rows[0].seq, 1)
   assert.deepEqual(state.rows[0].transitions, [])
 })
 

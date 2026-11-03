@@ -135,4 +135,11 @@
     <string name="skills_result_changes_requested">Changes requested</string>
     <string name="skills_archive_with_scope">Archive (%1$s)</string>
     <string name="skills_restore_with_scope">Restore (%1$s)</string>
+    <string name="skills_review_panel_title">Skill review</string>
+    <string name="skills_settings_group">Skills</string>
+    <string name="skills_settings_summary">Choose, enable and review</string>
+    <string name="skills_settings_pool">Skill selection</string>
+    <string name="skills_settings_pool_summary">View, enable and disable</string>
+    <string name="skills_settings_pending_hint">Candidates are waiting for review. Open the skills page to continue the review conversation.</string>
+    <string name="skills_settings_explain">Only reviewed skills are listed; create and review full skills in the Fairy conversation.</string>
 </resources>

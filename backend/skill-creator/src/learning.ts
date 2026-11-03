@@ -41,7 +41,6 @@ import {
   DEFAULT_LEARNING_MAX_TURNS,
   DEFAULT_LEARNING_TURNS,
   DEFAULT_MAX_MATERIAL_CHARACTERS,
-  LEARNING_SECTION,
   MAX_EXISTING_TASK_KEYS,
   MAX_REVOCABLE_SIGNALS,
   MAX_SIGNAL_NOTE_CHARACTERS,
@@ -50,7 +49,8 @@ import {
   SKILL_LEARNING_PRESET,
   isValidTaskKey,
 } from './learning-policy.js'
-import { assembleLearningMaterial, closedUserTurns, type ClosedTurn } from './material.js'
+import { ChildRuns, learningChildSetup, successfulCalls, turnCompleted } from './learning-child.js'
+import { assembleLearningMaterial, closedUserTurns, intervalHasToolCalls, type ClosedTurn } from './material.js'
 import { SkillError } from './service.js'
 import { SIGNAL_STATUS, type LearningRow, type NewSignal, type SignalRow, type SkillStore } from './store.js'
 import type { Context } from '@deepseek-ai/cordis'
@@ -78,9 +78,6 @@ const RETRY_MS = 2_000
 
 /** The continuation written when a failed detection child is resumed. */
 const DETECTION_RETRY_MESSAGE = '上一轮检测没有完成。请基于这段子会话中已有的学习材料继续；完成时恰好调用一次 submit_signals（可以提交零条信号），然后结束回复。'
-
-/** One tool call the durable log recorded successfully. */
-type ToolCall = { readonly callId: string; readonly arguments: string }
 
 /** The signals one detection run submitted, already validated. */
 type SubmittedSignal = {
@@ -222,26 +219,6 @@ export function reviewPrompt(input: { readonly candidates: readonly SubmittedSig
   return lines.join('\n')
 }
 
-/** One successful call of one tool in one run. */
-function successfulCalls(events: readonly SessionEvent[], startSeq: number, name: string): ToolCall[] {
-  const succeeded = new Set<string>()
-  for (const event of events) {
-    if (event.type !== 'tool/result' || event.seq < startSeq) continue
-    const callId = event.data.message.toolCallId
-    if (typeof callId === 'string' && event.data.message.isError !== true) succeeded.add(callId)
-  }
-  return events
-    .filter((event): event is SessionEvent<'tool/call'> => event.type === 'tool/call'
-      && event.seq >= startSeq && event.data.name === name && succeeded.has(event.data.callId))
-    .map(event => ({ callId: event.data.callId, arguments: event.data.arguments }))
-}
-
-/** Whether the child's last ended turn in this run completed. */
-function turnCompleted(events: readonly SessionEvent[], startSeq: number): boolean {
-  const ending = events.filter(event => event.type === 'turn/end' && event.seq >= startSeq).at(-1)
-  return ending !== undefined && ending.type === 'turn/end' && ending.data.reason.kind === 'completed'
-}
-
 /** Parse one JSON object argument string, or undefined. */
 function parseObject(text: string): Record<string, unknown> | undefined {
   try {
@@ -281,10 +258,8 @@ export class LearningEngine {
   readonly #options: LearningEngineOptions
   readonly #known = new Set<string>()
   readonly #cache = new Map<string, SourceFacts>()
-  readonly #active = new Set<string>()
-  readonly #runs = new Set<Promise<void>>()
+  readonly #children = new ChildRuns<string>()
   readonly #handles = new Map<string, AgentHandle>()
-  readonly #retryAt = new Map<string, number>()
   /** Consecutive failed runs per source, bounded by `learningMaxTurns`. */
   readonly #attempts = new Map<string, number>()
   #timer: ReturnType<typeof setInterval> | undefined
@@ -320,7 +295,7 @@ export class LearningEngine {
     this.#disposed = true
     if (this.#timer !== undefined) clearInterval(this.#timer)
     for (const handle of this.#handles.values()) await handle.dispose().catch(() => undefined)
-    await Promise.allSettled([...this.#runs])
+    await this.#children.close()
   }
 
   /** Recompute every known source from persisted state and the current clock. */
@@ -350,11 +325,11 @@ export class LearningEngine {
 
   /** One source evaluation: resume a failed interval or start a new one. */
   async #evaluate(sourceId: string): Promise<void> {
-    if (this.#disposed || this.#active.has(sourceId)) return
+    if (this.#disposed || this.#children.has(sourceId)) return
     const state = this.#store.learning(sourceId)
     if (state !== undefined && state.status !== 0) {
       if (state.child_session !== null && state.cut_seq !== null) {
-        if ((this.#retryAt.get(sourceId) ?? state.retry_at ?? 0) > Date.now()) return
+        if ((this.#children.retryAt(sourceId) ?? state.retry_at ?? 0) > Date.now()) return
         const owner = await this.#ownerOf(sourceId)
         if (owner === undefined) return
         this.#launch(sourceId, { kind: 'resume', ownerShortId: owner, childSession: state.child_session as SessionId, cutSeq: state.cut_seq })
@@ -396,6 +371,21 @@ export class LearningEngine {
     const frozen = this.#store.learning(sourceId)
     if (frozen === undefined || frozen.child_session === null) return
     const settings = this.#options.settings()
+    // Cheap pre-check before any model call: an interval with no tool call and
+    // no revocable earlier signal cannot carry an executed reusable workflow
+    // and cannot owe a late correction. Complete it with zero signals; a
+    // text-only correction interval still reaches the child because a
+    // revocable signal exists.
+    const revocable = this.#store.revocableSignals(facts.ownerShortId, sourceId, MAX_REVOCABLE_SIGNALS)
+    if (revocable.length === 0 && !intervalHasToolCalls({ events, watermarkSeq: latest.watermark_seq, cutSeq: cut.seq })) {
+      this.#store.completeLearning({
+        sourceSession: sourceId,
+        cutSeq: cut.seq,
+        childSession: frozen.child_session,
+      })
+      this.#options.log?.('info', `skill learning for ${sourceId} completed interval at ${String(cut.seq)} with zero signals: no tool calls and no revocable signal`)
+      return
+    }
     const material = assembleLearningMaterial({
       events,
       watermarkSeq: latest.watermark_seq,
@@ -409,7 +399,7 @@ export class LearningEngine {
       cutSeq: cut.seq,
       material,
       taskKeys: this.#store.taskKeys(facts.ownerShortId, MAX_EXISTING_TASK_KEYS),
-      revocable: this.#store.revocableSignals(facts.ownerShortId, sourceId, MAX_REVOCABLE_SIGNALS),
+      revocable,
       watermarkSeq: latest.watermark_seq,
     })
   }
@@ -482,20 +472,12 @@ export class LearningEngine {
 
   /** Launch one child run without blocking the evaluation that decided it. */
   #launch(sourceId: string, interval: DetectionInterval | DetectionResume): void {
-    this.#active.add(sourceId)
     const run = interval.kind === 'create'
       ? this.#runNew(sourceId, interval)
       : this.#runResume(sourceId, interval)
-    let tracked: Promise<void>
-    tracked = run.catch(() => {
-      // The run handles its own failure; this boundary only keeps a future tick
-      // from waiting on a rejected promise.
-      this.#retryAt.set(sourceId, Date.now() + RETRY_MS)
-    }).finally(() => {
-      this.#active.delete(sourceId)
-      this.#runs.delete(tracked)
-    })
-    this.#runs.add(tracked)
+    // The run handles its own failure; the shared tracker only keeps a future
+    // tick from waiting on a rejected promise and records its retry time.
+    this.#children.launch(sourceId, run, RETRY_MS)
   }
 
   /** Create the detection child, deliver the frozen material, and settle the interval. */
@@ -589,7 +571,7 @@ export class LearningEngine {
       return
     }
     this.#store.completeLearning({ sourceSession: sourceId, cutSeq, childSession })
-    this.#retryAt.delete(sourceId)
+    this.#children.clearRetry(sourceId)
     this.#attempts.delete(sourceId)
     this.#cache.delete(sourceId)
     this.#options.onSignals(ownerShortId)
@@ -632,8 +614,7 @@ export class LearningEngine {
         sessionId: childSession,
         meta: { parentSession, origin: 'subagent', agentPreset: SKILL_LEARNING_PRESET },
         agentOptions: { provider: settings.provider, model: settings.model },
-        setup: agentCtx => {
-          agentCtx.tools.restrict({ allow: [] })
+        setup: learningChildSetup(policy, agentCtx => {
           agentCtx.tools.register(defineTool({
             name: 'submit_review',
             description: 'Submit one judgement for every numbered candidate signal: decisions[].index is 1-based and matches the prompt list, decisions[].status is 0 success, 1 failure or 2 uncertain. Call exactly once.',
@@ -666,8 +647,7 @@ export class LearningEngine {
               return { ok: true, reviewed: decisions.length }
             },
           }))
-          agentCtx.systemPrompt.section({ name: LEARNING_SECTION, order: 0, text: policy, interpolate: false })
-        },
+        }),
       })
       const startSeq = handle.agent.session.seq
       handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: material }], source: { kind: 'user' } }))
@@ -715,11 +695,7 @@ export class LearningEngine {
       sessionId: interval.childSession,
       meta: { parentSession: sourceId as SessionId, origin: 'subagent', agentPreset: SKILL_LEARNING_PRESET },
       agentOptions: { provider: settings.provider, model: settings.model },
-      setup: agentCtx => {
-        agentCtx.tools.restrict({ allow: [] })
-        this.#registerSubmitTool(agentCtx, interval)
-        agentCtx.systemPrompt.section({ name: LEARNING_SECTION, order: 0, text: policy, interpolate: false })
-      },
+      setup: learningChildSetup(policy, agentCtx => this.#registerSubmitTool(agentCtx, interval)),
     })
   }
 
@@ -795,14 +771,10 @@ export class LearningEngine {
     return this.#ctx.agents.resume({
       resumeSessionId: childSession,
       agentOptions: { provider: settings.provider, model: settings.model },
-      setup: agentCtx => {
-        agentCtx.tools.restrict({ allow: [] })
-        // A resumed child keeps its own submit tool: the recovery message asks
-        // it to submit exactly once, and a missing tool would make that
-        // impossible. The frozen material is already in its durable log.
-        this.#registerSubmitTool(agentCtx, interval)
-        agentCtx.systemPrompt.section({ name: LEARNING_SECTION, order: 0, text: policy, interpolate: false })
-      },
+      // A resumed child keeps its own submit tool: the recovery message asks it
+      // to submit exactly once, and a missing tool would make that impossible.
+      // The frozen material is already in its durable log.
+      setup: learningChildSetup(policy, agentCtx => this.#registerSubmitTool(agentCtx, interval)),
     })
   }
 
@@ -820,7 +792,7 @@ export class LearningEngine {
       return
     }
     this.#store.failLearning({ sourceSession: sourceId, childSession, retryDelayMs: RETRY_MS })
-    this.#retryAt.set(sourceId, Date.now() + RETRY_MS)
+    this.#children.defer(sourceId, Date.now() + RETRY_MS)
   }
 }
 

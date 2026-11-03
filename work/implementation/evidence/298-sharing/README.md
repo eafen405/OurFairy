@@ -191,3 +191,11 @@ hidden because they are not introduced by #298 and no #298 assertion failed.
   badge remains the surface.
 - The full-suite timing flakes above are pre-existing in the #297 suites; no
   assertion about #298 failed in the repeated focused runs.
+
+## Review fixes (spec #295)
+
+The review changed the reminder rule: `SkillsReviewNotifier` now announces only a personal
+background candidate (`sourceType == 2`) or a common proposal whose `nextActions` name this caller
+as its reviewer, so an explicit/install candidate no longer triggers "有 N 个技能候选等待审核".
+Common skills can also be revised and rolled back by Phaethon (the proposer cannot). See the
+[spec review-fix evidence](../295-review/README.md).

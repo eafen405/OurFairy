@@ -135,4 +135,11 @@
     <string name="skills_result_changes_requested">要求修改</string>
     <string name="skills_archive_with_scope">归档（%1$s）</string>
     <string name="skills_restore_with_scope">恢复（%1$s）</string>
+    <string name="skills_review_panel_title">技能审核</string>
+    <string name="skills_settings_group">技能</string>
+    <string name="skills_settings_summary">选择、启停与待审</string>
+    <string name="skills_settings_pool">技能选择池</string>
+    <string name="skills_settings_pool_summary">查看、启用与停用</string>
+    <string name="skills_settings_pending_hint">有待审核的候选，进入技能页打开审核对话。</string>
+    <string name="skills_settings_explain">只显示已审核技能；完整的创建与审核在 Fairy 对话中完成。</string>
 </resources>

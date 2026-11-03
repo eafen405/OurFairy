@@ -161,7 +161,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS skill_preference_unique
  * `skill_learning_state` is one row per source session: the completed
  * watermark, the frozen cut and child of the interval now running, the newest
  * closed-turn time, a retry time and the recovery status. A completed interval
- * advances the watermark even when it produced no signal.
+ * advances the watermark even when it produced no signal. This is the row's
+ * operational state, not a business record: it follows `maintenance_state` in
+ * `backend/memory/src/store.ts`, so it has no logical-delete column (the row is
+ * reset in place, never hidden) and no `created_at`; `updated_at` is the only
+ * timestamp the engine needs.
  *
  * `skill_reuse_signal` is immutable evidence. A later correction inserts a new
  * `status = 3 revoked` row whose `revokes_signal_id` names the original; the
@@ -183,8 +187,7 @@ CREATE TABLE IF NOT EXISTS skill_learning_state (
   child_session TEXT,                          -- the detection child of the active or last interval
   status INTEGER NOT NULL DEFAULT 0,           -- 0 idle, 1 running, 2 failed
   retry_at INTEGER,                            -- earliest retry for a failed interval
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
+  updated_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS skill_reuse_signal (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -292,7 +295,6 @@ export type LearningRow = {
   status: number
   retry_at: number | null
   updated_at: number
-  deleted_at: number | null
 }
 
 /** One row of the `skill_reuse_signal` table. */
@@ -569,14 +571,14 @@ export class SkillStore {
   /** One source session's detection state, or undefined before its first observation. */
   learning(sourceSession: string): LearningRow | undefined {
     return rowOf<LearningRow>(this.#db.prepare(
-      'SELECT * FROM skill_learning_state WHERE source_session = ? AND deleted_at IS NULL',
+      'SELECT * FROM skill_learning_state WHERE source_session = ?',
     ).get(sourceSession))
   }
 
   /** Every source session the learning engine has observed, for the restart scan. */
   learningRows(): LearningRow[] {
     return rowsOf<LearningRow>(this.#db.prepare(
-      'SELECT * FROM skill_learning_state WHERE deleted_at IS NULL ORDER BY source_session',
+      'SELECT * FROM skill_learning_state ORDER BY source_session',
     ).all())
   }
 
