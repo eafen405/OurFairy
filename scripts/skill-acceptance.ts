@@ -596,8 +596,12 @@ async function caseTwoSessions(runtime: Runtime, shared: Shared): Promise<CaseOu
 async function caseLateCorrection(runtime: Runtime, shared: Shared): Promise<CaseOutcome> {
   if (shared.successSession === undefined || shared.successSignalId === undefined) fail('one-success did not leave a signal to correct')
   const original = signalsOf(runtime).find(signal => number(signal.id) === shared.successSignalId)
+  // The correction interval needs `learningTurns` closed turns after the last
+  // watermark, so the correction is followed by one more real turn.
   await sendTurn(runtime, runtime.alice, shared.successSession,
     '刚才那个流程其实不算成功，你漏了检查脚本的真实输出，请不要把它记成成功经验。')
+  await sendTurn(runtime, runtime.alice, shared.successSession,
+    '请记住这个纠正：以后这个流程必须先检查脚本的真实输出。')
   const revocation = await waitFor('the revocation row', () => signalsOf(runtime).find(signal =>
     number(signal.revokes_signal_id) === shared.successSignalId), 240_000) as JsonObject
   const after = signalsOf(runtime).find(signal => number(signal.id) === shared.successSignalId)
