@@ -76,7 +76,8 @@ class RemoteReceiveService : Service() {
      * The backend has no push channel, and a common candidate or its decision concerns another
      * user's account, so no chat observation would deliver it. One list read per minute is the
      * smallest surface that can publish the existing local reminder while the app is in the
-     * background; the notifier itself suppresses foreground and disabled notifications.
+     * background; the notifier itself suppresses foreground publication and a closed skills
+     * channel.
      */
     private fun startSkillsPoll() {
         if (poll?.isActive == true) return

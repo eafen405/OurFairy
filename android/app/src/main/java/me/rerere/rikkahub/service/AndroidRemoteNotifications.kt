@@ -28,8 +28,10 @@ import me.rerere.rikkahub.ui.identity.SkillsNotificationTarget
 
 /**
  * Android's notification and reception platform: it publishes reminders and answers the
- * foreground/enabled facts reception reads. Eligibility and durable consumption belong to shared
- * session sync, never here.
+ * foreground/enabled facts reception reads. The two switches are separate facts: [enabled] is the
+ * background-receive switch (chat reception), while skills reminders are gated by
+ * [skillsNotificationsAllowed] alone. Eligibility and durable consumption belong to shared session
+ * sync, never here.
  */
 class AndroidRemoteNotifications(private val context: Context) : RemoteNotificationPlatform, RemoteReceivePlatform, SkillsNotificationPlatform {
     private val preferences = context.getSharedPreferences("ourfairy.remote-receive", Context.MODE_PRIVATE)
@@ -52,8 +54,15 @@ class AndroidRemoteNotifications(private val context: Context) : RemoteNotificat
 
     fun notificationsAllowed(): Boolean = channelAllowed(MESSAGES_CHANNEL)
 
-    /** The skills reminder has its own channel; it is never gated by the chat channel's mood. */
-    private fun skillsNotificationsAllowed(): Boolean = channelAllowed(SKILLS_CHANNEL)
+    /**
+     * The sole notification gate for skill reminders: the skills channel's own availability.
+     *
+     * It covers POST_NOTIFICATIONS, the system notification switch and the channel's importance,
+     * and it is deliberately independent of [enabled] — the background-receive switch that controls
+     * chat reception. Turning reception off must not silence skill reminders, and a closed skills
+     * channel must not be bypassed by reception being on.
+     */
+    fun skillsNotificationsAllowed(): Boolean = channelAllowed(SKILLS_CHANNEL)
 
     private fun channelAllowed(channel: String): Boolean {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
@@ -97,8 +106,10 @@ class AndroidRemoteNotifications(private val context: Context) : RemoteNotificat
     /**
      * Publish one merged skill reminder opening the skills page.
      *
-     * Same eligibility and one-notification-per-account rule as [publish]: the URI is the tag, so a
-     * later reminder for the same account replaces the earlier one instead of stacking.
+     * One notification per account: the URI is the tag, so a later reminder for the same account
+     * replaces the earlier one instead of stacking. The caller already asks
+     * [skillsNotificationsAllowed] before observing (that is the reminder's only gate); the same
+     * check is repeated here as the last line of defence, so a closed channel can never post.
      */
     @SuppressLint("MissingPermission")
     override fun publishSkills(endpoint: String, userShortId: Int, preview: String) {

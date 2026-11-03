@@ -142,4 +142,26 @@
     <string name="skills_settings_pool_summary">View, enable and disable</string>
     <string name="skills_settings_pending_hint">Candidates are waiting for review. Open the skills page to continue the review conversation.</string>
     <string name="skills_settings_explain">Only reviewed skills are listed; create and review full skills in the Fairy conversation.</string>
+    <string name="skills_search_label">Search by name</string>
+    <string name="skills_search_no_match">No skill matches that name.</string>
+    <string name="skills_error_unauthorized">Your session has expired. Sign in again to read your skills.</string>
+    <string name="skills_error_forbidden">This account is not allowed to do that.</string>
+    <string name="skills_error_not_found">This skill or candidate is no longer visible.</string>
+    <string name="skills_error_archived">This skill is archived. Restore it before changing it.</string>
+    <string name="skills_error_not_pending">This candidate has already been decided.</string>
+    <string name="skills_error_invalid_request">The request was not valid. Update the app and try again.</string>
+    <string name="skills_error_internal">The server could not handle this request. Try again later.</string>
+    <string name="skills_review_section_change">Change</string>
+    <string name="skills_review_section_source">Source</string>
+    <string name="skills_review_section_claims">Applicability and benefit (claims by the candidate)</string>
+    <string name="skills_review_section_verification">Verification</string>
+    <string name="skills_review_section_approval">How to review</string>
+    <string name="skills_review_section_other">Other</string>
+    <string name="skills_review_show_verification_details">Verification details (%1$d lines)</string>
+    <string name="skills_review_hide_verification_details">Hide verification details</string>
+    <string name="skills_review_show_details">Details (version and full text)</string>
+    <string name="skills_review_hide_details">Hide details</string>
+    <string name="skills_review_expand">Expand</string>
+    <string name="skills_review_collapse">Collapse</string>
+    <string name="skills_review_verification_commands_by_candidate">The commands and scenarios below are provided by the candidate.</string>
 </resources>

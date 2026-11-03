@@ -79,14 +79,15 @@ fun FairySettingsPage(
     val identity by session.identity.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var open by remember { mutableStateOf<String?>("account") }
-    // The pending badge is the same `/skills/list` count the page renders; the settings row never
-    // derives it. It loads when the skills group opens, like the roster group, so a restored
-    // settings page still needs no network until the user asks for that section.
+    // The pending badge is the same `/skills/list` count the skills page renders; the settings
+    // row never derives it. It is read once when the page opens and again only when the
+    // credential changes, so the count is visible while the group is collapsed without polling.
+    // A signed-out page asks the backend nothing.
     var pendingSkills by remember { mutableStateOf(0) }
-    LaunchedEffect(open, identity?.token, skillsBackend) {
+    LaunchedEffect(identity?.token, skillsBackend) {
         val token = identity?.token
         val backend = skillsBackend
-        pendingSkills = if (open != "skills" || token == null || backend == null) {
+        pendingSkills = if (token == null || backend == null) {
             0
         } else {
             runCatching { backend.list(token).pendingCount }.getOrDefault(0)
@@ -178,6 +179,7 @@ fun FairySettingsPage(
                 summary = stringResource(R.string.skills_settings_summary),
                 open = open == "skills",
                 onToggle = { open = if (open == "skills") null else "skills" },
+                badge = if (pendingSkills > 0) stringResource(R.string.skills_pending_badge, pendingSkills) else null,
             ) {
                 GroupRow(
                     stringResource(R.string.skills_settings_pool),
@@ -185,17 +187,11 @@ fun FairySettingsPage(
                     onClick = onOpenSkills,
                 )
                 if (pendingSkills > 0) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        StatusChip(
-                            text = stringResource(R.string.skills_pending_badge, pendingSkills),
-                            tone = StatusTone.SIGNAL,
-                        )
-                        Text(
-                            text = stringResource(R.string.skills_settings_pending_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = tokens.textMuted,
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.skills_settings_pending_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = tokens.textMuted,
+                    )
                     Spacer(Modifier.height(8.dp))
                 }
                 Spacer(Modifier.height(8.dp))
@@ -272,7 +268,7 @@ fun FairySettingsPage(
     }
 }
 
-/** A collapsible group: slanted tag and title, summary while closed. */
+/** A collapsible group: slanted tag and title, an optional count badge, summary while closed. */
 @Composable
 internal fun FairySettingsGroup(
     title: String,
@@ -280,6 +276,7 @@ internal fun FairySettingsGroup(
     summary: String,
     open: Boolean,
     onToggle: () -> Unit,
+    badge: String? = null,
     content: @Composable () -> Unit,
 ) {
     val tokens = LocalFairyTokens.current
@@ -309,6 +306,10 @@ internal fun FairySettingsGroup(
                 letterSpacing = 1.sp,
                 color = tokens.textMuted.copy(alpha = 0.65f),
             )
+            if (badge != null) {
+                Spacer(Modifier.width(8.dp))
+                StatusChip(text = badge, tone = StatusTone.SIGNAL)
+            }
             Spacer(Modifier.weight(1f))
             Text(
                 text = if (open) "−" else "+",

@@ -12,6 +12,8 @@ import org.junit.Test
  * merged notification per newly observed background/common pending set or decision set, no reminder
  * for a candidate the user created explicitly or by install, a terminal common decision only for
  * its proposer, and a suppressed attempt still consumed so a later background move cannot replay it.
+ * The observation's only gate is the skills channel's availability (`remindersAllowed`); the
+ * background-receive switch is not consulted anywhere here.
  */
 private class ScriptedBackend(var pool: SkillPool) : SkillsBackend {
     var reads = 0
@@ -57,15 +59,18 @@ class SkillsReviewNotifierTest {
     private val ledger = MemoryLedger()
     private val platform = RecordingPlatform()
 
-    private fun notifier(backend: SkillsBackend, scope: kotlinx.coroutines.CoroutineScope, enabled: Boolean = true) =
-        SkillsReviewNotifier(
-            backend = backend,
-            ledger = ledger,
-            platform = platform,
-            endpoint = "https://fairy.example/",
-            notificationsEnabled = { enabled },
-            scope = scope,
-        )
+    private fun notifier(
+        backend: SkillsBackend,
+        scope: kotlinx.coroutines.CoroutineScope,
+        allowed: () -> Boolean = { true },
+    ) = SkillsReviewNotifier(
+        backend = backend,
+        ledger = ledger,
+        platform = platform,
+        endpoint = "https://fairy.example/",
+        remindersAllowed = allowed,
+        scope = scope,
+    )
 
     private fun result(id: Long, name: String, status: Int, proposer: Boolean) = SkillReviewResult(
         versionId = id,
@@ -232,7 +237,7 @@ class SkillsReviewNotifierTest {
     }
 
     @Test
-    fun `a foreground or disabled reminder is consumed instead of replayed on the next observation`() = runTest {
+    fun `a foreground-suppressed reminder is consumed instead of replayed on the next observation`() = runTest {
         val backend = ScriptedBackend(SkillPool(pending = listOf(PendingSkill(versionId = 71, sourceType = 2))))
 
         platform.foreground = true
@@ -250,11 +255,28 @@ class SkillsReviewNotifierTest {
     }
 
     @Test
-    fun `a disabled notification switch records the set without publishing`() = runTest {
+    fun `a closed skills channel records the set without publishing and reopening replays nothing`() = runTest {
         val backend = ScriptedBackend(SkillPool(pending = listOf(PendingSkill(versionId = 81, sourceType = 2))))
-        notifier(backend, this, enabled = false).observeNow("token", 2)
-        assertEquals(0, platform.alerts.size)
-        assertEquals(1, ledger.writes)
+        var allowed = false
+        val notifier = notifier(backend, this, allowed = { allowed })
+        notifier.observeNow("token", 2)
+        assertEquals("a closed skills channel publishes nothing", 0, platform.alerts.size)
+        assertEquals("the observed set is consumed anyway", 1, ledger.writes)
+
+        allowed = true
+        notifier.observeNow("token", 2)
+        assertEquals("a set consumed while the channel was closed is not replayed", 0, platform.alerts.size)
+        assertEquals("the suppressed set is not written twice", 1, ledger.writes)
+
+        // A genuinely new candidate is still published once the channel is open.
+        backend.pool = SkillPool(
+            pending = listOf(
+                PendingSkill(versionId = 81, sourceType = 2),
+                PendingSkill(versionId = 82, sourceType = 2),
+            ),
+        )
+        notifier.observeNow("token", 2)
+        assertEquals("a new set publishes normally", 1, platform.alerts.size)
     }
 
     @Test

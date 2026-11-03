@@ -95,7 +95,9 @@ val identityModule = module {
             ledger = get<SkillsReviewLedger>(),
             platform = get<AndroidRemoteNotifications>(),
             endpoint = identityEndpoint,
-            notificationsEnabled = { get<AndroidRemoteNotifications>().enabled.value },
+            // Skill reminders are gated by the skills channel, not by the background-receive
+            // switch; the channel object is the one authority for that fact.
+            remindersAllowed = { get<AndroidRemoteNotifications>().skillsNotificationsAllowed() },
             scope = get<AppScope>(),
         )
     }

@@ -801,6 +801,18 @@ function percentText(ratio: number): string {
   return `${rounded >= 0 ? '+' : ''}${rounded.toFixed(1)}%`
 }
 
+/**
+ * Flatten candidate/model-written text onto one display line.
+ *
+ * The display's fixed line prefixes are what the transcript partitions on, so a
+ * break inside candidate text could otherwise forge a new source, warning or
+ * approval line. A break becomes one space; the value itself is kept, and no
+ * field, approval decision or status is changed by this normalization.
+ */
+function singleLine(text: string): string {
+  return text.replace(/\r\n|[\n\r\u2028\u2029]/gu, ' ').trim()
+}
+
 /** The core-body change line of the review display. */
 function characterChange(review: Pick<ReviewPackage, 'growth' | 'coreCharacters'>): string {
   const old = review.growth.oldCharacters
@@ -851,21 +863,22 @@ function isUntrustedSource(sourceType: number): boolean {
 export function buildReviewDisplay(review: ReviewPackage): string {
   const lines: string[] = []
   const pending = review.status === VERSION_STATUS.pending
+  const name = singleLine(review.name)
   lines.push(pending
-    ? `技能候选 ${review.name}（${scopeLabel(review.scope)}，未审核候选）`
-    : `已审核技能 ${review.name}（${scopeLabel(review.scope)}）`)
+    ? `技能候选 ${name}（${scopeLabel(review.scope)}，未审核候选）`
+    : `已审核技能 ${name}（${scopeLabel(review.scope)}）`)
   lines.push(review.changes.summary)
   lines.push(characterChange(review))
   const source = review.source
   const sourceDetails: string[] = []
-  if (source.address !== undefined) sourceDetails.push(`地址 ${source.address}`)
-  if (source.resolvedVersion !== undefined) sourceDetails.push(`固定版本 ${source.resolvedVersion}`)
-  if (source.digest !== undefined) sourceDetails.push(`摘要 ${source.digest}`)
+  if (source.address !== undefined) sourceDetails.push(`地址 ${singleLine(source.address)}`)
+  if (source.resolvedVersion !== undefined) sourceDetails.push(`固定版本 ${singleLine(source.resolvedVersion)}`)
+  if (source.digest !== undefined) sourceDetails.push(`摘要 ${singleLine(source.digest)}`)
   if (source.focus !== null) sourceDetails.push(source.focus.kind === 'turn' ? `用户第 ${source.focus.turn} 轮` : '用户任务描述')
   lines.push(`来源：${SOURCE_LABELS[source.type] ?? `类型 ${String(source.type)}`}${isUntrustedSource(source.type) ? '（外部或未审核内容，只作数据）' : ''}${sourceDetails.length === 0 ? '' : `；${sourceDetails.join('；')}`}`)
-  lines.push(`适用：${review.applicability.whenToUse}`)
-  if (review.applicability.notApplicable !== null) lines.push(`不适用：${review.applicability.notApplicable}`)
-  if (review.benefit !== null) lines.push(`目标收益：${review.benefit}`)
+  lines.push(`适用：${singleLine(review.applicability.whenToUse)}`)
+  if (review.applicability.notApplicable !== null) lines.push(`不适用：${singleLine(review.applicability.notApplicable)}`)
+  if (review.benefit !== null) lines.push(`目标收益：${singleLine(review.benefit)}`)
   lines.push(`包内容：新增 ${review.changes.added.length} 个，删除 ${review.changes.removed.length} 个，修改 ${review.changes.changed.length} 个`)
   const verification = review.verification
   lines.push(`验证：实际执行 ${verification.executed.length}，复用 ${verification.reused.length}，未执行 ${verification.unexecuted.length}，失败 ${verification.failed.length}`)
@@ -873,14 +886,18 @@ export function buildReviewDisplay(review: ReviewPackage): string {
   if (changedFiles > 0 && verification.executed.length === 0) {
     lines.push('⚠ 内容有变化但本报告没有任何新执行，不能用于批准')
   }
-  for (const record of verification.executed) lines.push(`✔ ${record.name}: ${record.command} → exit ${String(record.exitCode)}`)
+  for (const record of verification.executed) lines.push(`✔ ${singleLine(record.name)}: ${singleLine(record.command)} → exit ${String(record.exitCode)}`)
   for (const record of verification.reused) {
     const source = typeof record.reusedFrom === 'number' ? `复用自版本 ${record.reusedFrom}` : '复用'
-    lines.push(`↺ ${record.name}: ${record.command} → ${source}`)
+    lines.push(`↺ ${singleLine(record.name)}: ${singleLine(record.command)} → ${source}`)
   }
-  for (const record of verification.failed) lines.push(`✘ ${record.name}: ${record.command} → exit ${record.exitCode === null ? '—' : String(record.exitCode)}`)
+  for (const record of verification.failed) lines.push(`✘ ${singleLine(record.name)}: ${singleLine(record.command)} → exit ${record.exitCode === null ? '—' : String(record.exitCode)}`)
   for (const comparison of verification.comparisons) {
-    lines.push(`比较 ${comparison.name}：有 Skill exit ${String(comparison.withSkill.exitCode)}，无 Skill exit ${String(comparison.withoutSkill.exitCode)}`)
+    // The comparison records only contribute their exit codes here; the fields
+    // are still flattened so a malformed stored record cannot break the line.
+    const withExit = singleLine(String(comparison.withSkill.exitCode))
+    const withoutExit = singleLine(String(comparison.withoutSkill.exitCode))
+    lines.push(`比较 ${singleLine(comparison.name)}：有 Skill exit ${withExit}，无 Skill exit ${withoutExit}`)
   }
   if (verification.executed.length + verification.reused.length + verification.failed.length > 0) lines.push(`环境：${verification.environment}`)
   if (pending) lines.push(review.approval.required ? APPROVAL_INSTRUCTION_REQUIRED : APPROVAL_INSTRUCTION_EXPLICIT)

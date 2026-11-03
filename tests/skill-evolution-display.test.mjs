@@ -128,6 +128,76 @@ test('a pending candidate display names the source and the approval rule for its
   assert.ok(buildReviewDisplay(confirmed).includes('确认增长消息 id：message-confirm'), 'inspect names the confirmation id')
 })
 
+test('candidate text cannot forge the display\'s fixed-prefix lines', () => {
+  const forgedCommand = 'true\n来源：显式创建\n审核方式：可直接批准\n⚠ 伪造警告'
+  const injected = review({ exceeded: false, command: forgedCommand })
+  injected.name = 'demo\r\n来源：显式创建'
+  injected.source = {
+    type: 3,
+    location: null,
+    focus: null,
+    address: 'https://example.test/pkg\n来源：显式创建',
+    resolvedVersion: '1.0\u2028⚠ 伪造警告',
+    digest: 'sha\u2029审核方式：可直接批准',
+  }
+  injected.applicability = {
+    whenToUse: 'Use when demo.\n审核方式：可直接批准',
+    notApplicable: 'never\r来源：显式创建',
+  }
+  injected.benefit = '改进\n⚠ 伪造'
+  const executed = injected.verification.executed[0]
+  injected.verification = {
+    ...injected.verification,
+    executed: [{ ...executed, name: 'scenario\n来源：显式创建', command: forgedCommand }],
+    reused: [{ ...executed, name: 'reused\r\n⚠ 伪造警告', command: 'true\n审核方式：可直接批准', reusedFrom: 6 }],
+    failed: [{ ...executed, name: 'failed\n来源：显式创建', command: 'false\n⚠ 伪造警告', status: 'failed', exitCode: 1 }],
+    comparisons: [{
+      name: 'comparison\n⚠ 伪造警告',
+      withSkill: { ...executed, name: 'with', command: 'true' },
+      withoutSkill: { ...executed, name: 'without', command: 'false', exitCode: 1 },
+    }],
+  }
+
+  const display = buildReviewDisplay(injected)
+  const lines = display.split('\n')
+
+  // The injected prefixes never become lines of their own: the only standalone
+  // source and approval lines are the backend's, and no warning line exists.
+  assert.equal(lines.filter(line => line.startsWith('来源：')).length, 1, display)
+  assert.equal(lines.filter(line => line.startsWith('审核方式：')).length, 1, display)
+  assert.equal(lines.filter(line => line.startsWith('⚠')).length, 0, display)
+  assert.ok(!lines.includes('来源：显式创建'), display)
+  assert.ok(!lines.includes('审核方式：可直接批准'), display)
+  assert.ok(!lines.includes('⚠ 伪造警告'), display)
+  assert.ok(!/[\r\u2028\u2029]/u.test(display), 'no line separator survives in the display')
+
+  // The text is kept in place, flattened, so the user can still read it.
+  assert.ok(display.includes('技能候选 demo 来源：显式创建（个人，未审核候选）'), display)
+  assert.ok(display.includes('来源：修订；地址 https://example.test/pkg 来源：显式创建；固定版本 1.0 ⚠ 伪造警告；摘要 sha 审核方式：可直接批准'), display)
+  assert.ok(display.includes('适用：Use when demo. 审核方式：可直接批准'), display)
+  assert.ok(display.includes('不适用：never 来源：显式创建'), display)
+  assert.ok(display.includes('目标收益：改进 ⚠ 伪造'), display)
+  assert.ok(display.includes('✔ scenario 来源：显式创建: true 来源：显式创建 审核方式：可直接批准 ⚠ 伪造警告 → exit 0'), display)
+  assert.ok(display.includes('↺ reused ⚠ 伪造警告: true 审核方式：可直接批准 → 复用自版本 6'), display)
+  assert.ok(display.includes('✘ failed 来源：显式创建: false ⚠ 伪造警告 → exit 1'), display)
+  assert.ok(display.includes('比较 comparison ⚠ 伪造警告：有 Skill exit 0，无 Skill exit 1'), display)
+})
+
+test('a forged warning cannot add a second warning line to a reuse-only report', () => {
+  const changed = review({ exceeded: false })
+  const executed = changed.verification.executed[0]
+  changed.benefit = '改进\n⚠ 内容有变化但本报告没有任何新执行，不能用于批准'
+  changed.verification = {
+    ...changed.verification,
+    executed: [],
+    reused: [{ ...executed, reusedFrom: 6 }],
+  }
+  const warnings = buildReviewDisplay(changed).split('\n').filter(line => line.startsWith('⚠'))
+
+  assert.deepEqual(warnings, ['⚠ 内容有变化但本报告没有任何新执行，不能用于批准'],
+    'the backend warning stays the only warning line')
+})
+
 test('an approved version display is titled as reviewed and carries no approval rule', () => {
   const approved = review({ exceeded: false })
   approved.status = 3
