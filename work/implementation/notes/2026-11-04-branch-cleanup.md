@@ -61,3 +61,40 @@ commit 本来就在 main 的历史里）。
 清理前：`2 need attention — #225 orphan, #295 stale-worktree`
 
 清理后：`no spec needs attention`（#225 转为 `in-flight`，#295 的遗留 worktree 已清）
+
+## 七、两个原本阻塞的问题已解答
+
+**Q：`combo.json` 的 `localPath` 指向 `/home/eafen405/projects/...`，本机是 `/home/fatfish/...`，
+`combo:verify` 报 drift 怎么办？**
+
+A：用环境变量覆盖即可，`scripts/combo.ts:48-51` 支持每仓库一个覆盖变量。本机实测：
+
+```sh
+export OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2
+npm run combo:verify
+```
+
+输出三行全 ok（`ourfairy main ok` / `dsh d80522d276dd5a83 ok` / `android source ok`），
+以 `combo: combination verified` 收尾。**不需要** `OURFAIRY_REPO_DIR`——放掉它一样全绿。
+
+同理 `OURFAIRY_DSH_DIR` 也是 `backend:doctor` 与 `npm test` 能跑起来的前提（否则报 checkout missing）。
+
+**Q：#249 声称的 10 类 × 3 次真实模型验收原始 JSON 已不在本机，还能复查吗？**
+
+A：不能。`work/tmp/249-persona/` 在本机不存在，只剩 `work/implementation/evidence/249-fairy-persona/README.md`
+里的 SHA-256 摘要与文字描述。这是"不可复查的证据"。重做时必须让原始 JSON 入仓
+（`work/implementation/evidence/<票>/` 下），否则 #249 验收第 2 条不成立。
+
+## 八、#249 重做方案
+
+完整方案见 [2026-11-04-249-redo-plan.md](2026-11-04-249-redo-plan.md)（861 行，只读分析产物）。
+一页结论：
+
+- 249 的 39 文件：**12 可 cherry-pick、13 必须重写、3 CP+补丁、5 处 249 漏做需要补**
+- `scripts/persona-acceptance.ts`（1443 行）+ 测试（618 行）**是 249 最值钱的产物**，改 3 处接口即可复用；
+  它补的正是 #302 自己承认补不上的语义验收空缺（302 只 pin `persona.characters === 804`，是字节数不是语义）
+- 人格文本：**能力上叠加**（`ownerIdentity()` 302 完全没有，必须加），**文本上替代**（同一常量整体换）
+- 与 `spec-225` **会打架**：`chat-read-window.test.mjs` 的 `makeWorld` 被 225 整体搬进
+  `tests/helpers/chat-world.mjs`，249 的 `identity` 假件补丁会落在被删除的位置；
+  `runtime.ts` 三方各加一行 import，正确解是 `taskAt`(225) + `ownerIdentity`(249) + `installPromptGuard`(302) **三个都留**
+- 分 4 批可独立合入；**批 5（人格文本 + 真实模型验收）是唯一会反复的**
