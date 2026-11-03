@@ -91,6 +91,18 @@ export interface CandidateEvidence {
   readonly note?: string
 }
 
+/** Where one background candidate came from: the cross-session claim's evidence. */
+export interface BackgroundProvenance {
+  /** The canonical task key shared by the contributing signals. */
+  readonly taskKey: string
+  /** The contributing reuse-signal ids the creation claim froze. */
+  readonly signalIds: readonly number[]
+  /** The distinct source sessions those signals came from. */
+  readonly sourceSessions: readonly string[]
+  /** The creation job that produced this candidate. */
+  readonly creationJobId: number
+}
+
 /** The facts one `create` call hands the backend. */
 export interface CreateCandidateInput {
   readonly ownerShortId: number
@@ -98,7 +110,7 @@ export interface CreateCandidateInput {
   /** The caller's durable log, read by the tool before the call. */
   readonly events: readonly SessionEvent[]
   readonly scope: number
-  /** Present for an explicit create/revision; absent for an address install. */
+  /** Present for an explicit create/revision; absent for an address install or a background claim. */
   readonly focus?: SkillFocusInput
   /** Model-drafted files; mutually exclusive with `packageDir`. */
   readonly files?: readonly CandidateFile[]
@@ -117,6 +129,14 @@ export interface CreateCandidateInput {
   readonly parentVersionId?: number
   /** The proven benefit of a revision; required with {@link parentVersionId}. */
   readonly targetBenefit?: string
+  /** The cross-session provenance of a background candidate. */
+  readonly background?: BackgroundProvenance
+  /**
+   * Stage the candidate without running verification. The background creation
+   * child then runs the recorded scenarios through its own `run_verification`
+   * tool, so the model cannot claim a result it never received.
+   */
+  readonly deferVerification?: boolean
   readonly signal?: AbortSignal
 }
 
@@ -468,6 +488,16 @@ interface SourceProvenance {
   /** The user turn that explicitly consented to a common proposal. */
   readonly consent?: SharingConsent
   readonly benefit?: string
+  /** The cross-session claim a background candidate came from (#300). */
+  readonly background?: {
+    readonly taskKey: string
+    readonly signalIds: readonly number[]
+    readonly sourceSessions: readonly string[]
+    readonly creationJobId: number
+  }
+  /** The scenarios a deferred background candidate still has to verify with. */
+  readonly scenarios?: readonly CandidateScenario[]
+  readonly comparisons?: readonly CandidateComparison[]
   /** The historical version a rollback candidate restores (#299). */
   readonly rollbackOf?: number
 }
@@ -866,9 +896,15 @@ export class SkillCreation {
       if (input.packageDir !== undefined && input.install === undefined) {
         throw new SkillError(400, 'skills/invalid-package', 'a fetched package needs the install source it was fetched from')
       }
-      const focus = input.focus === undefined ? undefined : resolveFocus(input.events, input.focus)
-      if (focus === undefined && input.install === undefined) {
-        throw new SkillError(400, 'skills/invalid-focus', 'create needs focus: {"kind":"turn"} or {"kind":"task","text":"..."}')
+      // A background candidate has no calling turn to name: its provenance is
+      // the cross-session claim, and the review package shows that instead.
+      const background = input.background
+      let focus: FocusProvenance | undefined
+      if (background === undefined) {
+        focus = input.focus === undefined ? undefined : resolveFocus(input.events, input.focus)
+        if (focus === undefined && input.install === undefined) {
+          throw new SkillError(400, 'skills/invalid-focus', 'create needs focus: {"kind":"turn"} or {"kind":"task","text":"..."}')
+        }
       }
       const evidence = common ? [] : checkedEvidence(input.evidence)
       const staging = join(this.#root, 'tmp', randomUUID())
@@ -909,26 +945,47 @@ export class SkillCreation {
         renameSync(staging, candidateDir)
         const growth = growthOf(parsed.coreCharacters, revision?.parent.core_characters ?? null)
         const install = input.install
-        const location: SourceProvenance = {
-          ...(common
-            ? { ...(consent === undefined ? {} : { consent }) }
-            : {
-                sessionId: input.sessionId,
-                ...(focus === undefined ? {} : { focus }),
-                ...(evidence.length === 0 ? {} : { evidence }),
-                ...(revision === undefined ? {} : { benefit: revision.benefit }),
-              }),
-          ...(install === undefined
-            ? {}
-            : {
-                address: install.address,
-                resolvedVersion: install.resolvedVersion,
-                digest: install.digest,
-                fetchedAt: install.fetchedAt,
-                ...(install.etag === undefined ? {} : { etag: install.etag }),
-                ...(install.lastModified === undefined ? {} : { lastModified: install.lastModified }),
-              }),
-        }
+        const location: SourceProvenance = background !== undefined
+          ? {
+              ...(evidence.length === 0 ? {} : { evidence }),
+              ...(revision === undefined ? {} : { benefit: revision.benefit }),
+              background: {
+                taskKey: background.taskKey,
+                signalIds: [...background.signalIds],
+                sourceSessions: [...background.sourceSessions],
+                creationJobId: background.creationJobId,
+              },
+              // A deferred candidate keeps the scenarios it must still run:
+              // run_verification reads them back from this provenance.
+              ...(input.deferVerification
+                ? { scenarios, comparisons }
+                : {}),
+            }
+          : {
+              ...(common
+                ? { ...(consent === undefined ? {} : { consent }) }
+                : {
+                    sessionId: input.sessionId,
+                    ...(focus === undefined ? {} : { focus }),
+                    ...(evidence.length === 0 ? {} : { evidence }),
+                    ...(revision === undefined ? {} : { benefit: revision.benefit }),
+                  }),
+              ...(install === undefined
+                ? {}
+                : {
+                    address: install.address,
+                    resolvedVersion: install.resolvedVersion,
+                    digest: install.digest,
+                    fetchedAt: install.fetchedAt,
+                    ...(install.etag === undefined ? {} : { etag: install.etag }),
+                    ...(install.lastModified === undefined ? {} : { lastModified: install.lastModified }),
+                  }),
+            }
+        const sourceType = background !== undefined
+          ? SOURCE_TYPE.background
+          : install !== undefined
+            ? SOURCE_TYPE.install
+            : revision === undefined ? SOURCE_TYPE.explicit : SOURCE_TYPE.evolution
         const draft = this.#store.createDraft({
           name: parsed.name,
           scope: revision?.skill.scope ?? input.scope,
@@ -942,13 +999,24 @@ export class SkillCreation {
           ...(input.license === undefined
             ? (parsed.license === undefined ? {} : { license: parsed.license })
             : { license: input.license }),
-          ...(install === undefined
-            ? (revision === undefined
-                ? { sourceType: SOURCE_TYPE.explicit }
-                : { sourceType: SOURCE_TYPE.evolution, parentVersionId: revision.parent.id, growthExceeded: growth.exceeded })
-            : { sourceType: SOURCE_TYPE.install }),
+          ...(revision === undefined
+            ? { sourceType }
+            : { sourceType, parentVersionId: revision.parent.id, growthExceeded: growth.exceeded }),
           sourceLocation: JSON.stringify(location),
         })
+        if (input.deferVerification) {
+          return {
+            ok: true,
+            skillId: draft.skillId,
+            versionId: draft.versionId,
+            status: VERSION_STATUS.pending,
+            nextActions: ['run_verification', 'inspect', 'review'],
+            verification: {
+              complete: false, executed: [], reused: [], unexecuted: [], failed: [], comparisons: [],
+              environment: '', ranAt: Date.now(),
+            },
+          }
+        }
         const reuse = revision === undefined ? undefined : this.#reusePlan(revision.parent, parsed.manifest, scenarios)
         const verification = await runVerification({
           root: this.#root,
@@ -1231,6 +1299,61 @@ export class SkillCreation {
         return boundInspectResult({ ok: true, action: 'inspect', kind: 'skill-review', review, display, file })
       }
       return boundInspectResult({ ok: true, action: 'inspect', kind: 'skill-review', review, display })
+    } catch (error) {
+      asSkillError(error)
+    }
+  }
+
+  /**
+   * Run the deferred verification of one background candidate.
+   *
+   * The creation child submits a complete package and the representative
+   * scenarios; the system runs them here, in the same disposable environment
+   * the explicit path uses, and writes the recorded report. Only the claim's
+   * owner may verify its own pending candidate, and only a candidate whose
+   * provenance is a background claim carries deferred scenarios.
+   */
+  async verifyBackground({ ownerShortId, versionId }: {
+    readonly ownerShortId: number
+    readonly versionId: number
+  }): Promise<{ readonly versionId: number; readonly report: VerificationReport; readonly summary: Record<string, unknown> }> {
+    try {
+      const version = this.#store.version(versionId)
+      if (version === undefined) throw new SkillError(404, 'skills/not-found', `skill version ${versionId} is not visible to this user`)
+      const skill = this.#store.identity(version.skill_id)
+      if (skill === undefined || skill.scope !== SKILL_SCOPE.personal || skill.owner_short_id !== ownerShortId) {
+        throw new SkillError(404, 'skills/not-found', `skill version ${versionId} is not visible to this user`)
+      }
+      if (version.status !== VERSION_STATUS.pending) {
+        throw new SkillError(409, 'skills/not-pending', `skill version ${versionId} is no longer pending`)
+      }
+      const provenance = parseSourceLocation(version.source_location)
+      if (provenance.background === undefined || provenance.scenarios === undefined) {
+        throw new SkillError(400, 'skills/invalid-verification', 'only a background candidate carries deferred verification scenarios')
+      }
+      const directory = this.#service.versionDirectory(version)
+      const parsed = this.#readCandidate(version, skill, directory)
+      const scenarios = checkedScenarios(provenance.scenarios, new Set(parsed.manifest.map(entry => entry.path)), this.#verifyTimeoutMs)
+      const comparisons = checkedComparisons(provenance.comparisons)
+      const report = await runVerification({
+        root: this.#root,
+        packageDir: directory,
+        scenarios,
+        comparisons,
+        timeoutMs: this.#verifyTimeoutMs,
+      })
+      this.#store.updateVerification(versionId, JSON.stringify(report))
+      return {
+        versionId,
+        report,
+        summary: {
+          complete: report.complete,
+          executed: report.executed.length,
+          failed: report.failed.length,
+          unexecuted: report.unexecuted.length,
+          reused: report.reused.length,
+        },
+      }
     } catch (error) {
       asSkillError(error)
     }

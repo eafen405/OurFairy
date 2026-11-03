@@ -87,6 +87,11 @@ export function launchEnv(env = {}) {
   const merged = mergedEnv(env)
   if (merged.OURFAIRY_PORT === undefined) merged.OURFAIRY_PORT = EPHEMERAL_PORT
   if (!Object.hasOwn(env, 'OURFAIRY_SKIP_BUILD')) merged.OURFAIRY_SKIP_BUILD = '1'
+  // Background skill learning watches every user session. A deterministic
+  // suite that is not about learning must not emit detection children (they
+  // would call the suite's model double after five closed turns and pollute
+  // its request expectations); the learning suite sets the threshold itself.
+  if (merged.OURFAIRY_SKILL_LEARNING_TURNS === undefined) merged.OURFAIRY_SKILL_LEARNING_TURNS = '50'
   return merged
 }
 

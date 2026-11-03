@@ -140,19 +140,20 @@ test('the package reader refuses symlinks, bad names, over-budget bodies and uns
   assert.equal(readSkillPackage(neutral).name, 'demo-skill')
 })
 
-test('the store creates schema v1 in WAL and enforces the active identity rule', async () => {
+test('the store creates schema v2 in WAL and enforces the active identity rule', async () => {
   const { SkillStore } = await import('../backend/skill-creator/dist/store.js')
   const dbPath = join(temp('skill-store-'), 'skill.sqlite')
   const store = new SkillStore({ path: dbPath })
   try {
-    assert.equal(store.schemaVersion(), 1)
+    assert.equal(store.schemaVersion(), 2)
     const facts = new DatabaseSync(dbPath)
     try {
       assert.equal(String(facts.prepare('PRAGMA journal_mode').get().journal_mode).toLowerCase(), 'wal')
       assert.deepEqual(
         facts.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row => row.name),
-        ['meta', 'skill', 'skill_user_preference', 'skill_version'],
-        'schema v1 has exactly the runtime subset; learning tables arrive with their ticket',
+        ['meta', 'skill', 'skill_creation_job', 'skill_learning_state', 'skill_reuse_signal',
+          'skill_user_preference', 'skill_version'],
+        'schema v2 is the runtime subset plus the three background-learning tables',
       )
       // The partial expression index is the authority for the nullable owner key.
       facts.prepare("INSERT INTO skill (name, scope, owner_short_id, created_by, updated_by, created_at, updated_at) VALUES ('common-one', 2, NULL, 0, 0, 0, 0)").run()

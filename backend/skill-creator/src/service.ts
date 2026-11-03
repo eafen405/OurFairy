@@ -172,6 +172,11 @@ export class SkillService {
     return this.#root
   }
 
+  /** The trusted bundled skills root; the background creation prompt reads the Skill Creator from it. */
+  get bundledSkillsDir(): string {
+    return this.#bundledSkillsDir
+  }
+
   /** Read one version's package directory, refusing a path that escapes the data root. */
   versionDirectory(version: SkillVersionRow): string {
     const parts = version.package_path.split('/')

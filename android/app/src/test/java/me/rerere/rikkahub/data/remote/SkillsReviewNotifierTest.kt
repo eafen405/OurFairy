@@ -104,6 +104,41 @@ class SkillsReviewNotifierTest {
     }
 
     @Test
+    fun `a background-created candidate reaches the user through one merged pending reminder`() = runTest {
+        // The learning engine only writes rows; the client sees the candidate
+        // through the ordinary pending list. An empty observation publishes
+        // nothing, the new background candidate publishes exactly one merged
+        // reminder and the same set never repeats.
+        val backend = ScriptedBackend(SkillPool())
+        val notifier = notifier(backend, this)
+        notifier.observeNow("token", 2)
+        assertEquals("an empty pending set publishes nothing", 0, platform.alerts.size)
+
+        backend.pool = SkillPool(
+            pending = listOf(
+                PendingSkill(
+                    versionId = 71,
+                    skillId = 12,
+                    name = "background-checklist",
+                    sourceType = 2,
+                    nextActions = listOf("approve", "request_changes", "reject"),
+                ),
+            ),
+            pendingCount = 1,
+        )
+        notifier.observeNow("token", 2)
+        assertEquals("the background candidate publishes one reminder", 1, platform.alerts.size)
+        val preview = platform.alerts.single().preview
+        assertTrue("the reminder names the pending count: $preview", preview.contains("1"))
+        assertTrue("the reminder is the review reminder: $preview", preview.contains("待审核"))
+        assertEquals("the ledger keeps the observed candidate", listOf(71L), ledger.records.values.single().pending)
+
+        notifier.observeNow("token", 2)
+        assertEquals("the same background candidate is never re-announced", 1, platform.alerts.size)
+        assertEquals("one observation costs one read", 3, backend.reads)
+    }
+
+    @Test
     fun `a terminal common decision reaches its proposer once, not another reviewer`() = runTest {
         val backend = ScriptedBackend(SkillPool(
             reviewResults = listOf(

@@ -183,6 +183,10 @@ async function start() {
     OURFAIRY_PHAETHON_PASSWORD: password,
     MINIMAX_CN_API_KEY: 'mock-skill-creation-key',
     OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${model.address().port}`,
+    // This suite reads the last model request as the user session's. Background
+    // children (memory maintenance here, skill learning in #300) also reach the
+    // double, so both engines are kept above this suite's turn count.
+    OURFAIRY_MEMORY_MAINTENANCE_TURNS: '50',
   })
   port = startedPort(run)
 }

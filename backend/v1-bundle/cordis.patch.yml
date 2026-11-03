@@ -427,6 +427,15 @@
             root: !!js dshHomePath('skill')
             bundledSkillsDir: !!js process.env.OURFAIRY_BUNDLED_SKILLS_DIR ?? dshHomePath('bundled-skills')
             seedDir: !!js process.env.OURFAIRY_SEED_SKILLS_DIR ?? ''
+            # Background learning: the closed-turn threshold, the light model
+            # route, the material bound and the per-interval child turn budget.
+            # The environment seeds a deployment; every evaluation re-reads the
+            # volatile value, and the row's Config refuses an out-of-range one.
+            learningTurns: !!js Number(process.env.OURFAIRY_SKILL_LEARNING_TURNS ?? 5)
+            learningModel: !!js process.env.OURFAIRY_SKILL_LEARNING_MODEL ?? 'MiniMax-M3.1-Flash'
+            learningProvider: !!js process.env.OURFAIRY_SKILL_LEARNING_PROVIDER ?? 'minimax-cn'
+            learningMaxMaterialChars: !!js Number(process.env.OURFAIRY_SKILL_LEARNING_MAX_MATERIAL_CHARS ?? 12000)
+            learningMaxTurns: !!js Number(process.env.OURFAIRY_SKILL_LEARNING_MAX_TURNS ?? 4)
             # The address install's download/package bound. The test suite lowers
             # it to keep an oversized-download case small; production keeps 10 MiB.
             installMaxBytes: !!js Number(process.env.OURFAIRY_SKILL_INSTALL_MAX_BYTES ?? 10485760)

@@ -14,12 +14,14 @@
  */
 import z from '@deepseek-ai/schemastery'
 import { mountRoutes } from '@ourfairy/dsh-http/http'
+import { isUserSession } from '@ourfairy/dsh-identity/session'
 import { ImpressionService, impressionHandlers, registerImpressions, SURFACE as IMPRESSION_SURFACE } from './impression.js'
 import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from './maintenance-policy.js'
 import { MaintenanceEngine, readMaintenanceSettings, type MaintenanceField } from './maintenance.js'
 import { MemoryService } from './service.js'
 import { MemoryStore } from './store.js'
 import { registerMemoryPolicy, registerMemoryTools } from './tools.js'
+import { MAINTENANCE_PRESET } from './preset.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 // The dsh seams this row reads: the agent registry and per-agent tool
@@ -108,7 +110,12 @@ export function apply(ctx: Context, config: MemoryConfig): void {
   const register = (agent: Agent): undefined => {
     const names = registrations.get(agent) ?? new Set<string>()
     registrations.set(agent, names)
-    registerMemoryTools(agent, service, names)
+    // Memory tools belong to a user's own session and to memory's own
+    // maintenance child. Another row's ownerless child (for example the skill
+    // learning child) must keep only the tools that row gave it, so this row
+    // does not paint its surface onto an unrelated agent.
+    const header = agent.session.header
+    if (isUserSession(header) || header.agentPreset === MAINTENANCE_PRESET) registerMemoryTools(agent, service, names)
     // The owned Fairy gets the write/no-write policy. The maintenance child is
     // ownerless and carries its own policy instead.
     registerMemoryPolicy(agent, names)
