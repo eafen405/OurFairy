@@ -1,0 +1,11 @@
+{
+  "title": "Fairy Skill 系统：#295 Android 修复轮（E1–E4 + E7）",
+  "entries": [
+    {
+      "dirs": [
+        "295-android-ux"
+      ],
+      "note": "2026-11-03 Android 修复与体验优化轮（基于修复轮分支 `fix/295-android-ux`，基线 `origin/fix/295-adversarial-review` ac93251）。按用户拍板：范围 P1（E1 待审入口呈现/验证、E2 后台候选提醒、E3 审核展示、E4 技能面板）+ 低风险 P2 的 E7（错误码本地化 + 真实后端 envelope golden），E5/E6 与后端语义改动不做，通知门控选「技能提醒与后台接收开关解耦、技能渠道可用性为唯一门」。落地：技能页按后端派生 state 四组折叠（默认只展开进入目录）+ 首句/96 字符描述截断 + 本地名称搜索 + 头部 `pendingCount`；设置页进入即读一次待审计数并在折叠组头显示徽标；审核展示按后端 `buildReviewDisplay` 固定前缀分区（来源/适用与收益（候选自述）/验证摘要与折叠命令、阻断性 ⚠ 警告常显/审核方式/默认折叠的版本-hash-expand 详情，未识别行原样兜底）+ 候选命令「由候选提供」注记；技能提醒发布门从后台接收开关改为技能渠道可用性，补 controller→notifier 真接线与 Robolectric 生产组合测试，保持先记账后抑制不补发/前台抑制/同集合不重复等反骚扰语义；错误码只映射真能到达页面的 7 个 code（未知 code 原文兜底）并加真实 envelope golden 契约测试。两轴 review 后收口修复：审核面板文案入 stringResource（13 个 `skills_review_*` key，en/zh 集合一致）、技能池行渲染去重、E7 去除 `skills/integrity` 死映射、后端 display 组装层 `singleLine()` 把候选/模型文本换行规范为行内空格（防候选文本用换行伪造 `来源：`/`⚠`/`审核方式：` 固定前缀行，display 注入测试 11/11 + 关联回归 57/57）。门禁：Android `./gradlew test lintDebug` 696 tests / 0 failure、lint 0 error；后端 `npm test` 全量 + `npm run combo:verify` + `node scripts/evidence-index.ts --check` 全绿。未做：E5/E6、`/skills/detail` 接线、真机/模拟器/connected 测试、真实后端 E2E；无 push 通道下技能提醒仍只在生命周期观测点与服务内 60s 轮询发布（App 持续后台且后台接收关闭时靠 in-app 待审计数），后端 display 与通知标题仍硬编码中文。"
+    }
+  ]
+}

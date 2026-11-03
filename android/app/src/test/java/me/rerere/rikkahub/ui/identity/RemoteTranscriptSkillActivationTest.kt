@@ -23,8 +23,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * A role-3 activation row is a quiet system line, never a user bubble or a Fairy message.
- * The legacy notification preview and role-2 filters are covered by RemoteChatStateTest.
+ * A role-3 row is a quiet system line or the backend-composed review panel, never a user bubble or
+ * a Fairy message. The legacy notification preview and role-2 filters are covered by
+ * RemoteChatStateTest; the review panel's section/collapse behaviour is covered by
+ * RemoteTranscriptSkillReviewTest.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35], qualifiers = "zh-rCN-w411dp-h891dp")
@@ -80,14 +82,19 @@ class RemoteTranscriptSkillActivationTest {
     }
 
     @Test
-    fun `a kind-2 row renders the backend review panel verbatim, not a bubble`() {
-        val display = "技能候选 demo（个人，版本 7，哈希 abc）\n新技能，420 字符\n验证：实际执行 1，复用 0，未执行 0，失败 0"
+    fun `a kind-2 row renders the review panel sections, not a bubble or one verbatim text`() {
+        val display = SkillReviewFixtures.pendingDisplay
         val review = activation.copy(messageId = "skill-review:call-2", kind = 2, text = display)
         show(listOf(question, review))
 
         compose.onNodeWithTag("skill-review", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("技能审核", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText(display, useUnmergedTree = true).assertExists()
+        // The panel is split by backend line prefix; it is no longer one raw text node.
+        compose.onNodeWithText(display, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("技能候选 pdf-reader（个人，未审核候选）", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(SkillReviewFixtures.SOURCE_EXPLICIT, useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("skill-review-source", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("skill-review-approval", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Fairy", useUnmergedTree = true).assertDoesNotExist()
         compose.onAllNodesWithTag("skill-activation", useUnmergedTree = true).fetchSemanticsNodes().let {
             assertEquals("a review row is not an activation line", 0, it.size)
@@ -95,21 +102,14 @@ class RemoteTranscriptSkillActivationTest {
     }
 
     @Test
-    fun `a growth review row renders the backend's characters and confirmation instruction verbatim`() {
-        val display = "技能候选 growth（个人，版本 9，哈希 abc）\n" +
-            "相对父版本：新增 0 个，删除 0 个，修改 1 个\n" +
-            "核心正文 1000 → 1110 字符（+11.0%）\n" +
-            "目标收益：add two verified steps\n" +
-            "验证：实际执行 1，复用 0，未执行 0，失败 0\n" +
-            "✔ check: true → exit 0\n" +
-            "查看全文：skill_manage inspect versionId=9 expand=skill\n" +
-            "篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」"
+    fun `a growth review row keeps the characters and the confirmation instruction visible`() {
+        val display = SkillReviewFixtures.pendingDisplay
         val review = activation.copy(messageId = "skill-review:call-9", kind = 2, text = display)
         show(listOf(question, review))
 
         compose.onNodeWithTag("skill-review", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText(display, useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("核心正文 1000 → 1110 字符（+11.0%）", substring = true, useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("确认增长", substring = true, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("核心正文 1000 → 1150 字符（+15.0%）", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(SkillReviewFixtures.GROWTH, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(SkillReviewFixtures.GROWTH_MESSAGE_ID, useUnmergedTree = true).assertExists()
     }
 }

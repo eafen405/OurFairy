@@ -2,9 +2,11 @@ package me.rerere.rikkahub.ui.identity
 
 import android.content.ClipData
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.widthIn
@@ -50,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
@@ -285,12 +288,97 @@ internal fun RemoteTranscript(
 }
 
 /**
- * The skill review display: the backend's four deterministic blocks, rendered as a multi-line
- * system panel rather than a message. The text is presented verbatim; the client never recomposes
- * a diff, a verification count or a growth percentage.
+ * The backend composes one `skill-review` display from a deterministic sequence of fixed line
+ * prefixes (`buildReviewDisplay` in `backend/skill-creator/src/creation.ts`). The client splits that
+ * text into the sections the user reads instead of one wall of text.
+ *
+ * Every line lands in exactly one bucket and keeps its original wording: counts, hashes, commands
+ * and percentages are only grouped, never recomputed. [other] holds lines this client does not
+ * recognise, so a newer backend display degrades to visible raw text instead of disappearing.
+ * [verificationWarnings] are blocking approval warnings (`⚠`): they stay out of the collapsible
+ * details, because a user must not have to expand anything to learn the candidate cannot be approved.
+ */
+internal data class SkillReviewSections(
+    val change: List<String> = emptyList(),
+    val source: List<String> = emptyList(),
+    val claims: List<String> = emptyList(),
+    val verification: List<String> = emptyList(),
+    val verificationWarnings: List<String> = emptyList(),
+    val verificationDetails: List<String> = emptyList(),
+    val approval: List<String> = emptyList(),
+    val details: List<String> = emptyList(),
+    val other: List<String> = emptyList(),
+)
+
+/**
+ * The growth instruction is the one line the user must act on; the backend appends it as the
+ * display's tail and may vary its percentage, so only its stable opening marks it.
+ */
+private const val REVIEW_GROWTH_MARKER = "篇幅增长超过"
+
+/**
+ * Split the deterministic review display by the backend's fixed line prefixes.
+ *
+ * Tolerant by design: unknown lines are kept verbatim in [SkillReviewSections.other], an empty
+ * display yields empty sections, and a display clipped mid-line by the backend's character bound
+ * still keeps its prefix, so the visible text is never lost.
+ */
+internal fun parseSkillReviewDisplay(text: String): SkillReviewSections {
+    if (text.isEmpty()) return SkillReviewSections()
+    val change = mutableListOf<String>()
+    val source = mutableListOf<String>()
+    val claims = mutableListOf<String>()
+    val verification = mutableListOf<String>()
+    val verificationWarnings = mutableListOf<String>()
+    val verificationDetails = mutableListOf<String>()
+    val approval = mutableListOf<String>()
+    val details = mutableListOf<String>()
+    val other = mutableListOf<String>()
+    for (line in text.split('\n')) {
+        when {
+            line.startsWith("技能候选 ") || line.startsWith("已审核技能 ") ||
+                line.startsWith("相对父版本：") || line.startsWith("新技能，") ||
+                line.startsWith("核心正文 ") -> change += line
+            line.startsWith("来源：") -> source += line
+            line.startsWith("适用：") || line.startsWith("不适用：") ||
+                line.startsWith("目标收益：") -> claims += line
+            line.startsWith("包内容：") || line.startsWith("验证：") -> verification += line
+            // A ⚠ line blocks approval; it must stay outside the collapsed verification details.
+            line.startsWith("⚠") -> verificationWarnings += line
+            line.startsWith("✔ ") || line.startsWith("↺ ") || line.startsWith("✘ ") ||
+                line.startsWith("比较 ") || line.startsWith("环境：") -> verificationDetails += line
+            line.startsWith("审核方式：") || line.startsWith("确认增长消息 id：") ||
+                line.startsWith(REVIEW_GROWTH_MARKER) -> approval += line
+            line.startsWith("详情：") || line.startsWith("查看全文：") -> details += line
+            else -> other += line
+        }
+    }
+    return SkillReviewSections(
+        change = change,
+        source = source,
+        claims = claims,
+        verification = verification,
+        verificationWarnings = verificationWarnings,
+        verificationDetails = verificationDetails,
+        approval = approval,
+        details = details,
+        other = other,
+    )
+}
+
+/**
+ * The skill review display: the backend's deterministic blocks, split by their fixed line prefixes
+ * into named sections with a readable hierarchy. The text stays verbatim — the client never
+ * recomposes a diff, a verification count or a growth percentage — but hashes, version ids, the
+ * `expand` tool syntax and verification commands start collapsed, and the candidate's own claims
+ * are labelled and de-emphasised as data. Blocking verification warnings stay visible: a user must
+ * not need to expand anything to learn a candidate cannot be approved.
  */
 @Composable
 private fun SkillReviewPanel(text: String, modifier: Modifier = Modifier) {
+    val sections = remember(text) { parseSkillReviewDisplay(text) }
+    var verificationExpanded by remember(text) { mutableStateOf(false) }
+    var detailsExpanded by remember(text) { mutableStateOf(false) }
     Column(
         modifier = modifier
             .padding(horizontal = FairyMessagePaddingH, vertical = 4.dp)
@@ -304,10 +392,177 @@ private fun SkillReviewPanel(text: String, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (sections.change.isNotEmpty()) {
+            ReviewLinesSection(R.string.skills_review_section_change, "skill-review-change", sections.change)
+        }
+        if (sections.source.isNotEmpty()) {
+            ReviewLinesSection(R.string.skills_review_section_source, "skill-review-source", sections.source)
+        }
+        if (sections.claims.isNotEmpty()) {
+            // Applicability and benefit are the candidate's own submission, not verified fact.
+            ReviewLinesSection(
+                title = R.string.skills_review_section_claims,
+                tag = "skill-review-claims",
+                lines = sections.claims,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                selectable = true,
+            )
+        }
+        if (sections.verification.isNotEmpty() || sections.verificationWarnings.isNotEmpty() ||
+            sections.verificationDetails.isNotEmpty()
+        ) {
+            Column(
+                modifier = Modifier.testTag("skill-review-verification"),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                ReviewSectionHeading(R.string.skills_review_section_verification)
+                ReviewLineTexts(sections.verification, LocalFairyTokens.current.textPrimary)
+                // ⚠ lines block approval, so they stay above the fold in the warning colour.
+                if (sections.verificationWarnings.isNotEmpty()) {
+                    ReviewLineTexts(
+                        sections.verificationWarnings,
+                        MaterialTheme.colorScheme.error,
+                        modifier = Modifier.testTag("skill-review-warning"),
+                    )
+                }
+                if (sections.verificationDetails.isNotEmpty()) {
+                    // Record names and commands below come from the candidate's own scenarios, so
+                    // label them as candidate-provided data even while the details are collapsed.
+                    Text(
+                        text = stringResource(R.string.skills_review_verification_commands_by_candidate),
+                        modifier = Modifier.testTag("skill-review-verification-candidate"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ReviewDisclosureRow(
+                        label = if (verificationExpanded) {
+                            stringResource(R.string.skills_review_hide_verification_details)
+                        } else {
+                            stringResource(
+                                R.string.skills_review_show_verification_details,
+                                sections.verificationDetails.size,
+                            )
+                        },
+                        tag = "skill-review-verification-toggle",
+                        expanded = verificationExpanded,
+                        onToggle = { verificationExpanded = !verificationExpanded },
+                    )
+                    if (verificationExpanded) {
+                        SelectionContainer {
+                            ReviewLineTexts(sections.verificationDetails, LocalFairyTokens.current.textPrimary)
+                        }
+                    }
+                }
+            }
+        }
+        if (sections.approval.isNotEmpty()) {
+            ReviewLinesSection(R.string.skills_review_section_approval, "skill-review-approval", sections.approval)
+        }
+        if (sections.details.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                ReviewDisclosureRow(
+                    label = if (detailsExpanded) {
+                        stringResource(R.string.skills_review_hide_details)
+                    } else {
+                        stringResource(R.string.skills_review_show_details)
+                    },
+                    tag = "skill-review-details-toggle",
+                    expanded = detailsExpanded,
+                    onToggle = { detailsExpanded = !detailsExpanded },
+                )
+                if (detailsExpanded) {
+                    Column(Modifier.testTag("skill-review-details")) {
+                        SelectionContainer {
+                            ReviewLineTexts(sections.details, LocalFairyTokens.current.textPrimary)
+                        }
+                    }
+                }
+            }
+        }
+        if (sections.other.isNotEmpty()) {
+            ReviewLinesSection(
+                title = R.string.skills_review_section_other,
+                tag = "skill-review-other",
+                lines = sections.other,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReviewLinesSection(
+    @StringRes title: Int,
+    tag: String,
+    lines: List<String>,
+    color: Color = LocalFairyTokens.current.textPrimary,
+    selectable: Boolean = false,
+) {
+    Column(
+        modifier = Modifier.testTag(tag),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ReviewSectionHeading(title)
+        if (selectable) {
+            SelectionContainer {
+                ReviewLineTexts(lines, color)
+            }
+        } else {
+            ReviewLineTexts(lines, color)
+        }
+    }
+}
+
+@Composable
+private fun ReviewSectionHeading(@StringRes title: Int) {
+    Text(
+        text = stringResource(title),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun ReviewLineTexts(lines: List<String>, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        lines.forEach { line ->
+            Text(
+                text = line,
+                style = MaterialTheme.typography.bodySmall,
+                color = color,
+            )
+        }
+    }
+}
+
+/** A collapsed-by-default section header; the arrow and the label both toggle [expanded]. */
+@Composable
+private fun ReviewDisclosureRow(
+    label: String,
+    tag: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(tag)
+            .clickable(onClick = onToggle),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = LocalFairyTokens.current.textPrimary,
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Icon(
+            imageVector = if (expanded) HugeIcons.ArrowUp02 else HugeIcons.ArrowDown01,
+            contentDescription = stringResource(
+                if (expanded) R.string.skills_review_collapse else R.string.skills_review_expand,
+            ),
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

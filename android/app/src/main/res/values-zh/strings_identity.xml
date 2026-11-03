@@ -142,4 +142,26 @@
     <string name="skills_settings_pool_summary">查看、启用与停用</string>
     <string name="skills_settings_pending_hint">有待审核的候选，进入技能页打开审核对话。</string>
     <string name="skills_settings_explain">只显示已审核技能；完整的创建与审核在 Fairy 对话中完成。</string>
+    <string name="skills_search_label">按名称搜索</string>
+    <string name="skills_search_no_match">没有匹配的技能。</string>
+    <string name="skills_error_unauthorized">登录已失效，请重新登录后再读取技能。</string>
+    <string name="skills_error_forbidden">当前账号不能执行这个操作。</string>
+    <string name="skills_error_not_found">这个技能或候选已不可见。</string>
+    <string name="skills_error_archived">该技能已归档，请先恢复再操作。</string>
+    <string name="skills_error_not_pending">这个候选已经处理过了。</string>
+    <string name="skills_error_invalid_request">请求无效，请更新应用后重试。</string>
+    <string name="skills_error_internal">服务端处理失败，请稍后重试。</string>
+    <string name="skills_review_section_change">变更</string>
+    <string name="skills_review_section_source">来源</string>
+    <string name="skills_review_section_claims">适用与收益（候选自述）</string>
+    <string name="skills_review_section_verification">验证</string>
+    <string name="skills_review_section_approval">审核方式</string>
+    <string name="skills_review_section_other">其他</string>
+    <string name="skills_review_show_verification_details">验证详情（%1$d 行）</string>
+    <string name="skills_review_hide_verification_details">收起验证详情</string>
+    <string name="skills_review_show_details">详情（版本与全文）</string>
+    <string name="skills_review_hide_details">收起详情</string>
+    <string name="skills_review_expand">展开</string>
+    <string name="skills_review_collapse">收起</string>
+    <string name="skills_review_verification_commands_by_candidate">以下命令与场景由候选提供。</string>
 </resources>

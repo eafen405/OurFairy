@@ -380,6 +380,12 @@
 | [295-adversarial-review](295-adversarial-review/README.md) | 实现后六视角对抗性 review（基线 `origin/main` 8a54c46、dsh d80522d2）：开发者/可维护性、并发可靠性、Fairy 模型侧体验、用户与 Android、红队安全完整性、外部成熟实现对照。合并报告含 P0/P1/P2 分级、现状锚定、交叉验证的真实问题（审核自批/外部内容注入链、创建无限重试、信号与水位非原子、revision 复用绕过、待审入口不触发回合、后台提醒默认不可见、面板信息过度暴露、bundled 元技能名可遮蔽、SSRF/来源卫生等）、需要法厄同拍板的决策清单、值得保留的设计与原始报告索引。原始六份报告不入库（运行时输出按惯例放 work/tmp）。 |
 | [295-fix-round](295-fix-round/README.md) | 2026-11-03 修复轮：按用户拍板（审核按来源分级——个人显式创建验证后可直批，其余来源与共有候选必须带展示后用户消息证据 `approvalMessageId`；不默认关网；不做 Fairy 自禁用）修复 review 的 P0/P1。落地：来源分级批准与 schema v3（approval_message_id、growth 确认 partial unique、learning attempts、revokes 索引）、不可信内容围栏、revision 内容变化强制真跑、bundled 名称保留、发布崩溃对账与启动恢复、创建 claim attempts 上限/指数退避/terminal、检测 give-up 持久化、信号+水位单事务、验证失败不 settle、settle 前重查信号、child 丢失恢复、tick 单飞与事件驱动、拒绝历史去重、安装 SSRF/重定向私网与元数据拒绝、来源卫生扩展、memory watch 谓词对齐、文件热路径去 description 读盘、bundled 正文压缩与 7700 正文上限；`/skills/review-open` 现在真正触发一次审核回合。Android 仅完成 JDK/SDK/Gradle 环境准备（`./gradlew test lintDebug` 通过）。已知限制见目录 README（DNS rebinding、旧 7701–8000 正文兼容、terminal pending 草稿、give-up 重开成本、1:N 全局准入留 #110）。 |
 
+## Fairy Skill 系统：#295 Android 修复轮（E1–E4 + E7）
+
+| 目录 | 内容 |
+| --- | --- |
+| [295-android-ux](295-android-ux/README.md) | 2026-11-03 Android 修复与体验优化轮（基于修复轮分支 `fix/295-android-ux`，基线 `origin/fix/295-adversarial-review` ac93251）。按用户拍板：范围 P1（E1 待审入口呈现/验证、E2 后台候选提醒、E3 审核展示、E4 技能面板）+ 低风险 P2 的 E7（错误码本地化 + 真实后端 envelope golden），E5/E6 与后端语义改动不做，通知门控选「技能提醒与后台接收开关解耦、技能渠道可用性为唯一门」。落地：技能页按后端派生 state 四组折叠（默认只展开进入目录）+ 首句/96 字符描述截断 + 本地名称搜索 + 头部 `pendingCount`；设置页进入即读一次待审计数并在折叠组头显示徽标；审核展示按后端 `buildReviewDisplay` 固定前缀分区（来源/适用与收益（候选自述）/验证摘要与折叠命令、阻断性 ⚠ 警告常显/审核方式/默认折叠的版本-hash-expand 详情，未识别行原样兜底）+ 候选命令「由候选提供」注记；技能提醒发布门从后台接收开关改为技能渠道可用性，补 controller→notifier 真接线与 Robolectric 生产组合测试，保持先记账后抑制不补发/前台抑制/同集合不重复等反骚扰语义；错误码只映射真能到达页面的 7 个 code（未知 code 原文兜底）并加真实 envelope golden 契约测试。两轴 review 后收口修复：审核面板文案入 stringResource（13 个 `skills_review_*` key，en/zh 集合一致）、技能池行渲染去重、E7 去除 `skills/integrity` 死映射、后端 display 组装层 `singleLine()` 把候选/模型文本换行规范为行内空格（防候选文本用换行伪造 `来源：`/`⚠`/`审核方式：` 固定前缀行，display 注入测试 11/11 + 关联回归 57/57）。门禁：Android `./gradlew test lintDebug` 696 tests / 0 failure、lint 0 error；后端 `npm test` 全量 + `npm run combo:verify` + `node scripts/evidence-index.ts --check` 全绿。未做：E5/E6、`/skills/detail` 接线、真机/模拟器/connected 测试、真实后端 E2E；无 push 通道下技能提醒仍只在生命周期观测点与服务内 60s 轮询发布（App 持续后台且后台接收关闭时靠 in-app 待审计数），后端 display 与通知标题仍硬编码中文。 |
+
 ## 界面微调（#215/#217/#218/#239/#255/#290/#291/#292）
 
 | 目录 | 内容 |
