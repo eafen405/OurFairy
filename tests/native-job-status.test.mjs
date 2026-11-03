@@ -10,7 +10,9 @@
  *
  * The adapter test drives `/chat/jobs/output`'s handler with a native job
  * status the table cannot name; the booted suite cannot produce one because
- * the native registry only ever reports its own members.
+ * the native registry only ever reports its own members. The runtime stub
+ * supplies the task-lookup result directly, so the adapter test does not build
+ * a whole session projection to reach the status mapping.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -57,16 +59,17 @@ test('an unmapped native job status is an explicit unknown in /chat/jobs/output'
   const native = { id: 'job-1', owner: 'session-1', kind: 'bash', label: 'unmapped status',
     status: 'paused', startedAt: 1, output: { earliest: 0, total: 0 } }
   const ctx = { jobs: {
-    generation: 'generation-1',
     events: { subscribe: () => {} },
-    list: () => [native],
     get: () => native,
     readAt: () => ({ chunks: [], next: 0, lossy: false }),
   } }
+  // The operation reads the task through the runtime's narrow lookup: the stub
+  // supplies the row and native identity instead of constructing a projection.
+  const task = { taskId: 'generation-1/job-1', kind: 'bash', label: 'unmapped status', status: 0,
+    availability: 1, startedAt: 1, output: { earliest: 0, total: 0 }, report: { status: 0 } }
   const runtime = {
-    open: async () => ({}),
-    projection: async () => ({ tasks: [{ taskId: 'generation-1/job-1', availability: 1, status: 0,
-      output: { earliest: 0, total: 0 } }] }),
+    open: async () => ({ sessionId: 'session-1' }),
+    taskOf: (_state, taskId) => taskId === task.taskId ? { task, jobId: 'job-1' } : null,
   }
   const { jobOutput } = installJobs(ctx, runtime)
   const output = await jobOutput('session-1', { sessionId: 'session-1', taskId: 'generation-1/job-1', from: 0 })

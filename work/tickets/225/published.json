@@ -1,0 +1,9 @@
+{
+  "parent": 225,
+  "title": "会话读取：完整页操作与任务身份访问",
+  "children": [
+    { "file": "01-page-read.md", "issue": 226, "title": "T1 页读取：SessionRuntime 完整页操作", "blockedBy": [] },
+    { "file": "02-task-lookup.md", "issue": 227, "title": "T2 任务访问：窄任务查找与原生 JobId", "blockedBy": [226] },
+    { "file": "03-closeout.md", "issue": 228, "title": "T3 收口：两轴评审修复、证据与全量门禁", "blockedBy": [226, 227] }
+  ]
+}
