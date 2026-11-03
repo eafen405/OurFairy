@@ -24,6 +24,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { isUserSession } from '@ourfairy/dsh-identity/session'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from './maintenance-policy.js'
 import { MemoryError } from './tool-kit.js'
@@ -196,12 +197,15 @@ export class MaintenanceEngine {
   }
 
   /**
-   * Follow one live agent as a possible source. Owned user sessions do; the
-   * maintenance child (no owner, maintenance preset) never becomes a source.
+   * Follow one live agent as a possible source.
+   *
+   * The predicate is the shared `isUserSession` rule (owned, no parent, no
+   * agent preset), not a local approximation: a child spawned with an owner
+   * must not become a maintenance source just because it is not this row's
+   * maintenance child. That is the one seam memory and skill agree on.
    */
   watch(agent: Agent): void {
-    const header = agent.session.header
-    if (header.owner === undefined || header.agentPreset === MAINTENANCE_PRESET) return
+    if (!isUserSession(agent.session.header)) return
     this.#known.add(agent.session.id)
     void this.#evaluate(agent.session.id)
   }
@@ -234,9 +238,10 @@ export class MaintenanceEngine {
     try {
       for (const row of this.#store.maintenanceRows()) this.#known.add(row.source_session)
       for (const snapshot of await this.#ctx.sessionPersistence.list()) {
-        const header = snapshot.header
-        if (header.owner === undefined || header.agentPreset === MAINTENANCE_PRESET) continue
-        this.#known.add(header.id)
+        // The boot scan applies the same rule as `watch`; a persisted child
+        // with an owner must not become a source just because it is not live.
+        if (!isUserSession(snapshot.header)) continue
+        this.#known.add(snapshot.header.id)
       }
       await this.#tick()
     } catch {

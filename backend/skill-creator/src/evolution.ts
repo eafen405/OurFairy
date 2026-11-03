@@ -114,11 +114,23 @@ function sameUses(left: readonly string[] | undefined, right: readonly string[] 
  * disposable verification environment; a reused record keeps the parent's
  * recorded facts and names the version it came from, so the review display can
  * say "reused" rather than "executed".
+ *
+ * A changed package can never be approved on the parent's evidence alone: when
+ * the candidate's manifest hash differs from the parent's, at least one
+ * scenario must really run again. Because a scenario that uses a changed file
+ * already stops matching, the only way "everything reused" survives a content
+ * change is that the changed files are covered by no `uses` at all (typically a
+ * `SKILL.md`-only rewrite behind a trivial dependency-free scenario); that plan
+ * is overridden and every scenario reruns.
  */
 export function planVerificationReuse(input: {
   readonly scenarios: readonly PlannedScenario[]
   readonly candidateHashes: ReadonlyMap<string, string>
   readonly parentHashes: ReadonlyMap<string, string>
+  /** The candidate's canonical manifest hash. */
+  readonly candidateManifestHash: string
+  /** The parent's canonical manifest hash, when the parent package could be read. */
+  readonly parentManifestHash: string | undefined
   readonly parentReport: { readonly executed: readonly ScenarioRecord[]; readonly reused: readonly ScenarioRecord[] } | undefined
   readonly parentVersionId: number
 }): ReusePlan {
@@ -141,6 +153,14 @@ export function planVerificationReuse(input: {
       continue
     }
     rerun.push(scenario)
+  }
+  const contentChanged = input.parentManifestHash !== undefined && input.parentManifestHash !== input.candidateManifestHash
+  if (contentChanged && rerun.length === 0 && input.scenarios.length > 0) {
+    // The candidate's bytes changed but no recorded evidence covers the change:
+    // a reuse-only report would be zero fresh executions for new content. Force
+    // the whole declared set to run so a changed version always has real
+    // evidence of its own.
+    return { reused: [], rerun: [...input.scenarios] }
   }
   return { reused, rerun }
 }
@@ -217,12 +237,25 @@ function userMessageText(event: SessionEvent): string | undefined {
 export const GROWTH_CONFIRMATION_TEXT = '确认增长'
 
 /**
+ * Normalize one user reply before comparing it with a fixed confirmation text.
+ *
+ * The rule stays "independent turn + user source + exact text"; the only
+ * relaxation is the wrapping a human naturally types: surrounding whitespace and
+ * Chinese/ASCII sentence punctuation. A reply of "确认增长。" or " 确认增长！" is
+ * the same decision; an added clause is not.
+ */
+function normalizedConfirmationText(text: string): string {
+  return text.trim().replace(/^[。．.,，!！?？~～\s]+/u, '').replace(/[。．.,，!！?？~～\s]+$/u, '')
+}
+
+/**
  * The confirmation message a pending growth candidate may be approved with.
  *
  * The message must be the caller's own chat message in the same session, with
- * the exact text, and it must come after the latest successful inspect call
- * that displayed this version. Reads the same log the review turn runs in, so a
- * message from another user or session can never match.
+ * the exact confirmation text (surrounding punctuation allowed), and it must
+ * come after the latest successful inspect call that displayed this version.
+ * Reads the same log the review turn runs in, so a message from another user or
+ * session can never match.
  */
 export function confirmationOf(input: {
   readonly events: readonly SessionEvent[]
@@ -235,7 +268,7 @@ export function confirmationOf(input: {
   for (const event of input.events) {
     if (event.seq <= inspectSeq) continue
     if (event.type !== 'user/message' || event.data.id !== input.messageId) continue
-    if (userMessageText(event)?.trim() !== GROWTH_CONFIRMATION_TEXT) continue
+    if (normalizedConfirmationText(userMessageText(event) ?? '') !== GROWTH_CONFIRMATION_TEXT) continue
     found = { messageId: event.data.id, seq: event.seq, confirmedAt: event.time }
   }
   return found
@@ -246,10 +279,11 @@ export function confirmationOf(input: {
  * `inspect` call.
  *
  * The model cannot read durable message ids from its context. `skill_manage
- * list` therefore names, for a growth-exceeded pending candidate, the latest
- * user message with the exact confirmation text that follows the latest
- * successful inspect call. The approval still re-reads the same message by id,
- * so this only bridges discovery: a model cannot confirm on the user's behalf.
+ * list` and `inspect` therefore name, for a growth-exceeded pending candidate,
+ * the latest user message with the exact confirmation text that follows the
+ * latest successful inspect call. The approval still re-reads the same message
+ * by id, so this only bridges discovery: a model cannot confirm on the user's
+ * behalf.
  */
 export function confirmationCandidate(events: readonly SessionEvent[], versionId: number): GrowthConfirmation | undefined {
   const inspectSeq = latestInspectSeq(events, versionId)
@@ -257,10 +291,63 @@ export function confirmationCandidate(events: readonly SessionEvent[], versionId
   let found: GrowthConfirmation | undefined
   for (const event of events) {
     if (event.seq <= inspectSeq) continue
-    if (event.type !== 'user/message' || userMessageText(event)?.trim() !== GROWTH_CONFIRMATION_TEXT) continue
+    if (event.type !== 'user/message' || normalizedConfirmationText(userMessageText(event) ?? '') !== GROWTH_CONFIRMATION_TEXT) continue
     found = { messageId: event.data.id, seq: event.seq, confirmedAt: event.time }
   }
   return found
+}
+
+/** One user message that can justify an approval decision. */
+export interface ApprovalConfirmation {
+  readonly messageId: string
+  readonly seq: number
+  readonly confirmedAt: number
+}
+
+/**
+ * The user messages that may justify an approval of one version: the caller's
+ * own chat messages (`source.kind === 'user'`, never the injected
+ * `skill-review` reference or a tool result) sent after the latest successful
+ * inspect display of that version.
+ */
+function approvalMessages(events: readonly SessionEvent[], versionId: number): ApprovalConfirmation[] {
+  const inspectSeq = latestInspectSeq(events, versionId)
+  if (inspectSeq === undefined) return []
+  const found: ApprovalConfirmation[] = []
+  for (const event of events) {
+    if (event.seq <= inspectSeq) continue
+    if (event.type !== 'user/message') continue
+    if (userMessageText(event) === undefined) continue
+    found.push({ messageId: event.data.id, seq: event.seq, confirmedAt: event.time })
+  }
+  return found
+}
+
+/**
+ * Validate one approval evidence message against the durable log.
+ *
+ * Every source-graded candidate (everything except a personal explicit create)
+ * must be approved with the id of a user message the current reviewer really
+ * sent in the reviewing session after the candidate's latest successful inspect
+ * display. A later user turn is the decision; the model cannot mint one, and
+ * the server never trusts the id without re-reading the log.
+ */
+export function approvalConfirmationOf(input: {
+  readonly events: readonly SessionEvent[]
+  readonly versionId: number
+  readonly messageId: string | undefined
+}): ApprovalConfirmation | undefined {
+  if (input.messageId === undefined || input.messageId === '') return undefined
+  return approvalMessages(input.events, input.versionId).find(message => message.messageId === input.messageId)
+}
+
+/**
+ * The newest user message the model may cite as approval evidence for one
+ * version, for `list`/`inspect` discovery. Approval re-reads the same message by
+ * id, so this only bridges discovery of a durable id the model cannot see.
+ */
+export function approvalConfirmationCandidate(events: readonly SessionEvent[], versionId: number): ApprovalConfirmation | undefined {
+  return approvalMessages(events, versionId).at(-1)
 }
 
 /**

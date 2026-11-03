@@ -13,7 +13,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { after, test } from 'node:test'
+import { after, describe, test } from 'node:test'
 
 const root = mkdtempSync(join(tmpdir(), 'ourfairy-skill-store-'))
 after(() => rmSync(root, { recursive: true, force: true }))
@@ -283,4 +283,227 @@ test('openDraftSkillIds counts a pending sibling and a newest changes-requested 
   } finally {
     store.close()
   }
+})
+
+describe('schema v3', () => {
+  /** Open the store on a published row so the migration has real data to keep. */
+  async function seeded(name) {
+    const { store, root: directory } = await open(name)
+    try {
+      const created = store.createDraft(draft({ name: 'kept' }))
+      store.publishDraft({
+        versionId: created.versionId, packagePath: 'versions/1/kept', reviewer: 7, reviewedAt: 1,
+        ownerShortId: 7, defaultEnable: true, recheck: () => true,
+      })
+    } finally {
+      store.close()
+    }
+    return { path: join(directory, 'skill.sqlite') }
+  }
+
+  /** Downgrade one v3 file to the v2 shape: no v3 columns or indexes. */
+  function downgradeToV2(path) {
+    const database = new DatabaseSync(path)
+    try {
+      database.exec('DROP INDEX IF EXISTS skill_version_growth_confirm_unique')
+      database.exec('DROP INDEX IF EXISTS skill_reuse_signal_by_revoked')
+      database.exec('ALTER TABLE skill_version DROP COLUMN approval_message_id')
+      database.exec('ALTER TABLE skill_learning_state DROP COLUMN attempts')
+      database.exec("UPDATE meta SET value = '2' WHERE key = 'schema_version'")
+    } finally {
+      database.close()
+    }
+  }
+
+  test('a v2 file migrates in place and keeps its rows', async () => {
+    const { path } = await seeded('migrate-v2')
+    downgradeToV2(path)
+    const { SkillStore } = await import('../backend/skill-creator/dist/store.js')
+    const store = new SkillStore({ path })
+    try {
+      assert.equal(store.schemaVersion(), 3)
+      const version = store.version(1)
+      assert.ok(version, 'a v2 version row survives')
+      assert.equal(version.approval_message_id, null)
+      assert.equal(store.identity(1).current_version_id, 1, 'the pointer survives')
+      const indexes = rows(path, "SELECT name FROM sqlite_master WHERE type = 'index'").map(row => row.name)
+      assert.ok(indexes.includes('skill_version_growth_confirm_unique'), 'the growth-confirmation unique index is created')
+      assert.ok(indexes.includes('skill_reuse_signal_by_revoked'), 'the revocation index is created')
+      store.observeLearning({ sourceSession: 'migrated-session', lastClosedSeq: 2, lastClosedAt: 1 })
+      assert.equal(store.learning('migrated-session').attempts, 0, 'the attempts column exists with its default')
+    } finally {
+      store.close()
+    }
+  })
+
+  test('a v1 file upgrades through v2 to v3', async () => {
+    const { path } = await seeded('migrate-v1')
+    const database = new DatabaseSync(path)
+    try {
+      database.exec('DROP INDEX IF EXISTS skill_version_growth_confirm_unique')
+      database.exec('DROP INDEX IF EXISTS skill_reuse_signal_by_revoked')
+      database.exec('ALTER TABLE skill_version DROP COLUMN approval_message_id')
+      database.exec('DROP TABLE skill_learning_state')
+      database.exec('DROP TABLE skill_reuse_signal')
+      database.exec('DROP TABLE skill_creation_job')
+      database.exec("UPDATE meta SET value = '1' WHERE key = 'schema_version'")
+    } finally {
+      database.close()
+    }
+    const { SkillStore } = await import('../backend/skill-creator/dist/store.js')
+    const store = new SkillStore({ path })
+    try {
+      assert.equal(store.schemaVersion(), 3)
+      assert.equal(store.identity(1).current_version_id, 1, 'the v1 row survives')
+      assert.equal(store.learning('nobody'), undefined)
+      store.observeLearning({ sourceSession: 'v1-upgraded', lastClosedSeq: 1, lastClosedAt: 2 })
+      assert.equal(store.learning('v1-upgraded').attempts, 0)
+      const indexes = rows(path, "SELECT name FROM sqlite_master WHERE type = 'index'").map(row => row.name)
+      assert.ok(indexes.includes('skill_version_growth_confirm_unique'))
+      assert.ok(indexes.includes('skill_reuse_signal_by_revoked'))
+    } finally {
+      store.close()
+    }
+  })
+
+  test('the approval message is recorded and one growth confirmation settles one version', async () => {
+    const { store } = await open('review-evidence')
+    try {
+      const first = store.createDraft(draft({ name: 'graded' }))
+      store.publishDraft({
+        versionId: first.versionId, packagePath: 'versions/1/one', reviewer: 7, reviewedAt: 1,
+        ownerShortId: 7, defaultEnable: true, approvalMessageId: 'approval-message-1', recheck: () => true,
+      })
+      assert.equal(store.version(first.versionId).approval_message_id, 'approval-message-1')
+
+      const grown = store.createDraft(draft({ name: 'graded', parentVersionId: first.versionId, growthExceeded: true }))
+      store.publishDraft({
+        versionId: grown.versionId, packagePath: 'versions/1/two', reviewer: 7, reviewedAt: 2,
+        ownerShortId: 7, defaultEnable: true,
+        confirmGrowth: { confirmedBy: 7, confirmedAt: 2, messageId: 'one-confirmation' },
+        recheck: () => true,
+      })
+      assert.equal(store.version(grown.versionId).growth_confirm_message, 'one-confirmation')
+
+      const again = store.createDraft(draft({ name: 'graded', parentVersionId: grown.versionId, growthExceeded: true }))
+      assert.throws(() => store.publishDraft({
+        versionId: again.versionId, packagePath: 'versions/1/three', reviewer: 7, reviewedAt: 3,
+        ownerShortId: 7, defaultEnable: true,
+        confirmGrowth: { confirmedBy: 7, confirmedAt: 3, messageId: 'one-confirmation' },
+        recheck: () => true,
+      }), /already confirmed/u, 'one user confirmation message cannot approve two growth candidates')
+      assert.equal(store.version(again.versionId).status, 0, 'the conflicting publish rolls back')
+    } finally {
+      store.close()
+    }
+  })
+})
+
+describe('atomic learning settle and attempts', () => {
+  test('fail/resume counts attempts and settle writes evidence and watermark in one transaction', async () => {
+    const { store } = await open('learning-settle')
+    try {
+      assert.throws(() => store.settleLearning({
+        sourceSession: 'missing', childSession: 'child', cutSeq: 1, ownerShortId: 7, signals: [],
+      }), /interval/u, 'a session without the claimed interval cannot settle')
+
+      store.observeLearning({ sourceSession: 'source', lastClosedSeq: 3, lastClosedAt: 10 })
+      assert.equal(store.claimLearning({ sourceSession: 'source', cutSeq: 3, lastClosedAt: 10, childSession: 'child' }), true)
+      assert.equal(store.failLearning({ sourceSession: 'source', childSession: 'child', retryDelayMs: 0 }), 1)
+      assert.equal(store.failLearning({ sourceSession: 'source', childSession: 'child', retryDelayMs: 0 }), 2)
+      assert.equal(store.learning('source').status, 2)
+      assert.equal(store.learning('source').attempts, 2, 'a restart cannot reset the attempt budget')
+
+      // A failed row is still the same child's interval; a different child or
+      // cut may not settle it.
+      assert.throws(() => store.settleLearning({
+        sourceSession: 'source', childSession: 'other-child', cutSeq: 3, ownerShortId: 7, signals: [],
+      }), /interval/u)
+      assert.throws(() => store.settleLearning({
+        sourceSession: 'source', childSession: 'child', cutSeq: 4, ownerShortId: 7, signals: [],
+      }), /interval/u)
+
+      const ids = store.settleLearning({
+        sourceSession: 'source', childSession: 'child', cutSeq: 3, ownerShortId: 7,
+        signals: [{ ownerShortId: 999, sourceSession: 'spoofed', taskKey: 'workflow:release', evidenceStartSeq: -1, evidenceEndSeq: 3, status: 0 }],
+      })
+      assert.equal(ids.length, 1)
+      const signal = store.signal(ids[0])
+      assert.equal(signal.owner_short_id, 7, 'the settle call owner is the authority')
+      assert.equal(signal.source_session, 'source', 'the settle call source session is the authority')
+      const settled = store.learning('source')
+      assert.equal(settled.status, 0)
+      assert.equal(settled.watermark_seq, 3)
+      assert.equal(settled.cut_seq, 3)
+      assert.equal(settled.attempts, 0)
+      assert.equal(settled.retry_at, null)
+    } finally {
+      store.close()
+    }
+  })
+
+  test('an exhausted interval is abandoned in place and reset starts a fresh budget', async () => {
+    const { store } = await open('learning-abandon')
+    try {
+      store.observeLearning({ sourceSession: 'source', lastClosedSeq: 5, lastClosedAt: 10 })
+      store.claimLearning({ sourceSession: 'source', cutSeq: 5, lastClosedAt: 10, childSession: 'child' })
+      store.failLearning({ sourceSession: 'source', childSession: 'child', retryDelayMs: 0 })
+      store.abandonLearning({ sourceSession: 'source', childSession: 'child', cutSeq: 5 })
+      const abandoned = store.learning('source')
+      assert.equal(abandoned.status, 3, 'the row is given up, not merely failed')
+      assert.equal(abandoned.cut_seq, 5, 'the frozen cut is kept so only a newer closed turn releases it')
+      assert.equal(abandoned.child_session, 'child')
+      assert.equal(abandoned.attempts, 1)
+      assert.equal(abandoned.retry_at, null)
+      assert.throws(() => store.settleLearning({
+        sourceSession: 'source', childSession: 'child', cutSeq: 5, ownerShortId: 7, signals: [],
+      }), /interval/u, 'a given-up interval can never settle')
+
+      store.resetLearning('source')
+      const reset = store.learning('source')
+      assert.equal(reset.status, 0)
+      assert.equal(reset.cut_seq, null)
+      assert.equal(reset.child_session, null)
+      assert.equal(reset.attempts, 0)
+    } finally {
+      store.close()
+    }
+  })
+})
+
+describe('creation claim terminal state', () => {
+  test('an exhausted claim ends terminal, consumes its evidence and lets newer evidence claim again', async () => {
+    const { store } = await open('creation-terminal')
+    try {
+      const first = store.insertSignals([
+        { ownerShortId: 7, sourceSession: 's1', taskKey: 'workflow:release', evidenceStartSeq: -1, evidenceEndSeq: 1, status: 0 },
+        { ownerShortId: 7, sourceSession: 's2', taskKey: 'workflow:release', evidenceStartSeq: -1, evidenceEndSeq: 1, status: 0 },
+      ])
+      assert.equal(store.creationCandidates().length, 1)
+      const claimed = store.claimCreationJob({ ownerShortId: 7, taskKey: 'workflow:release', childSession: 'child-1' })
+      assert.equal(claimed.claimed, true)
+      if (claimed.claimed !== true) return
+      assert.equal(store.failCreationJob({ id: claimed.job.id, retryDelayMs: 0 }), true)
+      assert.throws(() => store.abandonCreationJob({ id: claimed.job.id + 999 }), /failed claim/u)
+      store.abandonCreationJob({ id: claimed.job.id })
+      assert.equal(store.creationJob(claimed.job.id).state, 5, 'an exhausted claim settles as terminal')
+      assert.equal(store.creationJob(claimed.job.id).next_retry_at, null)
+      assert.equal(store.activeCreationJob(7, 'workflow:release'), undefined, 'a terminal claim does not block the key')
+      assert.deepEqual(store.creationCandidates(), [], 'the terminal claim consumed the frozen evidence')
+
+      const newer = store.insertSignals([
+        { ownerShortId: 7, sourceSession: 's3', taskKey: 'workflow:release', evidenceStartSeq: 1, evidenceEndSeq: 2, status: 0 },
+        { ownerShortId: 7, sourceSession: 's4', taskKey: 'workflow:release', evidenceStartSeq: 1, evidenceEndSeq: 2, status: 0 },
+      ])
+      assert.equal(store.creationCandidates().length, 1, 'newer evidence can claim again')
+      const again = store.claimCreationJob({ ownerShortId: 7, taskKey: 'workflow:release', childSession: 'child-2' })
+      assert.equal(again.claimed, true)
+      if (again.claimed !== true) return
+      assert.deepEqual(again.signalIds, newer, 'only the newer evidence contributes')
+      assert.deepEqual(store.jobSignals(again.job).map(row => row.id), newer)
+      assert.ok(first.length > 0)
+    } finally {
+      store.close()
+    }
+  })
 })

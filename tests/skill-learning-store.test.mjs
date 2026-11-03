@@ -1,11 +1,14 @@
 /**
- * Ticket #300: the background-learning store (schema v2) without a backend.
+ * Ticket #300 + the adverarial-review fix round: the background-learning store
+ * without a backend.
  *
  * These are the fast seams for the facts a model double cannot force
- * deterministically: the v1 → v2 ladder, the atomic creation claim (one job per
+ * deterministically: the schema ladder, the atomic creation claim (one job per
  * owner/task key), the immutable signal rows and the "valid success" rule that
- * a later revocation row never rewrites. Expected values come from the design
- * (design.md D4/D21), not from re-running the implementation.
+ * a later revocation row never rewrites, the persisted detection attempt budget
+ * and the atomic evidence+watermark settle. Expected values come from the
+ * design (design.md D4/D21) and the review findings (B1/B3), not from re-running
+ * the implementation.
  */
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -76,7 +79,7 @@ function signal(overrides = {}) {
   }
 }
 
-test('schema v1 migrates to v2 in place: v1 rows survive and the three learning tables appear', async () => {
+test('schema v1 migrates to the current schema in place: v1 rows survive and the learning tables appear', async () => {
   const directory = join(root, 'ladder')
   const path = join(directory, 'skill.sqlite')
   const { mkdirSync } = await import('node:fs')
@@ -98,7 +101,7 @@ test('schema v1 migrates to v2 in place: v1 rows survive and the three learning 
   const { SkillStore } = await import('../backend/skill-creator/dist/store.js')
   const store = new SkillStore({ path })
   try {
-    assert.equal(store.schemaVersion(), 2, 'the ladder stamps the new version')
+    assert.equal(store.schemaVersion(), 3, 'the ladder stamps the new version')
   } finally {
     store.close()
   }
@@ -107,16 +110,25 @@ test('schema v1 migrates to v2 in place: v1 rows survive and the three learning 
   assert.deepEqual(facts.map(row => row.name), [
     'meta', 'skill', 'skill_creation_job', 'skill_learning_state', 'skill_reuse_signal',
     'skill_user_preference', 'skill_version',
-  ], 'schema v2 adds exactly the three learning tables')
+  ], 'the learning tables are the only tables added to the v1 file')
   assert.equal(rows(path, 'SELECT name FROM skill WHERE id = 1')[0].name, 'kept-skill', 'the identity survives')
   assert.equal(rows(path, 'SELECT manifest_hash FROM skill_version WHERE id = 1')[0].manifest_hash, 'hash', 'the version survives')
   assert.equal(rows(path, 'SELECT enabled FROM skill_user_preference WHERE short_id = 7')[0].enabled, 1, 'the preference survives')
-  assert.equal(rows(path, "SELECT value FROM meta WHERE key = 'schema_version'")[0].value, '2')
+  assert.equal(rows(path, "SELECT value FROM meta WHERE key = 'schema_version'")[0].value, '3')
+
+  // The v3 columns and indexes are part of the same ladder: the detection
+  // attempt budget (B1) and the revocation anti-join index (B7).
+  const learningColumns = rows(path, 'PRAGMA table_info(skill_learning_state)').map(column => column.name)
+  assert.ok(learningColumns.includes('attempts'), 'the detection attempt budget is persisted')
+  const versionColumns = rows(path, 'PRAGMA table_info(skill_version)').map(column => column.name)
+  assert.ok(versionColumns.includes('approval_message_id'), 'the approval evidence column exists')
+  const indexes = rows(path, "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'").map(row => row.name)
+  assert.ok(indexes.includes('skill_reuse_signal_by_revoked'), 'the revocation anti-join has its partial index')
 
   // Reopening an already-migrated file is a no-op, not a second ladder step.
   const again = new SkillStore({ path })
   try {
-    assert.equal(again.schemaVersion(), 2)
+    assert.equal(again.schemaVersion(), 3)
   } finally {
     again.close()
   }
@@ -185,7 +197,7 @@ test('the creation claim is atomic and one owner/task key has at most one active
     assert.equal(rows(join(root, 'claim', 'skill.sqlite'), 'SELECT * FROM skill_creation_job').length, 1)
 
     // A failed job still owns the key: a retry resumes it instead of a second claim.
-    assert.equal(store.failCreationJob({ id: claimed.job.id }), true)
+    assert.equal(store.failCreationJob({ id: claimed.job.id, retryDelayMs: 2_000 }), true)
     assert.equal(store.claimCreationJob({ ownerShortId: 7, taskKey: 'release-checklist:changelog', childSession: 'child-3' }).claimed, false)
     assert.equal(store.resumeCreationJob({ id: claimed.job.id }), true)
     assert.equal(store.creationJob(claimed.job.id).attempts, 2)
@@ -256,22 +268,153 @@ test('a learning state freezes one cut and one child, and no failure advances th
     const running = store.learning('session-1')
     assert.deepEqual([running.watermark_seq, running.cut_seq, running.status, running.child_session], [-1, 10, 1, 'child-1'])
 
-    store.failLearning({ sourceSession: 'session-1', childSession: 'child-1' })
+    assert.equal(store.failLearning({ sourceSession: 'session-1', childSession: 'child-1', retryDelayMs: 2_000 }), 1,
+      'one failed run is one spent attempt')
     const failed = store.learning('session-1')
     assert.equal(failed.status, 2)
+    assert.equal(failed.attempts, 1)
+    assert.ok(failed.retry_at > Date.now(), 'a failure records its retry time')
     assert.equal(failed.watermark_seq, -1, 'a failure keeps the watermark')
     assert.equal(failed.cut_seq, 10, 'a failure keeps the frozen cut')
 
+    assert.equal(store.failLearning({ sourceSession: 'session-1', childSession: 'child-1', retryDelayMs: 2_000 }), 2,
+      'the attempt count survives across failure reports')
+    assert.equal(store.learning('session-1').attempts, 2)
+
     store.completeLearning({ sourceSession: 'session-1', cutSeq: 10, childSession: 'child-1' })
     const done = store.learning('session-1')
-    assert.deepEqual([done.watermark_seq, done.status], [10, 0], 'a zero-signal completion advances the watermark')
+    assert.deepEqual([done.watermark_seq, done.status, done.attempts], [10, 0, 0],
+      'a zero-signal completion advances the watermark and resets the attempt budget')
 
     store.resetLearning('session-1')
     const reset = store.learning('session-1')
-    assert.deepEqual([reset.cut_seq, reset.child_session, reset.status, reset.watermark_seq], [null, null, 0, 10])
+    assert.deepEqual([reset.cut_seq, reset.child_session, reset.status, reset.watermark_seq, reset.attempts], [null, null, 0, 10, 0])
   } finally {
     store.close()
   }
+})
+
+test('the detection attempt budget persists and an exhausted interval enters the give-up state in place', async () => {
+  const { store } = await open('give-up')
+  try {
+    assert.equal(store.claimLearning({ sourceSession: 'session-give-up', cutSeq: 30, lastClosedAt: 300, childSession: 'child-g' }), true)
+    assert.equal(store.learning('session-give-up').attempts, 0, 'a fresh interval starts with an unspent budget')
+
+    // The engine bounds the retry loop with this persisted count; a restart
+    // reads the same number instead of starting the budget over.
+    assert.equal(store.failLearning({ sourceSession: 'session-give-up', childSession: 'child-g', retryDelayMs: 2_000 }), 1)
+    assert.equal(store.failLearning({ sourceSession: 'session-give-up', childSession: 'child-g', retryDelayMs: 2_000 }), 2)
+    store.abandonLearning({ sourceSession: 'session-give-up', childSession: 'child-g', cutSeq: 30 })
+    const gaveUp = store.learning('session-give-up')
+    assert.deepEqual([gaveUp.status, gaveUp.attempts, gaveUp.cut_seq, gaveUp.child_session, gaveUp.retry_at],
+      [3, 2, 30, 'child-g', null], 'a given-up interval keeps its cut, child and spent budget but never retries itself')
+    assert.equal(gaveUp.watermark_seq, -1, 'giving up never advances the watermark')
+
+    // A wrong cut/child is refused rather than corrupting another interval.
+    assert.throws(() => store.abandonLearning({ sourceSession: 'session-give-up', childSession: 'child-g', cutSeq: 31 }),
+      error => error?.code === 'skills/invalid-learning-state')
+    assert.throws(() => store.failLearning({ sourceSession: 'session-give-up', childSession: 'other-child', retryDelayMs: 1_000 }),
+      error => error?.code === 'skills/invalid-learning-state')
+
+    // Only an explicit reset (a newer closed user turn) releases the source:
+    // that reset also starts a new attempt budget and lets the next interval claim.
+    store.resetLearning('session-give-up')
+    const released = store.learning('session-give-up')
+    assert.deepEqual([released.status, released.attempts, released.cut_seq], [0, 0, null])
+    assert.equal(store.claimLearning({ sourceSession: 'session-give-up', cutSeq: 40, lastClosedAt: 400, childSession: 'child-h' }), true)
+    assert.equal(store.learning('session-give-up').attempts, 0, 'a new interval starts with a fresh budget')
+  } finally {
+    store.close()
+  }
+})
+
+test('settleLearning stores evidence and the watermark in one transaction, and a replay writes nothing', async () => {
+  const { store } = await open('settle')
+  try {
+    const { SKILL_SCHEMA_VERSION } = await import('../backend/skill-creator/dist/store.js')
+    assert.equal(SKILL_SCHEMA_VERSION, 3)
+    store.claimLearning({ sourceSession: 'source-s', cutSeq: 20, lastClosedAt: 200, childSession: 'child-s' })
+    const first = store.settleLearning({
+      sourceSession: 'source-s',
+      childSession: 'child-s',
+      cutSeq: 20,
+      ownerShortId: 7,
+      signals: [signal({ sourceSession: 'source-s', taskKey: 'settle:one' }), signal({ sourceSession: 'source-s', taskKey: 'settle:two' })],
+    })
+    assert.equal(first.length, 2)
+    const row = store.learning('source-s')
+    assert.deepEqual([row.status, row.watermark_seq, row.cut_seq, row.attempts], [0, 20, 20, 0],
+      'both the evidence and the advanced watermark are committed together')
+
+    // A replay of the same settle (the restart path) is refused by the state
+    // check, so the same evidence range can never be inserted twice.
+    assert.throws(() => store.settleLearning({
+      sourceSession: 'source-s',
+      childSession: 'child-s',
+      cutSeq: 20,
+      ownerShortId: 7,
+      signals: [signal({ sourceSession: 'source-s', taskKey: 'settle:one' })],
+    }), error => error?.code === 'skills/invalid-learning-state')
+    assert.equal(rows(join(root, 'settle', 'skill.sqlite'), 'SELECT * FROM skill_reuse_signal').length, 2,
+      'the replay inserted nothing')
+  } finally {
+    store.close()
+  }
+})
+
+test('a settle that fails its validation leaves neither evidence nor an advanced watermark behind', async () => {
+  const { store } = await open('settle-crash')
+  try {
+    store.claimLearning({ sourceSession: 'source-c', cutSeq: 15, lastClosedAt: 150, childSession: 'child-c' })
+    // The second signal is invalid (bad task key). insertSignals would refuse it
+    // after the first row was written if the two writes were not one
+    // transaction: the crash window B3 describes. Here the whole settle rolls
+    // back, so a later retry can write the interval exactly once.
+    assert.throws(() => store.settleLearning({
+      sourceSession: 'source-c',
+      childSession: 'child-c',
+      cutSeq: 15,
+      ownerShortId: 7,
+      signals: [signal({ sourceSession: 'source-c' }), signal({ sourceSession: 'source-c', taskKey: 'Bad Key' })],
+    }), error => error?.code === 'skills/invalid-task-key')
+    const row = store.learning('source-c')
+    assert.deepEqual([row.status, row.watermark_seq, row.cut_seq], [1, -1, 15],
+      'a refused settle keeps the interval running with its watermark untouched')
+    assert.equal(rows(join(root, 'settle-crash', 'skill.sqlite'), 'SELECT * FROM skill_reuse_signal').length, 0,
+      'the refused settle inserted no partial evidence')
+
+    // The failed settle keeps the same claim retryable: it fails, is resumed and
+    // settles once. This is the crash window B3 describes (evidence written but
+    // watermark not), proven impossible by the single transaction: the retry
+    // stores each row exactly once and advances the watermark exactly once.
+    assert.equal(store.failLearning({ sourceSession: 'source-c', childSession: 'child-c', retryDelayMs: 2_000 }), 1)
+    assert.equal(store.learning('source-c').status, 2)
+    const ids = store.settleLearning({
+      sourceSession: 'source-c',
+      childSession: 'child-c',
+      cutSeq: 15,
+      ownerShortId: 7,
+      signals: [signal({ sourceSession: 'source-c' })],
+    })
+    assert.equal(ids.length, 1)
+    const settled = store.learning('source-c')
+    assert.deepEqual([settled.status, settled.watermark_seq, settled.attempts], [0, 15, 0])
+    assert.equal(rows(join(root, 'settle-crash', 'skill.sqlite'), 'SELECT * FROM skill_reuse_signal').length, 1,
+      'the retry wrote the interval exactly once')
+  } finally {
+    store.close()
+  }
+})
+
+test('the creation retry wait doubles from two seconds and is capped at five minutes', async () => {
+  const { creationRetryDelayMs, LEARNING_CREATION_ATTEMPTS, LEARNING_MAX_TURNS, CREATION_RETRY_MAX_MS } = await import('../backend/skill-creator/dist/learning-policy.js')
+  assert.deepEqual(LEARNING_CREATION_ATTEMPTS, { default: 5, min: 1, max: 20 }, 'the creation attempt budget has one authority')
+  assert.deepEqual(LEARNING_MAX_TURNS, { default: 4, min: 1, max: 20 }, 'the detection budget has one authority')
+  assert.deepEqual([1, 2, 3, 4, 5].map(attempt => creationRetryDelayMs(attempt)), [2_000, 4_000, 8_000, 16_000, 32_000],
+    'each failed creation run doubles the wait')
+  assert.equal(creationRetryDelayMs(9), 300_000, 'the wait is capped at five minutes')
+  assert.equal(creationRetryDelayMs(20), CREATION_RETRY_MAX_MS)
+  assert.equal(creationRetryDelayMs(0), 2_000, 'a malformed attempt count still backs off instead of spinning')
 })
 
 test('the creation recheck drops a later-revoked signal and refuses a claim that no longer has two sessions', async () => {
@@ -301,6 +444,35 @@ test('the creation recheck drops a later-revoked signal and refuses a claim that
 
     // The claim itself already owns the key; a second claim is never created.
     assert.equal(store.claimCreationJob({ ownerShortId: 7, taskKey: 'release-checklist:changelog', childSession: 'child-2' }).claimed, false)
+  } finally {
+    store.close()
+  }
+})
+
+test('an exhausted claim becomes terminal: it consumes its evidence but no longer owns the key', async () => {
+  const { store } = await open('terminal-claim')
+  try {
+    store.insertSignals([signal({ sourceSession: 'source-a' })])
+    const [claimedSignal] = store.insertSignals([signal({ sourceSession: 'source-b' })])
+    const claimed = store.claimCreationJob({ ownerShortId: 7, taskKey: 'release-checklist:changelog', childSession: 'child-1' })
+    assert.equal(claimed.claimed, true)
+    // The claim's last run failed and its budget is spent: the engine records
+    // the failure and then the terminal state.
+    assert.equal(store.failCreationJob({ id: claimed.job.id, retryDelayMs: 0 }), true)
+    store.abandonCreationJob({ id: claimed.job.id })
+    const terminal = store.creationJob(claimed.job.id)
+    assert.deepEqual([terminal.state, terminal.next_retry_at], [5, null])
+    // A terminal claim is not active: it blocks nothing.
+    assert.equal(store.activeCreationJob(7, 'release-checklist:changelog'), undefined)
+    // It still consumed its evidence: the same signals alone never re-trigger a
+    // claim (the through id gates them), yet a later signal can.
+    assert.equal(store.claimCreationJob({ ownerShortId: 7, taskKey: 'release-checklist:changelog', childSession: 'child-2' }).claimed, false)
+    assert.equal(store.creationCandidates().some(candidate => candidate.taskKey === 'release-checklist:changelog'), false)
+    store.insertSignals([signal({ sourceSession: 'source-c' })])
+    store.insertSignals([signal({ sourceSession: 'source-d' })])
+    const next = store.claimCreationJob({ ownerShortId: 7, taskKey: 'release-checklist:changelog', childSession: 'child-3' })
+    assert.equal(next.claimed, true, 'new evidence may claim again after a terminal claim')
+    assert.ok(next.signalIds.every(id => id > claimedSignal), `only evidence newer than the terminal claim contributes: ${JSON.stringify(next.signalIds)}`)
   } finally {
     store.close()
   }

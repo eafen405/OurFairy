@@ -33,8 +33,16 @@ export const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 /** The native catalog's description budget, in Unicode code points. */
 export const DESCRIPTION_MAX_CHARACTERS = 500
 
-/** The core workflow body budget, in Unicode code points. */
-export const CORE_BODY_MAX_CHARACTERS = 8000
+/**
+ * The core workflow body budget, in Unicode code points.
+ *
+ * The deployment's tool-result pruner rewrites a model-visible tool result
+ * above 8192 characters, and every skill body reaches the model inside the
+ * native `<skill_content>` wrapper (about 302 characters plus the resource-base
+ * path). 7700 keeps a maximal body under that threshold for any realistic
+ * deployment path while leaving room to grow.
+ */
+export const CORE_BODY_MAX_CHARACTERS = 7700
 
 /** Default package bounds; the install path may narrow the byte bound with Config. */
 export const DEFAULT_MAX_PACKAGE_BYTES = 10 * 1024 * 1024
@@ -199,10 +207,51 @@ function parseFrontmatterValue(key: string, raw: string, line: number): Frontmat
   return raw
 }
 
-/** An author-machine home path; a package must use relative paths or neutral examples. */
-const HOST_HOME_PATH = /\/(?:home|Users)\/[A-Za-z0-9._-]+/u
+/**
+ * An ordinary URL is not a host path: the package may legitimately point at
+ * documentation. Blank URLs before the path scan so a URL path such as
+ * `https://example.com/home/alice/docs` is not mistaken for a local path.
+ */
+const URL_TEXT = /\b(?:https?|ftp|git\+https?|ssh|git|s3|ws|wss):\/\/\S+/giu
 
-/** Refuse text content that embeds an author-machine absolute home path. */
+/** A `file:` URL names a local absolute path, not a documentation link. */
+const LOCAL_FILE_URL = /\bfile:\/+[^\s"'`)\]]*/iu
+
+/** A Windows drive-qualified path (`C:\Users\x`, `C:/Users/x`). */
+const WINDOWS_DRIVE_PATH = /(?:^|[\s"'`(<\[{=])[A-Za-z]:[\\/]/u
+
+/** A UNC path in either separator style (`\\server\share`, `//server/share`). */
+const UNC_PATH = /(?:^|[\s"'`(<\[{=])(?:\\\\[^\\\s]+\\|\/\/[A-Za-z0-9._$-]+[/\\])/u
+
+/** A home-directory prefix (`~/...`, `$HOME`, `${HOME}`, `%USERPROFILE%`). */
+const HOME_PREFIX_PATH = /(?:^|[\s"'`(<\[{=])(?:~[/\\]|~(?=[\s"'`)\]}.,;:!?]|$)|\$(?:\{HOME\}|HOME)(?![A-Za-z0-9_])|%(?:USERPROFILE|HOME)%(?![A-Za-z0-9_]))/u
+
+/**
+ * An absolute POSIX path (`/root`, `/etc/passwd`, `/home/alice/x`). The single
+ * slash excludes the `//` UNC form, which {@link UNC_PATH} handles; a shebang
+ * (`#!/bin/sh`) and a relative package path stay clear of this boundary.
+ */
+const POSIX_ABSOLUTE_PATH = /(?:^|[\s"'`(<\[{=])\/(?!\/)[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*/u
+
+/**
+ * Name the host-path shape one text carries, or undefined.
+ *
+ * The text is NFKC-normalized first so a compatibility form (fullwidth slash,
+ * tilde or colon) cannot smuggle a path past the scan. Ordinary URLs are
+ * blanked before the scan because a URL path is not a host location.
+ */
+function hostPathOf(text: string): string | undefined {
+  const normalized = text.normalize('NFKC')
+  if (LOCAL_FILE_URL.test(normalized)) return 'a local file URL'
+  const withoutUrls = normalized.replace(URL_TEXT, ' ')
+  if (WINDOWS_DRIVE_PATH.test(withoutUrls)) return 'a Windows drive path'
+  if (UNC_PATH.test(withoutUrls)) return 'a UNC path'
+  if (HOME_PREFIX_PATH.test(withoutUrls)) return 'a home-directory prefix'
+  if (POSIX_ABSOLUTE_PATH.test(withoutUrls)) return 'an absolute POSIX path'
+  return undefined
+}
+
+/** Refuse text content that embeds an author-machine or host absolute path. */
 function assertNoHostPaths(files: readonly { readonly path: string; readonly bytes: Buffer }[]): void {
   const decoder = new TextDecoder('utf-8', { fatal: true })
   for (const file of files) {
@@ -215,8 +264,9 @@ function assertNoHostPaths(files: readonly { readonly path: string; readonly byt
     } catch {
       continue
     }
-    if (HOST_HOME_PATH.test(text)) {
-      throw new PackageError(`${file.path} contains an absolute host home path; use a relative package path or a deployment-neutral example`)
+    const shape = hostPathOf(text)
+    if (shape !== undefined) {
+      throw new PackageError(`${file.path} contains ${shape}; use a relative package path or a deployment-neutral example`)
     }
   }
 }

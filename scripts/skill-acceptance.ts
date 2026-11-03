@@ -675,10 +675,14 @@ async function caseCommonProposal(runtime: Runtime, shared: Shared): Promise<Cas
     const list = await request(runtime.port, '/skills/list', { token: runtime.alice.token, body: {} })
     return array(list.json.pending).map(record).find(entry => number(entry?.scope) === 2)
   }, 300_000) as JsonObject
+  // A common candidate needs Phaethon's own message after the inspect display;
+  // the model can form the candidate but cannot approve it in the same turn.
+  const row = skillRows(runtime, 'SELECT * FROM skill_version WHERE id = ?', number(pending.versionId) ?? -1)[0] as JsonObject | undefined
   return {
     checks: [
       { name: 'a common candidate is pending for its proposer', ok: pending !== undefined, detail: `version ${String(pending.versionId)}` },
       { name: 'the proposer cannot approve it themselves', ok: true, detail: 'review permission is Phaethon-only by design (#298)' },
+      { name: 'the candidate carries no user approval evidence yet', ok: number(row?.status) === 0 && row?.approval_message_id === null, detail: `status ${String(row?.status)} approval ${String(row?.approval_message_id)}` },
     ],
     evidence: { session, pending },
   }
@@ -698,10 +702,14 @@ async function caseAddressInstall(runtime: Runtime, shared: Shared, address: str
     const list = await request(runtime.port, '/skills/list', { token: runtime.alice.token, body: {} })
     return array(list.json.pending).map(record).find(entry => number(entry?.sourceType) === 1)
   }, 300_000) as JsonObject
+  // An external install is untrusted content: approval needs the user's own
+  // message after the deterministic display, never the package's text.
+  const row = skillRows(runtime, 'SELECT * FROM skill_version WHERE id = ?', number(pending.versionId) ?? -1)[0] as JsonObject | undefined
   return {
     checks: [
       { name: 'an installed candidate is pending review', ok: pending !== undefined, detail: `version ${String(pending.versionId)}` },
-      { name: 'the install stays a candidate (no bypass)', ok: true, detail: 'source_type 1 pending' },
+      { name: 'the install stays a candidate (no bypass)', ok: number(row?.status) === 0, detail: 'source_type 1 pending' },
+      { name: 'the install carries no user approval evidence yet', ok: row?.approval_message_id === null, detail: `approval ${String(row?.approval_message_id)}` },
     ],
     evidence: { session, pending, address },
   }

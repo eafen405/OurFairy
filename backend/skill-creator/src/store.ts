@@ -10,9 +10,14 @@
  * Schema v1 is the runtime subset: identity, versions (with every review,
  * growth and install column the later tickets write), and preferences. Schema
  * v2 adds the three background-learning tables and nothing else, so the v1
- * tables keep their exact shape. The ladder is a real step: a v1 file is read,
- * the v2 tables are created, and the version is stamped; a file newer than this
- * build is refused instead of being written.
+ * tables keep their exact shape. Schema v3 adds the review-evidence columns and
+ * the two partial indexes the fix round needs: one review message can approve
+ * only one growth-confirmed version, a user's approval message is recorded on
+ * the version it approved, revoked signals are indexed, and a source session's
+ * detection state remembers how many attempts its active interval spent. The
+ * ladder is a real step: each older file is read, the missing objects are added
+ * in place, and the version is stamped; a file newer than this build is refused
+ * instead of being written.
  *
  * The learning tables hold one detection state per source session, immutable
  * reuse-signal evidence rows (a revocation is a new row naming the row it
@@ -36,7 +41,7 @@ import { isValidTaskKey } from './learning-policy.js'
 import { PackageError } from './package.js'
 
 /** The current schema version of this file; the ladder is asserted by the store test. */
-export const SKILL_SCHEMA_VERSION = 2
+export const SKILL_SCHEMA_VERSION = 3
 
 /** Skill identity scope: a user's own skill, or a deployment-common skill. */
 export const SKILL_SCOPE = Object.freeze({ personal: 1, common: 2 })
@@ -60,8 +65,13 @@ export const SOURCE_TYPE = Object.freeze({
   seed: 5,
 })
 
-/** One source session's detection state: idle, running an interval, or failed and awaiting a resume. */
-export const LEARNING_STATUS = Object.freeze({ idle: 0, running: 1, failed: 2 })
+/**
+ * One source session's detection state: idle, running an interval, failed and
+ * awaiting a resume, or given up after its persisted attempt budget was spent.
+ * A given-up row keeps its frozen cut and child: only a newer closed user turn
+ * may release it again.
+ */
+export const LEARNING_STATUS = Object.freeze({ idle: 0, running: 1, failed: 2, gaveUp: 3 })
 
 /** One reuse signal's judgement. Only a success without a later revocation counts. */
 export const SIGNAL_STATUS = Object.freeze({ success: 0, failure: 1, uncertain: 2, revoked: 3 })
@@ -69,13 +79,21 @@ export const SIGNAL_STATUS = Object.freeze({ success: 0, failure: 1, uncertain: 
 /** How far one signal has been taken by the cross-session creation path. */
 export const SIGNAL_PROCESSING = Object.freeze({ new: 0, claimed: 1, used: 2, ignored: 3 })
 
-/** One cross-session creation claim's state. */
+/**
+ * One cross-session creation claim's state.
+ *
+ * `terminal` is the explicit end state of a claim whose attempt budget was
+ * spent: it produces no candidate, never retries, and still consumes the
+ * evidence it froze (so the same signals do not satisfy the threshold again).
+ * Newer evidence for the same owner and task key can still be claimed.
+ */
 export const CREATION_JOB_STATE = Object.freeze({
   pending: 0,
   running: 1,
   candidate: 2,
   noImprovement: 3,
   failed: 4,
+  terminal: 5,
 })
 
 /**
@@ -213,7 +231,7 @@ CREATE TABLE IF NOT EXISTS skill_creation_job (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   owner_short_id INTEGER NOT NULL,
   task_key TEXT NOT NULL,
-  state INTEGER NOT NULL DEFAULT 0,            -- 0 pending, 1 running, 2 candidate, 3 no_improvement, 4 failed
+  state INTEGER NOT NULL DEFAULT 0,            -- 0 pending, 1 running, 2 candidate, 3 no_improvement, 4 failed, 5 terminal
   child_session TEXT,
   signals TEXT NOT NULL,                       -- JSON array of the contributing signal ids
   candidate_version_id INTEGER,
@@ -227,6 +245,36 @@ CREATE TABLE IF NOT EXISTS skill_creation_job (
 CREATE UNIQUE INDEX IF NOT EXISTS skill_creation_job_one_claim
   ON skill_creation_job(owner_short_id, task_key)
   WHERE state IN (0, 1, 4) AND deleted_at IS NULL;
+`
+
+/**
+ * Schema v3: the review-evidence columns and partial indexes (#295 fix round).
+ *
+ * `skill_version.approval_message_id` records the user message an approval was
+ * justified with, so the audit trail names the decision the same way the growth
+ * confirmation already does. `skill_version.growth_confirm_message` was already
+ * the message id; a partial unique index now makes one confirmation message
+ * approve at most one growth-exceeded version: a user who confirms two
+ * displayed candidates can no longer have one reply settle both.
+ *
+ * `skill_learning_state.attempts` persists the retry budget of the active
+ * interval, so a restart cannot reset it; a row that exhausts the budget is
+ * given up in place (see {@link LEARNING_STATUS.gaveUp}).
+ *
+ * `skill_reuse_signal(revokes_signal_id)` is the index B7 asks for: the "valid
+ * success = status 0 and no later revocation" reads run once per evaluator and
+ * on every claim, and this partial index keeps the anti-join bounded.
+ *
+ * The two new columns are added by the migration with a `PRAGMA table_info`
+ * check, so a half-applied file converges here as well.
+ */
+const SCHEMA_V3 = `
+CREATE UNIQUE INDEX IF NOT EXISTS skill_version_growth_confirm_unique
+  ON skill_version(growth_confirm_message)
+  WHERE growth_confirm_message IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS skill_reuse_signal_by_revoked
+  ON skill_reuse_signal(revokes_signal_id)
+  WHERE revokes_signal_id IS NOT NULL;
 `
 
 /** One row of the `skill` table, as every read site sees it. */
@@ -264,6 +312,8 @@ export type SkillVersionRow = {
   growth_confirmed_by: number | null
   growth_confirmed_at: number | null
   growth_confirm_message: string | null
+  /** The user message an approval was justified with (review-evidence rule). */
+  approval_message_id: string | null
   reviewer: number | null
   reviewed_at: number | null
   review_note: string | null
@@ -291,9 +341,11 @@ export type LearningRow = {
   cut_seq: number | null
   last_closed_at: number | null
   child_session: string | null
-  /** 0 idle, 1 running, 2 failed. */
+  /** 0 idle, 1 running, 2 failed, 3 given up. */
   status: number
   retry_at: number | null
+  /** Attempts the active or last interval spent; reset when a new interval starts. */
+  attempts: number
   updated_at: number
 }
 
@@ -322,7 +374,7 @@ export type CreationJobRow = {
   id: number
   owner_short_id: number
   task_key: string
-  /** 0 pending, 1 running, 2 candidate, 3 no_improvement, 4 failed. */
+  /** 0 pending, 1 running, 2 candidate, 3 no_improvement, 4 failed, 5 terminal. */
   state: number
   child_session: string | null
   /** The contributing signal ids, as a JSON array. */
@@ -434,6 +486,12 @@ export type DecidedVersionRow = {
 
 /** One affected row count from a mutation. */
 type ChangeResult = { readonly changes: number | bigint }
+
+/** Whether one SQLite refusal is the UNIQUE violation of the named column. */
+function isUniqueConstraint(error: unknown, column: string): boolean {
+  return error instanceof Error && error.message.includes('UNIQUE constraint failed')
+    && error.message.includes(column)
+}
 
 /**
  * The SQLite driver types every column as `SQLOutputValue`; the schema is the
@@ -634,28 +692,72 @@ export class SkillStore {
         return true
       }
       this.#db.prepare(`UPDATE skill_learning_state
-        SET cut_seq = ?, last_closed_at = ?, child_session = ?, status = 1, retry_at = NULL, updated_at = ?
+        SET cut_seq = ?, last_closed_at = ?, child_session = ?, status = 1, attempts = 0, retry_at = NULL, updated_at = ?
         WHERE source_session = ?`).run(cutSeq, lastClosedAt, childSession, now, sourceSession)
       return true
     })
   }
 
-  /** Keep the failed interval and its child for a resume; the watermark stays put. */
+  /**
+   * Keep the failed interval and its child for a resume; the watermark stays put.
+   *
+   * One attempt is counted inside the same `BEGIN IMMEDIATE`, so a restart can
+   * never reset the budget: the engine compares the returned count with the
+   * configured ceiling and gives the row up instead of retrying forever. The
+   * row may be running (first failure) or already failed (a failed resume).
+   *
+   * @returns the attempts the interval has spent now.
+   * @throws {SkillStoreError} `skills/invalid-learning-state` when no interval
+   *   row belongs to this child.
+   */
   failLearning({ sourceSession, childSession, retryDelayMs }: {
     readonly sourceSession: string
     readonly childSession: string
     readonly retryDelayMs: number
+  }): number {
+    return this.#transaction(() => {
+      const row = this.#learningInterval({ sourceSession, childSession })
+      const now = Date.now()
+      const attempts = row.attempts + 1
+      this.#db.prepare(`UPDATE skill_learning_state
+        SET child_session = ?, status = ?, retry_at = ?, attempts = ?, updated_at = ?
+        WHERE source_session = ?`).run(childSession, LEARNING_STATUS.failed, now + Math.max(0, retryDelayMs), attempts, now, sourceSession)
+      return attempts
+    })
+  }
+
+  /**
+   * Give one exhausted interval up in place.
+   *
+   * The frozen cut, the child and the attempt count stay: only a newer closed
+   * user turn may release the source again (the engine compares against the
+   * kept cut). `retry_at` is cleared and the status is terminal, so no tick
+   * resumes it automatically.
+   *
+   * @throws {SkillStoreError} `skills/invalid-learning-state` when the row is
+   *   not this child's interval at this cut.
+   */
+  abandonLearning({ sourceSession, childSession, cutSeq }: {
+    readonly sourceSession: string
+    readonly childSession: string
+    readonly cutSeq: number
   }): void {
-    const now = Date.now()
-    this.#db.prepare(`UPDATE skill_learning_state
-      SET child_session = ?, status = 2, retry_at = ?, updated_at = ?
-      WHERE source_session = ?`).run(childSession, now + Math.max(0, retryDelayMs), now, sourceSession)
+    this.#transaction(() => {
+      const row = this.#learningInterval({ sourceSession, childSession })
+      if (row.cut_seq !== cutSeq) {
+        throw new SkillStoreError('skills/invalid-learning-state',
+          `source session ${sourceSession} no longer runs the interval at ${String(cutSeq)}`)
+      }
+      this.#db.prepare('UPDATE skill_learning_state SET status = ?, retry_at = NULL, updated_at = ? WHERE source_session = ?')
+        .run(LEARNING_STATUS.gaveUp, Date.now(), sourceSession)
+    })
   }
 
   /**
    * Mark the frozen interval complete. Zero signals complete just like any
    * other run: the watermark is the frozen cut, so the next interval begins
-   * after it.
+   * after it. The attempt count belongs to the completed interval and restarts
+   * with the next one.
    */
   completeLearning({ sourceSession, cutSeq, childSession }: {
     readonly sourceSession: string
@@ -663,18 +765,75 @@ export class SkillStore {
     readonly childSession: string
   }): void {
     this.#db.prepare(`UPDATE skill_learning_state
-      SET watermark_seq = ?, cut_seq = ?, child_session = ?, status = 0, retry_at = NULL, updated_at = ?
+      SET watermark_seq = ?, cut_seq = ?, child_session = ?, status = 0, attempts = 0, retry_at = NULL, updated_at = ?
       WHERE source_session = ?`).run(cutSeq, cutSeq, childSession, Date.now(), sourceSession)
+  }
+
+  /**
+   * Store one interval's submitted signals and advance its watermark in one
+   * immediate transaction.
+   *
+   * The row must still be the running interval of this child at this frozen cut;
+   * anything else is refused instead of writing evidence for an interval that is
+   * not the one the caller settled. The insertion reuses the exact validation
+   * {@link insertSignals} applies, and the owner/source identity is taken from
+   * the call, not trusted from each signal. A crash between the two writes is
+   * impossible: the transaction either stores the evidence and the watermark
+   * together or neither.
+   *
+   * @returns the inserted signal ids, in submission order.
+   * @throws {SkillStoreError} `skills/invalid-learning-state` when the row is
+   *   not this child's interval at this cut, or the `insertSignals` validation
+   *   refusals for a bad signal.
+   */
+  settleLearning({ sourceSession, childSession, cutSeq, ownerShortId, signals }: {
+    readonly sourceSession: string
+    readonly childSession: string
+    readonly cutSeq: number
+    readonly ownerShortId: number
+    readonly signals: readonly NewSignal[]
+  }): number[] {
+    return this.#transaction(() => {
+      const row = this.learning(sourceSession)
+      // A failed interval resumes under the same child; its row stays `failed`
+      // until it settles, so both states name the same owned interval here.
+      if (row === undefined
+        || (row.status !== LEARNING_STATUS.running && row.status !== LEARNING_STATUS.failed)
+        || row.cut_seq !== cutSeq || row.child_session !== childSession) {
+        throw new SkillStoreError('skills/invalid-learning-state',
+          `source session ${sourceSession} is not the running interval at ${String(cutSeq)} under child ${childSession}`)
+      }
+      const ids = this.#insertSignals(signals.map(signal => ({ ...signal, ownerShortId, sourceSession })))
+      const now = Date.now()
+      this.#db.prepare(`UPDATE skill_learning_state
+        SET watermark_seq = ?, cut_seq = ?, status = ?, attempts = 0, retry_at = NULL, updated_at = ?
+        WHERE source_session = ?`).run(cutSeq, cutSeq, LEARNING_STATUS.idle, now, sourceSession)
+      return ids
+    })
+  }
+
+  /** The learning row this child owns, or a domain refusal. */
+  #learningInterval({ sourceSession, childSession }: {
+    readonly sourceSession: string
+    readonly childSession: string
+  }): LearningRow {
+    const row = this.learning(sourceSession)
+    if (row === undefined || row.child_session !== childSession) {
+      throw new SkillStoreError('skills/invalid-learning-state',
+        `source session ${sourceSession} has no interval owned by child ${childSession}`)
+    }
+    return row
   }
 
   /**
    * Drop the frozen cut and child without advancing the watermark, so an
    * interval that can never finish (its child never came into existence, or the
-   * configured turn budget is spent) is claimed again by a later tick.
+   * configured turn budget is spent) is claimed again by a later tick. The
+   * attempt count restarts with the new interval.
    */
   resetLearning(sourceSession: string): void {
     this.#db.prepare(`UPDATE skill_learning_state
-      SET cut_seq = NULL, child_session = NULL, status = 0, retry_at = NULL, updated_at = ?
+      SET cut_seq = NULL, child_session = NULL, status = 0, attempts = 0, retry_at = NULL, updated_at = ?
       WHERE source_session = ?`).run(Date.now(), sourceSession)
   }
 
@@ -694,10 +853,14 @@ export class SkillStore {
    */
   insertSignals(signals: readonly NewSignal[]): number[] {
     if (signals.length === 0) return []
-    return this.#transaction(() => {
-      const now = Date.now()
-      const ids: number[] = []
-      for (const signal of signals) {
+    return this.#transaction(() => this.#insertSignals(signals))
+  }
+
+  /** The insertion half of {@link insertSignals}; the caller owns the transaction. */
+  #insertSignals(signals: readonly NewSignal[]): number[] {
+    const now = Date.now()
+    const ids: number[] = []
+    for (const signal of signals) {
         if (!isValidTaskKey(signal.taskKey)) {
           throw new SkillStoreError('skills/invalid-task-key', `a task key must be <task-type>:<artifact> kebab-case, at most 64 characters; got ${JSON.stringify(signal.taskKey)}`)
         }
@@ -735,9 +898,8 @@ export class SkillStore {
           readonly lastInsertRowid: number | bigint
         }
         ids.push(Number(inserted.lastInsertRowid))
-      }
-      return ids
-    })
+    }
+    return ids
   }
 
   /** One signal row that is not logically deleted. */
@@ -787,7 +949,10 @@ export class SkillStore {
   /**
    * Every owner/task-key group that already has two independent sessions of
    * valid success and at least one signal newer than that key's last completed
-   * job. The claim re-checks the same facts inside its transaction.
+   * claim. A `candidate`, `no_improvement` or `terminal` claim consumes its
+   * `through_signal_id`, so a spent claim cannot re-qualify the same evidence;
+   * only newer signals open a new claim. The claim re-checks the same facts
+   * inside its transaction.
    */
   creationCandidates(): CreationCandidate[] {
     return rowsOf<{ owner_short_id: number; task_key: string; sessions: number; latest: number }>(this.#db.prepare(
@@ -801,12 +966,12 @@ export class SkillStore {
           AND s.id > COALESCE((
             SELECT MAX(j.through_signal_id) FROM skill_creation_job j
              WHERE j.owner_short_id = s.owner_short_id AND j.task_key = s.task_key
-               AND j.state IN (?, ?) AND j.deleted_at IS NULL), 0)
+               AND j.state IN (?, ?, ?) AND j.deleted_at IS NULL), 0)
         GROUP BY s.owner_short_id, s.task_key
        HAVING COUNT(DISTINCT s.source_session) >= 2
         ORDER BY latest`,
     ).all(SIGNAL_STATUS.success, SIGNAL_STATUS.revoked, CREATION_JOB_STATE.candidate,
-      CREATION_JOB_STATE.noImprovement)).map(row => ({
+      CREATION_JOB_STATE.noImprovement, CREATION_JOB_STATE.terminal)).map(row => ({
       ownerShortId: row.owner_short_id,
       taskKey: row.task_key,
       sessions: row.sessions,
@@ -841,9 +1006,10 @@ export class SkillStore {
   lastCompletedCreationJob(ownerShortId: number, taskKey: string): CreationJobRow | undefined {
     return rowOf<CreationJobRow>(this.#db.prepare(
       `SELECT * FROM skill_creation_job
-        WHERE owner_short_id = ? AND task_key = ? AND state IN (?, ?) AND deleted_at IS NULL
+        WHERE owner_short_id = ? AND task_key = ? AND state IN (?, ?, ?) AND deleted_at IS NULL
         ORDER BY id DESC LIMIT 1`,
-    ).get(ownerShortId, taskKey, CREATION_JOB_STATE.candidate, CREATION_JOB_STATE.noImprovement))
+    ).get(ownerShortId, taskKey, CREATION_JOB_STATE.candidate, CREATION_JOB_STATE.noImprovement,
+      CREATION_JOB_STATE.terminal))
   }
 
   /**
@@ -961,6 +1127,30 @@ export class SkillStore {
         WHERE id = ? AND state = ? AND deleted_at IS NULL`,
     ).run(state, candidateVersionId ?? null, Date.now(), id, CREATION_JOB_STATE.running) as ChangeResult
     return Number(result.changes) > 0
+  }
+
+  /**
+   * End a failed claim for good once its attempt budget is spent.
+   *
+   * The claim becomes `terminal`: it produces no candidate and no tick resumes
+   * it, but its frozen `through_signal_id` still counts as consumed evidence, so
+   * the same signals cannot satisfy the creation threshold again. Newer
+   * evidence for the same owner and task key starts a fresh claim, because
+   * {@link activeCreationJob} does not treat a terminal row as active.
+   *
+   * @throws {SkillStoreError} `skills/invalid-creation-state` when the row is not
+   *   a failed claim.
+   */
+  abandonCreationJob({ id }: { readonly id: number }): void {
+    this.#transaction(() => {
+      const row = this.creationJob(id)
+      if (row === undefined || row.state !== CREATION_JOB_STATE.failed) {
+        throw new SkillStoreError('skills/invalid-creation-state',
+          `creation claim ${id} is not a failed claim and cannot be abandoned`)
+      }
+      this.#db.prepare('UPDATE skill_creation_job SET state = ?, next_retry_at = NULL, updated_at = ? WHERE id = ?')
+        .run(CREATION_JOB_STATE.terminal, Date.now(), id)
+    })
   }
 
   /**
@@ -1142,6 +1332,23 @@ export class SkillStore {
   }
 
   /**
+   * Every pending draft row, for the boot reconciliation that repairs a pending
+   * row whose candidate directory a crash displaced. Not owner-scoped: it runs
+   * at boot before any request, and it only moves directories back or settles a
+   * row whose bytes are gone.
+   */
+  allPendingDrafts(limit = 1_000): PendingDraftRow[] {
+    return rowsOf<PendingDraftRow>(this.#db.prepare(
+      `SELECT v.*, s.name AS skill_name, s.scope AS skill_scope,
+              s.owner_short_id AS skill_owner_short_id, s.proposed_by AS skill_proposed_by,
+              s.archived_at AS skill_archived_at
+         FROM skill_version v JOIN skill s ON s.id = v.skill_id
+        WHERE v.status = ? AND v.deleted_at IS NULL AND s.deleted_at IS NULL
+        ORDER BY v.id LIMIT ?`,
+    ).all(VERSION_STATUS.pending, limit))
+  }
+
+  /**
    * The recently decided versions this caller may see as a result.
    *
    * A personal decision belongs to its owner; a common decision is visible to
@@ -1208,7 +1415,7 @@ export class SkillStore {
    * versions. The first personal approval with no preference row enables the
    * owner; an explicit preference always survives.
    */
-  publishDraft({ versionId, packagePath, reviewer, reviewedAt, ownerShortId, defaultEnable, confirmGrowth, recheck }: {
+  publishDraft({ versionId, packagePath, reviewer, reviewedAt, ownerShortId, defaultEnable, confirmGrowth, approvalMessageId, recheck }: {
     readonly versionId: number
     readonly packagePath: string
     readonly reviewer: number
@@ -1218,6 +1425,8 @@ export class SkillStore {
     readonly defaultEnable: boolean
     /** The validated user confirmation an exceeded-growth candidate was approved with. */
     readonly confirmGrowth?: { readonly confirmedBy: number; readonly confirmedAt: number; readonly messageId: string }
+    /** The validated user message that justified a source-graded approval. */
+    readonly approvalMessageId?: string
     readonly recheck: (version: SkillVersionRow, skill: SkillRow) => boolean
   }): { readonly skillId: number; readonly previousVersionId: number | null } {
     return this.#transaction(() => {
@@ -1256,14 +1465,26 @@ export class SkillStore {
         this.#db.prepare('UPDATE skill_version SET status = ?, updated_at = ? WHERE id = ?')
           .run(VERSION_STATUS.superseded, now, previous.id)
       }
-      this.#db.prepare(
-        `UPDATE skill_version
-            SET status = ?, package_path = ?, reviewer = ?, reviewed_at = ?,
-                growth_confirmed_by = ?, growth_confirmed_at = ?, growth_confirm_message = ?, updated_at = ?
-          WHERE id = ?`,
-      ).run(VERSION_STATUS.approvedCurrent, packagePath, reviewer, reviewedAt,
-        recordedGrowth?.confirmedBy ?? null, recordedGrowth?.confirmedAt ?? null, recordedGrowth?.messageId ?? null,
-        now, versionId)
+      try {
+        this.#db.prepare(
+          `UPDATE skill_version
+              SET status = ?, package_path = ?, reviewer = ?, reviewed_at = ?,
+                  growth_confirmed_by = ?, growth_confirmed_at = ?, growth_confirm_message = ?,
+                  approval_message_id = ?, updated_at = ?
+            WHERE id = ?`,
+        ).run(VERSION_STATUS.approvedCurrent, packagePath, reviewer, reviewedAt,
+          recordedGrowth?.confirmedBy ?? null, recordedGrowth?.confirmedAt ?? null, recordedGrowth?.messageId ?? null,
+          approvalMessageId ?? null, now, versionId)
+      } catch (error) {
+        // The partial unique index on growth_confirm_message is the second
+        // guarantee behind the review evidence: one user confirmation message
+        // approves at most one growth-exceeded version, even if two approvals race.
+        if (isUniqueConstraint(error, 'growth_confirm_message')) {
+          throw new SkillStoreError('skills/growth-confirmation-used',
+            'that user message already confirmed another growth-exceeded candidate; ask the user to confirm this one separately')
+        }
+        throw error
+      }
       this.#db.prepare('UPDATE skill SET current_version_id = ?, updated_by = ?, updated_at = ? WHERE id = ?')
         .run(versionId, reviewer, now, skill.id)
       if (defaultEnable && skill.scope === SKILL_SCOPE.personal && ownerShortId !== undefined
@@ -1297,6 +1518,7 @@ export class SkillStore {
       if (version === undefined) {
         this.#db.exec(SCHEMA)
         this.#db.exec(SCHEMA_V2)
+        this.#applyV3()
         this.#setVersion()
         return
       }
@@ -1309,11 +1531,39 @@ export class SkillStore {
         // learning tables and leaves every v1 row untouched. The statement is
         // CREATE IF NOT EXISTS, so a half-applied file converges here.
         this.#db.exec(SCHEMA_V2)
+        this.#applyV3()
+        this.#setVersion()
+        return
+      }
+      if (version === 2) {
+        // v2 files keep every row; v3 only adds two columns and two indexes.
+        this.#applyV3()
         this.#setVersion()
         return
       }
       throw new SkillStoreError('skills/schema-unsupported', `unsupported skill schema version ${version}`)
     })
+  }
+
+  /**
+   * Apply the v3 additions in place.
+   *
+   * `ALTER TABLE ... ADD COLUMN` has no `IF NOT EXISTS`, so each column is added
+   * only after `PRAGMA table_info` proves it missing: a crash between two
+   * statements of this migration converges here on the next boot instead of
+   * failing forever.
+   */
+  #applyV3(): void {
+    this.#addColumnIfMissing('skill_version', 'approval_message_id', 'TEXT')
+    this.#addColumnIfMissing('skill_learning_state', 'attempts', 'INTEGER NOT NULL DEFAULT 0')
+    this.#db.exec(SCHEMA_V3)
+  }
+
+  /** Add one column unless the table already has it. */
+  #addColumnIfMissing(table: 'skill_version' | 'skill_learning_state', column: string, definition: string): void {
+    const columns = rowsOf<{ name: string }>(this.#db.prepare(`PRAGMA table_info(${table})`).all())
+    if (columns.some(row => row.name === column)) return
+    this.#db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
   }
 
   #storedVersion(): number | undefined {

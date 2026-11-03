@@ -284,6 +284,45 @@ export class SessionRuntime {
     })
   }
 
+  /**
+   * Deliver one system-context user-role message to an owned session and start
+   * exactly one reply turn — but only when the session does not already carry
+   * it.
+   *
+   * This is the one trigger protocol for input the user did not type (the
+   * review entry): the message enters the native inbox like any queued prompt,
+   * so the model sees ordinary user-role context and the session runs a real
+   * turn. Its producer source keeps it out of the chat transcript, so no user
+   * bubble and no request receipt is fabricated.
+   *
+   * The whole check-deliver-flush sequence runs in the target session's queue,
+   * so two concurrent openings cannot both deliver. The matcher sees the
+   * message in both shapes a live session holds: the inbox splice (durable
+   * before the turn claims it) and the `user/message` the turn appends. A
+   * second click during either window therefore appends nothing and starts no
+   * second turn, and a retry after a failed flush finds the committed splice
+   * instead of delivering again.
+   *
+   * @param owner - the authenticated owner the session must belong to.
+   * @param sessionId - the session that receives the message.
+   * @param match - recognises one already-delivered message by its source.
+   * @param message - the user-role message to deliver; its source is preserved.
+   * @returns true when this call delivered the message and started its turn.
+   */
+  async promptOnce(owner: SessionOwner, sessionId: SessionId, match: (message: UserMessage) => boolean, message: UserMessage): Promise<boolean> {
+    const state = await this.open(owner, sessionId)
+    return this.runSession(sessionId, async () => {
+      const delivered = (events: readonly SessionEvent[]) => events.some(event => {
+        if (event.type === 'user/message') return match(event.data)
+        return event.type === 'agent/inbox/spliced' && event.data.inserted.some(match)
+      })
+      if (delivered((await this.events(sessionId)).events)) return false
+      this.followup(state, message)
+      await this.barrier(state)
+      return true
+    })
+  }
+
   async #resume(owner: SessionOwner, sessionId: SessionId, titleBackfill: boolean) {
     const state = new LiveSession()
     await this.ctx.agents.resume({ resumeSessionId: sessionId,

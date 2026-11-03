@@ -18,10 +18,18 @@
  *
  * Completion is decided from the durable log: the last `turn/end` must be
  * `completed` and the run must carry exactly one successful `submit_signals`
- * call. The submission is validated again here and only then persisted, so a
- * crash after the model answered cannot half-write an interval. A completed
- * turn with zero signals still advances the watermark; any other ending keeps
- * the watermark and leaves the same child for a resume.
+ * call. The submission is validated again here and only then persisted through
+ * one `settleLearning` transaction that stores the evidence and advances the
+ * watermark together, so a crash can never leave evidence behind an unadvanced
+ * interval. A completed turn with zero signals still advances the watermark;
+ * any other ending keeps the watermark and leaves the same child for a resume.
+ *
+ * Failed runs are budgeted: `skill_learning_state.attempts` persists across a
+ * restart, and once `learningMaxTurns` attempts are spent the interval is given
+ * up in place instead of being reset and re-claimed in a loop. Only a closed
+ * user turn after the abandoned cut releases the source again. A resume whose
+ * child session no longer exists releases the interval instead of spending the
+ * budget on it (the same recovery the memory maintenance engine has).
  *
  * Ambiguous-but-valuable evidence is resolved by one independent lightweight
  * review child before the interval settles. The review child sees the same
@@ -38,9 +46,10 @@ import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import {
   DETECTION_POLICY,
-  DEFAULT_LEARNING_MAX_TURNS,
-  DEFAULT_LEARNING_TURNS,
-  DEFAULT_MAX_MATERIAL_CHARACTERS,
+  LEARNING_CREATION_ATTEMPTS,
+  LEARNING_MAX_MATERIAL_CHARS,
+  LEARNING_MAX_TURNS,
+  LEARNING_TURNS,
   MAX_EXISTING_TASK_KEYS,
   MAX_REVOCABLE_SIGNALS,
   MAX_SIGNAL_NOTE_CHARACTERS,
@@ -52,7 +61,7 @@ import {
 import { ChildRuns, learningChildSetup, successfulCalls, turnCompleted } from './learning-child.js'
 import { assembleLearningMaterial, closedUserTurns, intervalHasToolCalls, type ClosedTurn } from './material.js'
 import { SkillError } from './service.js'
-import { SIGNAL_STATUS, type LearningRow, type NewSignal, type SignalRow, type SkillStore } from './store.js'
+import { LEARNING_STATUS, SIGNAL_STATUS, SkillStoreError, type LearningRow, type NewSignal, type SignalRow, type SkillStore } from './store.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
@@ -75,6 +84,8 @@ export const DEFAULT_LEARNING_PROVIDER = 'minimax-cn'
 const TICK_MS = 1_000
 /** How long a failed interval waits before resuming its child. */
 const RETRY_MS = 2_000
+/** How long a cold source with too few closed turns is kept before it is forgotten. */
+const COLD_SOURCE_RETENTION_MS = 6 * 60 * 60 * 1_000
 
 /** The continuation written when a failed detection child is resumed. */
 const DETECTION_RETRY_MESSAGE = '上一轮检测没有完成。请基于这段子会话中已有的学习材料继续；完成时恰好调用一次 submit_signals（可以提交零条信号），然后结束回复。'
@@ -120,6 +131,8 @@ export type LearningConfig = {
   readonly learningProvider: LearningField
   readonly learningMaxMaterialChars: LearningField
   readonly learningMaxTurns: LearningField
+  /** The creation-claim attempt ceiling; a missing field uses the policy default. */
+  readonly learningCreationAttempts?: LearningField
 }
 
 /** The checked values one evaluation uses. */
@@ -128,7 +141,10 @@ export type LearningSettings = {
   readonly model: string
   readonly provider: string
   readonly maxMaterialChars: number
+  /** The detection interval's failed-run budget. */
   readonly maxTurns: number
+  /** The background creation claim's failed-run budget. */
+  readonly creationAttemptLimit: number
 }
 
 /** Read one volatile field's current value. */
@@ -164,11 +180,14 @@ function textSetting(field: LearningField, fallback: string, name: string): stri
  */
 export function readLearningSettings(config: LearningConfig): LearningSettings {
   return {
-    turns: integerSetting(config.learningTurns, DEFAULT_LEARNING_TURNS, 1, 50, 'learningTurns'),
+    turns: integerSetting(config.learningTurns, LEARNING_TURNS.default, LEARNING_TURNS.min, LEARNING_TURNS.max, 'learningTurns'),
     model: textSetting(config.learningModel, DEFAULT_LEARNING_MODEL, 'learningModel'),
     provider: textSetting(config.learningProvider, DEFAULT_LEARNING_PROVIDER, 'learningProvider'),
-    maxMaterialChars: integerSetting(config.learningMaxMaterialChars, DEFAULT_MAX_MATERIAL_CHARACTERS, 500, 100_000, 'learningMaxMaterialChars'),
-    maxTurns: integerSetting(config.learningMaxTurns, DEFAULT_LEARNING_MAX_TURNS, 1, 20, 'learningMaxTurns'),
+    maxMaterialChars: integerSetting(config.learningMaxMaterialChars, LEARNING_MAX_MATERIAL_CHARS.default,
+      LEARNING_MAX_MATERIAL_CHARS.min, LEARNING_MAX_MATERIAL_CHARS.max, 'learningMaxMaterialChars'),
+    maxTurns: integerSetting(config.learningMaxTurns, LEARNING_MAX_TURNS.default, LEARNING_MAX_TURNS.min, LEARNING_MAX_TURNS.max, 'learningMaxTurns'),
+    creationAttemptLimit: integerSetting(config.learningCreationAttempts, LEARNING_CREATION_ATTEMPTS.default,
+      LEARNING_CREATION_ATTEMPTS.min, LEARNING_CREATION_ATTEMPTS.max, 'learningCreationAttempts'),
   }
 }
 
@@ -260,11 +279,11 @@ export class LearningEngine {
   readonly #cache = new Map<string, SourceFacts>()
   readonly #children = new ChildRuns<string>()
   readonly #handles = new Map<string, AgentHandle>()
-  /** Consecutive failed runs per source, bounded by `learningMaxTurns`. */
-  readonly #attempts = new Map<string, number>()
   #timer: ReturnType<typeof setInterval> | undefined
   #disposed = false
   #booting = false
+  /** Single-flight: a slow evaluation pass never overlaps the next tick. */
+  #ticking = false
 
   constructor(ctx: Context, store: SkillStore, options: LearningEngineOptions) {
     this.#ctx = ctx
@@ -298,10 +317,21 @@ export class LearningEngine {
     await this.#children.close()
   }
 
-  /** Recompute every known source from persisted state and the current clock. */
+  /**
+   * Recompute every known source from persisted state and the current clock.
+   *
+   * Single-flight: when one pass is still running (a slow persistence read, a
+   * large history), the next tick is skipped instead of stacking more passes on
+   * top of it. The skipped state is caught up by the following tick.
+   */
   async #tick(): Promise<void> {
-    if (this.#disposed) return
-    await Promise.allSettled([...this.#known].map(source => this.#evaluate(source)))
+    if (this.#disposed || this.#ticking) return
+    this.#ticking = true
+    try {
+      await Promise.allSettled([...this.#known].map(source => this.#evaluate(source)))
+    } finally {
+      this.#ticking = false
+    }
   }
 
   /** On boot, find every owned source session without relying on a live Agent. */
@@ -323,11 +353,15 @@ export class LearningEngine {
     }
   }
 
-  /** One source evaluation: resume a failed interval or start a new one. */
+  /** One source evaluation: resume a failed interval, release a given-up one, or start a new one. */
   async #evaluate(sourceId: string): Promise<void> {
     if (this.#disposed || this.#children.has(sourceId)) return
     const state = this.#store.learning(sourceId)
-    if (state !== undefined && state.status !== 0) {
+    if (state !== undefined && state.status === LEARNING_STATUS.gaveUp) {
+      // A given-up interval is terminal: only new evidence after its frozen cut
+      // may release the source, and nothing resumes its old child.
+      if (!(await this.#releasedFromGiveUp(sourceId, state))) return
+    } else if (state !== undefined && state.status !== 0) {
       if (state.child_session !== null && state.cut_seq !== null) {
         if ((this.#children.retryAt(sourceId) ?? state.retry_at ?? 0) > Date.now()) return
         const owner = await this.#ownerOf(sourceId)
@@ -351,7 +385,12 @@ export class LearningEngine {
       this.#forgetIfCold(sourceId)
       return
     }
-    if (pending < this.#options.settings().turns) return
+    if (pending < this.#options.settings().turns) {
+      // Not enough new turns yet; a cold source is forgotten after a bounded
+      // retention instead of being re-read on every tick forever.
+      this.#forgetIfCold(sourceId, { pending, lastClosedAt: latest.last_closed_at })
+      return
+    }
     if (!this.#quiet(sourceId)) return
 
     // The interval must be claimed from one exact observation: the last closed
@@ -440,6 +479,41 @@ export class LearningEngine {
     return facts
   }
 
+  /**
+   * Whether a given-up source may start a fresh interval again.
+   *
+   * The abandoned row keeps its frozen cut and attempt count, so no tick
+   * resumes it and a restart cannot reset the budget. Only a closed user turn
+   * *after* that cut is new evidence: then the row is released (clearing the
+   * attempt count with the frozen interval) and the normal path claims a fresh
+   * interval. Without such a turn the source stays released and no child is
+   * created for the same evidence again.
+   *
+   * @returns true when the caller may continue with the normal new-interval path.
+   */
+  async #releasedFromGiveUp(sourceId: string, state: LearningRow): Promise<boolean> {
+    const cutSeq = state.cut_seq
+    if (cutSeq === null) {
+      // A given-up row without a frozen cut cannot compare evidence; release it.
+      this.#store.resetLearning(sourceId)
+      return true
+    }
+    const facts = await this.#observe(sourceId, state)
+    if (facts === undefined) {
+      this.#forgetIfCold(sourceId)
+      return false
+    }
+    const newest = facts.turns.at(-1)
+    if (newest === undefined || newest.seq <= cutSeq) {
+      this.#forgetIfCold(sourceId, { pending: 0, lastClosedAt: state.last_closed_at })
+      return false
+    }
+    if (!this.#quiet(sourceId)) return false
+    this.#store.resetLearning(sourceId)
+    this.#options.log?.('info', `skill learning for ${sourceId} released its given-up interval: a newer closed user turn is available`)
+    return true
+  }
+
   /** The durable owner of one source session, from its live or persisted header. */
   async #ownerOf(sourceId: string): Promise<number | undefined> {
     const live = this.#ctx.agents.get(sourceId as SessionId)
@@ -463,9 +537,19 @@ export class LearningEngine {
     return live === undefined || live.status === 'idle'
   }
 
-  /** Drop a cold source with nothing left to detect; a live one keeps reporting future turns. */
-  #forgetIfCold(sourceId: string): void {
+  /**
+   * Drop a cold source with nothing left to detect; a live one keeps reporting
+   * future turns.
+   *
+   * `activity` is the source's newest closed-turn time. A cold source with a
+   * few not-yet-threshold turns is kept for a bounded window and then forgotten
+   * rather than stat'ed on every tick forever (B7); a live agent re-adds its own
+   * session through `watch`, and a restart rebuilds the set from the rows.
+   */
+  #forgetIfCold(sourceId: string, activity?: { readonly pending: number; readonly lastClosedAt: number | null }): void {
     if (this.#ctx.agents.get(sourceId as SessionId) !== undefined) return
+    if (activity !== undefined && activity.pending > 0
+      && Date.now() - (activity.lastClosedAt ?? 0) <= COLD_SOURCE_RETENTION_MS) return
     this.#known.delete(sourceId)
     this.#cache.delete(sourceId)
   }
@@ -494,7 +578,11 @@ export class LearningEngine {
       await handle.agent.whenIdle()
       await this.#settle(sourceId, interval.ownerShortId, interval.childSession, interval.cutSeq, startSeq, interval)
     } catch (error) {
-      this.#failed(sourceId, interval.childSession)
+      // The child never came into existence: there is nothing to resume, so
+      // release the claim instead of spending the interval's attempt budget on
+      // a child that cannot exist. This mirrors the memory maintenance engine.
+      if (handle === undefined) this.#store.resetLearning(sourceId)
+      else this.#failed(sourceId, interval.childSession)
       this.#options.log?.('warn', `skill learning interval for ${sourceId} failed: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       this.#handles.delete(sourceId)
@@ -506,6 +594,16 @@ export class LearningEngine {
   async #runResume(sourceId: string, interval: DetectionResume): Promise<void> {
     let handle: AgentHandle | undefined
     try {
+      // The child may have disappeared between the claim and this resume (an
+      // interrupted first run, a session store reset). There is nothing to
+      // resume then; release the interval instead of burning the budget on a
+      // child that will never load. Mirrors memory maintenance `#runResume`.
+      const stored = await this.#ctx.sessionPersistence.stat(interval.childSession).catch(() => undefined)
+      if (stored === undefined) {
+        this.#store.resetLearning(sourceId)
+        this.#options.log?.('info', `skill learning resume for ${sourceId} found no child session; the interval was released`)
+        return
+      }
       const frozen = await this.#frozenInterval(sourceId, interval.ownerShortId, interval.cutSeq)
       if (frozen === undefined) {
         this.#failed(sourceId, interval.childSession)
@@ -521,7 +619,13 @@ export class LearningEngine {
       await handle.agent.whenIdle()
       await this.#settle(sourceId, interval.ownerShortId, interval.childSession, interval.cutSeq, startSeq, frozen)
     } catch (error) {
-      this.#failed(sourceId, interval.childSession)
+      if (handle === undefined) {
+        const stored = await this.#ctx.sessionPersistence.stat(interval.childSession).catch(() => undefined)
+        if (stored === undefined) this.#store.resetLearning(sourceId)
+        else this.#failed(sourceId, interval.childSession)
+      } else {
+        this.#failed(sourceId, interval.childSession)
+      }
       this.#options.log?.('warn', `skill learning resume for ${sourceId} failed: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       this.#handles.delete(sourceId)
@@ -564,15 +668,31 @@ export class LearningEngine {
       submitted = await this.#reviewAmbiguous(childSession, cutSeq, frozen.material, submitted, ambiguous)
     }
     try {
-      this.#store.insertSignals(submitted.map(signal => toNewSignal(ownerShortId, sourceId, signal)))
+      // One immediate transaction stores the evidence and advances the
+      // watermark, so a crash can never leave inserted signals behind an
+      // unadvanced cut (B3). The store re-checks that this is still our running
+      // interval; a stale settle writes nothing.
+      this.#store.settleLearning({
+        sourceSession: sourceId,
+        childSession,
+        cutSeq,
+        ownerShortId,
+        signals: dedupeSubmission(submitted).map(signal => toNewSignal(ownerShortId, sourceId, signal)),
+      })
     } catch (error) {
+      if (error instanceof SkillStoreError && error.code === 'skills/invalid-learning-state') {
+        // Another tick or a restart already settled or released this interval;
+        // writing it twice would duplicate immutable evidence.
+        this.#children.clearRetry(sourceId)
+        this.#cache.delete(sourceId)
+        this.#options.log?.('info', `skill learning interval for ${sourceId} was already settled elsewhere; it was not written again`)
+        return
+      }
       this.#failed(sourceId, childSession)
       this.#options.log?.('warn', `skill learning signals for ${sourceId} were not stored: ${error instanceof Error ? error.message : String(error)}`)
       return
     }
-    this.#store.completeLearning({ sourceSession: sourceId, cutSeq, childSession })
     this.#children.clearRetry(sourceId)
-    this.#attempts.delete(sourceId)
     this.#cache.delete(sourceId)
     this.#options.onSignals(ownerShortId)
   }
@@ -778,22 +898,72 @@ export class LearningEngine {
     })
   }
 
-  /** Settle one failed run: keep the watermark, remember the same child, and bound retries. */
+  /**
+   * Settle one failed run: keep the watermark, remember the same child, and
+   * bound retries with the interval's durable attempt count.
+   *
+   * The count lives in `skill_learning_state.attempts`, so a restart cannot
+   * reset it. Once the configured budget is spent the interval is given up in
+   * place: no tick ever resumes it again, and only a closed user turn after its
+   * frozen cut releases the source (see {@link #releasedFromGiveUp}).
+   */
   #failed(sourceId: string, childSession: string): void {
     const settings = this.#options.settings()
-    const attempts = (this.#attempts.get(sourceId) ?? 0) + 1
-    this.#attempts.set(sourceId, attempts)
-    if (attempts >= settings.maxTurns) {
-      // The configured turn budget is spent: release the frozen interval so a
-      // later tick claims a fresh one; the watermark still never advanced.
-      this.#attempts.delete(sourceId)
+    const row = this.#store.learning(sourceId)
+    const cutSeq = row?.cut_seq
+    if (cutSeq === null || cutSeq === undefined) {
+      // No frozen interval to count; release it so the next tick observes the
+      // source again. A missing interval is not an attempt.
       this.#store.resetLearning(sourceId)
-      this.#options.log?.('warn', `skill learning for ${sourceId} exhausted its turn budget; the interval will be re-claimed`)
       return
     }
-    this.#store.failLearning({ sourceSession: sourceId, childSession, retryDelayMs: RETRY_MS })
+    let attempts: number
+    try {
+      attempts = this.#store.failLearning({ sourceSession: sourceId, childSession, retryDelayMs: RETRY_MS })
+    } catch (error) {
+      if (error instanceof SkillStoreError && error.code === 'skills/invalid-learning-state') {
+        // The interval is no longer owned by this child: do not invent state.
+        this.#children.clearRetry(sourceId)
+        return
+      }
+      throw error
+    }
+    if (attempts >= settings.maxTurns) {
+      try {
+        this.#store.abandonLearning({ sourceSession: sourceId, childSession, cutSeq })
+      } catch (error) {
+        if (!(error instanceof SkillStoreError && error.code === 'skills/invalid-learning-state')) throw error
+      }
+      this.#children.clearRetry(sourceId)
+      this.#options.log?.('warn', `skill learning for ${sourceId} spent its ${String(settings.maxTurns)}-attempt budget at cut ${String(cutSeq)}; it will not retry until a newer closed user turn`)
+      return
+    }
     this.#children.defer(sourceId, Date.now() + RETRY_MS)
   }
+}
+
+/**
+ * Collapse exactly repeated evidence claims inside one submission.
+ *
+ * A model that lists the same evidence twice would otherwise store two
+ * immutable rows for one fact; keep the first row (and its note) only. The
+ * identity of a claim is its task key, status, evidence range and revocation
+ * target — the free-text note is not part of it.
+ */
+function dedupeSubmission(signals: readonly SubmittedSignal[]): SubmittedSignal[] {
+  const seen = new Set<string>()
+  return signals.filter(signal => {
+    const identity = JSON.stringify([
+      signal.taskKey,
+      signal.status,
+      signal.evidenceStartSeq,
+      signal.evidenceEndSeq,
+      signal.revokesSignalId ?? null,
+    ])
+    if (seen.has(identity)) return false
+    seen.add(identity)
+    return true
+  })
 }
 
 /** Validate one submission against the frozen interval, filling the defaults. */
