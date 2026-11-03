@@ -149,9 +149,9 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 每个单元声明 `key`、`stateVersion`、zod `stateSchema`、`init(header)` 与 `apply(state,event)`：
 `apply` 必须同步且纯，未解释的事件返回同一引用；state 必须能被 registry 做 JSON checkpoint。
 每个单元的 `stateVersion` 在折叠语义或 state 形状变化时递增，旧版本的持久化行会被丢弃并从
-`init` 重折。当前版本：transcript `6`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
-工具名 + 未完成 `skill` 调用的窄配对表 + 成功的 `skill_manage` 审核结果派生行），work `2`
-（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读这几行，
+`init` 重折。当前版本：transcript `7`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
+工具名 + 未完成 `skill` / `skill_manage` 调用的窄配对表 + 与 `skill_manage` 调用配对的审核结果
+派生行），work `2`（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读这几行，
 与本文件一起漂移即失败。
 
 - 任务与活动是同一次 fold：activity 依赖每个事件后的任务/report 快照，拆开会形成第二套
@@ -177,11 +177,13 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
   `{messageId: 'skill-activation:<callId>', role: 3, kind: 1, status: 2, seq: 结果事件 seq,
   toolCallId}`，并消费该表项；失败结果只消费、不追加。每次成功激活恰好一行，重放与断线补齐
   按 `callId` 去重（首次出现胜出），位置跟随对应工具结果，不新增任何原生事件。
-- 审核展示行走同一 fold：成功（`isError !== true`）的 `tool/result` 若第一个文本块是可解析
-  JSON 且 `kind === 'skill-review'`、`display` 为非空字符串，追加一行
-  `{messageId: 'skill-review:<callId>', role: 3, kind: 2, status: 2, seq: 结果事件 seq,
-  toolCallId}`，`text` 就是后端组合的 `display`。它不经过 `skill` 配对表，失败结果、其他工具
-  结果和普通 JSON（如 `list`）都不产生；重复结果按 `callId` 首次出现胜出。
+- 审核展示行走同一 fold，并与调用方配对：`callId -> seq` 的窄表只收 `tool/call` 中
+  `name === 'skill_manage'` 的事件。只有该表中仍有待配对的 `callId`、且结果是成功
+  （`isError !== true`）、第一个文本块可解析为 `kind === 'skill-review'` 且 `display` 为非空
+  字符串时，才追加一行 `{messageId: 'skill-review:<callId>', role: 3, kind: 2, status: 2,
+  seq: 结果事件 seq, toolCallId}`，`text` 就是后端组合的 `display`。任何匹配结果都会消费该
+  表项：失败结果只消费、不追加；`bash` 等非 `skill_manage` 调用即使打印同样的 JSON 也不产生
+  审核行；普通 JSON（如 `list`）不产生；重复结果按 `callId` 首次出现胜出。
 - `/chat/read` 与 `/chat/observe` 从这两个单元读 durable 值；同一会话的所有观察者共享同一份
   单元状态（`tests/chat-multi-observer.test.mjs`）。
 
