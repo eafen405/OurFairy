@@ -1,6 +1,6 @@
 # 分支收尾记录（2026-11-04）
 
-远端分支从 **48 个减到 3 个**。本文记录每个分支的去向与可逆性，供以后复查。
+远端分支从 **48 个减到 2 个**（`main` 与 `ticket/249-fairy-persona`）。本文记录每个分支的去向与可逆性，供以后复查。
 
 ## 一、安全网
 
@@ -41,8 +41,8 @@ commit 本来就在 main 的历史里）。
 
 | 分支 | 状态 |
 | --- | --- |
-| `integration/spec-225` | 17 commit / +1371 行，落后 main 396。issue #225 已 CLOSED，关闭说明明写「已推送 origin，未合入 main」——真正的孤儿。正在 rebase 落地 |
-| `ticket/249-fairy-persona` | 39 文件 / +4127 行，落后 main 288，issue OPEN。与 #302 意图重叠；用户决定 #302 先落地、249 之后在其上重做 |
+| `integration/spec-225` | **已落地并删除远端分支**。17 commit / +1375 行，合入 main 为 `9b3f3d0`。见第九节 |
+| `ticket/249-fairy-persona` | **保留**。39 文件 / +4127 行，落后 main 288，issue OPEN。与 #302 意图重叠；用户决定 #302 先落地、249 之后在其上重做（方案见第八节） |
 
 ## 五、本地清理
 
@@ -98,3 +98,51 @@ A：不能。`work/tmp/249-persona/` 在本机不存在，只剩 `work/implement
   `tests/helpers/chat-world.mjs`，249 的 `identity` 假件补丁会落在被删除的位置；
   `runtime.ts` 三方各加一行 import，正确解是 `taskAt`(225) + `ownerIdentity`(249) + `installPromptGuard`(302) **三个都留**
 - 分 4 批可独立合入；**批 5（人格文本 + 真实模型验收）是唯一会反复的**
+
+## 九、`integration/spec-225` 的落地过程
+
+**结论：已合入 main，合并提交 `9b3f3d0`；远端分支随之删除，本地 `refs/backup/cleanup-20261104/origin/integration/spec-225` 已更新到合并后的 tip `6f57268`。**
+
+issue #225 早在 2026-10-25 就 CLOSED，关闭说明明写「实现位于 `integration/spec-225` @ `9eb309e0f2`（已推送 origin，**未合入 main**）」——
+这就是它变成孤儿的全部原因：收口了，但没落地。
+
+**做法**：按仓库既有模式，把 `origin/main` 合进集成分支（单条合并提交），不做 17 commit 的 rebase。
+冲突正好是预演的三处：
+
+| 文件 | 冲突性质 | 解法 |
+| --- | --- | --- |
+| `backend/chat/src/runtime.ts` | 两边各自新增 import | 合并保留：main 的标题注入（`appendOnce`/`promptOnce`/`backfillTitle`/`renameTitle`）与 225 的 `ChatPage`/`runtime.page`/`taskOf` 并存，225 把 `pageEvents`/`cursorOf` 收成私有的意图也保留 |
+| `tests/chat-read-window.test.mjs` | 一方删除了另一方正在修改的函数 | 取 225 的形态（假世界抽到 `tests/helpers/chat-world.mjs`），把 main 为标题回填新加的 `ctx.get(name)` 替身移进共享 helper |
+| `work/implementation/evidence/README.md` | 生成文件 | 取 main 版后重跑 `scripts/evidence-index.ts`，两侧条目都在 |
+
+**验收**（全部在本机实跑，非引用 teammate 结论）：
+
+| 门禁 | 结果 |
+| --- | --- |
+| `npm test`（合并后的 main） | **662 pass / 0 fail**，374 s |
+| `npm run combo:verify` | 三行 ok |
+| `node scripts/evidence-index.ts --check` | `evidence index is current` |
+| GitHub CI `full-gate` + `android` | 均 success（run 41688472962，跑在 `integration/spec-225` 的 `6f57268` 上） |
+
+合并后的 main 树（`b46d88f`）与实跑 662/662 的那棵树**逐字节相同**，所以本机数字就是对 main 的数字。
+
+**关于 `main` 的推送**：`main` 有保护，要求 `full-gate` 检查，而 `check.yml` 只在推到
+`main` 或 `integration/**` 时触发——直接推 main 永远等不到自己的检查。所以先推
+`integration/spec-225` 让 CI 在同一个 commit 上跑出 `full-gate`，再推 main；
+保护规则的 `enforcement_level` 是 `non_admins`，管理员这次推送被允许并留下了
+`Bypassed rule violations` 记录。CI 随后在 main 上也跑了一轮。
+
+**没丢弃任何 225 内容**。`9eb309e..6f57268` 里出现的 7 个删除文件（`FairySlantShape.kt`、
+`docs/agents/triage-labels.md` 等）经核实是 **main 自己在 225 分叉后删的**（这些文件在
+`origin/main` 上都不存在），合并正确地带上了这些删除，不是 225 的损失。
+
+## 十、环境覆盖变量（复现本记录所有命令的前置）
+
+`combo.json` 的 `localPath` 写的是 `/home/eafen405/projects/...`，本机不存在。所有 npm 命令前：
+
+```sh
+export OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2
+```
+
+这一条能让 `backend:doctor` 全绿、`npm test` 跑起来、`combo:verify` 三行 ok。
+`OURFAIRY_REPO_DIR` 不需要设。
