@@ -1,15 +1,15 @@
 /**
- * The memory policy's mounting points (ticket #248).
+ * Where the memory write rule is allowed to live (tickets #248, #302).
  *
- * The real-model acceptance (`scripts/memory-acceptance.ts`) found that the
- * Fairy and its maintenance child wrote session summaries, user profiles and
- * inferred environment facts. The fix is guidance, not a semantic filter: one
- * policy section on an owned Agent's prompt, the same rules in the
- * `memory_add` description, and a maintenance-child policy that names the
- * no-summary/no-profile rule. This test uses the real profile and Loader with a
- * model double and reads the prompts the model actually receives, so a policy
- * that stops being mounted fails here even though the real semantic sample is
- * not part of CI.
+ * #248 put the rule in two places: the `memory_add` description and an
+ * `ourfairy:memory-policy` prompt section. #302 removed the section — the
+ * description already carried the rule, and a prohibition list in the
+ * deployment prompt read back as assistant register.
+ *
+ * This test uses the real profile and Loader with a model double and reads the
+ * prompts the model actually receives: the owned prompt must no longer carry
+ * the section, the `memory_add` description must still carry the rule, and the
+ * maintenance child keeps its own policy.
  *
  * @covers backend/memory
  */
@@ -25,8 +25,14 @@ import { answerIfTitle } from './helpers/title-aware.mjs'
 const home = makeHome('ourfairy-memory-policy-')
 const password = 'memory-policy-password'
 const MEMORY_TOOLS = ['memory_add', 'memory_delete', 'memory_edit', 'memory_search', 'memory_switch']
-const MAIN_POLICY_MARKER = '不要写会话摘要、用户画像'
-const MAIN_ONLY_MARKER = '用户明确要求记住时立即用 memory_add 保存'
+/**
+ * A phrase only the removed `ourfairy:memory-policy` section carried.
+ *
+ * The maintenance child has its own policy with overlapping wording, so this
+ * marker must be a phrase unique to the owned section rather than a rule both
+ * writers share.
+ */
+const MAIN_SECTION_MARKER = '用户明确要求记住时立即用 memory_add 保存'
 let port, model, modelPort, admin
 /** Every request body the double received, in arrival order. */
 const requests = []
@@ -132,7 +138,7 @@ after(async () => {
   removeHome(home)
 })
 
-test('the owned prompt and the maintenance child carry the memory policy at their own seams', async () => {
+test('the write rule lives in the tool description, not in a prompt section', async () => {
   const user = await registerUser(port, admin.token, 'policy-user', password)
   const session = (await request('/sessions/create', user.token)).session.id
   for (let index = 0; index < 5; index += 1) await sendTurn(user, session, `POLICY-TURN-${index}`)
@@ -140,11 +146,11 @@ test('the owned prompt and the maintenance child carry the memory policy at thei
   const source = requests.find(body => !isChild(body))
   assert.ok(source !== undefined, 'the source session made a model request')
   const sourceSystem = systemOf(source)
-  assert.match(sourceSystem, new RegExp(MAIN_POLICY_MARKER), 'the owned prompt carries the memory policy')
-  assert.match(sourceSystem, /不要把你执行过的记忆增删改/, 'the owned prompt forbids meta-memories about memory operations')
-  assert.match(sourceSystem, /不要记录带有「最近」「今天」「现在」「刚才」/, 'the owned prompt excludes time-bound observations')
-  assert.match(sourceSystem, /可复用的工作流.*skill_manage.*记忆/u, 'the owned prompt keeps the workflow→skill, fact→memory boundary')
-  assert.match(sourceSystem, /同一内容不要同时写进技能和记忆/u, 'the owned prompt forbids double-writing')
+  // #302 removed the `ourfairy:memory-policy` section. The `memory_add`
+  // description already carried the same rule, so the deployment prompt no
+  // longer holds a prohibition list of its own (#302).
+  assert.equal(sourceSystem.includes(MAIN_SECTION_MARKER), false,
+    'the owned prompt carries no memory-policy section any more')
   const addTool = Array.isArray(source.tools) ? source.tools.find(tool => tool.name === 'memory_add') : undefined
   assert.ok(addTool !== undefined, 'the source request declares memory_add')
   assert.match(addTool.description, /session summaries/, 'memory_add names the no-summary/no-profile rule')
@@ -156,7 +162,7 @@ test('the owned prompt and the maintenance child carry the memory policy at thei
   assert.match(childSystem, /不要记录带有「最近」「今天」「现在」「刚才」/, 'the child excludes time-bound observations')
   assert.match(childSystem, /可复用的工作流.*skill_manage.*记忆/u, 'the child carries the same workflow→skill boundary')
 
-  assert.equal(childSystem.includes(MAIN_ONLY_MARKER), false, 'the owned prompt policy is not inherited by the child')
+  assert.equal(childSystem.includes(MAIN_SECTION_MARKER), false, 'the removed owned prompt policy is not inherited by the child')
   assert.equal(childSystem.includes('Authorized file spaces'), false,
     'the spaces prompt context contributes nothing to the maintenance preset')
   assert.match(childSystem, /你是长期记忆维护子代理/, 'the child carries its own maintenance instruction')
