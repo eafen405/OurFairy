@@ -28,8 +28,8 @@
  *
  * @module @ourfairy/dsh-skill-creator/src/service
  */
-import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
-import { sep } from 'node:path'
+import { existsSync, readdirSync, realpathSync, statSync, type Dirent } from 'node:fs'
+import { join, sep } from 'node:path'
 import { readSkillFrontmatter, readSkillPackage } from './package.js'
 import { importReviewedPackage } from './seed.js'
 import {
@@ -53,7 +53,6 @@ interface Candidate {
   readonly skill: SkillRow
   readonly version: SkillVersionRow
   readonly enabled: boolean
-  readonly description: string
 }
 
 /** The winners and pool rows for one owner, derived in one pass. */
@@ -160,11 +159,13 @@ export class SkillService {
   readonly #store: SkillStore
   readonly #root: string
   readonly #bundledSkillsDir: string
+  readonly #bundledNames: ReadonlySet<string>
 
   constructor(store: SkillStore, options: SkillServiceOptions) {
     this.#store = store
     this.#root = options.root
     this.#bundledSkillsDir = options.bundledSkillsDir
+    this.#bundledNames = bundledSkillNamesFrom(options.bundledSkillsDir)
   }
 
   /** The durable data root; the row owns it and no other module reads it. */
@@ -175,6 +176,19 @@ export class SkillService {
   /** The trusted bundled skills root; the background creation prompt reads the Skill Creator from it. */
   get bundledSkillsDir(): string {
     return this.#bundledSkillsDir
+  }
+
+  /**
+   * The bundled package names the product must not shadow.
+   *
+   * The native registry lets a product skill replace a bundled one of the same
+   * name, so creation/install/seed refuse these names. Read once at
+   * construction; a missing or unreadable bundled root answers an empty set
+   * (the row would still fail its own boot-time checks if the root were
+   * required). Callers only read the set.
+   */
+  bundledSkillNames(): ReadonlySet<string> {
+    return this.#bundledNames
   }
 
   /** Read one version's package directory, refusing a path that escapes the data root. */
@@ -255,7 +269,10 @@ export class SkillService {
     const evaluation = this.#evaluate(shortId)
     const catalog: CatalogSkill[] = []
     for (const winner of evaluation.winners.values()) {
-      const description = winner.description
+      // The description is read here, not in `#evaluate`: the read-only file
+      // contribution every `read`/`write`/`bash` call derives must not touch
+      // each version's package.
+      const description = this.#description(winner.version)
       if (description === '') continue
       let directory: string
       try {
@@ -402,7 +419,7 @@ export class SkillService {
       if (version === undefined || version.status !== VERSION_STATUS.approvedCurrent || version.skill_id !== skill.id) continue
       const preference = preferences.get(skill.id)
       const enabled = preference === undefined ? defaultEnabled(skill.scope) : preference.enabled === 1
-      candidates.push({ skill, version, enabled, description: this.#description(version) })
+      candidates.push({ skill, version, enabled })
     }
     const byName = new Map<string, Candidate[]>()
     for (const candidate of candidates) {
@@ -462,7 +479,7 @@ export class SkillService {
     return {
       skillId: candidate.skill.id,
       name: candidate.skill.name,
-      description: candidate.description,
+      description: this.#description(candidate.version),
       scope: candidate.skill.scope,
       state: state.state,
       enabled: candidate.enabled,
@@ -472,6 +489,36 @@ export class SkillService {
       ...(state.shadowedBy === undefined ? {} : { shadowedBy: state.shadowedBy }),
     }
   }
+}
+
+/**
+ * The names of the trusted bundled packages under one root.
+ *
+ * A bundled skill is a native `bundled` package; the product's create, install
+ * and seed paths use these names so a reviewed personal/common skill cannot
+ * replace the deployed meta skill in the native registry. The walk is bounded
+ * to the top level and skips a package whose `SKILL.md` cannot be read.
+ */
+function bundledSkillNamesFrom(dir: string): ReadonlySet<string> {
+  const names = new Set<string>()
+  let entries: Dirent[]
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return names
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const packageDir = join(dir, entry.name)
+    if (!existsSync(join(packageDir, 'SKILL.md'))) continue
+    try {
+      names.add(readSkillFrontmatter(packageDir).name)
+    } catch {
+      // A broken bundled package reserves no name; the deployment's loader
+      // reports the real failure.
+    }
+  }
+  return names
 }
 
 /** Every top-level directory under the seed root that carries a `SKILL.md`. */

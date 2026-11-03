@@ -11,6 +11,8 @@
  */
 import assert from 'node:assert/strict'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import fs from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -121,31 +123,60 @@ test('the package reader refuses symlinks, bad names, over-budget bodies and uns
   const longDescription = writePackage(join(temp('skill-pkg-desc2-'), 'pkg'), { description: '海'.repeat(501) })
   assert.throws(() => readSkillPackage(longDescription), /500/u)
 
-  const longBody = writePackage(join(temp('skill-pkg-body-'), 'pkg'), { body: '海'.repeat(8001) })
-  assert.throws(() => readSkillPackage(longBody), /8000/u)
+  const longBody = writePackage(join(temp('skill-pkg-body-'), 'pkg'), { body: '海'.repeat(7701) })
+  assert.throws(() => readSkillPackage(longBody), /7700/u)
+
+  const atBudget = writePackage(join(temp('skill-pkg-body-max-'), 'pkg'), { body: '海'.repeat(7700) })
+  assert.equal(readSkillPackage(atBudget).coreCharacters, 7700, 'the budget is inclusive')
 
   const backslash = writePackage(join(temp('skill-pkg-path-'), 'pkg'), { files: { 'a\\b.md': 'x' } })
   assert.throws(() => readSkillPackage(backslash), /separators/u)
 
-  const hostPath = writePackage(join(temp('skill-pkg-host-'), 'pkg'), {
-    files: { 'references/notes.md': 'copy /home/alice/private/file.txt before running' },
-  })
-  assert.throws(() => readSkillPackage(hostPath), /host home path/u,
-    'a package must not carry an author-machine absolute path')
+  const hostPaths = [
+    ['/root/private/file.txt', /absolute POSIX path/u],
+    ['C:\\Users\\alice\\file.txt', /Windows drive path/u],
+    ['C:/Users/alice/file.txt', /Windows drive path/u],
+    ['Run ~/scripts/build.sh first.', /home-directory prefix/u],
+    ['Lives at ~', /home-directory prefix/u],
+    ['Copy $HOME/.config/x', /home-directory prefix/u],
+    ['Copy ${HOME}/.config/x', /home-directory prefix/u],
+    ['\\\\server\\share\\notes.md', /UNC path/u],
+    ['//home/alice/private', /UNC path/u],
+    ['file:///root/private', /local file URL/u],
+    ['／root／private', /absolute POSIX path/u],
+  ]
+  for (const [content, pattern] of hostPaths) {
+    const hostPath = writePackage(join(temp('skill-pkg-host-'), 'pkg'), {
+      files: { 'references/notes.md': content },
+    })
+    assert.throws(() => readSkillPackage(hostPath), pattern,
+      `a package must not carry a host path: ${JSON.stringify(content)}`)
+  }
 
-  // A deployment-neutral path or an ordinary URL is not a host home path.
+  // Relative package paths, shebangs, ordinary URLs and an approximate "~" in
+  // prose are not host paths.
   const neutral = writePackage(join(temp('skill-pkg-neutral-'), 'pkg'), {
-    files: { 'references/notes.md': 'See https://example.com/docs/workflow and references/guide.md.' },
+    files: {
+      'references/notes.md': 'See https://example.com/home/alice/docs/workflow and references/guide.md.\n'
+        + 'A run takes ~5 seconds. Use either/or and 24/7 wording.',
+      'scripts/check.sh': '#!/bin/sh\nexit 0\n',
+    },
   })
   assert.equal(readSkillPackage(neutral).name, 'demo-skill')
+
+  const urlPath = writePackage(join(temp('skill-pkg-url-home-'), 'pkg'), {
+    files: { 'references/notes.md': 'Reference: https://example.com/home/alice/private/docs' },
+  })
+  assert.equal(readSkillPackage(urlPath).name, 'demo-skill',
+    'a URL path is not an author-machine path')
 })
 
-test('the store creates schema v2 in WAL and enforces the active identity rule', async () => {
+test('the store creates schema v3 in WAL and enforces the active identity rule', async () => {
   const { SkillStore } = await import('../backend/skill-creator/dist/store.js')
   const dbPath = join(temp('skill-store-'), 'skill.sqlite')
   const store = new SkillStore({ path: dbPath })
   try {
-    assert.equal(store.schemaVersion(), 2)
+    assert.equal(store.schemaVersion(), 3)
     const facts = new DatabaseSync(dbPath)
     try {
       assert.equal(String(facts.prepare('PRAGMA journal_mode').get().journal_mode).toLowerCase(), 'wal')
@@ -153,7 +184,7 @@ test('the store creates schema v2 in WAL and enforces the active identity rule',
         facts.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row => row.name),
         ['meta', 'skill', 'skill_creation_job', 'skill_learning_state', 'skill_reuse_signal',
           'skill_user_preference', 'skill_version'],
-        'schema v2 is the runtime subset plus the three background-learning tables',
+        'schema v3 is the runtime subset plus the three background-learning tables',
       )
       // The partial expression index is the authority for the nullable owner key.
       facts.prepare("INSERT INTO skill (name, scope, owner_short_id, created_by, updated_by, created_at, updated_at) VALUES ('common-one', 2, NULL, 0, 0, 0, 0)").run()
@@ -278,4 +309,104 @@ test('the creation writer stages a complete package and refuses unsafe or confli
   assert.throws(() => writeSkillPackage(join(temp('skill-write-prefix-'), 'pkg'), [
     { path: 'scripts', content: 'x' }, { path: 'scripts/run.sh', content: 'y' },
   ]), /both a file and a directory/u)
+})
+
+test('the bundled Skill Creator fits the pruner budget and keeps the whole contract', async () => {
+  const { readSkillPackage } = await import('../backend/skill-creator/dist/package.js')
+  const directory = join(import.meta.dirname, '..', 'backend', 'skill-creator', 'bundled', 'skill-creator')
+  const parsed = readSkillPackage(directory)
+  assert.equal(parsed.name, 'skill-creator')
+  const bodyCharacters = [...parsed.body].length
+  assert.ok(bodyCharacters < 7400,
+    `the bundled core body is ${bodyCharacters} characters; it must stay under 7400 so the rendered result fits the 8192 pruner threshold`)
+  // The native render wrapper is about 302 characters plus the resource-base
+  // path; a realistic deployment path is under 80 characters.
+  assert.ok(bodyCharacters + 302 + 80 < 8192, 'the rendered bundled skill must stay under the pruner threshold')
+  for (const heading of [
+    '# Skill Creator', '## When to use it', '## Workflow or fact', '## Package shape',
+    '## Create through skill_manage', '## Scenarios and evidence',
+    '## Revisions, rollback and growth', '### Growth confirmation', '### Rollback',
+    '## Review before use',
+  ]) {
+    assert.ok(parsed.body.includes(heading), `the bundled contract keeps the heading ${heading}`)
+  }
+  for (const phrase of ['parentVersionId', 'targetBenefit', 'complete rewrite', '110%', '确认增长', 'skill_manage rollback']) {
+    assert.ok(parsed.body.includes(phrase), `the bundled contract keeps ${phrase}`)
+  }
+})
+
+test('bundledSkillNames is read once at construction and tolerates a missing or broken root', async () => {
+  const { SkillService } = await import('../backend/skill-creator/dist/service.js')
+  const bundled = temp('skill-bundled-')
+  writePackage(join(bundled, 'alpha'), { name: 'alpha', description: 'Use when testing alpha.' })
+  writePackage(join(bundled, 'beta'), { name: 'beta', description: 'Use when testing beta.' })
+  mkdirSync(join(bundled, 'plain'), { recursive: true })
+  writeFileSync(join(bundled, 'plain', 'README.md'), 'not a skill package')
+  mkdirSync(join(bundled, 'broken'), { recursive: true })
+  writeFileSync(join(bundled, 'broken', 'SKILL.md'), 'not frontmatter')
+
+  const service = new SkillService({}, { root: temp('skill-bundled-root-'), bundledSkillsDir: bundled })
+  assert.deepEqual([...service.bundledSkillNames()].sort(), ['alpha', 'beta'],
+    'only packages carrying a readable SKILL.md name are listed')
+
+  // The set is cached once: a package added after construction is not picked up.
+  writePackage(join(bundled, 'gamma'), { name: 'gamma', description: 'Use when testing gamma.' })
+  assert.deepEqual([...service.bundledSkillNames()].sort(), ['alpha', 'beta'], 'the bundled name set is cached')
+
+  const missing = new SkillService({}, {
+    root: temp('skill-bundled-root-'), bundledSkillsDir: join(bundled, 'does-not-exist'),
+  })
+  assert.equal(missing.bundledSkillNames().size, 0, 'a missing bundled root answers an empty set')
+})
+
+test('the read-only hot path derives directories without reading descriptions', async () => {
+  const { SkillService } = await import('../backend/skill-creator/dist/service.js')
+  const root = temp('skill-service-lazy-')
+  const skills = []
+  const versions = new Map()
+  for (const [skillId, name] of [[1, 'alpha'], [2, 'beta']]) {
+    writePackage(join(root, 'versions', String(skillId), 'pkg'), {
+      name, description: `${name} description`,
+    })
+    skills.push({
+      id: skillId, name, scope: 1, owner_short_id: 7, current_version_id: skillId * 10, archived_at: null,
+    })
+    versions.set(skillId * 10, {
+      id: skillId * 10, skill_id: skillId, status: 3,
+      package_path: `versions/${skillId}/pkg`, manifest_hash: 'manifest-hash',
+    })
+  }
+  const store = {
+    preferences: () => [],
+    openDraftSkillIds: () => new Set(),
+    visibleIdentities: () => skills,
+    version: id => versions.get(id),
+  }
+  const service = new SkillService(store, { root, bundledSkillsDir: join(root, 'no-bundled-root') })
+
+  const reads = []
+  const original = fs.readFileSync
+  fs.readFileSync = function (path, ...args) {
+    if (String(path).endsWith('/SKILL.md')) reads.push(String(path))
+    return original.call(this, path, ...args)
+  }
+  syncBuiltinESMExports()
+  try {
+    const directories = service.readonlyVersionDirs(7)
+    assert.equal(directories.length, 2)
+    assert.equal(reads.length, 0, 'the read-only contribution must not read any description')
+
+    reads.length = 0
+    const catalog = service.catalog(7)
+    assert.deepEqual(catalog.map(item => item.description).sort(), ['alpha description', 'beta description'])
+    assert.equal(reads.length, 2, 'catalog reads exactly one description per winner')
+
+    reads.length = 0
+    const pool = service.pool(7)
+    assert.deepEqual(pool.map(item => item.description).sort(), ['alpha description', 'beta description'])
+    assert.equal(reads.length, 2, 'pool reads exactly one description per visible item')
+  } finally {
+    fs.readFileSync = original
+    syncBuiltinESMExports()
+  }
 })

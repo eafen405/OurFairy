@@ -19,7 +19,9 @@ import { tarGz, skillPackageEntries } from './helpers/tar-archive.mjs'
 
 const root = mkdtempSync(join(tmpdir(), 'ourfairy-skill-install-unit-'))
 const installModule = await import('../backend/skill-creator/dist/install.js')
-const { SkillInstall, extractSkillArchive, installBasesFromEnv, parseInstallAddress } = installModule
+const {
+  SkillInstall, assertFetchTarget, extractSkillArchive, installBasesFromEnv, installNetworkPolicyFromEnv, parseInstallAddress,
+} = installModule
 
 const SHA_ONE = 'a'.repeat(40)
 const SHA_TWO = 'b'.repeat(40)
@@ -27,8 +29,10 @@ const SHA_TWO = 'b'.repeat(40)
 let server
 let apiBase
 let directUrl
+let smallUrl
 let archiveOne
 let archiveTwo
+let smallArchive
 const requests = []
 let refSha = SHA_ONE
 let servedArchive = null
@@ -66,6 +70,10 @@ before(async () => {
     description: 'Use when running the installed demo.',
     extra: { 'references/guide.md': 'INSTALLED GUIDE TWO' },
   }))
+  smallArchive = tarGz(skillPackageEntries('demo', {
+    name: 'switch-demo',
+    description: 'Use when testing the private-network switch.',
+  }))
 
   server = http.createServer(async (incoming, response) => {
     const body = await bodyOf(incoming)
@@ -73,6 +81,21 @@ before(async () => {
     requests.push({ method: incoming.method, path: url.pathname, headers: incoming.headers, body })
     if (url.pathname === '/repos/acme/skills/commits/main') {
       json(response, 200, { sha: refSha })
+      return
+    }
+    if (url.pathname === '/redirect/metadata.tar.gz') {
+      response.writeHead(302, { location: 'http://169.254.169.254/latest/meta-data/' })
+      response.end()
+      return
+    }
+    if (url.pathname === '/redirect/file.tar.gz') {
+      response.writeHead(302, { location: 'file:///etc/passwd' })
+      response.end()
+      return
+    }
+    if (url.pathname === '/direct/small.tar.gz') {
+      response.writeHead(200, { 'content-type': 'application/gzip', 'content-length': smallArchive.byteLength })
+      response.end(smallArchive)
       return
     }
     if (url.pathname === `/acme/skills/tar.gz/${SHA_ONE}`) {
@@ -108,6 +131,7 @@ before(async () => {
   await once(server, 'listening')
   apiBase = `http://127.0.0.1:${server.address().port}`
   directUrl = `${apiBase}/direct/skill.tar.gz`
+  smallUrl = `${apiBase}/direct/small.tar.gz`
 })
 
 after(async () => {
@@ -234,7 +258,7 @@ describe('archive extraction', () => {
 describe('fetching a fixed package', () => {
   test('resolves a GitHub ref to a commit, downloads the commit tarball and records the source', async () => {
     refSha = SHA_ONE
-    const install = new SkillInstall({ root, maxBytes: 1024 * 1024, apiBase, codeloadBase: apiBase })
+    const install = new SkillInstall({ root, maxBytes: 1024 * 1024, apiBase, codeloadBase: apiBase, allowPrivateNetworks: true })
     const fetched = await install.fetch('https://github.com/acme/skills/tree/main/skills/demo')
     try {
       assert.equal(fetched.source.address, 'https://github.com/acme/skills/tree/main/skills/demo')
@@ -254,7 +278,7 @@ describe('fetching a fixed package', () => {
 
   test('a ref change after the fetch cannot rewrite the fetched package', async () => {
     refSha = SHA_ONE
-    const install = new SkillInstall({ root, maxBytes: 1024 * 1024, apiBase, codeloadBase: apiBase })
+    const install = new SkillInstall({ root, maxBytes: 1024 * 1024, apiBase, codeloadBase: apiBase, allowPrivateNetworks: true })
     const first = await install.fetch('github:acme/skills/skills/demo@main')
     try {
       const before = readFileSync(join(first.packageDir, 'references', 'guide.md'), 'utf8')
@@ -275,7 +299,7 @@ describe('fetching a fixed package', () => {
   })
 
   test('records the digest, ETag, Last-Modified and LICENSE of a direct archive', async () => {
-    const install = new SkillInstall({ root, maxBytes: 1024 * 1024, apiBase, codeloadBase: apiBase })
+    const install = new SkillInstall({ root, maxBytes: 1024 * 1024, apiBase, codeloadBase: apiBase, allowPrivateNetworks: true })
     const fetched = await install.fetch(directUrl)
     try {
       assert.equal(fetched.source.resolvedVersion, digestOf(servedArchive))
@@ -290,7 +314,7 @@ describe('fetching a fixed package', () => {
   })
 
   test('refuses an unsupported archive before any request and an oversized download before buffering it', async () => {
-    const install = new SkillInstall({ root, maxBytes: 1024, apiBase, codeloadBase: apiBase })
+    const install = new SkillInstall({ root, maxBytes: 1024, apiBase, codeloadBase: apiBase, allowPrivateNetworks: true })
     const before = requests.length
     await assert.rejects(install.fetch('https://example.invalid/demo.zip'), error =>
       error.code === 'skills/unsupported-archive')
@@ -318,5 +342,106 @@ describe('install bases', () => {
       OURFAIRY_GITHUB_API_BASE: 'http://127.0.0.1:9/api',
       OURFAIRY_GITHUB_CODELOAD_BASE: 'http://127.0.0.1:9/codeload',
     }), { apiBase: 'http://127.0.0.1:9/api', codeloadBase: 'http://127.0.0.1:9/codeload' })
+  })
+
+  test('the private-network switch is off unless explicitly set', () => {
+    assert.equal(installNetworkPolicyFromEnv({}).allowPrivateNetworks, false)
+    assert.equal(installNetworkPolicyFromEnv({ OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS: '0' }).allowPrivateNetworks, false)
+    assert.equal(installNetworkPolicyFromEnv({ OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS: 'yes' }).allowPrivateNetworks, false)
+    assert.equal(installNetworkPolicyFromEnv({ OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS: '1' }).allowPrivateNetworks, true)
+    assert.equal(installNetworkPolicyFromEnv({ OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS: 'true' }).allowPrivateNetworks, true)
+  })
+})
+
+describe('install network target checks', () => {
+  const strict = { allowPrivateNetworks: false }
+  const open = { allowPrivateNetworks: true }
+
+  test('refuses loopback, private, link-local, unique-local, multicast, unspecified and CGNAT targets', async () => {
+    for (const address of [
+      'http://127.0.0.1/demo.tar.gz',
+      'http://127.10.0.9/demo.tar.gz',
+      'http://10.0.0.1/demo.tar.gz',
+      'http://172.16.5.4/demo.tar.gz',
+      'http://192.168.1.1/demo.tar.gz',
+      'http://169.254.1.1/demo.tar.gz',
+      'http://100.64.0.1/demo.tar.gz',
+      'http://0.0.0.0/demo.tar.gz',
+      'http://224.0.0.1/demo.tar.gz',
+      'http://[::1]/demo.tar.gz',
+      'http://[::]/demo.tar.gz',
+      'http://[fc00::1]/demo.tar.gz',
+      'http://[fe80::1]/demo.tar.gz',
+      'http://[ff02::1]/demo.tar.gz',
+      'http://[::ffff:127.0.0.1]/demo.tar.gz',
+      'http://localhost/demo.tar.gz',
+    ]) {
+      await assert.rejects(assertFetchTarget(new URL(address), strict), error =>
+        error.code === 'skills/install-forbidden-target', `target must be refused: ${address}`)
+    }
+    // A public literal does not need the network and is accepted.
+    await assert.doesNotReject(assertFetchTarget(new URL('https://1.1.1.1/demo.tar.gz'), strict))
+  })
+
+  test('refuses every cloud metadata endpoint even when private networks are allowed', async () => {
+    for (const address of [
+      'http://169.254.169.254/latest/meta-data/',
+      'http://[fd00:ec2::254]/latest/meta-data/',
+      'http://[::ffff:169.254.169.254]/latest/meta-data/',
+      'http://100.100.100.200/latest/meta-data/',
+    ]) {
+      await assert.rejects(assertFetchTarget(new URL(address), open), error =>
+        error.code === 'skills/install-forbidden-target', `metadata target must stay refused: ${address}`)
+    }
+    // The switch still opens ordinary loopback and RFC 1918 targets.
+    await assert.doesNotReject(assertFetchTarget(new URL('http://10.1.2.3/demo.tar.gz'), open))
+    await assert.doesNotReject(assertFetchTarget(new URL('http://[::1]/demo.tar.gz'), open))
+  })
+
+  test('refuses a non-http(s) hop and an https-to-http downgrade', async () => {
+    for (const address of ['file:///etc/passwd', 'ftp://example.invalid/demo.tar.gz']) {
+      await assert.rejects(assertFetchTarget(new URL(address), strict), error =>
+        error.code === 'skills/invalid-address', `scheme must be refused: ${address}`)
+    }
+    await assert.rejects(
+      assertFetchTarget(new URL('http://1.1.1.1/demo.tar.gz'), strict, new URL('https://1.1.1.1/demo.tar.gz')),
+      error => error.code === 'skills/insecure-redirect' && /https-to-http/u.test(error.message),
+    )
+    await assert.doesNotReject(
+      assertFetchTarget(new URL('https://1.1.1.1/other.tar.gz'), strict, new URL('https://1.1.1.1/demo.tar.gz')))
+  })
+})
+
+describe('install fetch policy', () => {
+  test('a loopback target is refused unless the switch is on, and the switch can come from the environment', async () => {
+    const previous = process.env.OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS
+    try {
+      delete process.env.OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS
+      const strict = new SkillInstall({ root, maxBytes: 1024 * 1024, apiBase, codeloadBase: apiBase })
+      const before = requests.length
+      await assert.rejects(strict.fetch(smallUrl), error =>
+        error.code === 'skills/install-forbidden-target' && /reserved/u.test(error.message))
+      assert.equal(requests.length, before, 'a refused target is never requested')
+
+      process.env.OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS = '1'
+      const fromEnv = new SkillInstall({ root, maxBytes: 1024 * 1024, apiBase, codeloadBase: apiBase })
+      const fetched = await fromEnv.fetch(smallUrl)
+      try {
+        assert.equal(fetched.source.address, smallUrl)
+      } finally {
+        fetched.cleanup()
+      }
+    } finally {
+      if (previous === undefined) delete process.env.OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS
+      else process.env.OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS = previous
+    }
+  })
+
+  test('every redirect hop is re-checked: metadata and non-http locations stay refused', async () => {
+    const install = new SkillInstall({ root, maxBytes: 1024 * 1024, apiBase, codeloadBase: apiBase, allowPrivateNetworks: true })
+    await assert.rejects(install.fetch(`${apiBase}/redirect/metadata.tar.gz`), error =>
+      error.code === 'skills/install-forbidden-target' && /metadata/u.test(error.message))
+    await assert.rejects(install.fetch(`${apiBase}/redirect/file.tar.gz`), error =>
+      error.code === 'skills/invalid-address' && /http/u.test(error.message))
   })
 })

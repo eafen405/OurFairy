@@ -373,6 +373,13 @@
 | [300-learning](300-learning/README.md) | #300 后台学习：schema v2 三表（检测水位/冻结切点/认领、不可变复用信号与撤销行、所有者+任务键唯一创建认领）；1 秒 tick 的用户会话检测（阈值、静默、冻结切点、零信号推进水位、失败恢复同一子会话、完成只看持久 turn/end + 一次结构化提交）；有界材料投影；无 owner 的检测子会话只注册 `submit_signals`，任务键复用/语法与撤销；模糊证据一次独立审查，不确定不触发；两个独立会话达到门槛后原子认领，创建子会话只拥有有界证据读取/候选提交/验证执行/无改进工具，复用同一 Skill Creator、候选与验证路径；创建失败只重试认领；客户端复用既有待审提醒；`scripts/skill-acceptance.ts` 与 `npm run acceptance:skill`（`--plan` 无凭据运行，真实模型样本与调用/token 记录）。真实模型验收 2026-11-03 在 MiniMax-M3.1-Flash 上执行：8 个样本全量 8/8 通过（light 10 次 / deep 12 次，input 167,369 / output 56,774 token），验收中发现并修正了纯辅助工具区间误报（检测措辞 + 无工具/无可撤销信号的前置检查）与三个验收脚本缺陷（`maxEvents` 上限、turn 预算、同区间多信号的撤销匹配）。 |
 | [295-review](295-review/README.md) | #295 两轴复审修复与真实模型验收后续：共有技能可由法厄同创建修订与回滚、修订必须关联证据、移除模型可自填的 `license`；聊天 role 3 审核行按 `skill_manage` callId 配对（`stateVersion` 7），bash 伪造同形 JSON 不产生行；提醒只对后台候选与法厄同可见的共有提案；客户端文案入 stringResource；学习子会话装配/完成/重试去重为 `learning-child.ts`；`skill_learning_state` 去掉从未写入的 `deleted_at`（对齐 `maintenance_state`）；包根导出收窄；多个 skill 套件补 `OURFAIRY_MEMORY_MAINTENANCE_TURNS=50`。真实模型验收的最终全量与修复记录见本目录与 #300 证据。 |
 
+## Fairy Skill 系统：#295 对抗性 review 与修复轮
+
+| 目录 | 内容 |
+| --- | --- |
+| [295-adversarial-review](295-adversarial-review/README.md) | 实现后六视角对抗性 review（基线 `origin/main` 8a54c46、dsh d80522d2）：开发者/可维护性、并发可靠性、Fairy 模型侧体验、用户与 Android、红队安全完整性、外部成熟实现对照。合并报告含 P0/P1/P2 分级、现状锚定、交叉验证的真实问题（审核自批/外部内容注入链、创建无限重试、信号与水位非原子、revision 复用绕过、待审入口不触发回合、后台提醒默认不可见、面板信息过度暴露、bundled 元技能名可遮蔽、SSRF/来源卫生等）、需要法厄同拍板的决策清单、值得保留的设计与原始报告索引。原始六份报告不入库（运行时输出按惯例放 work/tmp）。 |
+| [295-fix-round](295-fix-round/README.md) | 2026-11-03 修复轮：按用户拍板（审核按来源分级——个人显式创建验证后可直批，其余来源与共有候选必须带展示后用户消息证据 `approvalMessageId`；不默认关网；不做 Fairy 自禁用）修复 review 的 P0/P1。落地：来源分级批准与 schema v3（approval_message_id、growth 确认 partial unique、learning attempts、revokes 索引）、不可信内容围栏、revision 内容变化强制真跑、bundled 名称保留、发布崩溃对账与启动恢复、创建 claim attempts 上限/指数退避/terminal、检测 give-up 持久化、信号+水位单事务、验证失败不 settle、settle 前重查信号、child 丢失恢复、tick 单飞与事件驱动、拒绝历史去重、安装 SSRF/重定向私网与元数据拒绝、来源卫生扩展、memory watch 谓词对齐、文件热路径去 description 读盘、bundled 正文压缩与 7700 正文上限；`/skills/review-open` 现在真正触发一次审核回合。Android 仅完成 JDK/SDK/Gradle 环境准备（`./gradlew test lintDebug` 通过）。已知限制见目录 README（DNS rebinding、旧 7701–8000 正文兼容、terminal pending 草稿、give-up 重开成本、1:N 全局准入留 #110）。 |
+
 ## 界面微调（#215/#217/#218/#239/#255/#290/#291/#292）
 
 | 目录 | 内容 |

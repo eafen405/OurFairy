@@ -57,7 +57,7 @@ import type {} from '@ourfairy/dsh-spaces'
 
 export const name = 'ourfairy-skill-creator'
 export const inject = ['skills', 'agents', 'tools', 'identity', 'webServer', 'connection', 'ourfairySpaces',
-  'sessionPersistence', 'sessionQuery', 'ourfairySessions', 'ourfairyChatRuntime']
+  'sessionPersistence', 'sessionQuery', 'ourfairySessions', 'ourfairyChatRuntime', 'systemPrompt']
 
 /**
  * The row's configuration.
@@ -85,6 +85,10 @@ export const Config = z.object({
   learningProvider: z.string().min(1).default('minimax-cn').volatile(),
   learningMaxMaterialChars: z.natural().default(12000),
   learningMaxTurns: z.natural().default(4),
+  // The creation-claim retry ceiling: an exhausted claim settles as terminal
+  // instead of retrying the same evidence forever (the detection child's own
+  // budget is learningMaxTurns).
+  learningCreationAttempts: z.natural().min(1).max(20).default(5),
   verifyTimeoutMs: z.natural().default(120_000),
   installMaxBytes: z.natural().default(10 * 1024 * 1024),
 })
@@ -101,6 +105,7 @@ export type SkillCreatorConfig = {
   readonly learningProvider?: LearningField
   readonly learningMaxMaterialChars?: LearningField
   readonly learningMaxTurns?: LearningField
+  readonly learningCreationAttempts?: number
   readonly installMaxBytes?: number
 }
 
@@ -121,6 +126,7 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
     learningProvider: config.learningProvider,
     learningMaxMaterialChars: config.learningMaxMaterialChars,
     learningMaxTurns: config.learningMaxTurns,
+    learningCreationAttempts: config.learningCreationAttempts,
   })
   learningSettings()
 
@@ -135,6 +141,13 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
   const notifications = new SkillNotifications(store)
   const providers = new SkillProviders(service)
   const logger = ctx.logger('ourfairy-skill-creator')
+  // Repair the publish crash window and interrupted staging before any request
+  // or background engine can read a pending row (see SkillCreation.reconcile).
+  const reconciliation = creation.reconcile()
+  if (reconciliation.tmpRemoved > 0 || reconciliation.pendingRecovered > 0 || reconciliation.pendingSettled > 0) {
+    logger.info(`ourfairy-skill-creator: boot reconciliation removed ${String(reconciliation.tmpRemoved)} staging, `
+      + `recovered ${String(reconciliation.pendingRecovered)}, settled ${String(reconciliation.pendingSettled)} broken pending candidate(s)`)
+  }
   const creationEngine = new SkillCreationEngine(ctx, store, creation, service, {
     settings: learningSettings,
     log: (level, message) => { if (level === 'info') logger.info(message); else logger.warn(message) },

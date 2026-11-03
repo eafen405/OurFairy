@@ -1,29 +1,33 @@
 /**
- * The review-entry seam: one system-context candidate reference appended to the
- * caller's primary session (#297).
+ * The review-entry seam: one system-context candidate reference delivered to
+ * the caller's primary session, followed by one real review turn (#297, #295
+ * review E1).
  *
  * The pending entry on the Skills page must land in the user's own main
  * conversation without pretending the user typed the reference. This module
- * appends exactly one durable `user/message` whose producer source is
+ * delivers exactly one durable `user/message` whose producer source is
  * `skill-review` and whose form is `instructions`; the chat transcript fold
  * ignores every non-`user` source, so it is not a user bubble, while the model
- * sees ordinary user-role context. `appendOnce` makes the append idempotent by
- * candidate, so opening the same pending item twice does not stack references.
+ * sees ordinary user-role context. The delivery is what starts the turn: the
+ * user no longer has to send a message of their own before the model inspects
+ * the candidate.
  *
- * The source fields are the review identity: the candidate version and the
- * manifest hash. A later candidate (a new draft) is a different reference.
+ * The trigger follows the delivery, not the click: only a call that actually
+ * delivered a new reference starts a turn. Opening the same pending item twice
+ * therefore neither stacks references nor starts a second review turn; a new
+ * draft is a new version id and is a different reference. The source fields are
+ * the review identity: the candidate version and the manifest hash.
  *
  * @module @ourfairy/dsh-skill-creator/src/review-open
  */
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Context } from '@deepseek-ai/cordis'
-import type { Session } from '@deepseek-ai/dsh-session'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SkillCreation } from './creation.js'
 // Type-only: the product services this seam calls, and the message-source map
 // it extends. They add no runtime dependency beyond the rows themselves.
 import type {} from '@ourfairy/dsh-chat'
 import type {} from '@ourfairy/dsh-sessions'
-import type {} from '@deepseek-ai/dsh-llm'
 
 /** The producer-owned source of one review-entry message. */
 export interface SkillReviewSource {
@@ -47,11 +51,14 @@ export function reviewEntryText(target: { readonly name: string; readonly versio
 }
 
 /**
- * Append the candidate reference to the caller's fixed primary session once.
+ * Deliver the candidate reference to the caller's fixed primary session once
+ * and start that session's review turn.
  *
  * The caller must be allowed to review the candidate: the creation module's one
  * visibility function runs first, so a version id cannot become a reference in
- * someone else's conversation.
+ * someone else's conversation. The delivery itself is the turn trigger, and the
+ * dedupe reads the same reference: a second open of the same candidate appends
+ * nothing and starts no second turn.
  *
  * @returns the primary session id the client should open.
  */
@@ -71,13 +78,13 @@ export async function appendReviewEntry({ ctx, creation, shortId, isAdmin, versi
     versionId: target.versionId,
     manifestHash: target.manifestHash,
   }
-  await ctx.ourfairyChatRuntime.appendOnce(header.id, events => events.find(event => {
-    if (event.type !== 'user/message') return false
-    const eventSource = event.data.source as { kind?: unknown; versionId?: unknown }
-    return eventSource.kind === 'skill-review' && eventSource.versionId === versionId
-  }), (session: Session) => session.append('user/message', createUserMessage({
+  const isReference = (message: UserMessage): boolean => {
+    const messageSource = message.source as { kind?: unknown; versionId?: unknown }
+    return messageSource.kind === 'skill-review' && messageSource.versionId === versionId
+  }
+  await ctx.ourfairyChatRuntime.promptOnce({ shortId }, header.id, isReference, createUserMessage({
     content: [{ type: 'text', text }],
     source,
-  }), { surfaceOp: 'append' }))
+  }))
   return { sessionId: header.id }
 }

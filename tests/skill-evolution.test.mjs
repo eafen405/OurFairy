@@ -12,9 +12,9 @@
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { once } from 'node:events'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { after, before, describe, test } from 'node:test'
 import { describeRun, httpJson, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
@@ -193,10 +193,24 @@ function packageFiles(name, { description = 'Use when running the reusable workf
 /** The shared verification scenario; reads the package copy it was given. */
 const SCENARIO = { name: 'reads the packaged reference', command: 'test -f references/guide.md && grep -q GUIDE references/guide.md', uses: ['references/guide.md'] }
 
-/** Approve one pending candidate as its owner, optionally citing a growth confirmation. */
+/**
+ * Approve one pending revision/rollback candidate after a real user decision.
+ *
+ * A revision or rollback is source_type 3/4, so the approval needs the reviewing
+ * user's own message sent after the deterministic inspect display. When a
+ * growth confirmation is cited the test already inspected the candidate before
+ * the user replied `确认增长`; re-inspecting here would make that confirmation
+ * stale, so only the no-confirmation path opens its own display.
+ */
 async function approve(versionId, growthConfirmMessageId) {
+  if (growthConfirmMessageId === undefined) {
+    const display = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId })
+    assert.equal(display.isError, false, display.text)
+  }
+  const evidence = await sendUserMessage(alice, sessionAlice, '批准')
   return callTool(alice, sessionAlice, 'skill_manage', {
     action: 'review', versionId, decision: 'approve',
+    approvalMessageId: evidence.messageId,
     ...(growthConfirmMessageId === undefined ? {} : { growthConfirmMessageId }),
   })
 }
@@ -505,9 +519,7 @@ describe('revision candidates', () => {
       inspect.value.display)
     assert.ok(inspect.value.display.includes('✔ changing check: grep -q NEW references/changing.md → exit 0'), inspect.value.display)
 
-    const approved = await callTool(alice, sessionAlice, 'skill_manage', {
-      action: 'review', versionId: revision.value.versionId, decision: 'approve',
-    })
+    const approved = await approve(revision.value.versionId)
     assert.equal(approved.isError, false, 'verification that is partly reused still authorises approval: ' + approved.text)
     assert.equal(versionOf(base.versionId).status, 4)
     assert.equal(versionOf(revision.value.versionId).status, 3)
@@ -801,9 +813,19 @@ describe('atomic version switching and the pool revision state', () => {
       scenarios: [SCENARIO],
     })
     assert.equal(second.isError, false, second.text)
+    // Both decisions have real evidence from their own session; only one can
+    // publish because both name the same parent version.
+    const secondDisplay = await callTool(alice, sessionAliceSecond, 'skill_manage', {
+      action: 'inspect', versionId: second.value.versionId,
+    })
+    assert.equal(secondDisplay.isError, false, secondDisplay.text)
+    const secondEvidence = await sendUserMessage(alice, sessionAliceSecond, '批准')
     const [firstApproval, secondApproval] = await Promise.all([
       approve(revision.value.versionId),
-      callTool(alice, sessionAliceSecond, 'skill_manage', { action: 'review', versionId: second.value.versionId, decision: 'approve' }),
+      callTool(alice, sessionAliceSecond, 'skill_manage', {
+        action: 'review', versionId: second.value.versionId, decision: 'approve',
+        approvalMessageId: secondEvidence.messageId,
+      }),
     ])
     const winners = [firstApproval, secondApproval].filter(result => result.isError === false)
     const losers = [firstApproval, secondApproval].filter(result => result.isError === true)
@@ -994,5 +1016,198 @@ describe('rollback', () => {
     assert.match(loaded.text, /110%/u)
     assert.match(loaded.text, /确认增长/u)
     assert.match(loaded.text, /skill_manage rollback/u)
+  })
+})
+
+describe('source-graded approval evidence', () => {
+  test('a revision cannot be approved without the user\'s own post-display message', async () => {
+    const base = await publishNewSkill('approval-grade', { bodyLength: 1000 })
+    const revision = await createRevision('approval-grade', base.versionId, {
+      bodyLength: 1090, benefit: 'recover the failing branch',
+    })
+    assert.equal(revision.isError, false, revision.text)
+    const versionId = revision.value.versionId
+
+    // A display exists, but the model still cannot approve on its own.
+    const inspect = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId })
+    assert.equal(inspect.isError, false, inspect.text)
+    assert.equal(inspect.value.review.approval.required, true, 'a revision needs user approval evidence')
+    const bare = await callTool(alice, sessionAlice, 'skill_manage', { action: 'review', versionId, decision: 'approve' })
+    assert.equal(bare.isError, true, 'a bare approval is refused')
+    assert.match(bare.text, /skills\/approval-confirmation-required/u, bare.text)
+    assert.equal(versionOf(versionId).status, 0, 'the refused approval leaves the candidate pending')
+
+    // A message sent before the latest display cannot be the evidence.
+    const early = await sendUserMessage(alice, sessionAlice, 'early decision')
+    await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId })
+    const stale = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'review', versionId, decision: 'approve', approvalMessageId: early.messageId,
+    })
+    assert.equal(stale.isError, true, 'a message from before the latest display is stale')
+    assert.match(stale.text, /skills\/approval-confirmation-invalid/u, stale.text)
+
+    // A forged id is refused.
+    const forged = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'review', versionId, decision: 'approve', approvalMessageId: 'not-a-real-message-id',
+    })
+    assert.equal(forged.isError, true)
+    assert.match(forged.text, /skills\/approval-confirmation-invalid/u, forged.text)
+
+    // Another user's real message id cannot be borrowed.
+    const otherUser = await sendUserMessage(bob, sessionBob, 'approve it')
+    const borrowed = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'review', versionId, decision: 'approve', approvalMessageId: otherUser.messageId,
+    })
+    assert.equal(borrowed.isError, true)
+    assert.match(borrowed.text, /skills\/approval-confirmation-invalid/u, borrowed.text)
+
+    // The user's own post-display message approves and is recorded on the row.
+    const decision = await sendUserMessage(alice, sessionAlice, '批准')
+    const approved = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'review', versionId, decision: 'approve', approvalMessageId: decision.messageId,
+    })
+    assert.equal(approved.isError, false, approved.text)
+    assert.equal(versionOf(versionId).status, 3)
+    assert.equal(versionOf(versionId).approval_message_id, decision.messageId,
+      'the approval names the user message it was justified with')
+  })
+})
+
+describe('changed-content verification', () => {
+  test('a changed revision runs a scenario again even when every scenario would be reusable', async () => {
+    const scenarios = [{ name: 'no dependencies', command: 'true' }]
+    const base = await publishNewSkill('reuse-force', {
+      bodyLength: 1000,
+      files: packageFiles('reuse-force', { bodyLength: 1000 }),
+      scenarios,
+    })
+    assert.equal(JSON.parse(versionOf(base.versionId).verification).executed.length, 1)
+
+    const revision = await createRevision('reuse-force', base.versionId, {
+      bodyLength: 1090,
+      files: packageFiles('reuse-force', { bodyLength: 1090 }),
+      scenarios,
+    })
+    assert.equal(revision.isError, false, revision.text)
+    const report = JSON.parse(versionOf(revision.value.versionId).verification)
+    assert.deepEqual(report.executed.map(record => record.name), ['no dependencies'],
+      'the changed body forces a real execution of the declared scenario')
+    assert.deepEqual(report.reused, [], 'no parent run is reused for changed content')
+
+    const inspect = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: revision.value.versionId })
+    assert.equal(inspect.isError, false, inspect.text)
+    assert.ok(inspect.value.display.includes('验证：实际执行 1，复用 0'), inspect.value.display)
+  })
+
+  test('the review gate refuses a pre-fix reuse-only report for changed content', async () => {
+    const base = await publishNewSkill('reuse-gate', { bodyLength: 1000 })
+    const revision = await createRevision('reuse-gate', base.versionId, { bodyLength: 1090, benefit: 'recover the branch' })
+    assert.equal(revision.isError, false, revision.text)
+
+    // Reconstruct the pre-fix shape: only the parent's records, no execution.
+    const parentReport = JSON.parse(versionOf(base.versionId).verification)
+    const reuseOnly = {
+      complete: true,
+      executed: [],
+      reused: parentReport.executed.map(record => ({ ...record, reusedFrom: base.versionId })),
+      unexecuted: [],
+      failed: [],
+      comparisons: [],
+      environment: parentReport.environment,
+      ranAt: Date.now(),
+    }
+    const database = new DatabaseSync(databasePath)
+    try {
+      database.prepare('UPDATE skill_version SET verification = ? WHERE id = ?').run(JSON.stringify(reuseOnly), revision.value.versionId)
+    } finally {
+      database.close()
+    }
+    const refused = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'review', versionId: revision.value.versionId, decision: 'approve',
+    })
+    assert.equal(refused.isError, true, 'new content cannot be approved on reused parent evidence')
+    assert.match(refused.text, /skills\/verification-incomplete/u, refused.text)
+    assert.equal(versionOf(revision.value.versionId).status, 0)
+  })
+})
+
+describe('growth confirmation is consumed once', () => {
+  test('one 确认增长 message cannot settle two growth candidates', async () => {
+    const baseA = await publishNewSkill('growth-once-a', { bodyLength: 1000, marker: 'A1' })
+    const first = await createRevision('growth-once-a', baseA.versionId, {
+      bodyLength: 1110, marker: 'A2', benefit: 'add the recovery branch',
+    })
+    const baseB = await publishNewSkill('growth-once-b', { bodyLength: 1000, marker: 'B1' })
+    const second = await createRevision('growth-once-b', baseB.versionId, {
+      bodyLength: 1110, marker: 'B2', benefit: 'add the recovery branch',
+    })
+    assert.equal(first.isError, false, first.text)
+    assert.equal(second.isError, false, second.text)
+    assert.equal(versionOf(first.value.versionId).growth_exceeded, 1)
+    assert.equal(versionOf(second.value.versionId).growth_exceeded, 1)
+
+    // Both candidates were displayed, then the user confirms once.
+    await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: first.value.versionId })
+    await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: second.value.versionId })
+    const confirmation = await sendUserMessage(alice, sessionAlice, '确认增长')
+
+    const approvedFirst = await approve(first.value.versionId, confirmation.messageId)
+    assert.equal(approvedFirst.isError, false, approvedFirst.text)
+    assert.equal(versionOf(first.value.versionId).growth_confirm_message, confirmation.messageId)
+
+    const reused = await approve(second.value.versionId, confirmation.messageId)
+    assert.equal(reused.isError, true, 'one confirmation message approves one growth candidate only')
+    assert.match(reused.text, /skills\/growth-confirmation-used/u, reused.text)
+    assert.equal(versionOf(second.value.versionId).status, 0, 'the second candidate stays pending')
+    assert.equal(versionOf(second.value.versionId).growth_confirm_message, null)
+  })
+})
+
+describe('publish crash reconciliation', () => {
+  test('a displaced pending candidate is moved back and a content-less one is settled at boot', async () => {
+    // A: a kill between the approval rename and the transaction leaves the
+    // pending row pointing at candidates/ while the bytes sit in versions/.
+    const displaced = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' },
+      files: packageFiles('crash-recover', { bodyLength: 1000 }),
+      scenarios: [{ name: 'ok', command: 'true' }],
+    })
+    assert.equal(displaced.isError, false, displaced.text)
+    const displacedDir = packageDirectory(displaced.value.versionId)
+    const versionsRoot = join(skillRoot, 'versions', String(displaced.value.skillId))
+    mkdirSync(versionsRoot, { recursive: true })
+    renameSync(displacedDir, join(versionsRoot, basename(displacedDir)))
+    assert.ok(!existsSync(displacedDir))
+
+    // B: the bytes are gone entirely, so the row can never be reviewed.
+    const lost = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' },
+      files: packageFiles('crash-lost', { bodyLength: 1000 }),
+      scenarios: [{ name: 'ok', command: 'true' }],
+    })
+    assert.equal(lost.isError, false, lost.text)
+    rmSync(packageDirectory(lost.value.versionId), { recursive: true, force: true })
+
+    // Stale staging from an interrupted write must not survive the reboot.
+    const staleStaging = join(skillRoot, 'tmp', 'crashed-staging')
+    mkdirSync(staleStaging, { recursive: true })
+
+    await stop()
+    await start()
+
+    const recovered = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'inspect', versionId: displaced.value.versionId,
+    })
+    assert.equal(recovered.isError, false, `the displaced candidate is inspectable again: ${recovered.text}`)
+    assert.equal(versionOf(displaced.value.versionId).package_path, `candidates/${basename(displacedDir)}`,
+      'the row keeps its candidate path')
+    assert.ok(existsSync(packageDirectory(displaced.value.versionId)), 'the boot reconciliation moved it back')
+    assert.ok(!existsSync(staleStaging), 'the interrupted staging directory is removed')
+
+    const broken = versionOf(lost.value.versionId)
+    assert.equal(broken.status, 2, 'a pending candidate whose bytes are gone is settled as rejected')
+    assert.match(broken.review_note, /启动对账/u)
+    const gone = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: lost.value.versionId })
+    assert.equal(gone.isError, true, 'a settled broken candidate cannot be inspected')
   })
 })

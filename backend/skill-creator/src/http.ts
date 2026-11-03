@@ -74,7 +74,7 @@ export function skillHandlers({ service, creation, lifecycle, notifications, aut
   readonly fence: (request: IncomingMessage) => unknown
   readonly invalidateOwner: (shortId: number) => void
   readonly invalidateAll: () => void
-  /** Append the candidate reference to the caller's primary session, once. */
+  /** Deliver the candidate reference to the caller's primary session once and start its review turn. */
   readonly openReview: (shortId: number, isAdmin: boolean, versionId: number) => Promise<{ readonly sessionId: string }>
 }): Map<string, SkillHandler> {
   const callerOf = (request: IncomingMessage): RouteCaller => {

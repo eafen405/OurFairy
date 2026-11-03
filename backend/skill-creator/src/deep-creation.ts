@@ -9,10 +9,17 @@
  * revision), runs its real verification, or explicitly reports no improvement.
  *
  * The claim is the unit of retry. A failed creation keeps its claim and child
- * and is retried independently of any detection watermark; detection keeps
- * running and its own failures keep their own intervals. A restart rebuilds
- * every claim from the database: running jobs resume their persisted child,
- * failed jobs are retried, and new threshold groups are claimed again.
+ * and is retried after an exponential backoff, bounded by the configured
+ * attempt budget (`learningCreationAttempts`); an exhausted claim enters the
+ * explicit `terminal` state and is never retried automatically again. A draft
+ * whose verification failed or never completed stays pending for the user to
+ * reject (the system never silently decides a user-visible candidate), and the
+ * claim does not keep producing side effects. Detection keeps running and its
+ * own failures keep their own intervals. A restart rebuilds every claim from
+ * the database: running jobs resume their persisted child, due failed jobs are
+ * retried, terminal claims are left alone, and one threshold scan claims
+ * evidence that arrived while the process was down. New evidence normally
+ * claims directly through `onSignals`.
  *
  * The child is an ordinary dsh Agent with `parentSession` naming the newest
  * contributing source, `origin: 'subagent'` and the learning preset, and no
@@ -29,9 +36,18 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import { readSkillFrontmatter } from './package.js'
 import { ChildRuns, learningChildSetup, successfulCalls, turnCompleted } from './learning-child.js'
-import { CREATION_POLICY, SKILL_LEARNING_PRESET } from './learning-policy.js'
+import { CREATION_POLICY, SKILL_LEARNING_PRESET, creationRetryDelayMs } from './learning-policy.js'
 import { assembleLearningMaterial } from './material.js'
-import { CREATION_JOB_STATE, SIGNAL_STATUS, type CreationJobRow, type SignalRow, type SkillStore } from './store.js'
+import {
+  CREATION_JOB_STATE,
+  SIGNAL_STATUS,
+  SKILL_SCOPE,
+  SkillStoreError,
+  VERSION_STATUS,
+  type CreationJobRow,
+  type SignalRow,
+  type SkillStore,
+} from './store.js'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { Context } from '@deepseek-ai/cordis'
 import type { AgentHandle } from '@deepseek-ai/dsh-agent'
@@ -46,10 +62,8 @@ import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-tools'
 
-/** How often the engine retries failed claims and looks for new threshold groups. */
+/** How often the engine retries due failed claims. New evidence is event-driven. */
 const TICK_MS = 1_000
-/** How long a failed creation claim waits before its child is resumed. */
-const RETRY_MS = 2_000
 
 /** The task message one creation child receives; the evidence is read through its own tool. */
 const CREATION_TASK_MESSAGE = '后台技能创建任务。请先用 read_evidence 读取贡献证据，再决定：提交完整技能候选并用 run_verification 验证，或调用 finish_no_improvement 明确说明没有改进。不要创建重复候选。'
@@ -133,35 +147,79 @@ export class SkillCreationEngine {
     }
   }
 
-  /** Retry due failed claims and claim every threshold group no claim owns. */
+  /**
+   * Retry the failed claims whose backoff is due.
+   *
+   * New threshold groups no longer need a poll: the learning engine calls
+   * {@link evaluate} through `onSignals` right after an interval settles. The
+   * tick therefore only spends the retry budget of claims that already exist,
+   * and never relaunches a terminal (attempt-exhausted) claim.
+   */
   async #tick(): Promise<void> {
     if (this.#disposed) return
     for (const job of this.#store.creationJobs()) {
       if (job.state !== CREATION_JOB_STATE.failed || this.#children.has(job.id)) continue
+      if (this.#attemptsSpent(job)) {
+        // A crash between the failure write and the terminal write converges
+        // here; nothing relaunches an exhausted claim.
+        this.#retireTerminal(job)
+        continue
+      }
       if ((this.#children.retryAt(job.id) ?? job.next_retry_at ?? 0) > Date.now()) continue
       this.#recovered.add(job.id)
       this.#launch(job)
     }
-    for (const candidate of this.#store.creationCandidates()) {
-      this.#claim(candidate.ownerShortId, candidate.taskKey)
-    }
   }
 
-  /** On boot, rebuild every claim from durable state before claiming anything new. */
+  /**
+   * On boot, rebuild every claim from durable state, then scan the threshold
+   * once.
+   *
+   * A restart cannot rely on `onSignals` for evidence written while the process
+   * was down, so one bounded scan runs here instead of on every tick. Restart
+   * recovery never relaunches a terminal claim: an attempt-exhausted row stays
+   * exactly as durable as its failure.
+   */
   async #bootstrap(): Promise<void> {
     if (this.#booting) return
     this.#booting = true
     try {
       for (const job of this.#store.creationJobs()) {
         if (job.state !== CREATION_JOB_STATE.running && job.state !== CREATION_JOB_STATE.failed) continue
+        if (this.#attemptsSpent(job) && job.state === CREATION_JOB_STATE.failed) {
+          this.#retireTerminal(job)
+          continue
+        }
+        // A failed claim whose backoff is still running is picked up by a tick.
+        if (job.state === CREATION_JOB_STATE.failed && (job.next_retry_at ?? 0) > Date.now()) continue
         this.#recovered.add(job.id)
         this.#launch(job)
+      }
+      for (const candidate of this.#store.creationCandidates()) {
+        this.#claim(candidate.ownerShortId, candidate.taskKey)
       }
     } catch {
       // A failed listing is retried by the next tick; the claims stay durable.
     } finally {
       this.#booting = false
     }
+  }
+
+  /** Whether one claim has spent its configured attempt budget and is terminal. */
+  #attemptsSpent(job: CreationJobRow): boolean {
+    return job.attempts >= this.#options.settings().creationAttemptLimit
+  }
+
+  /** Move one failed, attempt-exhausted claim into the explicit terminal state. */
+  #retireTerminal(job: CreationJobRow): void {
+    if (job.state === CREATION_JOB_STATE.terminal) return
+    try {
+      this.#store.abandonCreationJob({ id: job.id })
+    } catch (error) {
+      // A concurrent retire (another tick's row snapshot) is a no-op, not an error.
+      if (!(error instanceof SkillStoreError && error.code === 'skills/invalid-creation-state')) throw error
+    }
+    this.#children.clearRetry(job.id)
   }
 
   /** Claim one owner/task key if it still meets the threshold; never throws into the tick. */
@@ -184,7 +242,7 @@ export class SkillCreationEngine {
     if (this.#children.has(job.id)) return
     const fresh = job.attempts === 1 && !this.#recovered.has(job.id)
     this.#recovered.delete(job.id)
-    this.#children.launch(job.id, this.#run(job, fresh), RETRY_MS)
+    this.#children.launch(job.id, this.#run(job, fresh), creationRetryDelayMs(Math.max(1, job.attempts)))
   }
 
   /**
@@ -208,6 +266,7 @@ export class SkillCreationEngine {
         // Later corrections removed the evidence: complete as a no-op and leave
         // every detection watermark exactly where it is.
         this.#store.completeCreationJob({ id: current.id, state: CREATION_JOB_STATE.noImprovement })
+        this.#children.clearRetry(current.id)
         this.#options.log?.('info', `skill creation claim for ${current.task_key} no longer meets the threshold; completed as a no-op`)
         return
       }
@@ -240,10 +299,32 @@ export class SkillCreationEngine {
     }
   }
 
-  /** Settle one running claim from the child's durable log and the system's rows. */
+  /**
+   * Settle one running claim from the child's durable log and the system's rows.
+   *
+   * Two authorities are re-read before any outcome touches the database: the
+   * surviving signals (a revocation can land while the child runs for up to the
+   * verification timeout) and the system-recorded verification report (a
+   * candidate whose scenarios failed is not a settle-able outcome). Either
+   * refusal keeps the claim retryable inside its attempt budget instead of
+   * publishing a candidate the reviewer could never approve.
+   */
   async #settle(jobId: number, startSeq: number): Promise<void> {
     const job = this.#store.creationJob(jobId)
     if (job === undefined) return
+    // B6: a late correction may have revoked evidence after the claim froze it.
+    // The candidate must not carry provenance that is no longer valid, and the
+    // detection watermarks are never rolled back here.
+    const surviving = validJobSignals(this.#store, job)
+    if (!creationThresholdHolds(surviving)) {
+      // A draft may already exist from before the revocation; it stays pending
+      // for the user to reject (B2 decision: the system does not silently mutate
+      // a user-visible candidate), but the claim itself is settled as a no-op.
+      this.#store.completeCreationJob({ id: jobId, state: CREATION_JOB_STATE.noImprovement })
+      this.#children.clearRetry(jobId)
+      this.#options.log?.('info', `skill creation claim ${String(jobId)} lost its evidence after the claim; completed as a no-op`)
+      return
+    }
     const childSession = job.child_session as SessionId | null
     if (childSession === null) {
       this.#failed(jobId)
@@ -257,27 +338,43 @@ export class SkillCreationEngine {
     const candidateVersionId = job.candidate_version_id
     if (candidateVersionId !== null) {
       const version = this.#store.version(candidateVersionId)
-      if (version === undefined || version.verification === null) {
-        // A candidate without a system-recorded verification is not an outcome:
-        // resume the child so it can run the recorded scenarios.
+      if (version === undefined || !verificationSettlesCandidate(version.verification)) {
+        // A failed or missing system-recorded verification is not a candidate:
+        // retry inside the budget rather than settle a dead pending draft (B2).
         this.#failed(jobId)
         return
       }
       this.#store.completeCreationJob({ id: jobId, state: CREATION_JOB_STATE.candidate, candidateVersionId })
+      this.#children.clearRetry(jobId)
       return
     }
     const noImprovement = successfulCalls(events, startSeq, 'finish_no_improvement')
     if (noImprovement.length === 1) {
       this.#store.completeCreationJob({ id: jobId, state: CREATION_JOB_STATE.noImprovement })
+      this.#children.clearRetry(jobId)
       return
     }
     this.#failed(jobId)
   }
 
-  /** Record one failed run and keep the claim for an independent retry. */
+  /** Record one failed run and keep the claim retryable inside its attempt budget. */
   #failed(jobId: number): void {
-    this.#store.failCreationJob({ id: jobId, retryDelayMs: RETRY_MS })
-    this.#children.defer(jobId, Date.now() + RETRY_MS)
+    const job = this.#store.creationJob(jobId)
+    if (job === undefined) return
+    if (this.#attemptsSpent(job)) {
+      // The budget is spent: the claim becomes the explicit terminal state, so
+      // it produces no candidate, no tick resumes it and a restart cannot
+      // relaunch it. `abandonCreationJob` requires the failed state, so the
+      // failure is recorded first; a crash between the two statements leaves a
+      // failed claim that the next tick converges to terminal.
+      this.#store.failCreationJob({ id: jobId, retryDelayMs: 0 })
+      this.#retireTerminal(job)
+      this.#options.log?.('warn', `skill creation claim ${String(jobId)} spent its ${String(job.attempts)}-attempt budget; it is terminal and will not be retried`)
+      return
+    }
+    const delay = creationRetryDelayMs(job.attempts)
+    this.#store.failCreationJob({ id: jobId, retryDelayMs: delay })
+    this.#children.defer(jobId, Date.now() + delay)
   }
 
   /** Create one deep-creation child for a claim. */
@@ -351,6 +448,22 @@ export class SkillCreationEngine {
       : `当前个人技能：\n${current.map(row => {
           const version = row.current_version_id === null ? undefined : this.#store.version(row.current_version_id)
           return `- ${row.name}（技能 ${String(row.id)}，当前版本 ${String(row.current_version_id)}）：${version === undefined ? '' : clip(this.#versionDescription(version), DEDUPE_DESCRIPTION_MAX)}`
+        }).join('\n')}`)
+    // A user's recent refusal is dedupe context too: without it a rejected
+    // workflow is offered again after two more successes (E6). The review note
+    // is the recorded reason; the child is told to finish without improvement
+    // unless it can prove a change.
+    const refused = this.#store.recentDecisions({ shortId: ownerShortId, isAdmin: false, limit: MAX_DEDUPE_ITEMS })
+      .filter(row => row.skill_scope === SKILL_SCOPE.personal
+        && (row.status === VERSION_STATUS.rejected || row.status === VERSION_STATUS.changesRequested))
+      .slice(0, MAX_DEDUPE_ITEMS)
+    lines.push(refused.length === 0
+      ? '用户最近拒绝/要求修改的个人技能：无。'
+      : `用户最近拒绝/要求修改的个人技能（没有可证明的改进时不要重复提交）：\n${refused.map(row => {
+          const version = this.#store.version(row.id)
+          const note = version?.review_note
+          const label = row.status === VERSION_STATUS.rejected ? '已拒绝' : '要求修改'
+          return `- ${row.skill_name}（版本 ${String(row.id)}，${label}）${note === null || note === undefined || note === '' ? '' : `：${clip(note, DEDUPE_DESCRIPTION_MAX)}`}`
         }).join('\n')}`)
     return lines.join('\n')
   }
@@ -486,9 +599,15 @@ export class SkillCreationEngine {
         if (current === undefined || current.candidate_version_id !== null) {
           throw new Error('skills/invalid-request: this claim already has a candidate')
         }
+        // A revocation may have landed while the child was reading evidence:
+        // never create provenance for evidence the threshold no longer holds.
+        const surviving = validJobSignals(this.#store, current)
+        if (!creationThresholdHolds(surviving)) {
+          throw new Error('skills/evidence-invalid: the contributing evidence was revoked after this claim was made; call finish_no_improvement with the reason')
+        }
         const result = await this.#creation.create({
           ownerShortId,
-          sessionId: triggeringSession(signals, current),
+          sessionId: triggeringSession(surviving, current),
           events: [],
           scope: 1,
           files: checkedPackageFiles(args.files),
@@ -499,8 +618,8 @@ export class SkillCreationEngine {
           ...(args.targetBenefit === undefined ? {} : { targetBenefit: args.targetBenefit }),
           background: {
             taskKey: current.task_key,
-            signalIds: signals.map(signal => signal.id),
-            sourceSessions: [...new Set(signals.map(signal => signal.source_session))],
+            signalIds: surviving.map(signal => signal.id),
+            sourceSessions: [...new Set(surviving.map(signal => signal.source_session))],
             creationJobId: current.id,
           },
           deferVerification: true,
@@ -548,6 +667,33 @@ export class SkillCreationEngine {
       },
     }))
   }
+}
+
+/**
+ * Whether one stored verification report is a complete outcome a claim may
+ * settle a candidate on.
+ *
+ * The same bar the approval gate applies: the report ran to an end, no
+ * scenario failed or stayed unexecuted, and at least one scenario actually ran
+ * (or was reused from a recorded parent run). A partial or failed report must
+ * keep the claim retryable instead of becoming a pending draft nobody can
+ * approve (B2).
+ */
+function verificationSettlesCandidate(verification: string | null): boolean {
+  if (verification === null) return false
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(verification)
+  } catch {
+    return false
+  }
+  if (parsed === null || typeof parsed !== 'object') return false
+  const report = parsed as { complete?: unknown; executed?: unknown; reused?: unknown; unexecuted?: unknown; failed?: unknown }
+  const list = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : [])
+  return report.complete === true
+    && list(report.failed).length === 0
+    && list(report.unexecuted).length === 0
+    && list(report.executed).length + list(report.reused).length > 0
 }
 
 /** The model-supplied package files, refusing a file without text content. */
