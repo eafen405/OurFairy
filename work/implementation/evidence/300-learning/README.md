@@ -121,7 +121,7 @@ Ticket: [#300](https://github.com/eafen405/OurFairy/issues/300)，spec [#295](..
 | `node --test tests/skill-learning-material.test.mjs` | 4/4 通过（材料内容/排除项/总长界限/闭合回合） |
 | 13 个既有 skill 套件（creation/evolution/sharing/install/runtime/verify/package/store） | 109/109 通过（合并后） |
 | memory 维护/CRUD/设置 + route inventory + identity-http + model-double + agent-capabilities | 48/48 通过 |
-| `npm test`（全量，最终树） | 595 个测试，595 通过，0 失败（exit 0，duration 202.8s） |
+| `npm test`（全量，最终树） | 599 个测试，599 通过，0 失败（exit 0，duration 67.7s） |
 | `npm run combo:verify` | `combo: combination verified`（ourfairy 基于集成 tip、dsh 锁定提交一致、Android 声明一致） |
 | `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug` | 见下方“最终门禁” |
 | `npm run acceptance:skill -- --plan` | exit 0，未读凭据、未启动后端、未写文件 |
@@ -199,7 +199,7 @@ commit 后取 tarball；样本要求模型直接把地址交给 `skill_manage` �
 最终树 = `ticket/300-learning` 合并 `integration/spec-295` tip `545fef5b63` 后，再含本票提交。
 
 - `npm run build`：通过。
-- `npm test`：595/595 通过（exit 0，duration 202.8s）。
+- `npm test`：599/599 通过（exit 0，duration 67.7s；复审修复 + 验收后续的新用例计入）。
 - `npm run combo:verify`：`combo: combination verified`。
 - `cd android && ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug`：`BUILD
   SUCCESSFUL in 7m 23s`（134 个任务：60 executed / 74 up-to-date；`:app:testDebugUnitTest`
