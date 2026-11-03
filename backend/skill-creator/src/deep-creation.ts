@@ -28,17 +28,14 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import { readSkillFrontmatter } from './package.js'
-import {
-  CREATION_POLICY,
-  LEARNING_SECTION,
-  SKILL_LEARNING_PRESET,
-} from './learning-policy.js'
+import { ChildRuns, learningChildSetup, successfulCalls, turnCompleted } from './learning-child.js'
+import { CREATION_POLICY, SKILL_LEARNING_PRESET } from './learning-policy.js'
 import { assembleLearningMaterial } from './material.js'
 import { CREATION_JOB_STATE, SIGNAL_STATUS, type CreationJobRow, type SignalRow, type SkillStore } from './store.js'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { Context } from '@deepseek-ai/cordis'
 import type { AgentHandle } from '@deepseek-ai/dsh-agent'
-import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { SkillCreation } from './creation.js'
 import type { SkillService } from './service.js'
 import type { LearningSettings } from './learning.js'
@@ -84,26 +81,6 @@ export function creationThresholdHolds(signals: readonly SignalRow[]): boolean {
   return new Set(signals.map(signal => signal.source_session)).size >= 2
 }
 
-/** One successful tool call in one run. */
-function successfulCalls(events: readonly SessionEvent[], startSeq: number, name: string): { readonly arguments: string }[] {
-  const succeeded = new Set<string>()
-  for (const event of events) {
-    if (event.type !== 'tool/result' || event.seq < startSeq) continue
-    const callId = event.data.message.toolCallId
-    if (typeof callId === 'string' && event.data.message.isError !== true) succeeded.add(callId)
-  }
-  return events
-    .filter((event): event is SessionEvent<'tool/call'> => event.type === 'tool/call'
-      && event.seq >= startSeq && event.data.name === name && succeeded.has(event.data.callId))
-    .map(event => ({ arguments: event.data.arguments }))
-}
-
-/** Whether the child's last ended turn in this run completed. */
-function turnCompleted(events: readonly SessionEvent[], startSeq: number): boolean {
-  const ending = events.filter(event => event.type === 'turn/end' && event.seq >= startSeq).at(-1)
-  return ending !== undefined && ending.type === 'turn/end' && ending.data.reason.kind === 'completed'
-}
-
 /** The dependencies the creation engine was constructed with. */
 export interface CreationEngineOptions {
   readonly settings: () => LearningSettings
@@ -116,10 +93,8 @@ export class SkillCreationEngine {
   readonly #creation: SkillCreation
   readonly #service: SkillService
   readonly #options: CreationEngineOptions
-  readonly #active = new Set<number>()
-  readonly #runs = new Set<Promise<void>>()
+  readonly #children = new ChildRuns<number>()
   readonly #handles = new Map<number, AgentHandle>()
-  readonly #retryAt = new Map<number, number>()
   /** Jobs launched from a persisted claim, whose attempt was already counted. */
   readonly #recovered = new Set<number>()
   #timer: ReturnType<typeof setInterval> | undefined
@@ -146,7 +121,7 @@ export class SkillCreationEngine {
     this.#disposed = true
     if (this.#timer !== undefined) clearInterval(this.#timer)
     for (const handle of this.#handles.values()) await handle.dispose().catch(() => undefined)
-    await Promise.allSettled([...this.#runs])
+    await this.#children.close()
   }
 
   /** Re-evaluate one owner's claims after a detection interval produced signals. */
@@ -162,8 +137,8 @@ export class SkillCreationEngine {
   async #tick(): Promise<void> {
     if (this.#disposed) return
     for (const job of this.#store.creationJobs()) {
-      if (job.state !== CREATION_JOB_STATE.failed || this.#active.has(job.id)) continue
-      if ((this.#retryAt.get(job.id) ?? job.next_retry_at ?? 0) > Date.now()) continue
+      if (job.state !== CREATION_JOB_STATE.failed || this.#children.has(job.id)) continue
+      if ((this.#children.retryAt(job.id) ?? job.next_retry_at ?? 0) > Date.now()) continue
       this.#recovered.add(job.id)
       this.#launch(job)
     }
@@ -206,19 +181,10 @@ export class SkillCreationEngine {
 
   /** Launch one claim without blocking the evaluation that decided it. */
   #launch(job: CreationJobRow): void {
-    if (this.#active.has(job.id)) return
-    this.#active.add(job.id)
+    if (this.#children.has(job.id)) return
     const fresh = job.attempts === 1 && !this.#recovered.has(job.id)
     this.#recovered.delete(job.id)
-    const run = this.#run(job, fresh)
-    let tracked: Promise<void>
-    tracked = run.catch(() => {
-      this.#retryAt.set(job.id, Date.now() + RETRY_MS)
-    }).finally(() => {
-      this.#active.delete(job.id)
-      this.#runs.delete(tracked)
-    })
-    this.#runs.add(tracked)
+    this.#children.launch(job.id, this.#run(job, fresh), RETRY_MS)
   }
 
   /**
@@ -311,7 +277,7 @@ export class SkillCreationEngine {
   /** Record one failed run and keep the claim for an independent retry. */
   #failed(jobId: number): void {
     this.#store.failCreationJob({ id: jobId, retryDelayMs: RETRY_MS })
-    this.#retryAt.set(jobId, Date.now() + RETRY_MS)
+    this.#children.defer(jobId, Date.now() + RETRY_MS)
   }
 
   /** Create one deep-creation child for a claim. */
@@ -328,11 +294,7 @@ export class SkillCreationEngine {
       // not the detection light route; a cold source falls back to the
       // deployment's default selection.
       ...(route === undefined ? {} : { agentOptions: route }),
-      setup: agentCtx => {
-        agentCtx.tools.restrict({ allow: [] })
-        this.#registerTools(agentCtx, jobId, job, signals)
-        agentCtx.systemPrompt.section({ name: LEARNING_SECTION, order: 0, text: policy, interpolate: false })
-      },
+      setup: learningChildSetup(policy, agentCtx => this.#registerTools(agentCtx, jobId, job, signals)),
     })
   }
 
@@ -354,11 +316,7 @@ export class SkillCreationEngine {
     return this.#ctx.agents.resume({
       resumeSessionId: childSession,
       ...(route === undefined ? {} : { agentOptions: route }),
-      setup: agentCtx => {
-        agentCtx.tools.restrict({ allow: [] })
-        this.#registerTools(agentCtx, jobId, job, signals)
-        agentCtx.systemPrompt.section({ name: LEARNING_SECTION, order: 0, text: `${policy}\n\n${CREATION_RETRY_MESSAGE}`, interpolate: false })
-      },
+      setup: learningChildSetup(`${policy}\n\n${CREATION_RETRY_MESSAGE}`, agentCtx => this.#registerTools(agentCtx, jobId, job, signals)),
     })
   }
 
@@ -465,7 +423,7 @@ export class SkillCreationEngine {
     }))
     agentCtx.tools.register(defineTool({
       name: 'submit_candidate',
-      description: 'Submit one complete skill package as a pending candidate. files must include SKILL.md with name and description; scenarios are the representative commands run_verification will execute. A revision of an existing current skill additionally needs parentVersionId and targetBenefit. At most one candidate per claim, and the backend derives the owner, scope and landing path.',
+      description: 'Submit one complete skill package as a pending candidate. files must include SKILL.md with name and description; scenarios are the representative commands run_verification will execute. A revision of an existing current skill additionally needs parentVersionId, targetBenefit and at least one evidence entry (kind session/test/observation and ref). At most one candidate per claim, and the backend derives the owner, scope and landing path.',
       parameters: {
         files: {
           type: 'array',

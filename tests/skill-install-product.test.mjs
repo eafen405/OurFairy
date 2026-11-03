@@ -199,6 +199,9 @@ async function start() {
     OURFAIRY_PHAETHON_PASSWORD: password,
     MINIMAX_CN_API_KEY: 'mock-skill-install-key',
     OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${model.address().port}`,
+    // Keep the memory-maintenance child out of this suite's model double: the
+    // last-request assertions must read the user session's own request.
+    OURFAIRY_MEMORY_MAINTENANCE_TURNS: '50',
     OURFAIRY_GITHUB_API_BASE: stubBase,
     OURFAIRY_GITHUB_CODELOAD_BASE: stubBase,
     // A small install bound keeps the oversized-download case real without an
@@ -355,6 +358,9 @@ describe('address install through the product', () => {
     const installed = await callTool(alice, sessionAlice, 'skill_manage', {
       action: 'create', scope: 1, address: 'https://github.com/acme/skills/tree/main/skills/release-check',
       scenarios: [scenario],
+      // A model-supplied licence is ignored: the fetched package's own
+      // frontmatter/LICENSE is the only licence the backend records.
+      license: 'MODEL-CLAIM',
     })
     assert.equal(installed.isError, false, `the install must succeed: ${installed.text}`)
     assert.equal(installed.value.status, 0)
@@ -370,7 +376,8 @@ describe('address install through the product', () => {
     assert.equal(source.resolvedVersion, SHA_ONE)
     assert.equal(source.digest, createHash('sha256').update(codeloadArchive).digest('hex'))
     assert.ok(source.fetchedAt > 0)
-    assert.match(version.license, /MIT License/u)
+    assert.match(version.license, /MIT License/u, 'the package LICENSE wins over a model-supplied licence')
+    assert.ok(!version.license.includes('MODEL-CLAIM'), 'a model-supplied licence is never recorded')
     assert.match(version.package_path, /^candidates\//u)
     assert.ok(existsSync(join(ids.github.directory, 'references', 'checklist.md')))
     assert.ok(existsSync(join(ids.github.directory, 'LICENSE')), 'the license file stays in the package')

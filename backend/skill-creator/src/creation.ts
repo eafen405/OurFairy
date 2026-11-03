@@ -109,7 +109,8 @@ export interface CreateCandidateInput {
   readonly sessionId: string
   /** The caller's durable log, read by the tool before the call. */
   readonly events: readonly SessionEvent[]
-  readonly scope: number
+  /** 1 personal or 2 common; a revision derives it from the parent. */
+  readonly scope?: number
   /** Present for an explicit create/revision; absent for an address install or a background claim. */
   readonly focus?: SkillFocusInput
   /** Model-drafted files; mutually exclusive with `packageDir`. */
@@ -124,7 +125,17 @@ export interface CreateCandidateInput {
   readonly scenarios: readonly CandidateScenario[]
   readonly comparisons?: readonly CandidateComparison[]
   readonly evidence?: readonly CandidateEvidence[]
+  /**
+   * The licence the package itself carries (frontmatter, or the install path's
+   * `LICENSE*` scan). Only the install path supplies it; the model never does,
+   * so it can never override the bytes being published.
+   */
   readonly license?: string
+  /**
+   * Whether the caller is Phaethon. A common skill's revision and rollback are
+   * admin-only, exactly like its review; a personal one stays owner-only.
+   */
+  readonly isAdmin?: boolean
   /** The current approved version this candidate revises (#299). */
   readonly parentVersionId?: number
   /** The proven benefit of a revision; required with {@link parentVersionId}. */
@@ -881,11 +892,16 @@ export class SkillCreation {
    */
   async create(input: CreateCandidateInput): Promise<CreateCandidateResult> {
     try {
-      if (input.scope !== SKILL_SCOPE.personal && input.scope !== SKILL_SCOPE.common) {
+      if (input.scope !== undefined && input.scope !== SKILL_SCOPE.personal && input.scope !== SKILL_SCOPE.common) {
         throw new SkillError(400, 'skills/invalid-scope', `unknown skill scope ${String(input.scope)}`)
       }
       const revision = this.#revisionContext(input)
-      const common = revision === undefined && input.scope === SKILL_SCOPE.common
+      const scope = revision?.skill.scope ?? input.scope
+      if (scope === undefined) {
+        throw new SkillError(400, 'skills/invalid-scope', 'create needs scope 1 (personal) or 2 (common)')
+      }
+      const common = revision === undefined && scope === SKILL_SCOPE.common
+      const commonRevision = revision !== undefined && revision.skill.scope === SKILL_SCOPE.common
       const consent = common ? requireSharingConsent(input.events) : undefined
       if (input.packageDir !== undefined && input.files !== undefined) {
         throw new SkillError(400, 'skills/invalid-package', 'create accepts either package files or a fetched package, not both')
@@ -907,6 +923,13 @@ export class SkillCreation {
         }
       }
       const evidence = common ? [] : checkedEvidence(input.evidence)
+      // Spec §4: new content must cite evidence or a test. A new skill's
+      // provenance is its focus/turn; a revision has no focus to stand in for
+      // it, so it needs at least one checked evidence entry.
+      if (revision !== undefined && evidence.length === 0) {
+        throw new SkillError(400, 'skills/invalid-evidence',
+          'a revision needs at least one evidence entry (kind and ref) for the change it proposes')
+      }
       const staging = join(this.#root, 'tmp', randomUUID())
       const candidateId = randomUUID()
       let candidateDir: string | undefined
@@ -921,7 +944,7 @@ export class SkillCreation {
         if (revision === undefined) {
           const identityOwner = common ? undefined : input.ownerShortId
           const existing = this.#store.activeIdentity({
-            scope: input.scope,
+            scope,
             ownerShortId: identityOwner,
             name: parsed.name,
           })
@@ -965,10 +988,17 @@ export class SkillCreation {
               ...(common
                 ? { ...(consent === undefined ? {} : { consent }) }
                 : {
-                    sessionId: input.sessionId,
-                    ...(focus === undefined ? {} : { focus }),
-                    ...(evidence.length === 0 ? {} : { evidence }),
-                    ...(revision === undefined ? {} : { benefit: revision.benefit }),
+                    // A common revision is Phaethon's private session too: only
+                    // the revision's own evidence/benefit become review
+                    // material the proposer may read.
+                    ...(commonRevision
+                      ? { ...(evidence.length === 0 ? {} : { evidence }), ...(revision === undefined ? {} : { benefit: revision.benefit }) }
+                      : {
+                          sessionId: input.sessionId,
+                          ...(focus === undefined ? {} : { focus }),
+                          ...(evidence.length === 0 ? {} : { evidence }),
+                          ...(revision === undefined ? {} : { benefit: revision.benefit }),
+                        }),
                   }),
               ...(install === undefined
                 ? {}
@@ -988,8 +1018,11 @@ export class SkillCreation {
             : revision === undefined ? SOURCE_TYPE.explicit : SOURCE_TYPE.evolution
         const draft = this.#store.createDraft({
           name: parsed.name,
-          scope: revision?.skill.scope ?? input.scope,
-          ...(common ? {} : { ownerShortId: input.ownerShortId }),
+          scope,
+          // A common identity (new proposal or revision) has no personal owner;
+          // a new proposal records its proposer, a common revision edits the
+          // identity that already names one.
+          ...(common || commonRevision ? {} : { ownerShortId: input.ownerShortId }),
           ...(common ? { proposedBy: input.ownerShortId } : {}),
           createdBy: input.ownerShortId,
           packagePath: `candidates/${candidateId}`,
@@ -1058,8 +1091,10 @@ export class SkillCreation {
    * current report where the content still matches), and a repeat rollback of
    * the content that is already current is refused as a no-op.
    */
-  async rollback({ shortId, sessionId, versionId }: {
+  async rollback({ shortId, isAdmin = false, sessionId, versionId }: {
     readonly shortId: number
+    /** Whether the caller is Phaethon; a common skill's rollback is admin-only. */
+    readonly isAdmin?: boolean
     readonly sessionId: string
     readonly versionId: number
   }): Promise<RollbackResult> {
@@ -1069,7 +1104,7 @@ export class SkillCreation {
         throw new SkillError(404, 'skills/not-found', `skill version ${versionId} is not visible to this user`)
       }
       const skill = this.#store.identity(source.skill_id)
-      if (skill === undefined || !canReview(shortId, false, skill)) {
+      if (skill === undefined || !canReview(shortId, isAdmin === true, skill)) {
         throw new SkillError(404, 'skills/not-found', `skill version ${versionId} is not visible to this user`)
       }
       if (skill.archived_at !== null) {
@@ -1113,14 +1148,18 @@ export class SkillCreation {
         renameSync(staging, candidateDir)
         const growth = growthOf(parsed.coreCharacters, current.core_characters)
         const location: SourceProvenance = {
-          sessionId,
+          // A common rollback is Phaethon's own exchange; the review material a
+          // proposer can read carries only the rollback target.
+          ...(skill.scope === SKILL_SCOPE.common ? {} : { sessionId }),
           benefit: `回滚到版本 ${source.id} 的已审核内容`,
           rollbackOf: source.id,
         }
         const draft = this.#store.createDraft({
           name: parsed.name,
           scope: skill.scope,
-          ownerShortId: shortId,
+          // A common skill keeps its NULL owner and its original proposer; a
+          // Phaethon rollback only creates a candidate for the same identity.
+          ...(skill.scope === SKILL_SCOPE.common ? {} : { ownerShortId: shortId }),
           createdBy: shortId,
           packagePath: `candidates/${candidateId}`,
           manifest: canonicalManifest(parsed.manifest),
@@ -1164,11 +1203,12 @@ export class SkillCreation {
   /**
    * Resolve the parent a revision must name, or undefined for a new skill.
    *
-   * The parent is the skill's current approved version and belongs to the
-   * caller's personal identity; a common parent, another owner's parent or a
-   * stale/superseded version is refused with the same vocabulary the tool
-   * reports. The target benefit is required and bounded; it is provenance, not
-   * a model claim that approval can skip.
+   * The parent is the skill's current approved version. A personal parent is
+   * visible to its owner; a common parent only to Phaethon, through
+   * `canReview`. Another owner's parent or a stale/superseded version is
+   * refused with the same vocabulary the tool reports. The target benefit is
+   * required and bounded; it is provenance, not a model claim that approval can
+   * skip.
    */
   #revisionContext(input: CreateCandidateInput): { skill: SkillRow; parent: SkillVersionRow; benefit: string } | undefined {
     if (input.parentVersionId === undefined) {
@@ -1178,15 +1218,17 @@ export class SkillCreation {
       return undefined
     }
     const benefit = checkedTargetBenefit(input.targetBenefit)
-    if (input.scope !== undefined && input.scope !== SKILL_SCOPE.personal) {
-      throw new SkillError(400, 'skills/invalid-parent', 'a revision keeps the parent skill scope')
-    }
     const parent = this.#store.version(input.parentVersionId)
     if (parent === undefined) {
       throw new SkillError(400, 'skills/invalid-parent', `parentVersionId ${input.parentVersionId} is not a skill version`)
     }
     const skill = this.#store.identity(parent.skill_id)
-    if (skill === undefined || skill.scope !== SKILL_SCOPE.personal || skill.owner_short_id !== input.ownerShortId) {
+    if (input.scope !== undefined && (skill === undefined || input.scope !== skill.scope)) {
+      throw new SkillError(400, 'skills/invalid-parent', 'a revision keeps the parent skill scope')
+    }
+    // A personal skill is revised by its owner; a common skill only by
+    // Phaethon, through the same canReview rule its candidates already use.
+    if (skill === undefined || !canReview(input.ownerShortId, input.isAdmin === true, skill)) {
       throw new SkillError(404, 'skills/not-found', `skill version ${input.parentVersionId} is not visible to this user`)
     }
     if (skill.archived_at !== null) {

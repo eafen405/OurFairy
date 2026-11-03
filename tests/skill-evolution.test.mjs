@@ -238,11 +238,12 @@ async function publishNewSkill(name, { bodyLength = 1000, files, scenarios = [{ 
 }
 
 /** Create one revision candidate of an approved skill. */
-async function createRevision(name, parentVersionId, { bodyLength = 1090, marker, files, scenarios = [{ name: 'ok', command: 'true' }], benefit = 'fix the failed step', extra = {} } = {}) {
+async function createRevision(name, parentVersionId, { bodyLength = 1090, marker, files, scenarios = [{ name: 'ok', command: 'true' }], benefit = 'fix the failed step', evidence = [{ kind: 'test', ref: 'the revision scenario' }], extra = {} } = {}) {
   return callTool(alice, sessionAlice, 'skill_manage', {
     action: 'create', scope: 1, focus: { kind: 'turn' },
     parentVersionId,
     targetBenefit: benefit,
+    evidence,
     files: files ?? packageFiles(name, { bodyLength, marker, extra }),
     scenarios,
   })
@@ -255,6 +256,9 @@ async function start() {
     OURFAIRY_PHAETHON_PASSWORD: password,
     MINIMAX_CN_API_KEY: 'mock-skill-evolution-key',
     OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${model.address().port}`,
+    // Keep the memory-maintenance child out of this suite's model double: the
+    // last-request assertions must read the user session's own request.
+    OURFAIRY_MEMORY_MAINTENANCE_TURNS: '50',
   })
   port = startedPort(run)
 }
@@ -356,13 +360,27 @@ describe('revision candidates', () => {
     assert.equal(rows('SELECT * FROM skill_version WHERE skill_id = ?', base.skillId).length, 1,
       'a refused revision leaves no version row')
 
+    // §4: new content must cite evidence or a test. A new skill's focus is its
+    // provenance; a revision needs at least one checked evidence entry.
+    const noEvidence = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' }, parentVersionId: base.versionId,
+      targetBenefit: 'recover from the failing second step',
+      files: packageFiles('growth-demo', { bodyLength: 1090 }), scenarios: [{ name: 'ok', command: 'true' }],
+    })
+    assert.equal(noEvidence.isError, true, 'a revision without evidence is refused')
+    assert.match(noEvidence.text, /skills\/invalid-evidence/u, noEvidence.text)
+    assert.equal(rows('SELECT * FROM skill_version WHERE skill_id = ?', base.skillId).length, 1,
+      'the refused revision leaves no version row')
+
     // An unknown parent and a non-current parent are refused.
     const unknown = await createRevision('growth-demo', 999_999)
     assert.equal(unknown.isError, true)
     assert.match(unknown.text, /skills\/invalid-parent/u, unknown.text)
 
     const revision = await createRevision('growth-demo', base.versionId, {
-      bodyLength: 1090, benefit: 'recover from the failing second step', extra: { 'references/guide.md': 'GUIDE v2' },
+      bodyLength: 1090, benefit: 'recover from the failing second step',
+      evidence: [{ kind: 'test', ref: 'skills/e2e: growth-demo scenario', note: 'new scenario passes' }],
+      extra: { 'references/guide.md': 'GUIDE v2' },
     })
     assert.equal(revision.isError, false, revision.text)
     assert.equal(revision.value.status, 0)
@@ -379,6 +397,8 @@ describe('revision candidates', () => {
     const provenance = JSON.parse(version.source_location)
     assert.equal(provenance.benefit, 'recover from the failing second step')
     assert.equal(provenance.focus.kind, 'turn')
+    assert.deepEqual(provenance.evidence, [{ kind: 'test', ref: 'skills/e2e: growth-demo scenario', note: 'new scenario passes' }],
+      'the revision records the evidence it cited')
 
     const bobRevision = await callTool(bob, sessionBob, 'skill_manage', {
       action: 'create', scope: 1, focus: { kind: 'turn' }, parentVersionId: base.versionId,
@@ -391,6 +411,7 @@ describe('revision candidates', () => {
     const changed = await callTool(alice, sessionAlice, 'skill_manage', {
       action: 'create', scope: 1, focus: { kind: 'turn' }, parentVersionId: base.versionId,
       targetBenefit: 'rename into a second identity',
+      evidence: [{ kind: 'test', ref: 'the rename attempt' }],
       files: packageFiles('growth-demo-renamed', { bodyLength: 1000 }), scenarios: [{ name: 'ok', command: 'true' }],
     })
     assert.equal(changed.isError, true, 'a revision keeps the identity name')
@@ -502,6 +523,7 @@ describe('revision candidates', () => {
       action: 'create', scope: 1, focus: { kind: 'turn' },
       parentVersionId: base.versionId,
       targetBenefit: 'prove the guide is the difference',
+      evidence: [{ kind: 'test', ref: 'the comparison scenario' }],
       files: packageFiles('comparison-demo', { bodyLength: 1090, marker: 'V2', extra: { 'references/guide.md': 'GUIDE V2' } }),
       scenarios: [SCENARIO],
       comparisons: [{
@@ -531,6 +553,24 @@ describe('revision candidates', () => {
     const approved = await approve(revision.value.versionId)
     assert.equal(approved.isError, false, 'a recorded comparison does not block approval: ' + approved.text)
   })
+})
+
+test('a model-supplied licence cannot override the package frontmatter licence', async () => {
+  const name = 'licence-demo'
+  const body = bodyOf(1000)
+  const files = [{ path: 'SKILL.md', content: `---\nname: ${name}\ndescription: Use when recording the package licence.\nlicense: MIT\n---\n\n${body}\n` }]
+  const created = await callTool(alice, sessionAlice, 'skill_manage', {
+    action: 'create', scope: 1, focus: { kind: 'turn' },
+    files,
+    scenarios: [{ name: 'ok', command: 'true' }],
+    license: 'MODEL-CLAIM',
+  })
+  assert.equal(created.isError, false, created.text)
+  const version = versionOf(created.value.versionId)
+  assert.equal(version.license, 'MIT', 'the package frontmatter licence is the recorded fact')
+  const inspect = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: created.value.versionId })
+  assert.equal(inspect.isError, false, inspect.text)
+  assert.equal(inspect.value.review.license, 'MIT', 'the review package names the package licence, not the model claim')
 })
 
 describe('growth confirmation', () => {

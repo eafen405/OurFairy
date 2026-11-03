@@ -77,8 +77,7 @@ scope: 1                     // personal, owned by the calling user
 focus: {kind: "turn"}        // current/latest turn, {kind:"turn",turn:N}, or {kind:"task",text:"..."}
 files: [{path, content, executable?}]   // the complete package, including SKILL.md
 scenarios: [{name, command, description?, uses?, timeoutMs?}]   // at least one
-evidence: [{kind: "session"|"test"|"observation", ref, note?}]  // optional
-license: "..."               // optional, when the package carries none
+evidence: [{kind: "session"|"test"|"observation", ref, note?}]  // required for a revision, optional for a new skill
 ```
 
 - `focus` bounds the material you read. Use the current turn by default; use a
@@ -88,11 +87,13 @@ license: "..."               // optional, when the package carries none
 - `files` must contain the complete package. You cannot choose where it lands;
   the backend stages it in an isolated candidate area and computes the manifest
   hash itself.
-- Only personal creation is available through this tool. Shared creation and
-  installation from an address are later capabilities; do not pretend one
-  succeeded.
+- `scope: 2` is a common skill and needs the user's current turn to explicitly
+  ask to share it; the backend records that turn as the consent. An address
+  install uses `address` instead of `files`.
 - A name that already has an approved skill is refused for a plain create. Use
   a revision with `parentVersionId` instead of inventing a second identity.
+- Never submit a licence. The package's own frontmatter or `LICENSE` file is
+  the only licence the backend records.
 
 ## Scenarios and evidence
 
@@ -129,7 +130,9 @@ Create a revision only for a proven reason:
 
 If there is no such benefit, keep the current version and create nothing. A
 revision without `targetBenefit` is refused, and the backend records the benefit
-in the review material.
+in the review material. A revision must also cite at least one `evidence` entry
+(kind and ref) for the change it proposes; a new skill's focus/turn is its
+provenance, so a new skill does not need one.
 
 The backend reuses a parent scenario's recorded run only when its name, command
 and every `uses` file hash are unchanged; the rest rerun in the disposable
@@ -162,7 +165,8 @@ over.
 version copies that clean package into a new pending candidate and verifies it
 again. Review it like any other candidate. Rollback never moves the current
 version directly, and a version switch always keeps the user's enable
-preference.
+preference. A personal skill is revised and rolled back by its owner; a common
+skill only by Phaethon.
 
 ## Review before use
 

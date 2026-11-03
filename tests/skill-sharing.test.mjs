@@ -179,6 +179,9 @@ async function start() {
     OURFAIRY_PHAETHON_PASSWORD: password,
     MINIMAX_CN_API_KEY: 'mock-skill-sharing-key',
     OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${model.address().port}`,
+    // Keep the memory-maintenance child out of this suite's model double: the
+    // last-request assertions must read the user session's own request.
+    OURFAIRY_MEMORY_MAINTENANCE_TURNS: '50',
   })
   port = startedPort(run)
 }
@@ -559,5 +562,55 @@ describe('archive and restore', () => {
     assert.ok(review.verification.executed.length >= 1)
     assert.ok(!requestText(requests.at(-1)).includes('PROBE: first real turn'),
       'a common review does not expose another user\'s raw session text')
+  })
+
+  test('Phaethon revises and rolls back a common skill; its proposer can do neither', async () => {
+    const revisionFiles = packageFiles('shared-release', { extra: { 'references/guide.md': 'SHARED GUIDE V2' } })
+    const proposerRevision = await callTool(alice, sessions.alice, {
+      action: 'create', focus: { kind: 'turn' }, parentVersionId: ids.common.versionId,
+      targetBenefit: 'let the proposer evolve a common skill',
+      evidence: [{ kind: 'test', ref: 'proposer revision' }],
+      files: revisionFiles, scenarios: [scenario],
+    })
+    assert.equal(proposerRevision.isError, true, 'a common skill is not the proposer\'s to evolve')
+    assert.match(proposerRevision.text, /skills\/not-found/u, proposerRevision.text)
+
+    const revision = await callTool(admin, sessions.admin, {
+      action: 'create', focus: { kind: 'turn' }, parentVersionId: ids.common.versionId,
+      targetBenefit: 'refresh the shared workflow with v2',
+      evidence: [{ kind: 'test', ref: 'shared-release scenario' }],
+      files: revisionFiles, scenarios: [scenario],
+    })
+    assert.equal(revision.isError, false, `Phaethon can revise a common skill: ${revision.text}`)
+    const revisionRow = versionOf(revision.value.versionId)
+    assert.equal(revisionRow.source_type, 3, 'a common revision records the evolution source type')
+    assert.equal(revisionRow.parent_version_id, ids.common.versionId)
+    assert.equal(identityOf('shared-release', 2).owner_short_id, null, 'the common identity keeps no owner')
+    const approved = await callTool(admin, sessions.admin, {
+      action: 'review', versionId: revision.value.versionId, decision: 'approve',
+    })
+    assert.equal(approved.isError, false, approved.text)
+    assert.equal(versionOf(ids.common.versionId).status, 4, 'the old common version is superseded')
+    assert.equal(versionOf(revision.value.versionId).status, 3)
+
+    const proposerRollback = await callTool(alice, sessions.alice, {
+      action: 'rollback', versionId: ids.common.versionId,
+    })
+    assert.equal(proposerRollback.isError, true, 'a common skill is not the proposer\'s to roll back')
+    assert.match(proposerRollback.text, /skills\/not-found/u, proposerRollback.text)
+    const outsiderRollback = await callTool(bob, sessions.bob, { action: 'rollback', versionId: ids.common.versionId })
+    assert.equal(outsiderRollback.isError, true)
+
+    const rolledBack = await callTool(admin, sessions.admin, {
+      action: 'rollback', versionId: ids.common.versionId,
+    })
+    assert.equal(rolledBack.isError, false, `Phaethon can roll a common skill back: ${rolledBack.text}`)
+    const rollbackRow = versionOf(rolledBack.value.versionId)
+    assert.equal(rollbackRow.source_type, 4, 'a rollback records the rollback source type')
+    assert.equal(rollbackRow.parent_version_id, revision.value.versionId, 'the rollback targets the current version')
+    assert.equal(rollbackRow.status, 0, 'rollback stays a pending candidate')
+    assert.equal(identityOf('shared-release', 2).current_version_id, revision.value.versionId,
+      'rollback never moves the current pointer')
+    assert.equal(rolledBack.value.skillId, ids.common.skillId, 'the rollback joins the same common identity')
   })
 })

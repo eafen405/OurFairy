@@ -18,6 +18,7 @@
  */
 import { freezeSurface, postHandler } from '@ourfairy/dsh-http/http'
 import { SkillError, type PoolItem, type SkillDetail } from './service.js'
+import { invalidateLifecycleScope, type LifecycleResult } from './sharing.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { SkillCreation, PendingItem } from './creation.js'
 import type { SkillNotifications, ReviewResultItem } from './notify.js'
@@ -112,6 +113,14 @@ export function skillHandlers({ service, creation, lifecycle, notifications, aut
     growthExceeded: item.growthExceeded,
     nextActions: [...item.nextActions],
   })
+  /** One archive/restore handler: validate, write, invalidate the affected catalogs. */
+  const lifecycleHandler = (write: (caller: RouteCaller, skillId: number) => LifecycleResult): SkillHandler => post(async (body, request) => {
+    const caller = callerOf(request)
+    const skillId = positiveInteger(body, 'skillId')
+    const updated = write(caller, skillId)
+    invalidateLifecycleScope(updated, caller.shortId, invalidateOwner, invalidateAll)
+    return { ok: true, skill: poolView(updated.item) }
+  })
   /** One recently decided candidate, exactly as `skill_manage list` derives it. */
   const resultView = (item: ReviewResultItem): Record<string, unknown> => ({
     versionId: item.versionId,
@@ -162,22 +171,9 @@ export function skillHandlers({ service, creation, lifecycle, notifications, aut
       const opened = await openReview(caller.shortId, caller.isAdmin, versionId)
       return { ok: true, sessionId: opened.sessionId }
     })],
-    ['/skills/archive', post(async (body, request) => {
-      const caller = callerOf(request)
-      const skillId = positiveInteger(body, 'skillId')
-      const updated = lifecycle.archive({ shortId: caller.shortId, isAdmin: caller.isAdmin, skillId })
-      // A common archive leaves every user's catalog; a personal one only its owner's.
-      if (updated.scope === 2) invalidateAll()
-      else invalidateOwner(caller.shortId)
-      return { ok: true, skill: poolView(updated.item) }
-    })],
-    ['/skills/restore', post(async (body, request) => {
-      const caller = callerOf(request)
-      const skillId = positiveInteger(body, 'skillId')
-      const updated = lifecycle.restore({ shortId: caller.shortId, isAdmin: caller.isAdmin, skillId })
-      if (updated.scope === 2) invalidateAll()
-      else invalidateOwner(caller.shortId)
-      return { ok: true, skill: poolView(updated.item) }
-    })],
+    ['/skills/archive', lifecycleHandler((caller, skillId) =>
+      lifecycle.archive({ shortId: caller.shortId, isAdmin: caller.isAdmin, skillId }))],
+    ['/skills/restore', lifecycleHandler((caller, skillId) =>
+      lifecycle.restore({ shortId: caller.shortId, isAdmin: caller.isAdmin, skillId }))],
   ])
 }

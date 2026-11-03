@@ -109,6 +109,19 @@ export interface LifecycleResult {
 }
 
 /**
+ * Invalidate the live catalogs one archive/restore write affects.
+ *
+ * The HTTP routes and the `skill_manage` tool both call this: a common write
+ * leaves every user's catalog, a personal one only its owner's. Keeping the
+ * scope branch here means the two entry points cannot drift.
+ */
+export function invalidateLifecycleScope(result: LifecycleResult, ownerShortId: number,
+  invalidateOwner: (shortId: number) => void, invalidateAll: () => void): void {
+  if (result.scope === SKILL_SCOPE.common) invalidateAll()
+  else invalidateOwner(ownerShortId)
+}
+
+/**
  * The archive/restore lifecycle over the pool authority.
  *
  * The pool item is the visibility check: only an identity the caller can see

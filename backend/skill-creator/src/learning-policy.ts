@@ -98,7 +98,7 @@ export const CREATION_POLICY = '你是后台技能创建子代理。你在封口
   + '先判断是否真的存在可复用的工作流：适用情境、输入、输出、前置条件、不适用情境，以及多次成功中相同的关键步骤。'
   + '如果已有候选或当前技能已经覆盖同一工作流，且这次没有可证明的改进，调用 finish_no_improvement 说明原因；不要制造重复候选。'
   + '要形成新技能或修订时，用 submit_candidate 提交完整包文件：SKILL.md 必须带 name 与 description，引用放 references/，脚本放 scripts/；同时给出 1–3 条代表性验证场景。'
-  + '修订必须给出 parentVersionId（当前已批准版本）与非空的 targetBenefit；包必须是完整重写，不是补丁。'
+  + '修订必须给出 parentVersionId（当前已批准版本）、非空的 targetBenefit，以及至少一条 evidence（kind 与 ref）；包必须是完整重写，不是补丁。'
   + '候选提交后用 run_verification 在该候选上执行真实验证；命令、退出码与输出由系统记录，你不能自己声明验证通过。'
   + '清理客套、一次性绝对路径、偶然故障叙述和无关个人信息；只用相对路径，不写作者机器路径。'
   + '可复用工作流属于技能，稳定事实与偏好属于记忆；不要双写。'

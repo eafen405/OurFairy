@@ -210,28 +210,8 @@ export function apply(ctx: Context, config: SkillCreatorConfig): void {
   creationEngine.start()
 }
 
-export { buildReviewDisplay, parseSourceLocation, resolveFocus, REVIEW_ACTIONS, SkillCreation } from './creation.js'
+// The package root is the plugin entry: `apply`, `Config` and `name`/`inject`
+// above plus the surface the route carriers register. Everything else is an
+// implementation module, reached through its own path (`./seed`) or the source
+// file; exporting internals here would grow a second, unenforced interface.
 export { SKILL_PATHS, SURFACE } from './http.js'
-export { extractSkillArchive, installBasesFromEnv, parseInstallAddress, SkillInstall } from './install.js'
-export { REVIEW_RESULTS_LIMIT, SkillNotifications } from './notify.js'
-export { appendReviewEntry, reviewEntryText } from './review-open.js'
-export { ACTION_SCOPE, POOL_STATE, SkillService } from './service.js'
-export { canInspect, canManageLifecycle, canReview, requireSharingConsent, SHARING_PHRASES, SkillLifecycle } from './sharing.js'
-export { SKILL_MANAGE_DESCRIPTION, SKILL_MANAGE_NAME, registerSkillTools } from './tools.js'
-export { runVerification, type VerificationReport } from './verify.js'
-export { PROVIDER_NAME, SkillProviders } from './provider.js'
-export { SKILL_SCOPE, SkillStore, SOURCE_TYPE, VERSION_STATUS } from './store.js'
-export { importReviewedPackage } from './seed.js'
-export { SkillCreationEngine, creationThresholdHolds, validJobSignals } from './deep-creation.js'
-export { LearningEngine, readLearningSettings } from './learning.js'
-export {
-  CREATION_POLICY,
-  DETECTION_POLICY,
-  MAX_EXISTING_TASK_KEYS,
-  MAX_SIGNALS_PER_SUBMISSION,
-  REVIEW_POLICY,
-  SKILL_LEARNING_PRESET,
-  TASK_KEY_MAX_CHARACTERS,
-  isValidTaskKey,
-} from './learning-policy.js'
-export { assembleLearningMaterial, closedUserTurns } from './material.js'
