@@ -287,6 +287,9 @@ before(async () => {
     }
     seen.main.push({ body, tools })
     if (script.holdText !== undefined && !held && requestText(body).includes(script.holdText)) {
+      // Hold exactly the first request whose conversation carries the marker;
+      // later turns repeat earlier messages, so the marker is consumed once.
+      script.holdText = undefined
       held = true
       await new Promise(resolve => { heldRelease = resolve })
       held = false
@@ -428,6 +431,18 @@ async function newSession(identity) {
   return (await request('/sessions/create', identity.token)).session.id
 }
 
+/** Rows of the memory database (the maintenance engine's own state). */
+function memoryRows(sql, ...parameters) {
+  const path = join(home, 'dsh-home', 'memory', 'memory.sqlite')
+  if (!existsSync(path)) return []
+  const database = new DatabaseSync(path)
+  try {
+    return database.prepare(sql).all(...parameters).map(row => ({ ...row }))
+  } finally {
+    database.close()
+  }
+}
+
 /** The newest learning state for one source session, or undefined. */
 function learningState(sessionId) {
   return rows('SELECT * FROM skill_learning_state WHERE source_session = ?', sessionId)[0]
@@ -475,6 +490,14 @@ describe('background detection', () => {
     assert.equal(header.agentPreset, 'ourfairy:skill-learning')
     assert.equal(header.origin, 'subagent')
     assert.equal(header.owner, undefined, 'the learning child is ownerless in its header')
+
+    // Neither background engine treats the child as a source: it has no owner
+    // and carries the learning preset, so memory's maintenance watch skips it
+    // and the learning engine's source predicate does too.
+    assert.deepEqual(memoryRows('SELECT * FROM maintenance_state WHERE source_session = ?', state.child_session), [],
+      'memory maintenance never observes a learning child')
+    assert.deepEqual(rows('SELECT * FROM skill_learning_state WHERE source_session = ?', state.child_session), [],
+      'a learning child never becomes a learning source')
 
     // The child stays out of the user's session list and cannot be read as one.
     const list = await request('/sessions/list', alice.token)
@@ -536,7 +559,15 @@ describe('background detection', () => {
     await delay(2_500)
     assert.equal(seen.detection.length, 0, 'a running source never starts a detection child')
     heldRelease?.()
-    await waitFor('the delayed detection child', () => seen.detection[0], 30_000)
+    const delayed = await waitFor('the delayed detection child', () => seen.detection[0], 30_000)
+    assert.match(requestText(delayed.body), /先生成发布说明/u, 'the first interval material carries the closed turns before its cut')
+    // The newly idle source opens one interval covering both closed turns; a
+    // later turn is the *next* interval and never enters the frozen material.
+    await sendPlain(alice, session, '第三条属于下一区间')
+    const next = await waitFor('the next interval child', () => seen.detection.find(entry =>
+      requestText(entry.body).includes('第三条属于下一区间')), 30_000)
+    assert.equal(requestText(next.body).includes('先生成发布说明'), false, 'the frozen cut separates the intervals')
+    assert.equal(requestText(next.body).includes('第二条还在进行中'), false)
   })
 
   test('the detection prompt carries the existing task keys and a malformed key is refused before any row', async () => {
@@ -577,6 +608,23 @@ describe('background detection', () => {
     })
     assert.equal(stored.task_key, 'review:success')
     assert.equal(seen.creation.length, 0, 'one session never reaches the two-session creation threshold')
+  })
+
+  test('a failure signal never counts toward the two-session creation threshold', async () => {
+    resetScript({ detection: submissions([{ taskKey: 'failure:only', status: 1 }]) })
+    const failedSession = await newSession(alice)
+    await sendPlain(alice, failedSession, '这次发布清单做失败了')
+    await waitFor('the failure signal', () => signals().find(row => row.source_session === failedSession))
+    assert.equal(signals().find(row => row.source_session === failedSession).status, 1)
+
+    script.detection = submissions([{ taskKey: 'failure:only', status: 0 }])
+    const successSession = await newSession(alice)
+    await sendPlain(alice, successSession, '另一个会话把发布清单做成功了')
+    await waitFor('the lone success signal', () => signals().find(row => row.source_session === successSession))
+    await delay(2_500)
+    assert.equal(creationJobs().filter(row => row.task_key === 'failure:only').length, 0,
+      'one success plus one failure is not two independent successful sessions')
+    assert.equal(seen.creation.length, 0)
   })
 
   test('an uncertain review is stored as uncertain and never triggers creation', async () => {
