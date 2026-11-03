@@ -54,6 +54,7 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,6 +63,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Download01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.RemoteChatAttachment
 import me.rerere.rikkahub.data.remote.RemoteChatAttempt
 import me.rerere.rikkahub.data.remote.RemoteChatMessage
@@ -282,7 +284,6 @@ internal fun RemoteTranscript(
     }
 }
 
-/** A quiet full-width system line: what Fairy loaded, not something either side said. */
 /**
  * The skill review display: the backend's four deterministic blocks, rendered as a multi-line
  * system panel rather than a message. The text is presented verbatim; the client never recomposes
@@ -299,7 +300,7 @@ private fun SkillReviewPanel(text: String, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
-            text = "技能审核",
+            text = stringResource(R.string.skills_review_panel_title),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -311,6 +312,7 @@ private fun SkillReviewPanel(text: String, modifier: Modifier = Modifier) {
     }
 }
 
+/** A quiet full-width system line: what Fairy loaded, not something either side said. */
 @Composable
 private fun SkillActivationLine(text: String, modifier: Modifier = Modifier) {
     Row(
