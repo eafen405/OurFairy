@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.di
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.lifecycle.ProcessLifecycleOwner
 import me.rerere.rikkahub.data.remote.RemoteAttachmentApi
 import me.rerere.rikkahub.data.remote.RemoteSpeechApi
@@ -13,11 +14,15 @@ import me.rerere.rikkahub.data.remote.RemoteJobBackend
 import me.rerere.rikkahub.data.remote.RemoteChatState
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.data.remote.RemoteAppUpdate
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.service.AndroidRemoteNotifications
 import me.rerere.rikkahub.service.RemoteReceiveController
 import me.rerere.rikkahub.service.RemoteReceiveServiceLauncher
+import me.rerere.rikkahub.ui.fairy.FairyInteraction
+import me.rerere.rikkahub.ui.fairy.FairyUiMemory
 import me.rerere.rikkahub.data.remote.AndroidChatSyncStore
+import me.rerere.rikkahub.data.remote.AndroidSkillsReviewLedger
 import me.rerere.rikkahub.data.remote.ChatSyncStore
 import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.AndroidKeystoreCredentialStore
@@ -26,15 +31,21 @@ import me.rerere.rikkahub.data.remote.GatewayApi
 import me.rerere.rikkahub.data.remote.GatewayBackend
 import me.rerere.rikkahub.data.remote.IdentityApi
 import me.rerere.rikkahub.data.remote.IdentityBackend
+import me.rerere.rikkahub.data.remote.ImpressionApi
+import me.rerere.rikkahub.data.remote.ImpressionBackend
 import me.rerere.rikkahub.data.remote.SessionApi
 import me.rerere.rikkahub.data.remote.SessionBackend
+import me.rerere.rikkahub.data.remote.SkillsApi
+import me.rerere.rikkahub.data.remote.SkillsBackend
+import me.rerere.rikkahub.data.remote.SkillsReviewLedger
+import me.rerere.rikkahub.data.remote.SkillsReviewNotifier
 import okhttp3.OkHttpClient
 import org.koin.dsl.module
 
 /** Build-time deployment address; release requires an explicit Gradle property. */
 private val identityEndpoint: String = BuildConfig.IDENTITY_ENDPOINT
 
-/** Account identity, owned sessions and remote reception share one process lifetime. */
+/** Account identity, owned sessions, remote reception and app updates share one process lifetime. */
 val identityModule = module {
     single<CredentialStore> {
         AndroidKeystoreCredentialStore(context = get<Context>())
@@ -56,15 +67,40 @@ val identityModule = module {
         GatewayApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
     }
 
+    single<ImpressionBackend> {
+        ImpressionApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
+    }
+
+    single<SkillsBackend> {
+        SkillsApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
+    }
+
     single<RemoteAttachmentBackend> { RemoteAttachmentApi(identityEndpoint, get<OkHttpClient>()) }
 
     single<RemoteSpeechBackend> { RemoteSpeechApi(identityEndpoint, get<OkHttpClient>()) }
 
     single<RemoteJobBackend> { RemoteJobApi(identityEndpoint, get<OkHttpClient>()) }
 
+    single { RemoteAppUpdate(get<Context>(), get<OkHttpClient>(), identityEndpoint) }
+
     single<ChatSyncStore> { AndroidChatSyncStore(get<Context>()) }
 
+    single<SkillsReviewLedger> { AndroidSkillsReviewLedger(get<Context>()) }
+
     single { AndroidRemoteNotifications(get<Context>()) }
+
+    single {
+        SkillsReviewNotifier(
+            backend = get<SkillsBackend>(),
+            ledger = get<SkillsReviewLedger>(),
+            platform = get<AndroidRemoteNotifications>(),
+            endpoint = identityEndpoint,
+            // Skill reminders are gated by the skills channel, not by the background-receive
+            // switch; the channel object is the one authority for that fact.
+            remindersAllowed = { get<AndroidRemoteNotifications>().skillsNotificationsAllowed() },
+            scope = get<AppScope>(),
+        )
+    }
 
     single {
         val runtimeScope = get<AppScope>()
@@ -80,17 +116,28 @@ val identityModule = module {
                 speechBackend = get<RemoteSpeechBackend>(),
                 settleReminders = settles,
             )
-        }, notifications, { notifications.enabled.value })
+        }, notifications, { notifications.enabled.value }, syncStore, identityEndpoint)
     }
 
     single { RemoteReceiveServiceLauncher(get<Context>()) }
+
+    // One interaction owner for the process: both pages ask it for 当前表现, 待机 and 台词. Its
+    // clock and line memory are injected here, so the module itself holds no Android clock and a
+    // test drives it with a fixed one and an in-memory memory.
+    single {
+        FairyInteraction(
+            now = SystemClock::uptimeMillis,
+            random = kotlin.random.Random.Default,
+            lines = FairyUiMemory(get<Context>()),
+        )
+    }
 
     single {
         // The app-wide foreground fact is the notification boundary's own read; the
         // process lifecycle only tells reception when to ask for it again.
         RemoteReceiveController(get<AccountSession>(), get<RemoteReceiveState>(),
             get<AndroidRemoteNotifications>(), get<RemoteReceiveServiceLauncher>(),
-            ProcessLifecycleOwner.get().lifecycle, get<AppScope>())
+            ProcessLifecycleOwner.get().lifecycle, get<AppScope>(), get<SkillsReviewNotifier>())
     }
 
     single {

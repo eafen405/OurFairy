@@ -25,9 +25,9 @@ import { createHash } from 'node:crypto'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { after, before, describe, test } from 'node:test'
-import { describeRun, dshDir, httpJson, makeHome, removeHome, runBackend, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
+import { describeRun, httpJson, makeHome, removeHome, runBackend, startArgs, startedPort, writeOverlay } from './helpers/backend.mjs'
 
-const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 
 const PHAETHON_PASSWORD = 'test-phaethon-password'
 const home = makeHome('ourfairy-owned-sessions-')
@@ -56,7 +56,7 @@ function stopBackend() {
 }
 
 before(async () => {
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['success'], repeatLast: true, successText: 'OK' })
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['success'], repeatLast: true, successText: 'OK' })
   startBackend()
 })
 

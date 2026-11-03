@@ -15,19 +15,26 @@
  * scenario. Native message and session ids are generated per run, so the
  * frozen rows omit `messageId`; every other field is the captured value except
  * `tools`, which #213 added afterwards: the row it was added to (the
- * `todo_write` step at seq 11) is the one place this fixture is not a pure
- * capture.
+ * `todo_write` step) is the one place this fixture is not a pure capture.
+ *
+ * #251 shifted every seq at or after the first human message by three: mounting
+ * the title rows makes the product write `session/title` (fallback),
+ * `session/title-llm-request` (the auxiliary route record) and `session/title`
+ * (the model's title) into the same log. Only the seq fields, the cut keys and
+ * the activity episode id moved — the capture's rows, their order, statuses,
+ * texts and the tasks/activity values are unchanged, which is what re-running
+ * this suite against the shifted capture proves.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
-import { dshDir, describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 // Registers Node resolution for the pinned dsh checkout before the product
 // modules below are loaded (they are dynamic imports for that reason).
 import './helpers/dsh-peers.mjs'
 
-const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 const units = await import('../backend/chat/dist/units.js')
 const expected = JSON.parse(readFileSync(new URL('./fixtures/projection-real-expected.json', import.meta.url), 'utf8'))
 
@@ -85,17 +92,24 @@ async function readLog(token, sessionId) {
   return events
 }
 
-/** Compare the unit read against the frozen values, ignoring per-run generated ids. */
+/**
+ * Compare the unit read against the frozen values, ignoring per-run generated
+ * ids and the position #224 added after the capture.
+ */
 function assertSameProjection(events, sessionId, running = false) {
-  const stable = messages => messages.map(({ messageId, ...row }) => row)
+  const stable = messages => messages.map(({ messageId, position: _position, ...row }) => row)
   const ctx = { jobs: { generation: 'no-live-registry', list: () => [] } }
   const transcriptState = events.reduce(units.transcriptDefinition.apply, units.transcriptDefinition.init({ id: sessionId }, 0))
   const workState = events.reduce(units.workDefinition.apply, units.workDefinition.init({ id: sessionId }, 0))
   const work = units.tasksAndActivityAt(workState, ctx, sessionId, running, events.at(-1)?.seq ?? -1)
-  assert.deepEqual(stable(units.transcriptAt(transcriptState)), expected.transcript,
+  const rows = units.transcriptAt(transcriptState)
+  assert.deepEqual(stable(rows), expected.transcript,
     `transcript must match the frozen rows; turn endings: ${JSON.stringify(
       events.filter(event => event.type === 'turn/end').map(event => event.data.reason),
     )}`)
+  // The capture's array order is the first-appearance order, so it is the
+  // independent expectation for each row's place.
+  assert.deepEqual(rows.map(message => message.position), expected.transcript.map((_, index) => index))
   assert.deepEqual(work, expected.work, 'tasks and activity must match the frozen values')
   return { transcriptState, workState, work }
 }
@@ -103,7 +117,7 @@ function assertSameProjection(events, sessionId, running = false) {
 before(async () => {
   // A tool call first, then a normal reply: the log then contains a tool call,
   // its result, and the two assistant messages the product wrote for them.
-  model = await startMockLlmServer({ apiKey: 'mock-key',
+  model = await startTitleAwareModel({ apiKey: 'mock-key',
     sequence: ['tool_call_success', 'slow_success', 'partial_eof', 'success'], repeatLast: true,
     successText: '工具之后回复。', partialText: '失败前原文\n**不能丢**。', chunkSize: 2,
     toolName: 'todo_write', toolArguments: JSON.stringify({ todos: [{ content: '检查投影', status: 'in_progress' }] }) })
@@ -142,15 +156,22 @@ test('the units reproduce the frozen values over a real session log', async () =
   assert.ok(failed.every(message => message.requestId === null), 'an attempt row has no request id')
 
   // The same frozen value must hold at every cut the transcript claims to answer.
-  const stable = messages => messages.map(({ messageId, ...row }) => row)
+  const stable = messages => messages.map(({ messageId, position: _position, ...row }) => row)
   for (const [cut, rows] of Object.entries(expected.cuts)) {
-    assert.deepEqual(stable(units.transcriptAt(folded, Number(cut))), rows,
-      `transcript at cut ${cut} must match the frozen prefix`)
+    const at = units.transcriptAt(folded, Number(cut))
+    assert.deepEqual(stable(at), rows, `transcript at cut ${cut} must match the frozen prefix`)
+    // A cut sees a prefix of the first-appearance order, so its places run from zero.
+    assert.deepEqual(at.map(message => message.position), rows.map((_, index) => index),
+      `positions at cut ${cut} must name the frozen prefix places`)
   }
 
   // The read face serves the same folded facts; the frozen fixture is the
   // independent expectation, and this asserts the endpoint is on that path.
   const read = await post('/chat/read', alice.token, { sessionId })
+  // The read is served from the same unit state: the wire rows are the folded
+  // rows, positions included.
+  assert.deepEqual(read.projection.messages, units.transcriptAt(folded),
+    'the endpoint must serve the folded transcript rows')
   const logDerived = ({ availability, ...task }) => task
   assert.deepEqual(read.projection.tasks.filter(task => task.availability === 0).map(logDerived),
     work.tasks.filter(task => task.availability === 0).map(logDerived),

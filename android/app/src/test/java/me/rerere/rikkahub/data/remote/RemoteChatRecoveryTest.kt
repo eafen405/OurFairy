@@ -250,7 +250,7 @@ class RemoteChatRecoveryTest {
         assertNotNull(state.snapshot.value.failure)
     }
     companion object {
-        fun message(seq:Long)=RemoteChatMessage("m$seq",seq,null,2,2,"body$seq")
+        fun message(seq:Long)=RemoteChatMessage("m$seq",seq,seq,null,2,2,"body$seq")
         fun projection(from:Long,cursor:Long,version:Long=1)=RemoteChatProjection(
             "s","g",version,cursor,-1,listOf(message(cursor)),null,0,null,
             cursor,from,eventCoverage(from,cursor),from>0,from.takeIf { it>0 })

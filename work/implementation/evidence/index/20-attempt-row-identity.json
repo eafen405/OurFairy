@@ -1,0 +1,12 @@
+{
+  "title": "#233 Android 呈现：attempt 行身份由后端事实派生",
+  "entries": [
+    {
+      "dirs": [
+        "234-presentation-identity",
+        "235-reading-regression",
+        "233-closeout"
+      ]
+    }
+  ]
+}

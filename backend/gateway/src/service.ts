@@ -11,6 +11,10 @@
  * @module @ourfairy/dsh-gateway/src/service
  */
 import { Service } from '@deepseek-ai/cordis'
+import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from '@ourfairy/dsh-memory/maintenance-policy'
+import {
+  DEFAULT_API_KEY_ENV, isPositiveInteger, SPEECH_ENDPOINT_PATTERN, SPEECH_ENV_NAME_PATTERN, SPEECH_FIELDS, SPEECH_LIMIT_FIELDS,
+} from '@ourfairy/dsh-speech/policy'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
@@ -99,6 +103,40 @@ export const PHONE_EDITABLE_MODEL_FIELDS = new Set(['id', 'name', 'contextWindow
 
 /** Draft fields outside `models` reshape every model on the route. */
 const ROUTE_WIDE_FIELDS = ['api', 'baseURL', 'apiKeyEnv'] as const
+
+/**
+ * The automatic-compaction threshold's owning row and product policy range.
+ *
+ * The row is the native `compaction-basic` entry the shipped bundle mounts; its
+ * `thresholdTokens` field is volatile, so a save applies to the next pressure
+ * check without remounting the row. The range is the product decision from
+ * `docs/specs/fairy-memory.md` §6, enforced here because the native row only
+ * declares a positive integer.
+ */
+const COMPACTION_ROW = 'compaction-basic'
+const COMPACTION_FIELD = 'thresholdTokens'
+const COMPACTION_MIN_TOKENS = 100_000
+const COMPACTION_MAX_TOKENS = 900_000
+const COMPACTION_DEFAULT_TOKENS = 500_000
+
+/**
+ * The memory row's two maintenance numbers and their product policy range.
+ *
+ * The `memory` row is the one the shipped bundle mounts; `maintenanceTurns` and
+ * `maintenanceDecayHours` are volatile fields, so a save applies to the next
+ * maintenance evaluation without remounting the engine. The defaults and the
+ * ranges are the memory package's maintenance policy (§5/§6 of
+ * `docs/specs/fairy-memory.md`), read here through a runtime import so the row's
+ * Config, the engine's read-time check and this phone-facing check share one
+ * declaration. The wire contract still names the error code and spelling the
+ * phone sees.
+ *
+ * The gateway view names them `triggerTurns` and `decayHours`; the profile keeps
+ * the row's own field names.
+ */
+const MAINTENANCE_ROW = 'memory'
+const MAINTENANCE_TURNS_FIELD = 'maintenanceTurns'
+const MAINTENANCE_DECAY_FIELD = 'maintenanceDecayHours'
 
 /**
  * One model entry of a provider route, as the settings row and the phone draft
@@ -410,7 +448,9 @@ export class GatewayService extends Service {
   async asrView() {
     const row = this.row('speech')
     const value = row?.value ?? {}
-    const ref = value.apiKeyEnv ?? 'VOICE_API_KEY'
+    // The field vocabulary is the speech policy's; the gateway adds only the
+    // defaulted reference and the facts around the row.
+    const ref = value.apiKeyEnv ?? DEFAULT_API_KEY_ENV
     const credential = await this.credential(ref)
     // The speech route answers "available" from the resolved value, so the
     // gateway must ask the same seam the same way rather than describing a
@@ -419,16 +459,26 @@ export class GatewayService extends Service {
     const resolved = credentials === undefined ? undefined : await credentials.resolve(ref as CredentialRef).catch(() => undefined)
     return {
       editable: row !== undefined,
-      model: value.model ?? null,
-      endpoint: value.endpoint ?? null,
-      apiKeyEnv: ref,
-      maxDurationMs: value.maxDurationMs ?? null,
-      maxAudioBytes: value.maxAudioBytes ?? null,
-      timeoutMs: value.timeoutMs ?? null,
-      maxGlobalInFlight: value.maxGlobalInFlight ?? null,
-      maxUserInFlight: value.maxUserInFlight ?? null,
+      ...Object.fromEntries(SPEECH_FIELDS.map(field => [field, field === 'apiKeyEnv' ? ref : (value[field] ?? null)])),
       available: resolved?.value?.trim() !== undefined && resolved.value.trim() !== '',
       credential,
+    }
+  }
+
+  /** The live automatic-compaction threshold the native pressure check reads. */
+  compactionView() {
+    const value = this.row(COMPACTION_ROW)?.value?.[COMPACTION_FIELD]
+    return { [COMPACTION_FIELD]: isSafeInteger(value) ? value : COMPACTION_DEFAULT_TOKENS }
+  }
+
+  /** The live maintenance numbers the next maintenance evaluation reads. */
+  maintenanceView() {
+    const value = this.row(MAINTENANCE_ROW)?.value
+    const turns = value?.[MAINTENANCE_TURNS_FIELD]
+    const decayHours = value?.[MAINTENANCE_DECAY_FIELD]
+    return {
+      triggerTurns: isSafeInteger(turns) ? turns : MAINTENANCE_TURNS.default,
+      decayHours: isSafeInteger(decayHours) ? decayHours : MAINTENANCE_DECAY_HOURS.default,
     }
   }
 
@@ -437,7 +487,9 @@ export class GatewayService extends Service {
     // A deployment without the editor answers 503 from requireConfigurationEditor(); reaching here
     // means the editor is mounted, so only per-row presence can differ.
     const capability = { selection: this.row('agent-default-model') !== undefined,
-      routes: this.row('llm-pi-ai') !== undefined, asr: this.row('speech') !== undefined }
+      routes: this.row('llm-pi-ai') !== undefined, asr: this.row('speech') !== undefined,
+      compaction: this.row(COMPACTION_ROW) !== undefined,
+      maintenance: this.row(MAINTENANCE_ROW) !== undefined }
     const selection = this.ctx.agentDefaultModel.currentSelection()
     const inUse = this.ctx.ourfairyChat.activeReplies()
     const profiles = this.row('llm-pi-ai')?.value?.providers ?? {}
@@ -455,18 +507,25 @@ export class GatewayService extends Service {
     const routesRow = this.row('llm-pi-ai')
     const selectionRow = this.row('agent-default-model')
     const asrRow = this.row('speech')
+    const compactionRow = this.row(COMPACTION_ROW)
+    const maintenanceRow = this.row(MAINTENANCE_ROW)
     return {
       gateway: {
       selection,
       selectionApplies: 'next-turn',
       routes,
       asr: await this.asrView(),
+      compaction: this.compactionView(),
+      maintenance: this.maintenanceView(),
       inUse,
       editable: capability,
       saved: {
         selection: Object.keys(selectionRow?.user ?? {}).length > 0,
         routes: Object.keys(routesRow?.user?.providers ?? {}).length > 0,
         asr: Object.keys(asrRow?.user ?? {}).length > 0,
+        compaction: isSafeInteger(compactionRow?.user?.[COMPACTION_FIELD]),
+        maintenance: isSafeInteger(maintenanceRow?.user?.[MAINTENANCE_TURNS_FIELD])
+          || isSafeInteger(maintenanceRow?.user?.[MAINTENANCE_DECAY_FIELD]),
       },
       },
     }
@@ -576,24 +635,96 @@ export class GatewayService extends Service {
     const model = input.model
     const endpoint = input.endpoint
     if (typeof model !== 'string' || model.trim() === '') throw new GatewayError(400, 'gateway/invalid-asr', 'model must be a non-empty string')
-    if (typeof endpoint !== 'string' || !/^https?:\/\/[^\s]+$/u.test(endpoint)) {
+    // The check's grammar is the speech policy's, so this save and the speech
+    // runtime accept exactly the same endpoint.
+    if (typeof endpoint !== 'string' || !SPEECH_ENDPOINT_PATTERN.test(endpoint)) {
       throw new GatewayError(400, 'gateway/invalid-asr', 'endpoint must be an http(s) URL')
     }
     const fields: Record<string, unknown> = { model, endpoint }
-    for (const field of ['maxDurationMs', 'maxAudioBytes', 'timeoutMs', 'maxGlobalInFlight', 'maxUserInFlight'] as const) {
+    for (const field of SPEECH_LIMIT_FIELDS) {
       if (input[field] === undefined) continue
-      if (!isSafeInteger(input[field]) || input[field] < 1) {
+      if (!isPositiveInteger(input[field])) {
         throw new GatewayError(400, 'gateway/invalid-asr', `${field} must be a positive integer`)
       }
       fields[field] = input[field]
     }
     if (input.apiKeyEnv !== undefined) {
-      if (typeof input.apiKeyEnv !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(input.apiKeyEnv)) {
+      if (typeof input.apiKeyEnv !== 'string' || !SPEECH_ENV_NAME_PATTERN.test(input.apiKeyEnv)) {
         throw new GatewayError(400, 'gateway/invalid-asr', 'apiKeyEnv must be an environment-variable name')
       }
       fields.apiKeyEnv = input.apiKeyEnv
     }
     await this.edit(() => this.requireConfigurationEditor().update('speech', fields))
     return { asr: await this.asrView() }
+  }
+
+  /**
+   * Save the automatic-compaction threshold. The native `compaction-basic` row
+   * carries it as a volatile field, so the next pressure check reads the new
+   * value and a running reply is not interrupted.
+   */
+  async saveCompaction(body: Record<string, unknown>) {
+    const input = body ?? ({} as Record<string, unknown>)
+    for (const key of Object.keys(input)) {
+      if (key !== COMPACTION_FIELD) {
+        throw new GatewayError(400, 'gateway/invalid-compaction',
+          `the compaction threshold does not accept field "${key}"`)
+      }
+    }
+    const thresholdTokens = input[COMPACTION_FIELD]
+    if (!isSafeInteger(thresholdTokens)
+      || thresholdTokens < COMPACTION_MIN_TOKENS || thresholdTokens > COMPACTION_MAX_TOKENS) {
+      const got = thresholdTokens === undefined ? 'no value' : JSON.stringify(thresholdTokens)
+      throw new GatewayError(400, 'gateway/invalid-compaction',
+        `${COMPACTION_FIELD} must be a whole number of tokens from ${COMPACTION_MIN_TOKENS} to ${COMPACTION_MAX_TOKENS},`
+        + ` inclusive; got ${got}`)
+    }
+    if (this.row(COMPACTION_ROW) === undefined) {
+      throw new GatewayError(503, 'gateway/configuration-unavailable',
+        `this deployment mounts no "${COMPACTION_ROW}" row; the compaction threshold cannot be saved here`)
+    }
+    await this.edit(() => this.requireConfigurationEditor().update(COMPACTION_ROW, { thresholdTokens }))
+    return { compaction: this.compactionView() }
+  }
+
+  /**
+   * Save the maintenance trigger turn count and decay interval. The memory row
+   * carries both as volatile fields, so the next maintenance evaluation reads
+   * the new values; a parked interval is re-evaluated under them and no
+   * persisted watermark is touched by this write.
+   */
+  async saveMaintenance(body: Record<string, unknown>) {
+    const input = body ?? ({} as Record<string, unknown>)
+    for (const key of Object.keys(input)) {
+      if (key !== 'triggerTurns' && key !== 'decayHours') {
+        throw new GatewayError(400, 'gateway/invalid-maintenance',
+          `the maintenance settings do not accept field "${key}"`)
+      }
+    }
+    const triggerTurns = input.triggerTurns
+    if (!isSafeInteger(triggerTurns)
+      || triggerTurns < MAINTENANCE_TURNS.min || triggerTurns > MAINTENANCE_TURNS.max) {
+      const got = triggerTurns === undefined ? 'no value' : JSON.stringify(triggerTurns)
+      throw new GatewayError(400, 'gateway/invalid-maintenance',
+        `triggerTurns must be a whole number of closed turns from ${MAINTENANCE_TURNS.min} to ${MAINTENANCE_TURNS.max},`
+        + ` inclusive; got ${got}`)
+    }
+    const decayHours = input.decayHours
+    if (!isSafeInteger(decayHours)
+      || decayHours < MAINTENANCE_DECAY_HOURS.min || decayHours > MAINTENANCE_DECAY_HOURS.max) {
+      const got = decayHours === undefined ? 'no value' : JSON.stringify(decayHours)
+      throw new GatewayError(400, 'gateway/invalid-maintenance',
+        `decayHours must be a whole number of hours from ${MAINTENANCE_DECAY_HOURS.min} to ${MAINTENANCE_DECAY_HOURS.max},`
+        + ` inclusive; got ${got}`)
+    }
+    if (this.row(MAINTENANCE_ROW) === undefined) {
+      throw new GatewayError(503, 'gateway/configuration-unavailable',
+        `this deployment mounts no "${MAINTENANCE_ROW}" row; the maintenance settings cannot be saved here`)
+    }
+    await this.edit(() => this.requireConfigurationEditor().update(MAINTENANCE_ROW, {
+      [MAINTENANCE_TURNS_FIELD]: triggerTurns,
+      [MAINTENANCE_DECAY_FIELD]: decayHours,
+    }))
+    return { maintenance: this.maintenanceView() }
   }
 }

@@ -1,8 +1,14 @@
+/**
+ * @covers backend/chat — this suite drives `/chat/jobs/output`,
+ * `/chat/jobs/stop`, `/chat/observe` and `/chat/stop` through the product's own
+ * routes rather than importing the package.
+ */
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
 import { before, after, test } from 'node:test'
 import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const home = makeHome('ourfairy-jobs-')
 const password = 'jobs-test-password'
@@ -47,6 +53,9 @@ async function stop() {
 before(async () => {
   model = http.createServer(async (req, res) => {
     let data = ''; for await (const chunk of req) data += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(data, res)) return
     const body = JSON.parse(data)
     const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
     const latestUser = blocks.findLastIndex(c => c.type === 'text' && (c.text.startsWith('{"name":') || c.text.startsWith('__')))

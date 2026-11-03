@@ -16,8 +16,8 @@ import org.junit.Test
 
 /**
  * A session only records the episode it owes the reminder; reception sees every session and
- * publishes the backlog once. These tests therefore drive the session through reception, because
- * that module owns when a reminder appears.
+ * publishes each owed session's reminder. These tests therefore drive the session through
+ * reception, because that module owns when a reminder appears.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoteNotificationStateTest {
@@ -73,13 +73,16 @@ class RemoteNotificationStateTest {
     private class Sessions(
         private val ids: Map<String, String> = mapOf("alice" to "s", "bob" to "bob-session"),
     ) : SessionBackend {
-        override suspend fun list(token: String) = OwnedSessions(
+        override suspend fun list(token: String, archived: Boolean) = OwnedSessions(
             listOf(OwnedSession(ids.getValue(token), primary = true)), ids.getValue(token),
         )
         override suspend fun read(token: String, sessionId: String) = OwnedSession(sessionId)
+        override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun create(token: String) = error("not used")
         override suspend fun primary(token: String) = OwnedSession(ids.getValue(token), primary = true)
+        override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
+        override suspend fun restore(token: String, sessionId: String) = error("not used")
     }
 
     private fun TestScope.received(
@@ -89,7 +92,7 @@ class RemoteNotificationStateTest {
         enabled: () -> Boolean = { true },
     ) = RemoteReceiveState(Sessions(), backgroundScope, { settle ->
         RemoteChatState(backend, backgroundScope, store, "https://fairy", settleReminders = settle)
-    }, platform, enabled)
+    }, platform, enabled, store, "https://fairy")
 
     private fun TestScope.opened(
         store: ChatSyncStore,
@@ -158,7 +161,7 @@ class RemoteNotificationStateTest {
             completed = RemoteCompletedActivity("s/5", 5, 6, 5), delivery = RemoteActivityDelivery("s/1", 2)))); runCurrent()
         assertEquals(listOf("delivered2", "delivered6"), platform.alerts.map { it.second })
     }
-    @Test fun `reconnect waits for catchup and writer ack then merges backlog without guessing unknown as quiet`() = runTest {
+    @Test fun `reconnect waits for catchup and writer ack then publishes the backlog without guessing unknown as quiet`() = runTest {
         val store = Store()
         val key = ChatSyncKey("https://fairy", 1, "s")
         store.seed(key, ChatSyncRecord(0, true, notificationThrough = 0))

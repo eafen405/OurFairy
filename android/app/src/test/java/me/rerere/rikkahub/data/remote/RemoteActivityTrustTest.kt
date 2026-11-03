@@ -38,11 +38,14 @@ class RemoteActivityTrustTest {
     }
     /** The account's one session, so reception binds it and owns when the reminder appears. */
     private class Sessions : SessionBackend {
-        override suspend fun list(token: String) = OwnedSessions(listOf(OwnedSession("s", primary = true)), "s")
+        override suspend fun list(token: String, archived: Boolean) = OwnedSessions(listOf(OwnedSession("s", primary = true)), "s")
         override suspend fun read(token: String, sessionId: String) = OwnedSession(sessionId)
+        override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun create(token: String) = error("not used")
         override suspend fun primary(token: String) = OwnedSession("s", primary = true)
+        override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
+        override suspend fun restore(token: String, sessionId: String) = error("not used")
     }
     private class Backend : RemoteChatBackend {
         val updates = MutableSharedFlow<RemoteChatProjection>(extraBufferCapacity = 10)
@@ -69,7 +72,7 @@ class RemoteActivityTrustTest {
     ): RemoteChatState {
         val receiver = RemoteReceiveState(Sessions(), backgroundScope, { settle ->
             RemoteChatState(backend, backgroundScope, store, "https://fairy", settleReminders = settle)
-        }, platform)
+        }, platform, { true }, store, "https://fairy")
         receiver.bind("alice", 1); runCurrent()
         return requireNotNull(receiver.stateForSession("s"))
     }

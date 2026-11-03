@@ -14,17 +14,22 @@
  * installs, a merge, an explicit `--full`, or a selection wider than the limit
  * run the whole suite.
  *
- * The selection is a direct-surface choice, not a coverage claim: a package no
- * test imports on purpose falls to `typecheck`, and the closing ticket runs the
+ * The selection is a direct-surface choice, not a coverage claim: the selector
+ * reads the changed path's direct references in a test body plus any
+ * `@covers backend/<package>` line the test file writes for itself. Whether a
+ * suite that drives a package through the launcher carries that line is the
+ * suite's own call — this selector claims no complete coverage — a package no
+ * test declares or names falls to `typecheck`, and the closing ticket runs the
  * full suite.
  *
- * Delivery is unchanged: `CODING_STANDARDS.md` still requires `npm test` and
- * `npm run combo:verify` on the final integration state, and CI runs the same.
+ * Final backend and changed-face Android checks remain mandatory;
+ * `CODING_STANDARDS.md` names the delivery commands and CI runs both product faces.
  *
  * Usage:
  *   node scripts/precommit.ts           # classify the staged change and run the gate
  *   node scripts/precommit.ts --print   # print the decision as JSON, run nothing
  *   node scripts/precommit.ts --full    # run the full suite whatever changed
+ *   node scripts/precommit.ts --merge   # name a merge the hook cannot see yet
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -36,8 +41,8 @@ import { packageNameOf } from './package-manifest.ts'
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(scriptDir, '..')
 
-/** One command the gate runs. */
-export type GateCommand = { command: string; args: readonly string[] }
+/** One command the gate runs, relative to the repository root unless cwd says otherwise. */
+export type GateCommand = { command: string; args: readonly string[]; cwd?: string }
 
 /** Which gate a staged change earns. */
 export type GateMode = 'docs' | 'related' | 'typecheck' | 'full'
@@ -72,11 +77,16 @@ export const TYPECHECK_COMMANDS = Object.freeze([
   Object.freeze({ command: 'npm', args: Object.freeze(['run', 'combo:verify']) }),
 ])
 
-/** Checks any other commit runs: the full product suite, then the combination. */
+/** Checks any other commit runs: the full backend suite, then the combination. */
 export const FULL_COMMANDS = Object.freeze([
   Object.freeze({ command: 'npm', args: Object.freeze(['test']) }),
   Object.freeze({ command: 'npm', args: Object.freeze(['run', 'combo:verify']) }),
 ])
+
+/** Android checks run in their own Gradle project, in addition to the root gate. */
+const ANDROID_COMMAND = Object.freeze({
+  command: './gradlew', args: Object.freeze(['test', 'lintDebug']), cwd: 'android',
+})
 
 /**
  * How many related tests may be selected before the gate runs everything.
@@ -143,11 +153,35 @@ function productPackageName(root: string, name: string): string | undefined {
 }
 
 /**
+ * The line a test file writes to declare the product package it drives.
+ *
+ * A behaviour suite that reaches a package through the launcher and the
+ * product's HTTP routes imports no source from that package, so the body-name
+ * signal cannot see the association. The file states it instead, which keeps
+ * the association in the one file that knows it — there is no list to sync.
+ */
+const COVERS_DECLARATION = /@covers\s+backend\/([a-z0-9-]+)/gu
+
+/**
+ * Whether a test file declares one of the changed packages.
+ * @param body - the test file's text
+ * @param changed - package directory names under `backend/`
+ * @returns
+ */
+function declaresAny(body: string, changed: ReadonlySet<string>): boolean {
+  for (const [, name] of body.matchAll(COVERS_DECLARATION)) {
+    if (changed.has(name!)) return true
+  }
+  return false
+}
+
+/**
  * The test files a staged change is related to.
  *
  * Staged test files are always selected. A changed product package selects the
- * tests whose body names that package, and a changed script selects the tests
- * whose body names that script. A Markdown change selects the link check.
+ * tests that name it or declare it on a `@covers backend/<package>` line, and a
+ * changed script selects the tests whose body names that script. A Markdown
+ * change selects the link check.
  * @param paths staged paths, repository-relative
  * @param [options]
  * @returns repo-relative test paths.
@@ -155,6 +189,7 @@ function productPackageName(root: string, name: string): string | undefined {
 export function relatedTests(paths: string[], { root = repoRoot }: { root?: string } = {}): string[] {
   const selected = new Set<string>()
   const needles: string[] = []
+  const changedPackages = new Set<string>()
   for (const path of paths) {
     if (/^tests\/.+\.test\.mjs$/u.test(path)) {
       selected.add(path)
@@ -166,8 +201,10 @@ export function relatedTests(paths: string[], { root = repoRoot }: { root?: stri
     }
     const productPackage = /^backend\/([^/]+)\//u.exec(path)
     if (productPackage !== null) {
-      needles.push(`backend/${productPackage[1]}/`)
-      const published = productPackageName(root, productPackage[1]!)
+      const name = productPackage[1]!
+      changedPackages.add(name)
+      needles.push(`backend/${name}/`)
+      const published = productPackageName(root, name)
       if (published !== undefined) needles.push(published)
       continue
     }
@@ -177,7 +214,7 @@ export function relatedTests(paths: string[], { root = repoRoot }: { root?: stri
   if (needles.length > 0) {
     for (const file of testFiles(root)) {
       const body = readFileSync(join(root, file), 'utf8')
-      if (needles.some(needle => body.includes(needle))) selected.add(file)
+      if (needles.some(needle => body.includes(needle)) || declaresAny(body, changedPackages)) selected.add(file)
     }
   }
   return [...selected].sort()
@@ -222,10 +259,14 @@ function decide(paths: string[], options: GateOptions = {}): GateDecision {
  */
 export function plan(paths: string[], options: GateOptions = {}): GatePlan {
   const { mode, tests } = decide(paths, options)
-  if (mode === 'docs') return { mode, tests, commands: DOCS_COMMANDS }
-  if (mode === 'full') return { mode, tests, commands: FULL_COMMANDS }
-  if (mode === 'typecheck') return { mode, tests, commands: TYPECHECK_COMMANDS }
-  return { mode, tests, commands: relatedCommands(tests) }
+  const commands = mode === 'docs' ? DOCS_COMMANDS
+    : mode === 'full' ? FULL_COMMANDS
+      : mode === 'typecheck' ? TYPECHECK_COMMANDS
+        : relatedCommands(tests)
+  const withAndroid = paths.some(path => /^android\//u.test(path) && !/\.mdx?$/iu.test(path))
+    ? [...commands, ANDROID_COMMAND]
+    : commands
+  return { mode, tests, commands: withAndroid }
 }
 
 /**
@@ -245,15 +286,19 @@ export function stagedPaths(root: string): string[] {
   }).trim()
   let out: string
   try {
-    out = read(['diff', '--cached', '--name-only', 'HEAD'])
+    out = read(['diff', '--cached', '--name-only', '--no-renames', 'HEAD'])
   } catch {
-    out = read(['diff', '--cached', '--name-only'])
+    out = read(['diff', '--cached', '--name-only', '--no-renames'])
   }
   return out.split('\n').filter(Boolean)
 }
 
 /**
  * Whether this checkout is in the middle of a merge.
+ *
+ * `pre-merge-commit` runs before Git writes MERGE_HEAD, so that hook passes
+ * `--merge` instead; this check covers `git commit` finishing a conflicted
+ * merge.
  * @param root
  * @returns
  */
@@ -264,7 +309,10 @@ export function isMerging(root: string): boolean {
 function main(argv: string[]): void {
   const print = argv.includes('--print')
   const paths = stagedPaths(repoRoot)
-  const decision = plan(paths, { merge: isMerging(repoRoot), forceFull: argv.includes('--full') })
+  const decision = plan(paths, {
+    merge: isMerging(repoRoot) || argv.includes('--merge'),
+    forceFull: argv.includes('--full'),
+  })
   if (print) {
     process.stdout.write(`${JSON.stringify({ ...decision, paths }, null, 2)}\n`)
     return
@@ -272,7 +320,7 @@ function main(argv: string[]): void {
   const why = paths.length === 0 ? 'message-only amend' : decision.mode === 'docs' ? 'Markdown-only change' : `${paths.length} changed path(s)`
   process.stdout.write(`pre-commit: ${decision.mode} gate (${why})\n`)
   for (const step of decision.commands) {
-    const result = spawnSync(step.command, step.args, { cwd: repoRoot, stdio: 'inherit' })
+    const result = spawnSync(step.command, step.args, { cwd: resolve(repoRoot, step.cwd ?? '.'), stdio: 'inherit' })
     if (result.status !== 0) {
       process.stderr.write(`pre-commit: ${step.command} ${step.args.join(' ')} failed\n`)
       process.exitCode = result.status ?? 1

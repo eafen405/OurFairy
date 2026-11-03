@@ -194,6 +194,130 @@ class SessionApiTest {
         assertEquals("s-7", read.id)
     }
 
+    // ---- renaming a session ----
+
+    @Test
+    fun `rename names the session and the title, and answers with the row the list would return`() = runTest {
+        reply(
+            200,
+            """{"ok":true,"session":{"id":"s-2","owner":"user:1","primary":false,"createdAt":1760003600000,"title":"我的会话","titleSource":2}}""",
+        )
+
+        val renamed = api.rename(TOKEN, "s-2", "  我的   会话  ")
+
+        val request = onlyRequest()
+        assertEquals("POST", request.method)
+        // The session family's address; which module answers it is a backend detail.
+        assertEquals("/sessions/rename", request.path)
+        assertEquals("Bearer $TOKEN", request.authorization)
+        // The text goes as the reader wrote it: normalization belongs to the
+        // backend, and a client must not pre-trim what it cannot normalize.
+        assertEquals("""{"sessionId":"s-2","title":"  我的   会话  "}""", request.body)
+        assertEquals("application/json; charset=utf-8", request.contentType)
+
+        assertEquals("s-2", renamed.id)
+        assertEquals("我的会话", renamed.title)
+        assertEquals(OwnedSessionTitleSource.USER, renamed.titleSource)
+    }
+
+    @Test
+    fun `a refused title keeps the backend's own code so the drawer can word it`() = runTest {
+        reply(400, """{"ok":false,"error":{"code":"sessions/empty-title","message":"the title has no visible characters once normalized"}}""")
+
+        try {
+            api.rename(TOKEN, "s-2", "  ")
+            fail("expected the refusal to be raised")
+        } catch (refused: IdentityRefused) {
+            assertEquals(400, refused.status)
+            assertEquals(SessionsSnapshot.EMPTY_TITLE, refused.code)
+        }
+    }
+
+    // ---- archiving (this product's delete) ----
+
+    @Test
+    fun `archive names the session it wants and answers with it`() = runTest {
+        reply(200, """{"ok":true,"session":{"id":"s-5","owner":"user:1","primary":false,"createdAt":1760003600000}}""")
+
+        val archived = api.archive(TOKEN, "s-5")
+
+        val request = onlyRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/sessions/archive", request.path)
+        assertEquals("Bearer $TOKEN", request.authorization)
+        assertEquals("""{"sessionId":"s-5"}""", request.body)
+        assertEquals("application/json; charset=utf-8", request.contentType)
+        assertEquals("s-5", archived.id)
+    }
+
+    @Test
+    fun `archiving the primary session carries the backend's own refusal code`() = runTest {
+        reply(409, """{"ok":false,"error":{"code":"sessions/primary-not-archivable","message":"the primary session is never archived"}}""")
+
+        try {
+            api.archive(TOKEN, "s-1")
+            fail("expected the refusal to be raised")
+        } catch (refused: IdentityRefused) {
+            assertEquals(409, refused.status)
+            assertEquals("sessions/primary-not-archivable", refused.code)
+        }
+    }
+
+    // ---- the archived view and restoring ----
+
+    @Test
+    fun `the archived view asks the same list path with the archived flag`() = runTest {
+        reply(
+            200,
+            """{"ok":true,"sessions":[{"id":"s-old","owner":"user:1","primary":false,"createdAt":1760000000000,"title":"旧会话"}],"primarySessionId":null}""",
+        )
+
+        val listed = api.list(TOKEN, archived = true)
+
+        val request = onlyRequest()
+        assertEquals("POST", request.method)
+        // One path answers both views; only the question changes.
+        assertEquals("/sessions/list", request.path)
+        assertEquals("Bearer $TOKEN", request.authorization)
+        assertEquals("""{"archived":true}""", request.body)
+        assertEquals("application/json; charset=utf-8", request.contentType)
+        assertEquals(listOf("s-old"), listed.sessions.map { it.id })
+        // The archived view never stands in a main session.
+        assertNull(listed.primarySessionId)
+    }
+
+    @Test
+    fun `restore names the session it wants and answers with the row the list would return`() = runTest {
+        reply(
+            200,
+            """{"ok":true,"session":{"id":"s-old","owner":"user:1","primary":false,"createdAt":1760000000000,"title":"旧会话","titleSource":0}}""",
+        )
+
+        val restored = api.restore(TOKEN, "s-old")
+
+        val request = onlyRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/sessions/restore", request.path)
+        assertEquals("Bearer $TOKEN", request.authorization)
+        assertEquals("""{"sessionId":"s-old"}""", request.body)
+        assertEquals("application/json; charset=utf-8", request.contentType)
+        assertEquals("s-old", restored.id)
+        assertEquals("旧会话", restored.title)
+    }
+
+    @Test
+    fun `a restore the backend refuses keeps its own code`() = runTest {
+        reply(409, """{"ok":false,"error":{"code":"sessions/not-archived","message":"that session is not in your archive"}}""")
+
+        try {
+            api.restore(TOKEN, "s-1")
+            fail("expected the refusal to be raised")
+        } catch (refused: IdentityRefused) {
+            assertEquals(409, refused.status)
+            assertEquals("sessions/not-archived", refused.code)
+        }
+    }
+
     // ---- refusal ----
 
     @Test

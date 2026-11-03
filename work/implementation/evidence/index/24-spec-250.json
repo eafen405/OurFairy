@@ -1,0 +1,29 @@
+{
+  "title": "会话管理（规格 #250）",
+  "entries": [
+    {
+      "dirs": [
+        "251-session-titles"
+      ],
+      "note": "#251 挂载原生会话标题两行：五个 `/sessions/*` 路由都带标题、`/sessions/list` 一次批量折叠，没有 `session/title` 事件的老会话按首条人类消息派生只读兜底（不写日志、不调模型）"
+    },
+    {
+      "dirs": [
+        "252-session-rename"
+      ],
+      "note": "#252 改名只经原生标题服务写入并钉住用户标题，新增 `/sessions/rename`（`open` 关补生成 → 改名 → `barrier` 落盘），客户端行内改名入口与标题栏显示会话名"
+    },
+    {
+      "dirs": [
+        "253-session-archive"
+      ],
+      "note": "#253 删除复用归档：归档表自持 SQLite、`list(owner, { archived })` 是唯一过滤点、主会话拒绝归档（`sessions/primary-not-archivable`），客户端 `AlertDialog` 二次确认；不提供物理删除"
+    },
+    {
+      "dirs": [
+        "254-archived-sessions"
+      ],
+      "note": "#254 归档的另一半：新增 `/sessions/restore`（未归档则 409 `sessions/not-archived`），客户端归档视图只填归档流、不出主会话也不给物理删除"
+    }
+  ]
+}

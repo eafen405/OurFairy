@@ -12,7 +12,7 @@
 
 ## 界面
 
-根主题是 `ui/fairy/FairyAppTheme.kt` 的 Material 3 Expressive 主题。沿用 Fairy 视觉、现有窗口和折叠配置组，使用 expressive motion、较大圆角及整行点击区域。
+根主题是 `ui/fairy/FairyAppTheme.kt` 的 Material 3 Expressive 主题。沿用 Fairy 视觉、现有窗口和折叠配置组，使用 expressive motion 与整行点击区域。颜色、形状和字体角色统一由 `ui/fairy/FairyTokens.kt` 提供；玻璃面板、信号按钮和状态标签分别复用 `InstrumentPanel`、`SignalButton`、`StatusChip`。普通面板使用 4–6dp 圆角与弱内描边，光效只用于 Fairy 核心、主按钮及实时状态。Fairy 本体与动画使用 `fairyBlue` / `fairyGlow` / `fairyLink` 的原有蓝色身份；仪器焦点、主按钮和实时状态使用独立的 `signal`，不得用 `signal` 替换本体动画色。
 
 显示偏好只由 `data/datastore/DisplayPreferences.kt` 的 `DisplayPreferencesStore` 管理，界面入口在 `ui/identity/RemoteDisplayPreferences.kt`。按当前页面需要扩展本地偏好。
 

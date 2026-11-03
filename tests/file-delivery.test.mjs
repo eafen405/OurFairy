@@ -1,3 +1,11 @@
+/**
+ * @covers backend/delivery — this suite drives the row through the product's
+ * chat and HTTP routes rather than importing it.
+ * @covers backend/attachments — the delivered file is qualified through the
+ * product's upload routes before the recipient can read it.
+ * @covers backend/groups — one case delivers into a group root that the group
+ * tools create and join.
+ */
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
@@ -5,6 +13,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { before, after, test } from 'node:test'
 import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const home = makeHome('ourfairy-file-delivery-')
 const password = 'group-test-password'
@@ -37,9 +46,23 @@ async function tool(user, name, args, sessionId, callId = `delivery-call-${reque
   }
   assert.fail(`tool ${name} reply was not returned to original chat ${sessionId}`)
 }
+/**
+ * The two sessions a self-delivery case needs: the fixed primary, filled so the
+ * next create materializes an ordinary session, and that origin conversation.
+ */
+async function selfDeliverySessions(user) {
+  const primary = (await request('/sessions/primary', user.token)).session.id
+  await tool(user, 'groups', {}, primary)
+  const origin = (await request('/sessions/create', user.token)).session.id
+  assert.notEqual(origin, primary)
+  return { primary, origin }
+}
 async function startBackend(overlays = []) {
+  // This suite drives many tool turns through one source session; keep them
+  // below the maintenance threshold so it tests delivery, not maintenance.
   const run = await runBackendAsync(startArgs(overlays), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: password,
-    MINIMAX_CN_API_KEY: 'mock-group-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}` })
+    MINIMAX_CN_API_KEY: 'mock-group-key', OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${modelPort}`,
+    OURFAIRY_MEMORY_MAINTENANCE_TURNS: '50' })
   port = startedPort(run)
 }
 async function stopBackend() {
@@ -49,6 +72,9 @@ async function stopBackend() {
 before(async () => {
   model = http.createServer(async (req, res) => {
     let data = ''; for await (const chunk of req) data += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(data, res)) return
     if (req.url.endsWith('/files')) {
       res.writeHead(404,{'content-type':'application/json'}); res.end(JSON.stringify({error:{type:'not_found_error',message:'model double uses inline image fallback'}})); return
     }
@@ -254,6 +280,10 @@ test('a file delivery flush failure leaves a ready retry and never confirms inco
   await startBackend([layer]);await projection(bob,target)
   const args={recipientShortId:bob.user.shortId,text:'File checkpoint retry',files:[{path}]}
   const failed=await tool(alice,'deliver_message',args,senderSession,'file-flush-stable')
+  // The injected `session/flush` fault is what refused this delivery; without
+  // the live `delivery/message` event the fixture would stay inert and this
+  // case would only be testing a successful delivery.
+  assert.match(failed,/injected durability checkpoint failure/)
   assert.doesNotMatch(failed,/deliveryId/)
   const db=new DatabaseSync(join(home,'dsh-home','identity','identity.sqlite'))
   assert.equal(db.prepare('SELECT status FROM deliveries WHERE text=?').get(args.text).status,0)
@@ -307,4 +337,31 @@ test('authorized shared files appear together in live and persisted recipient at
     assert.equal((await download(bob,target,saved.messageId,0)).bytes.toString(),'GROUP SELECTED')
     assert.match(await tool(bob,'read',{file_path:groupPath},target),/outside|denied|permission/i)
   }finally{await follow.close()}
+})
+test('a file delivered to the caller lands with its text in the origin session and downloads only there', async () => {
+  const dana = await user('self-file-dana')
+  const { primary, origin } = await selfDeliverySessions(dana)
+  const bytes = Buffer.from('SELF LANDING ORIGINAL 原样')
+  const path = join(home,'dsh-home','spaces','private',String(dana.user.shortId),'self-landing.txt')
+  await tool(dana, 'write', { file_path: path, content: bytes.toString() }, origin)
+  const text = 'Delivered to myself with a file'
+  assert.match(await tool(dana, 'deliver_message', { recipientShortId: dana.user.shortId, text, files: [{ path }] }, origin, 'self-file-landing'), /deliveryId/)
+  const view = await projection(dana, origin)
+  const messages = view.messages.filter(message => message.text === text)
+  assert.equal(messages.length, 1)
+  assert.equal(messages[0].role, 2, 'the delivered text and file are one ordinary Fairy message in the origin')
+  assert.deepEqual(messages[0].attachments, [{ index: 0, type: 1, name: 'self-landing.txt', mime: 'text/plain', bytes: bytes.length }])
+  const delivered = view.events.filter(event => event.type === 'delivery/message')
+  assert.equal(delivered.length, 1)
+  assert.equal(delivered[0].data.origin.sessionId, origin)
+  const primaryView = await projection(dana, primary)
+  assert.equal(primaryView.messages.some(message => message.text === text), false, 'a self delivery must not also land in the primary')
+  assert.equal(primaryView.events.some(event => event.type === 'delivery/message'), false)
+  const landing = await download(dana, origin, messages[0].messageId, 0)
+  assert.equal(landing.status, 200)
+  assert.deepEqual(landing.bytes, bytes)
+  assert.equal((await download(dana, primary, messages[0].messageId, 0)).status, 404)
+  const elsewhere = (await request('/sessions/create', dana.token)).session.id
+  assert.notEqual(elsewhere, origin)
+  assert.equal((await download(dana, elsewhere, messages[0].messageId, 0)).status, 404)
 })

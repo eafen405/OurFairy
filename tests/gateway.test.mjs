@@ -8,6 +8,11 @@
  * Messages-protocol double selected through `OURFAIRY_MINIMAX_BASE_URL`, exactly as the
  * baseline probe suite does; that is a model double, not a claim about a real
  * provider.
+ *
+ * @covers backend/attachments — the image turns reach the model through a file
+ * uploaded on the product's attachment routes.
+ * @covers backend/speech — the ASR case records through `/speech/transcriptions`
+ * against the endpoint the gateway saved.
  */
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -16,11 +21,11 @@ import { after, test } from 'node:test'
 // modules below are loaded; it must stay the first helper import of this file.
 import './helpers/dsh-peers.mjs'
 import {
-  dshDir, describeRun, httpJson, makeHome, readReport, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
+  describeRun, httpJson, makeHome, readReport, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
 
 const PHAETHON_PASSWORD = 'gateway-password'
-const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 const { loadOverlayPatches } = await import('@deepseek-ai/dsh-app-boot')
 const { flattenEntries } = await import('../scripts/combo.ts')
 const { Config: PiAiConfig } = await import('@deepseek-ai/dsh-llm-pi-ai')
@@ -51,7 +56,7 @@ function freshHome() {
 
 /** Start one loopback Messages double and return it with the env that selects it. */
 async function modelDouble(options = {}) {
-  const server = await startMockLlmServer({ host: '127.0.0.1', port: 0, apiKey: 'mock-key', sequence: ['success'], ...options })
+  const server = await startTitleAwareModel({ host: '127.0.0.1', port: 0, apiKey: 'mock-key', sequence: ['success'], ...options })
   servers.push(server)
   return { server, env: { OURFAIRY_MINIMAX_BASE_URL: `${server.baseURL}`, MINIMAX_CN_API_KEY: 'mock-key' } }
 }
@@ -183,7 +188,7 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     const admin = await signIn(port)
     const agent = await inviteAndRegister(port, admin, 'agent-one')
 
-    for (const path of ['/gateway/read', '/gateway/selection', '/gateway/route', '/gateway/route/delete', '/gateway/asr']) {
+    for (const path of ['/gateway/read', '/gateway/selection', '/gateway/route', '/gateway/route/delete', '/gateway/asr', '/gateway/compaction', '/gateway/maintenance']) {
       const anonymous = await httpJson(port, path, { body: {}, expect: false })
       assert.equal(anonymous.status, 401, `${path} must refuse an anonymous caller`)
       assert.equal(anonymous.json.error.code, 'gateway/unauthorized')
@@ -195,8 +200,12 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     const initial = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
     assert.deepEqual(initial.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'max' })
     assert.equal(initial.selectionApplies, 'next-turn')
-    assert.deepEqual(initial.saved, { selection: false, routes: false, asr: false })
-    assert.deepEqual(initial.editable, { selection: true, routes: true, asr: true })
+    assert.deepEqual(initial.saved, { selection: false, routes: false, asr: false, compaction: false, maintenance: false })
+    assert.deepEqual(initial.editable, { selection: true, routes: true, asr: true, compaction: true, maintenance: true })
+    assert.deepEqual(initial.compaction, { thresholdTokens: 500000 },
+      'the shipped composition declares the 500K default and the gateway reads it')
+    assert.deepEqual(initial.maintenance, { triggerTurns: 15, decayHours: 6 },
+      'the shipped composition declares the 15-turn / 6-hour defaults and the gateway reads them')
     assert.deepEqual(initial.routes.map(route => route.provider), ['deepseek-official', 'minimax-cn'])
     const official = initial.routes.find(route => route.provider === 'deepseek-official')
     assert.equal(official.editable, false, 'the official DeepSeek route is not the gateway\'s to redefine')
@@ -253,7 +262,7 @@ test('the gateway reads the shared configuration, refuses an ordinary agent, and
     const after = (await httpJson(restarted.port, '/gateway/read', { token: admin, body: {} })).gateway
     assert.deepEqual(after.selection, { provider: 'minimax-cn', model: 'MiniMax-M3.1-Flash', reasoningEffort: 'low' },
       'the saved selection survives a restart')
-    assert.deepEqual(after.saved, { selection: true, routes: true, asr: true })
+    assert.deepEqual(after.saved, { selection: true, routes: true, asr: true, compaction: false, maintenance: false })
     assert.ok(after.routes.some(route => route.provider === 'minimax-cn'), 'the saved route survives a restart')
     assert.equal(after.asr.maxDurationMs, 30000)
   } finally {
@@ -279,6 +288,8 @@ test('an invalid configuration is refused with the reason, and nothing is persis
       ['/gateway/route/delete', { provider: 'missing-route' }, 'gateway/unknown-route'],
       ['/gateway/asr', { model: 'm', endpoint: 'not-a-url' }, 'gateway/invalid-asr'],
       ['/gateway/asr', { model: 'm', endpoint: 'https://asr.example/v1', maxAudioBytes: 0 }, 'gateway/invalid-asr'],
+      ['/gateway/compaction', { thresholdTokens: 42 }, 'gateway/invalid-compaction'],
+      ['/gateway/maintenance', { triggerTurns: 4, decayHours: 6 }, 'gateway/invalid-maintenance'],
     ]
     for (const [path, body, code] of cases) {
       const response = await httpJson(port, path, { token: admin, body, expect: false })
@@ -286,7 +297,7 @@ test('an invalid configuration is refused with the reason, and nothing is persis
       assert.equal(response.json.error.code, code, `${path} ${JSON.stringify(body)}: ${response.text}`)
     }
     const state = (await httpJson(port, '/gateway/read', { token: admin, body: {} })).gateway
-    assert.deepEqual(state.saved, { selection: false, routes: false, asr: false }, 'a refused write persists nothing')
+    assert.deepEqual(state.saved, { selection: false, routes: false, asr: false, compaction: false, maintenance: false }, 'a refused write persists nothing')
     assert.deepEqual(state.routes.map(route => route.provider), ['deepseek-official', 'minimax-cn'],
       'a refused write leaves the deployment route in place')
   } finally {

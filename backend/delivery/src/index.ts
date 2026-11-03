@@ -2,10 +2,10 @@
  * Peer delivery as its own product row: the `deliver_message` tool, the durable
  * delivery coordination rows behind it, and their recovery at boot.
  *
- * The only chat access is the narrow `ourfairyChatRuntime` service: one session
- * queue, one delivery queue, the live session, an event read and a durability
- * barrier. This package imports no chat module, so disabling this row removes
- * delivery without touching chat's routes.
+ * The only chat access is the narrow `ourfairyChatRuntime` service: one
+ * at-most-once append that resolves durable, and one outgoing-delivery queue.
+ * This package imports no chat module, so disabling this row removes delivery
+ * without touching chat's routes.
  */
 import { createHash } from 'node:crypto'
 import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
@@ -13,26 +13,27 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { SessionScopeError } from '@ourfairy/dsh-sessions'
 import { MAX_ATTACHMENTS, MAX_MESSAGE_BYTES } from '@ourfairy/dsh-attachments'
 import { ownerOf, shortIdOf } from '@ourfairy/dsh-identity/owner'
+import { isUserSession } from '@ourfairy/dsh-identity/session'
+import { deliveryTargetOf } from './target.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock, ToolCallId } from '@deepseek-ai/dsh-llm'
-import type { DeliveryId, Session, SessionEvent, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import type { DeliveryId, Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { IdentityService } from '@ourfairy/dsh-identity'
 // The dsh context's own seams and the product's own context rows: the agent
-// registry, the tool runtime, the session store, the persistence handle, the
-// attachments row and chat's narrow runtime facade. The imports are type-only,
-// so they add no runtime dependency.
+// registry, the tool runtime, the session store, the attachments row and chat's
+// narrow runtime facade. The imports are type-only, so they add no runtime
+// dependency.
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@ourfairy/dsh-attachments'
 import type {} from '@ourfairy/dsh-chat'
 import type {} from '@ourfairy/dsh-identity'
 import type {} from '@ourfairy/dsh-sessions'
 
 export const name = 'ourfairy-delivery'
-export const inject = ['identity', 'ourfairySessions', 'ourfairyAttachments', 'ourfairyChatRuntime', 'sessions', 'sessionPersistence', 'tools', 'agents']
+export const inject = ['identity', 'ourfairySessions', 'ourfairyAttachments', 'ourfairyChatRuntime', 'tools', 'agents']
 
 /** One delivery row, as identity's delivery face exposes it. */
 type DeliveryRow = NonNullable<ReturnType<IdentityService['deliveries']['prepare']>>
@@ -95,40 +96,24 @@ export function apply(ctx: Context) {
   }, { surfaceOp: 'append' })
 
   async function settle(row: DeliveryRow) {
-    const result = await runtime.runSession(row.sessionId as SessionId, async () => {
-      let event: DeliveryEvent | undefined
-      const state = runtime.live(row.sessionId as SessionId)
-      if (state) {
-        event = find((await runtime.events(row.sessionId as SessionId)).events, row.deliveryId) ?? append(state.session, row)
-        await runtime.barrier(state)
-      } else {
-        const handle = await ctx.sessionPersistence.open(row.sessionId as SessionId, 'write')
-        try {
-          const read = await handle.read()
-          event = find(read.events, row.deliveryId)
-          if (!event) {
-            // The persistence handle hands its slice over as a readonly array;
-            // the session store takes the seed as it is, and the migration does
-            // not copy it.
-            const session = ctx.sessions.prepare(row.sessionId as SessionId, { seed: read.events as SessionEvent[], meta: handle.header,
-              inheritedEventCount: handle.inheritedEventCount, eventState: read.eventState })
-            event = append(session, row)
-            // Restore may add a lifecycle marker; persist the whole new suffix.
-            await handle.append(session.snapshotEvents(read.events.length as SessionLogOffset))
-          }
-          await handle.flush()
-        } finally { await handle.close() }
-      }
-      const result = { messageId: event.data.message.id, acceptedSeq: event.seq }
-      deliveries.complete(row.deliveryId, result)
-      return { ...receipt(row), ...result }
-    })
+    // One call owns the whole write protocol: the target session's queue, the
+    // live/cold branch, dedupe against the live-preferred read, the cold
+    // handle's lifecycle and the durability barrier. It resolves only after the
+    // event is durable, so the business row is completed afterwards.
+    const event = await runtime.appendOnce(row.sessionId as SessionId,
+      events => find(events, row.deliveryId),
+      session => append(session, row))
+    const result = { messageId: event.data.message.id, acceptedSeq: event.seq }
+    // The durable row is the authority on the delivery fact; the event is durable
+    // before this write, and the session writer queue has ended before notifying.
+    deliveries.complete(row.deliveryId, result)
+    const settled = { ...receipt(row), ...result }
     // The writer queue ends before notifying; the durable row survives any outlet failure.
-    try { await ctx.parallel('ourfairy/delivery', result) }
+    try { await ctx.parallel('ourfairy/delivery', settled) }
     // The caught value is reported as it is; the migration does not turn it
     // into a different error.
     catch (error) { ctx.logger('ourfairy-delivery').warn('delivery %s notification outlet failed: %s', row.deliveryId, (error as Error).message) }
-    return result
+    return settled
   }
   const recovery = (async () => {
     for (const row of deliveries.pending()) {
@@ -152,14 +137,21 @@ export function apply(ctx: Context) {
     // The recipient was checked above, so the user is there; the identity face
     // types its lookup as optional and the migration adds no second check.
     const target = users.byShortId(recipientShortId) as UserRow
-    const primary = await ctx.ourfairySessions.primary(target)
+    // The landing is decided once, before the row exists, and the row records
+    // it: the event, the receipt and recovery all read that recorded session.
+    // The primary is resolved as it always was, and the session service answers
+    // whether the origin could host; the pure rule alone decides the landing.
+    const primarySession = await ctx.ourfairySessions.primary(target)
+    const originCanHost = await ctx.ourfairySessions.canHostDelivery(sender, agent.session.id)
+    const sessionId = deliveryTargetOf({ senderShortId, recipientShortId,
+      originSessionId: agent.session.id, originCanHost, primarySessionId: primarySession.id })
     const deliveryId = createHash('sha256').update(JSON.stringify([agent.session.id, callId])).digest('hex')
     return runtime.runDelivery(deliveryId as SessionId, async () => {
       // The store writes the row and reads it back in the same transaction, so
       // the row is there; the migration keeps the original failure instead of
       // adding a check.
       let row = deliveries.prepare({ deliveryId, senderShortId, senderSessionId: agent.session.id,
-        recipientShortId, sessionId: primary.id, text, files: files.map(selector => ({ selector, prepared: null })) }) as DeliveryRow
+        recipientShortId, sessionId, text, files: files.map(selector => ({ selector, prepared: null })) }) as DeliveryRow
       for (let index = 0; index < row.files.length; index++) {
         // The loop bound is the file count, so the index is in range.
         if (row.files[index]!.prepared !== null) continue
@@ -172,8 +164,12 @@ export function apply(ctx: Context) {
     })
   }
   const register = (agent: Agent): undefined => {
+    // Only a user's own session gets product tools by default; any other agent
+    // gets none until its creator grants them. A scope's own registration
+    // cannot be hidden by dsh's tool restriction, so the row enforces it here.
+    if (!isUserSession(agent.session.header)) return undefined
     agent.ctx.tools.register(defineTool({ name: 'deliver_message',
-      description: 'Deliver the specified text and optional files selected by readable path or current-session messageId/index to a user’s fixed primary chat. This does not read their history or start their Fairy. The call authorizes delivery; no extra sharing approval is needed.',
+      description: 'Deliver the specified text and optional files selected by readable path or current-session messageId/index to the recipient’s conversation: the caller’s own current session when delivering to themselves, otherwise the recipient’s fixed primary chat. This does not read their history or start their Fairy. The call authorizes delivery; no extra sharing approval is needed.',
       parameters: { recipientShortId: { type: 'integer', required: true }, text: { type: 'string', required: true },
         files: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, messageId: { type: 'string' }, index: { type: 'integer' } } } } },
       output: { schema: { type: 'object', additionalProperties: true }, render: (_args: unknown, value: unknown): ContentBlock[] => [{ type: 'text', text: JSON.stringify(value) }] },

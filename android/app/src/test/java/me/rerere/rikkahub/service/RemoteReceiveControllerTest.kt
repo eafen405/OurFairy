@@ -24,6 +24,7 @@ import me.rerere.rikkahub.data.remote.IdentityUser
 import me.rerere.rikkahub.data.remote.InMemoryCredentialStore
 import me.rerere.rikkahub.data.remote.OwnedSession
 import me.rerere.rikkahub.data.remote.OwnedSessions
+import me.rerere.rikkahub.data.remote.PendingSkill
 import me.rerere.rikkahub.data.remote.RemoteChatBackend
 import me.rerere.rikkahub.data.remote.RemoteChatProjection
 import me.rerere.rikkahub.data.remote.RemoteChatState
@@ -31,6 +32,13 @@ import me.rerere.rikkahub.data.remote.RemoteReceivePlatform
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.data.remote.SessionBackend
 import me.rerere.rikkahub.data.remote.SignedIn
+import me.rerere.rikkahub.data.remote.SkillPool
+import me.rerere.rikkahub.data.remote.SkillsBackend
+import me.rerere.rikkahub.data.remote.SkillsNotificationPlatform
+import me.rerere.rikkahub.data.remote.SkillsReviewKey
+import me.rerere.rikkahub.data.remote.SkillsReviewLedger
+import me.rerere.rikkahub.data.remote.SkillsReviewNotifier
+import me.rerere.rikkahub.data.remote.SkillsReviewRecord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -48,14 +56,32 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoteReceiveControllerTest {
 
-    /** The platform double: the one foreground answer, the receive switch, and what publication would do. */
-    private class Platform(foreground: Boolean) : RemoteReceivePlatform {
+    /**
+     * The platform double: the one foreground answer, the receive switch, the skills channel's
+     * availability, and what publication would do.
+     *
+     * Like AndroidRemoteNotifications it answers for several boundaries at once: reception reads
+     * [enabled] and [isForeground], the skills reminder reads [skillsChannelAllowed] and
+     * [isForeground]. The two switches are separate facts on purpose.
+     */
+    private class Platform(foreground: Boolean) : RemoteReceivePlatform, SkillsNotificationPlatform {
         private val mutableEnabled = MutableStateFlow(false)
         override val enabled: StateFlow<Boolean> = mutableEnabled
         private var foreground = foreground
         override fun isForeground() = foreground
         override fun setEnabled(value: Boolean) {
             mutableEnabled.value = value
+        }
+
+        /** Whether the skills channel may post now; independent of the receive switch. */
+        var skillsChannelAllowed = true
+
+        data class SkillsAlert(val endpoint: String, val account: Int, val preview: String)
+
+        val alerts = mutableListOf<SkillsAlert>()
+
+        override fun publishSkills(endpoint: String, userShortId: Int, preview: String) {
+            alerts += SkillsAlert(endpoint, userShortId, preview)
         }
 
         fun appForeground(value: Boolean) {
@@ -97,12 +123,15 @@ class RemoteReceiveControllerTest {
     }
 
     private class Sessions : SessionBackend {
-        override suspend fun list(token: String) =
+        override suspend fun list(token: String, archived: Boolean) =
             OwnedSessions(listOf(OwnedSession("$token-main", primary = true)), "$token-main")
         override suspend fun create(token: String) = error("not used")
         override suspend fun select(token: String, sessionId: String) = error("not used")
         override suspend fun primary(token: String) = error("not used")
         override suspend fun read(token: String, sessionId: String) = error("not used")
+        override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
+        override suspend fun archive(token: String, sessionId: String) = error("not used")
+        override suspend fun restore(token: String, sessionId: String) = error("not used")
     }
 
     private class Store : ChatSyncStore {
@@ -129,17 +158,61 @@ class RemoteReceiveControllerTest {
         override suspend fun stop(token: String, sessionId: String) = error("not used")
     }
 
-    private class Harness(scope: CoroutineScope, foreground: Boolean, enabled: Boolean = false) {
-        val platform = Platform(foreground).apply { setEnabled(enabled) }
+    /** The bounded skills list the reminder pass reads; a double, not a mock. */
+    private class Skills : SkillsBackend {
+        var pool = SkillPool()
+
+        override suspend fun list(token: String): SkillPool = pool
+
+        override suspend fun detail(token: String, skillId: Long) = error("not used")
+        override suspend fun setEnabled(token: String, skillId: Long, enabled: Boolean) = error("not used")
+        override suspend fun reviewOpen(token: String, versionId: Long) = error("not used")
+        override suspend fun archive(token: String, skillId: Long) = error("not used")
+        override suspend fun restore(token: String, skillId: Long) = error("not used")
+    }
+
+    /** The account's durable reminder ledger, in memory. */
+    private class SkillsLedger : SkillsReviewLedger {
+        val records = mutableMapOf<SkillsReviewKey, SkillsReviewRecord>()
+
+        override suspend fun load(key: SkillsReviewKey) = records[key] ?: SkillsReviewRecord()
+
+        override suspend fun save(key: SkillsReviewKey, record: SkillsReviewRecord) {
+            records[key] = record
+        }
+    }
+
+    private class Harness(
+        scope: CoroutineScope,
+        foreground: Boolean,
+        enabled: Boolean = false,
+        skillsAllowed: Boolean = true,
+    ) {
+        val platform = Platform(foreground).apply {
+            setEnabled(enabled)
+            skillsChannelAllowed = skillsAllowed
+        }
         val host = Host()
         val chats = Chats()
         val screens = Screen()
+        val skills = Skills()
+        val skillsLedger = SkillsLedger()
         val receiver = RemoteReceiveState(Sessions(), scope, {
             RemoteChatState(chats, scope, Store(), "https://fairy")
         })
         // The same wiring IdentityModule gives the app: the identity publisher binds reception.
         val account = AccountSession(Identity(), InMemoryCredentialStore(), onAccountChanged = receiver::bindIdentity)
-        val controller = RemoteReceiveController(account, receiver, platform, host, screens.lifecycle, scope)
+        val notifier = SkillsReviewNotifier(
+            backend = skills,
+            ledger = skillsLedger,
+            platform = platform,
+            endpoint = "https://fairy",
+            // The wiring under test mirrors IdentityModule: the skills channel is the only gate,
+            // never the receive switch.
+            remindersAllowed = { platform.skillsChannelAllowed },
+            scope = scope,
+        )
+        val controller = RemoteReceiveController(account, receiver, platform, host, screens.lifecycle, scope, notifier)
     }
 
     @Test
@@ -271,5 +344,106 @@ class RemoteReceiveControllerTest {
             harness.receiver.owned.snapshot.value.sessions.isEmpty(),
         )
         assertNull(harness.receiver.selectedChat.value)
+    }
+
+    /**
+     * The skills reminder is gated by the skills channel, never by the receive switch.
+     *
+     * The controller observes the skills sets on every lifecycle move whatever [Platform.enabled]
+     * says; leaving the foreground is the pass that publishes a candidate which appeared since the
+     * last observation (one observed while in front is suppressed and consumed, as before). A
+     * receive switch left off must not silence that reminder, or the default user never sees a
+     * background-created candidate.
+     */
+    @Test
+    fun `with reception off, leaving the foreground publishes the merged skills reminder once`() = runTest {
+        val harness = Harness(backgroundScope, foreground = true, enabled = false)
+        harness.screens.start()
+        harness.account.signIn("alice", "pw")
+        runCurrent()
+        assertFalse("reception is off for this test", harness.platform.enabled.value)
+
+        harness.skills.pool = SkillPool(
+            pending = listOf(PendingSkill(versionId = 41, name = "background-candidate", sourceType = 2)),
+            pendingCount = 1,
+        )
+        harness.platform.appForeground(false)
+        harness.screens.stop()
+        runCurrent()
+
+        assertEquals("the background move publishes one reminder", 1, harness.platform.alerts.size)
+        val alert = harness.platform.alerts.single()
+        assertEquals("https://fairy", alert.endpoint)
+        assertEquals("the reminder names the account that produced it", 1, alert.account)
+        assertTrue("the merged reminder asks for review: ${alert.preview}", alert.preview.contains("待审核"))
+        assertEquals(
+            "the ledger records the observed candidate",
+            listOf(41L),
+            harness.skillsLedger.records.values.single().pending,
+        )
+
+        // The same set observed again on the next background move is never re-announced.
+        harness.platform.appForeground(true)
+        harness.screens.start()
+        runCurrent()
+        harness.platform.appForeground(false)
+        harness.screens.stop()
+        runCurrent()
+        assertEquals("the same set is not re-announced", 1, harness.platform.alerts.size)
+    }
+
+    /**
+     * A closed skills channel suppresses publication but still consumes the observation.
+     *
+     * This is the reminder-once rule, not an extra one: reopening the channel must not replay a
+     * candidate the user could not have been told about, while a genuinely new set still publishes.
+     */
+    @Test
+    fun `a closed skills channel consumes the set and reopening it replays nothing`() = runTest {
+        val harness = Harness(backgroundScope, foreground = true, enabled = false, skillsAllowed = false)
+        harness.screens.start()
+        harness.account.signIn("alice", "pw")
+        runCurrent()
+
+        harness.skills.pool = SkillPool(
+            pending = listOf(PendingSkill(versionId = 51, name = "unseen-candidate", sourceType = 2)),
+            pendingCount = 1,
+        )
+        harness.platform.appForeground(false)
+        harness.screens.stop()
+        runCurrent()
+
+        assertEquals("a closed skills channel publishes nothing", 0, harness.platform.alerts.size)
+        assertEquals(
+            "the observed set is consumed even when it could not be announced",
+            listOf(51L),
+            harness.skillsLedger.records.values.single().pending,
+        )
+
+        // Reopening the channel must not replay the suppressed set.
+        harness.platform.skillsChannelAllowed = true
+        harness.platform.appForeground(true)
+        harness.screens.start()
+        runCurrent()
+        harness.platform.appForeground(false)
+        harness.screens.stop()
+        runCurrent()
+        assertEquals("the suppressed set is not replayed after the channel returns", 0, harness.platform.alerts.size)
+
+        // A genuinely new candidate is still announced once the channel is open.
+        harness.platform.appForeground(true)
+        harness.screens.start()
+        runCurrent()
+        harness.skills.pool = SkillPool(
+            pending = listOf(
+                PendingSkill(versionId = 51, name = "unseen-candidate", sourceType = 2),
+                PendingSkill(versionId = 52, name = "second-candidate", sourceType = 2),
+            ),
+            pendingCount = 2,
+        )
+        harness.platform.appForeground(false)
+        harness.screens.stop()
+        runCurrent()
+        assertEquals("a new set still reaches the user", 1, harness.platform.alerts.size)
     }
 }

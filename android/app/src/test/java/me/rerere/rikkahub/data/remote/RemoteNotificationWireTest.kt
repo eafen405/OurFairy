@@ -13,7 +13,12 @@ import java.net.InetSocketAddress
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** Captured real product SSE, through production HTTP decoder and synchronization owner. */
+/**
+ * Captured real product SSE, through production HTTP decoder and synchronization owner.
+ *
+ * The capture predates #224's required `position`: its single row is at the place the current
+ * backend derives for that row (index 0), and every other byte is the capture's.
+ */
 class RemoteNotificationWireTest {
     @Test fun `actual durable recipient SSE is caught up and consumed once through the shipped client`() = runTest {
         val frames = javaClass.getResourceAsStream("/remote-notifications/actual-recipient-observe.sse")!!.readBytes()
@@ -59,14 +64,17 @@ class RemoteNotificationWireTest {
         server.start()
         // The shipped client and synchronization owner, under the module that owns publication.
         val receiver = RemoteReceiveState(object : SessionBackend {
-            override suspend fun list(token: String) = OwnedSessions(listOf(OwnedSession(sessionId, primary = true)), sessionId)
+            override suspend fun list(token: String, archived: Boolean) = OwnedSessions(listOf(OwnedSession(sessionId, primary = true)), sessionId)
             override suspend fun read(token: String, sessionId: String) = OwnedSession(sessionId)
+            override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
             override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
             override suspend fun create(token: String) = error("not used")
             override suspend fun primary(token: String) = OwnedSession(sessionId, primary = true)
+            override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
+            override suspend fun restore(token: String, sessionId: String) = error("not used")
         }, backgroundScope, { settle ->
             RemoteChatState(RemoteChatApi(endpoint, OkHttpClient()), backgroundScope, store, endpoint, settleReminders = settle)
-        }, platform)
+        }, platform, { true }, store, endpoint)
         val state: RemoteChatState
         try {
             receiver.bind("fixture-recipient", 3)

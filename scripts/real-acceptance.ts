@@ -5,25 +5,27 @@
  * Boots the product backend with the deployment's real credentials, then makes
  * the smallest calls the acceptance matrix requires of external services:
  *
- *   1. one real MiniMax text turn through the product chat route, on the
- *      combination's shared selection (`minimax-cn` / `MiniMax-M3.1-Flash`);
+ *   1. one real cloud text turn through the product chat route, on the current
+ *      combination's shared model selection;
  *   2. the PDF scan-page path, where the model asks for a page render and the
  *      resulting tool result carries a real image (`scripts/pdf-flash-smoke.ts`);
- *   3. one real SiliconFlow ASR transcription, on speech synthesized with the
- *      same account's TTS model and resampled to the product's 16 kHz PCM WAV
- *      contract — a synthetic sample, not a human recording.
+ *   3. one real ASR transcription through the current speech configuration, on
+ *      speech synthesized by the script's TTS provider and resampled to the
+ *      product's 16 kHz PCM WAV contract — a synthetic sample, not a human recording.
  *
- * The MiniMax credential is resolved by the backend from its credential
+ * The text-model credential is resolved by the backend from its credential
  * document (`OURFAIRY_CREDENTIALS_FILE`, defaulting to the operator's
  * `$DSH_HOME/.credentials.yaml` when present) or from the launching
  * environment; the script never reads or prints the secret.
  *
- * The script prints one JSON document with the actual outcome of every step. It
- * does not upgrade an absent credential or a refused call into a pass.
+ * Without --plan, the script prints one JSON document with the actual outcome
+ * of every selected step. It does not upgrade an absent credential or a refused
+ * call into a pass. --plan prints the selection without reading credentials,
+ * starting the backend, or calling a service.
  *
  * Usage:
  *   set -a; . ./VOICE_API_KEY.env; set +a
- *   node scripts/real-acceptance.ts [--home <dir>] [--skip-pdf]
+ *   node scripts/real-acceptance.ts [--home <dir>] [--skip-pdf] [--skip-asr] [--plan]
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -37,7 +39,10 @@ const PHAETHON_PASSWORD = 'real-acceptance-password'
 const options = parse(process.argv.slice(2))
 
 /** The command's options, as argv carries them. */
-type AcceptanceOptions = { home: string | undefined; skipPdf: boolean }
+type AcceptanceOptions = { home: string | undefined; skipPdf: boolean; skipAsr: boolean; printPlan: boolean }
+
+/** The service checks selected for execution, and the ones deliberately omitted. */
+type AcceptancePlan = { steps: Array<'text' | 'scanPage' | 'asr'>; unexecuted: string[] }
 
 /**
  * A JSON answer, read field by field.
@@ -83,14 +88,25 @@ type AcceptanceReport = {
 }
 
 function parse(argv: string[]): AcceptanceOptions {
-  const parsed: AcceptanceOptions = { home: undefined, skipPdf: false }
+  const parsed: AcceptanceOptions = { home: undefined, skipPdf: false, skipAsr: false, printPlan: false }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!
     if (arg === '--home') { parsed.home = resolve(argv[index + 1]!); index += 1 }
     else if (arg === '--skip-pdf') parsed.skipPdf = true
+    else if (arg === '--skip-asr') parsed.skipAsr = true
+    else if (arg === '--plan') parsed.printPlan = true
     else throw new Error(`unknown argument ${arg}`)
   }
   return parsed
+}
+
+function selectSteps(options: AcceptanceOptions): AcceptancePlan {
+  const selected: AcceptancePlan = { steps: ['text'], unexecuted: [] }
+  if (options.skipPdf) selected.unexecuted.push('PDF scan page smoke (--skip-pdf)')
+  else selected.steps.push('scanPage')
+  if (options.skipAsr) selected.unexecuted.push('ASR transcription (--skip-asr)')
+  else selected.steps.push('asr')
+  return selected
 }
 
 function readEnvFile(name: string): void {
@@ -229,8 +245,15 @@ function stop(home: string): void {
 }
 
 async function main(): Promise<void> {
+  const selected = selectSteps(options)
+  if (options.printPlan) {
+    process.stdout.write(`${JSON.stringify(selected, undefined, 2)}\n`)
+    return
+  }
   readEnvFile('VOICE_API_KEY.env')
-  if (!process.env.VOICE_API_KEY) fail('VOICE_API_KEY is not set and VOICE_API_KEY.env is unreadable')
+  if (selected.steps.includes('asr') && !process.env.VOICE_API_KEY) {
+    fail('VOICE_API_KEY is not set and VOICE_API_KEY.env is unreadable')
+  }
   if (process.env.MINIMAX_CN_API_KEY === undefined) {
     // Reuse the operator's own dsh credential document: the backend resolves
     // the reference through its credential seam, so no secret is copied or
@@ -244,7 +267,7 @@ async function main(): Promise<void> {
   mkdirSync(home, { recursive: true })
   const report: AcceptanceReport = {
     startedAt: new Date().toISOString(), dshHome: join(home, 'dsh-home'), steps: {},
-    unexecuted: [], failures: [],
+    unexecuted: [...selected.unexecuted], failures: [],
   }
   let backend: { port: number; logFile: string } | undefined
   try {
@@ -266,7 +289,7 @@ async function main(): Promise<void> {
     if (registered.status !== 200) throw new Error(`agent registration failed: ${registered.status} ${registered.bytes.toString('utf8')}`)
     const agent = registered.json!.token as string
 
-    /** 1. Official Flash text through the product chat runtime. */
+    /** 1. Real text through the current shared selection and product chat runtime. */
     try {
       const { json: created } = await request(backend.port, '/sessions/create', { token: admin, body: {} })
       const sessionId = created!.session!.id
@@ -285,9 +308,7 @@ async function main(): Promise<void> {
     }
 
     /** 2. The PDF scan-page path: a real render becomes an official image tool result. */
-    if (options.skipPdf) {
-      report.unexecuted.push('PDF scan page smoke (--skip-pdf)')
-    } else {
+    if (selected.steps.includes('scanPage')) {
       const smoke = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'pdf-flash-smoke.ts'), 'scan'], {
         cwd: repoRoot,
         env: { ...process.env, OURFAIRY_URL: `http://127.0.0.1:${backend.port}`, OURFAIRY_TOKEN: admin },
@@ -305,18 +326,20 @@ async function main(): Promise<void> {
     }
 
     /** 3. Real ASR on synthesized speech, through the product's recording route. */
-    try {
-      const spoken = '主人，首版真实链路验收已经完成，语音转写返回了这段文字。'
-      const wav = await synthesizeSpeech(spoken)
-      const transcribed = await request(backend.port, '/speech/transcriptions', {
-        token: agent, body: wav, headers: { 'content-type': 'audio/wav' },
-      })
-      report.steps.asr = { status: transcribed.status, synthesized: spoken, text: transcribed.json?.text ?? null,
-        error: transcribed.json?.error ?? null, bytes: wav.length }
-      if (transcribed.status !== 200) report.failures.push(`ASR answered ${transcribed.status}: ${transcribed.bytes.toString('utf8').slice(0, 500)}`)
-    } catch (error) {
-      report.steps.asr = { error: (error as Error)?.message ?? String(error) }
-      report.failures.push(`ASR step could not run: ${(error as Error)?.message ?? String(error)}`)
+    if (selected.steps.includes('asr')) {
+      try {
+        const spoken = '主人，首版真实链路验收已经完成，语音转写返回了这段文字。'
+        const wav = await synthesizeSpeech(spoken)
+        const transcribed = await request(backend.port, '/speech/transcriptions', {
+          token: agent, body: wav, headers: { 'content-type': 'audio/wav' },
+        })
+        report.steps.asr = { status: transcribed.status, synthesized: spoken, text: transcribed.json?.text ?? null,
+          error: transcribed.json?.error ?? null, bytes: wav.length }
+        if (transcribed.status !== 200) report.failures.push(`ASR answered ${transcribed.status}: ${transcribed.bytes.toString('utf8').slice(0, 500)}`)
+      } catch (error) {
+        report.steps.asr = { error: (error as Error)?.message ?? String(error) }
+        report.failures.push(`ASR step could not run: ${(error as Error)?.message ?? String(error)}`)
+      }
     }
 
   } catch (error) {

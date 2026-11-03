@@ -1,10 +1,13 @@
 /**
- * Owned sessions: which authenticated identity a session belongs to, and which
- * of that identity's sessions is its fixed primary session.
+ * Owned sessions: which authenticated identity a session belongs to, which of
+ * that identity's sessions is its fixed primary session, and which sessions the
+ * caller has archived.
  *
  * `SessionHeader.owner` is the only ownership authority. A user's primary id is
  * derived from their permanent short number, so the binding needs no stored
- * column.
+ * column. Archiving is the one product fact this module stores itself, in its
+ * own file (`./archive-store`): it is scoped to the caller but never becomes a
+ * second owner.
  *
  * @module @ourfairy/dsh-sessions/src/service
  */
@@ -15,7 +18,8 @@ import type { IdentityService } from '@ourfairy/dsh-identity'
 import type { SessionHeader, SessionId, SessionStore } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence, SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
 import type { IncomingMessage } from 'node:http'
-import { hasMessages, readSessionEvents } from './events.js'
+import type { SessionArchiveStore } from './archive-store.js'
+import { hasMessages, NO_TITLE, readSessionEvents, readSessionTitles, type SessionTitleFact } from './events.js'
 
 /** Error carrying the HTTP status one request path answers with. */
 export class SessionScopeError extends Error {
@@ -70,16 +74,20 @@ export class OwnedSessionService extends Service {
   readonly persistence: SessionPersistence
   /** The identity service that names the caller. */
   readonly identity: IdentityService
+  /** The product's archive rows: one per session, scoped to the caller. */
+  readonly archiveStore: SessionArchiveStore
 
-  constructor(ctx: Context, { sessions, persistence, identity }: {
+  constructor(ctx: Context, { sessions, persistence, identity, archive }: {
     sessions: SessionStore
     persistence: SessionPersistence
     identity: IdentityService
+    archive: SessionArchiveStore
   }) {
     super(ctx, 'ourfairySessions')
     this.sessions = sessions
     this.persistence = persistence
     this.identity = identity
+    this.archiveStore = archive
   }
 
   /** The user the presented credential speaks for, or undefined. */
@@ -88,18 +96,37 @@ export class OwnedSessionService extends Service {
   }
 
   /** One session as the product exposes it. */
-  expose(header: SessionHeader, shortId: number): {
+  expose(header: SessionHeader, shortId: number, title: SessionTitleFact = NO_TITLE): {
     id: string
     owner: string | null
     primary: boolean
     createdAt: number
+    title: string
+    titleSource: number
   } {
     return {
       id: header.id,
       owner: header.owner ?? null,
       primary: header.id === primarySessionIdOf(shortId),
       createdAt: header.createdAt,
+      title: title.title,
+      titleSource: title.source,
     }
+  }
+
+  /**
+   * Fold the titles of a batch of sessions for the wire.
+   *
+   * One batch read is what keeps `/sessions/list` to one pass over the stored
+   * titles; the read is the `./events` authority and never opens an agent.
+   */
+  async titlesOf(sessionIds: readonly SessionId[]): Promise<Map<SessionId, SessionTitleFact>> {
+    return await readSessionTitles(this.ctx, sessionIds)
+  }
+
+  /** The title fact of one session; the single-session form of {@link titlesOf}. */
+  async titleOf(sessionId: SessionId): Promise<SessionTitleFact> {
+    return (await this.titlesOf([sessionId])).get(sessionId) ?? NO_TITLE
   }
 
   /** `persistence.stat` answers a snapshot `{header, revision, ...}`, never a bare header. */
@@ -131,17 +158,44 @@ export class OwnedSessionService extends Service {
     return snapshot.header
   }
 
-  /** Every stored session this identity owns, plus its primary id (or null). Reads headers only. */
-  async list(owner: SessionOwner): Promise<{ sessions: SessionHeader[]; primarySessionId: string | null }> {
+  /**
+   * Every stored session this identity owns in the requested view, plus the
+   * primary id when that session appears in the view. Reads headers only.
+   *
+   * This is the archive's only filter point. The default view excludes archived
+   * sessions, which is what also keeps them out of the empty-session reuse
+   * (`_newestEmptyOrdinary` lists), out of conversation search (the search tool
+   * lists), and out of every other caller that asks this module what the user
+   * has. Adding a per-caller filter would be a second authority for the same
+   * fact.
+   *
+   * The archived view never carries the primary session: the primary is where
+   * replies and deliveries from other users land and cannot be archived. It
+   * answers no standing default for the same reason — a session that is not in
+   * the view cannot be the one the view stands in.
+   */
+  async list(owner: SessionOwner, { archived = false }: { archived?: boolean } = {}): Promise<{
+    sessions: SessionHeader[]
+    primarySessionId: string | null
+  }> {
     const snapshots = await this.persistence.list()
-    const owned = snapshots
-      .map(snapshot => snapshot.header)
-      .filter(header => header.owner === ownerOf(owner.shortId))
-      .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
+    const archivedIds = this.archiveStore.archivedSessionIds(owner.shortId)
+    const archivedRank = new Map(archivedIds.map((id, index) => [id, index]))
+    const owned = snapshots.map(snapshot => snapshot.header).filter(header => header.owner === ownerOf(owner.shortId))
+    const sessions = archived
+      // The archived view keeps the order the store answered: most recently
+      // archived first. Creation order would bury the session just deleted, and
+      // the archive instant is recorded for exactly this.
+      ? owned
+        .filter(header => archivedRank.has(header.id))
+        .sort((left, right) => (archivedRank.get(left.id) as number) - (archivedRank.get(right.id) as number))
+      : owned
+        .filter(header => !archivedRank.has(header.id))
+        .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
     const primaryId = primarySessionIdOf(owner.shortId)
     return {
-      sessions: owned,
-      primarySessionId: owned.some(header => header.id === primaryId) ? primaryId : null,
+      sessions,
+      primarySessionId: sessions.some(header => header.id === primaryId) ? primaryId : null,
     }
   }
 
@@ -246,5 +300,66 @@ export class OwnedSessionService extends Service {
   /** Read one owned session. */
   async read(owner: SessionOwner, sessionId: unknown): Promise<SessionHeader> {
     return await this._ownedHeader(owner, sessionId)
+  }
+
+  /**
+   * Whether one session may host a delivery for this caller: the stored header
+   * exists, its owner is this caller, and the session is not archived.
+   *
+   * This is the one read a delivery uses to decide a self delivery's landing.
+   * The archive fact is the store's single-row read, not the caller's archived
+   * list: the question names one session, so enumerating the archive would read
+   * more than the answer needs.
+   */
+  async canHostDelivery(owner: SessionOwner, sessionId: SessionId): Promise<boolean> {
+    const snapshot = await this._headerOf(sessionId)
+    if (snapshot === undefined) return false
+    if (snapshot.header.owner !== ownerOf(owner.shortId)) return false
+    return !this.archiveStore.isArchived({ sessionId: snapshot.header.id, ownerShortId: owner.shortId })
+  }
+
+  /**
+   * Archive one owned session: stop offering it in the default views while its
+   * log, its messages and its history stay exactly where they are.
+   *
+   * The primary session is refused here, not only hidden by a client. It is
+   * where replies and deliveries from other users land, so archiving it would
+   * lose the place they land; a self delivery instead follows the conversation
+   * it was issued from and does not depend on the primary being in the default
+   * view. The caller gets its own code for that rather than being told the
+   * session does not exist.
+   *
+   * Authorization is the header's, like every other route: a session the caller
+   * does not own is refused before the archive is touched, so one identity can
+   * neither archive nor disturb another's.
+   */
+  async archive(owner: SessionOwner, sessionId: unknown): Promise<SessionHeader> {
+    const header = await this._ownedHeader(owner, sessionId)
+    if (header.id === primarySessionIdOf(owner.shortId)) {
+      throw new SessionScopeError(409, 'sessions/primary-not-archivable',
+        'the primary session is where replies land and is never archived')
+    }
+    this.archiveStore.archive({ sessionId: header.id, ownerShortId: owner.shortId })
+    return header
+  }
+
+  /**
+   * Restore one session the caller archived: it goes back into the default
+   * views with its log, its messages and its history untouched — restoring
+   * writes the archive row, never a session log.
+   *
+   * Authorization is the header's, like every other route, so a session the
+   * caller does not own is refused before the archive is looked at. Then the
+   * row itself must be this caller's and archived: a session that is not
+   * archived — including the primary, which can never be — answers its own code
+   * rather than "unknown session", because the session does exist and saying
+   * otherwise would hide the real reason. Nothing is written in that case.
+   */
+  async restore(owner: SessionOwner, sessionId: unknown): Promise<SessionHeader> {
+    const header = await this._ownedHeader(owner, sessionId)
+    if (!this.archiveStore.restore({ sessionId: header.id, ownerShortId: owner.shortId })) {
+      throw new SessionScopeError(409, 'sessions/not-archived', 'that session is not in your archive')
+    }
+    return header
   }
 }

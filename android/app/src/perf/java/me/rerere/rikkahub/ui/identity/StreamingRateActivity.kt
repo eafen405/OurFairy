@@ -24,6 +24,7 @@ import kotlinx.coroutines.withTimeout
 import me.rerere.rikkahub.data.remote.RemoteChatApi
 import me.rerere.rikkahub.data.remote.RemoteChatProjection
 import me.rerere.rikkahub.data.remote.RemoteChatState
+import me.rerere.rikkahub.data.remote.newestFairyOutput
 import me.rerere.rikkahub.ui.fairy.FairyAppTheme
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -74,13 +75,11 @@ class StreamingRateActivity : ComponentActivity() {
                     Text("流式速率测量 / #214")
                     RemoteTranscript(
                         messages = projection?.messages.orEmpty(),
-                        attemptText = projection?.attempt?.text,
-                        attemptKey = projection?.let { it.generation to it.attempt?.attemptId },
+                        generation = projection?.generation.orEmpty(),
+                        attempt = projection?.attempt,
+                        settledAttempt = projection?.settledAttempt,
                         downloadEnabled = false,
                         onDownload = { _, _ -> },
-                        settledAttempt = projection?.let { p ->
-                            p.settledAttempt?.let { attemptRowKey(p.generation, it.attemptId) to it.seq }
-                        },
                     )
                 }
             }
@@ -114,7 +113,8 @@ class StreamingRateActivity : ComponentActivity() {
         put("atMs", SystemClock.elapsedRealtimeNanos() / 1_000_000.0)
         put("version", projection.version)
         put("revision", projection.attempt?.revision)
-        put("chars", projection.attempt?.text?.length ?: projection.messages.lastOrNull { it.role == 2 }?.text?.length ?: 0)
+        // Position orders presentation, so the newest output is not necessarily the last row.
+        put("chars", projection.attempt?.text?.length ?: projection.messages.newestFairyOutput()?.text?.length ?: 0)
         put("replyStatus", projection.replyStatus)
     }
 

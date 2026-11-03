@@ -41,10 +41,6 @@ object FairyLines {
     val homePool: List<Int> = (1..texts.size).toList()
     const val HOME_AVOID = 5
 
-    /** Chat page: the short ones, avoiding the last 2 said. */
-    val chatPool = listOf(7, 8, 9, 11)
-    const val CHAT_AVOID = 2
-
     /** What she says as she dozes off on the home page. */
     val sleepPool = listOf(10, 11)
 
@@ -66,17 +62,18 @@ fun pickFairyLine(pool: List<Int>, recent: List<Int>, avoid: Int, random: Random
 private const val RECENT_KEEP = 8
 
 /**
- * Small local UI memory (not synced): which lines Fairy said recently, shared
- * by the home and chat pages so she does not repeat herself across both.
+ * Small local UI memory (not synced): which lines Fairy said recently. The interaction module is
+ * its only caller, and both pages present that one module, so a line said on one page is not
+ * repeated on the other.
  */
-class FairyUiMemory(context: Context) {
+class FairyUiMemory(context: Context) : FairyLineMemory {
     private val prefs = context.applicationContext.getSharedPreferences("fairy_ui", Context.MODE_PRIVATE)
 
-    val recentLines: List<Int>
+    override val recentLines: List<Int>
         get() = prefs.getString(KEY_RECENT, "").orEmpty().split(',').mapNotNull(String::toIntOrNull)
 
     /** Picks from [pool] avoiding the last [avoid] lines, and records it. */
-    fun nextLine(pool: List<Int>, avoid: Int, random: Random = Random.Default): FairyLine {
+    override fun nextLine(pool: List<Int>, avoid: Int, random: Random): FairyLine {
         val recent = recentLines
         val id = pickFairyLine(pool, recent, avoid, random)
         val updated = (listOf(id) + recent.filter { it != id }).take(RECENT_KEEP)

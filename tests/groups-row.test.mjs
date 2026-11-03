@@ -7,6 +7,8 @@
  * here is caller-visible: the tool catalog the model receives, and the results
  * the tools return through the product's own chat routes. The row id is
  * exercised the way an operator addresses it — an overlay disabling `groups`.
+ *
+ * @covers backend/groups
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'
@@ -14,6 +16,7 @@ import { once } from 'node:events'
 import { join } from 'node:path'
 import { before, after, test } from 'node:test'
 import { describeRun, httpJson, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const home = makeHome('ourfairy-groups-row-')
 const password = 'groups-row-password'
@@ -53,6 +56,9 @@ function offeredTools() {
 before(async () => {
   model = http.createServer(async (req, res) => {
     let data = ''; for await (const chunk of req) data += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(data, res)) return
     const body = JSON.parse(data); modelRequests.push(body)
     const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
     const commandIndex = blocks.findLastIndex(c => c.type === 'text' && c.text.startsWith('{"name":'))

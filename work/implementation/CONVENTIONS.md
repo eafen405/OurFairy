@@ -6,7 +6,12 @@
 
 ## 0. 权威来源（按优先级）
 
-1. 父规格：<https://github.com/eafen405/OurFairy/issues/23>（本地副本 [`docs/specs/ourfairy-v1.md`](../../docs/specs/ourfairy-v1.md)）
+1. 父规格：<https://github.com/eafen405/OurFairy/issues/23>（本地副本 [`docs/specs/ourfairy-v1.md`](../../docs/specs/ourfairy-v1.md)）是产品总权威。
+   与它并列登记的现行增量规格：
+   - [#240 Fairy 记忆与上下文治理](https://github.com/eafen405/OurFairy/issues/240)（本地副本 [`docs/specs/fairy-memory.md`](../../docs/specs/fairy-memory.md)）：边界是长期记忆、印象、上下文压缩与维护设置。
+   - [#295 Fairy Skill 系统与工作流学习](https://github.com/eafen405/OurFairy/issues/295)（本地副本 [`docs/specs/fairy-skills.md`](../../docs/specs/fairy-skills.md)）：边界是 Skill 运行时、创建、学习、审核与客户端维护。
+
+   这些增量不重述也不覆盖父规格的用户、会话与权限语义，冲突时以父规格为准。
 2. 实施路线最终决议：<https://github.com/eafen405/OurFairy/issues/22#issuecomment-6167313227>（本地副本 [`docs/decisions/v1-implementation-route.md`](../../docs/decisions/v1-implementation-route.md)）
 3. 实施票：GitHub issue 为准；单票副本位于 `work/tickets/<票号>/`，首版 #24–#45 的票集见 [`work/tickets/ourfairy-v1/README.md`](../../work/tickets/ourfairy-v1/README.md)，票的读写方式见 [`docs/agents/issue-tracker.md`](../../docs/agents/issue-tracker.md)
 4. 研究：目录索引与研究基线说明见 [`docs/research/README.md`](../../docs/research/README.md)
@@ -42,14 +47,14 @@ git -C /home/eafen405/projects/deepseek-harness worktree add \
 
 规则：
 
-- 开工前先跑 `npm run specs:status`：一次给出每张 spec 的分支 tip、是否已推送、是否已落地、遗留的
-  worktree，以及落地分支本身有没有未推送提交。开工与收口都以这份输出为准，不用 `git log --all`
-  逐个分支反推。
+- 开工前先跑 `npm run specs:status`：一次给出每个 spec 与小修 integration 批次的分支 tip、推送、
+  祖先合并、内容落地、遗留 worktree，以及落地分支本身有没有未推送提交。开工与收口都以这份输出为准，
+  不用 `git log --all` 逐个分支反推。
 - 开工前确认 worktree 基线是目标集成分支的最新提交；不是则先 `git merge` 集成分支最新提交再开始。
 - **合并前**再把集成分支 tip 合进自己的票分支，解决冲突后报告，不要等 Lead 替你解冲突。
 - 每张票只写自己声明过的写范围；跨票公共文件由 Lead 协调。
 - 完成后由 Lead 指定的 merger 把票分支合入对应集成分支，并更新 `combo.json`。
-- worktree 任务结束后由 Lead 清理；不要自行 `git worktree remove` 别人的。
+- **收尾即清场。** 任务结束或交接前，本轮执行者清理自己创建的临时 worktree、已合入本地分支、临时产物和后台任务；交付前确认 `git status --porcelain` 为空、`git worktree list` 无本轮遗留。未提交或未合入内容用 stash 或分支明确保留，不为清场硬合并或丢弃。不要动其他人的 worktree。
 
 ## 3. 工具链
 
@@ -66,7 +71,7 @@ git -C /home/eafen405/projects/deepseek-harness worktree add \
 
 - **Gradle 下载发行版超时 ≠ 代理没配**：Java/Gradle 不读 `http_proxy`/`https_proxy` 环境变量，`curl` 能下不代表 Gradle 能下。
 - **依赖解析期间日志长时间无输出是正常推进，不是卡死**：Gradle 只在任务完成时打印 `> Task`。
-- **长构建要脱离 agent turn 运行**：用 `setsid nohup ... &`，日志落到 `work/implementation/evidence/` 下本票的目录里供任何人轮询。
+- **长构建使用托管后台任务**：用支持任务句柄的后台执行工具（本环境为 `bash` 的 `run_in_background` 与 `job_output`），保留任务 id，交付前收集或取消相关任务。原始运行日志放在 `work/tmp/<票号>/`；交付 README 记录实际命令与结果，日志本身不作为提交物。
 
 ## 4. 常用命令
 
@@ -87,7 +92,7 @@ OurFairy 侧怎么跑测试、怎么起后端，见根 [`README.md`](../../READM
 每张票的交付必须留下**可复查的证据**，写在 `work/implementation/evidence/` 下；
 目录入口、每份 README 该写什么、哪些原始输出不入库，都在[证据索引](evidence/README.md)中，本文不重复。
 
-本文只补一条：结论必须区分**替身测试**（模型/网络/平台替身）与**真实服务**（官方 DeepSeek、硅基流动 ASR）
+本文只补一条：结论必须区分**替身测试**（模型/网络/平台替身）与**真实服务**（当前组合的云模型与 ASR）
 证据，也必须区分**模拟器/构建成功**与**真机**证据；「编译通过」不等于验收通过（用词纪律见
 `CODING_STANDARDS.md`）。
 

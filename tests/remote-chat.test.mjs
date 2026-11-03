@@ -1,12 +1,17 @@
+/**
+ * @covers backend/chat — this suite drives `/chat/page`, `/chat/observe`,
+ * `/chat/receipt` and `/chat/stop` through the product's own routes rather than
+ * importing the package.
+ */
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { join } from 'node:path'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { before, after, test } from 'node:test'
-import { dshDir, describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 
-const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 const home = makeHome('ourfairy-chat-')
 const password = 'test-chat-password'
 const answer = '# Fairy\n\n你好，**世界**。\n```js\n1 + 1\n```\n最后。'
@@ -53,7 +58,7 @@ async function eventually(work, check, timeout = 15000) {
   assert.fail(`condition not reached: ${JSON.stringify(value)}`)
 }
 before(async () => {
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
     successText: answer, chunkSize: 2, chunkDelayMs: 15 })
   await start()
   admin = (await request('/identity/sign-in', undefined, { name: 'phaethon', password })).body
@@ -93,6 +98,32 @@ test('a stable send is durably accepted once across concurrent retries and backe
   const read = await request('/chat/read', alice.token, { sessionId })
   assert.deepEqual(read.body.projection.messages.map(m => m.text), [body.text, answer])
   assert.equal(model.requests.length, 1)
+})
+
+test('a page names the same position as the live read for the same row', async () => {
+  const sessionId = await session(alice.token)
+  const requestId = 'alice-position-1'
+  const sent = await request('/chat/send', alice.token, { sessionId, requestId, text: 'position me' })
+  assert.equal(sent.status, 200, JSON.stringify(sent))
+  const settled = await eventually(() => request('/chat/read', alice.token, { sessionId }),
+    r => r.body.projection?.replyStatus === 0 && r.body.projection.messages.some(m => m.role === 2))
+  const live = settled.body.projection
+
+  // Presentation order is first appearance, numbered from zero for the session.
+  assert.deepEqual(live.messages.map(m => m.position), live.messages.map((_, index) => index))
+  assert.deepEqual(live.messages.map(m => m.role), [1, 2])
+  const user = live.messages[0]
+  assert.equal(user.requestId, requestId)
+
+  // A page that names only one row still reports that row's place in the
+  // session: a window does not renumber what it carries.
+  for (const row of [user, live.messages[1]]) {
+    const page = await request('/chat/page', alice.token, {
+      sessionId, throughSeq: row.seq, beforeSeq: row.seq + 1, maxEvents: 1,
+    })
+    assert.equal(page.status, 200, JSON.stringify(page))
+    assert.deepEqual(page.body.page.messages, [row])
+  }
 })
 
 function artifacts() {
@@ -222,7 +253,7 @@ test('a stop settles the visible prefix as interrupted and does not cancel the n
 test('a failed model attempt retains its exact partial text after a cold restart', async () => {
   await stop()
   await model.close()
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['partial_eof'], repeatLast: true,
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['partial_eof'], repeatLast: true,
     partialText: '失败前原文\n**不能丢**。', chunkSize: 2 })
   await start()
   const sessionId = await session(bob.token)
@@ -241,7 +272,7 @@ test('a failed model attempt retains its exact partial text after a cold restart
 test('the deployment owner identity is separate from a chat attempt to edit the persona', async () => {
   await stop()
   await model.close()
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['slow_success'], repeatLast: true,
     successText: answer, chunkSize: 1, chunkDelayMs: 5 })
   await start()
   const sessionId = await session(admin.token)
@@ -293,7 +324,7 @@ test('stopping the current reply preserves accepted queued input for the next wa
 test('stopping before visible output records interruption rather than a failed reply', async () => {
   await stop()
   await model.close()
-  model = await startMockLlmServer({ apiKey: 'mock-key', sequence: ['stall'], repeatLast: true })
+  model = await startTitleAwareModel({ apiKey: 'mock-key', sequence: ['stall'], repeatLast: true })
   await start()
   const sessionId = await session(alice.token)
   await request('/chat/send', alice.token, { sessionId, requestId: 'stop-before-text', text: 'wait for output' })

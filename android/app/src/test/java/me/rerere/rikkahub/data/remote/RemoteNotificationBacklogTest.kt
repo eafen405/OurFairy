@@ -14,9 +14,9 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * A reconnect that catches up several sessions publishes one reminder, not one per session.
+ * A reconnect that catches up several sessions publishes one reminder per owed landing session.
  * Each session records the episode it owes in its own durable record; reception sees every
- * session and decides once, so the backlog has an owner.
+ * session, so each alert opens the session the content actually landed in.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoteNotificationBacklogTest {
@@ -29,36 +29,40 @@ class RemoteNotificationBacklogTest {
 
     /**
      * Records whether the reminder was suppressed, so a later reconnect cannot replay it.
-     * [failNextPublish] models the platform refusing the attempt after the durable record was
-     * consumed: the sound for that episode is lost, and only that episode.
+     * [refusedSessions] models the platform refusing one landing's attempt after the durable
+     * record was consumed: the sound for that episode is lost, and only that episode.
      */
     private class Platform : RemoteNotificationPlatform {
         var foreground = false
         var enabled = true
-        var failNextPublish = false
         var publishAttempts = 0
+        val refusedSessions = mutableSetOf<String>()
         val alerts = mutableListOf<Pair<ChatSyncKey, String>>()
         override fun isForeground() = foreground
         override fun publish(key: ChatSyncKey, preview: String) {
             publishAttempts += 1
             if (foreground || !enabled) throw AssertionError("a suppressed reminder was published")
-            if (failNextPublish) {
-                failNextPublish = false
+            if (key.sessionId in refusedSessions) {
                 throw IOException("notification channel refused the reminder")
             }
             alerts += key to preview
         }
     }
 
-    private class Sessions(private val ids: List<String> = listOf("main")) : SessionBackend {
-        override suspend fun list(token: String) = OwnedSessions(
+    private class Sessions(ids: List<String> = listOf("main")) : SessionBackend {
+        private var ids = ids
+        fun setIds(next: List<String>) { ids = next }
+        override suspend fun list(token: String, archived: Boolean) = OwnedSessions(
             ids.map { OwnedSession("$token-$it", primary = it == ids.first()) },
             "$token-${ids.first()}",
         )
         override suspend fun read(token: String, sessionId: String) = OwnedSession(sessionId)
+        override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun create(token: String) = error("not used")
         override suspend fun primary(token: String) = OwnedSession("$token-${ids.first()}", primary = true)
+        override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
+        override suspend fun restore(token: String, sessionId: String) = error("not used")
     }
 
     private class Chats : RemoteChatBackend {
@@ -94,37 +98,62 @@ class RemoteNotificationBacklogTest {
     private fun TestScope.receiver(harness: Harness, sessions: SessionBackend = Sessions()) =
         RemoteReceiveState(sessions, backgroundScope, { settle ->
             RemoteChatState(harness.chats, backgroundScope, harness.store, "https://fairy", settleReminders = settle)
-        }, harness.platform, { harness.platform.enabled })
+        }, harness.platform, { harness.platform.enabled }, harness.store, "https://fairy")
 
-    @Test fun `three staggered reconnects publish one merged reminder`() = runTest {
+    @Test fun `three staggered reconnects publish one reminder per landing session`() = runTest {
         val harness = Harness()
         val receiver = receiver(harness, Sessions(listOf("main", "other", "third")))
         receiver.bind("alice", 1); runCurrent()
         val main = harness.chats.updates.getValue("alice-main")
         val other = harness.chats.updates.getValue("alice-other")
         val third = harness.chats.updates.getValue("alice-third")
-        // Each session reconnects on its own schedule. The first one to answer must not spend
-        // the reminder before the others have said whether they owe anything: `syncing` alone
-        // stayed false for a session that had not received its opening frame yet, so the old
-        // aggregation published once per arriving session (three notifications, not one).
+        // Each session reconnects on its own schedule. The first one to answer must not spend the
+        // account's reminders before the others have said whether they owe anything: publishing
+        // now would settle only part of the backlog instead of one pass over all of it.
         main.emit(delivery("alice-main", 1)); runCurrent()
         assertTrue(
-            "a session that has not answered yet still holds the merged reminder",
+            "a session that has not answered yet still holds the backlog",
             harness.platform.alerts.isEmpty(),
         )
         other.emit(delivery("alice-other", 2)); runCurrent()
         assertTrue("the second arrival must not publish on its own", harness.platform.alerts.isEmpty())
         third.emit(delivery("alice-third", 3)); runCurrent()
-        assertEquals(1, harness.platform.alerts.size)
-        // The merge opens the account's primary session, which is also where it lands for the user.
-        assertEquals("alice-main", harness.platform.alerts.single().first.sessionId)
+        assertEquals(3, harness.platform.alerts.size)
+        // Each landing gets its own reminder, keyed by that session and previewing that session's
+        // output, so opening an alert opens where the content is.
+        assertEquals(
+            mapOf(
+                ChatSyncKey("https://fairy", 1, "alice-main") to "delivered1",
+                ChatSyncKey("https://fairy", 1, "alice-other") to "delivered2",
+                ChatSyncKey("https://fairy", 1, "alice-third") to "delivered3",
+            ),
+            harness.platform.alerts.toMap(),
+        )
         // Every session consumed its backlog, so nothing is replayed on the next attempt.
         for (id in listOf("main", "other", "third")) {
             assertFalse(harness.store.load(ChatSyncKey("https://fairy", 1, "alice-$id")).notificationOwed)
         }
         // The same episode seen again is not a second backlog.
         main.emit(delivery("alice-main", 1).copy(version = 2)); runCurrent()
-        assertEquals(1, harness.platform.alerts.size)
+        assertEquals(3, harness.platform.alerts.size)
+    }
+
+    @Test fun `a non-primary landing keeps its own target when only it owes`() = runTest {
+        val harness = Harness()
+        val receiver = receiver(harness, Sessions(listOf("main", "other")))
+        receiver.bind("alice", 1); runCurrent()
+        // The primary answers while owing nothing, so the catch-up gate opens.
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+        harness.chats.updates.getValue("alice-other").emit(delivery("alice-other", 2)); runCurrent()
+
+        // The only debt is the non-primary landing; the alert keeps that target rather than
+        // being redirected to the primary just because the primary exists.
+        assertEquals(
+            listOf(ChatSyncKey("https://fairy", 1, "alice-other") to "delivered2"),
+            harness.platform.alerts,
+        )
     }
 
     @Test fun `a backlog the application already saw in front is consumed without a reminder`() = runTest {
@@ -155,12 +184,213 @@ class RemoteNotificationBacklogTest {
         assertFalse(harness.store.load(key).notificationOwed)
     }
 
+    /**
+     * The ledger is the reminder's authority, not whichever runtime happens to be live.
+     *
+     * The session settles here holding a record that owes nothing, and only afterwards does the
+     * ledger gain an owed episode — which is what a previous run, or any other writer, looks like
+     * from this one. Walking the live runtimes would answer "nothing owed" from their cached copy
+     * and the episode would be stranded; reading the ledger answers with what is actually owed.
+     */
+    @Test fun `debt the ledger records is settled even when the live runtime never saw it`() = runTest {
+        val harness = Harness()
+        val receiver = receiver(harness)
+        receiver.bind("alice", 1); runCurrent()
+        val key = ChatSyncKey("https://fairy", 1, "alice-main")
+        // A quiet settlement: the session answers, and claims nothing, so its record owes nothing.
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+        assertTrue("the quiet settlement owes nothing", harness.store.load(key).notificationOwed.not())
+        assertTrue(harness.platform.alerts.isEmpty())
+
+        // A record this run did not write: the episode was claimed before the process restarted.
+        harness.store.seed(key, ChatSyncRecord(0, true, notificationThrough = 1,
+            notificationEpisodeId = "alice-main/1", notificationOwed = true))
+        // The account's list is what names the session keys, so asking it again is what makes the
+        // debt discoverable. Nothing about the runtime changed, and nothing had to.
+        receiver.owned.refresh(); runCurrent()
+
+        assertEquals(1, harness.platform.alerts.size)
+        assertEquals("alice-main", harness.platform.alerts.single().first.sessionId)
+        assertEquals("Fairy 已完成本次活动", harness.platform.alerts.single().second)
+        assertFalse("the settled debt is retired in the ledger", harness.store.load(key).notificationOwed)
+    }
+
+    /** Debt is read for the account's own session keys; a record outside them is not published. */
+    @Test fun `a record for a session this account does not list is never published`() = runTest {
+        val harness = Harness()
+        harness.store.seed(ChatSyncKey("https://fairy", 1, "alice-archived"), ChatSyncRecord(0, true,
+            notificationThrough = 1, notificationEpisodeId = "alice-archived/1", notificationOwed = true))
+        val receiver = receiver(harness)
+        receiver.bind("alice", 1); runCurrent()
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+        receiver.owned.refresh(); runCurrent()
+
+        assertTrue("a session outside the account's list has no reminder", harness.platform.alerts.isEmpty())
+        assertTrue("and its record is left exactly as it was",
+            harness.store.load(ChatSyncKey("https://fairy", 1, "alice-archived")).notificationOwed)
+    }
+
+    /**
+     * A live runtime names the record it commits; reception does not rebuild the key from its own
+     * fallback endpoint while that runtime exists. A mismatch must not hide the owed episode.
+     */
+    @Test fun `a live runtime's own key names its debt`() = runTest {
+        val harness = Harness()
+        val key = ChatSyncKey("https://elsewhere", 1, "alice-main")
+        harness.store.seed(key, ChatSyncRecord(0, true, notificationThrough = 1,
+            notificationEpisodeId = "alice-main/1", notificationOwed = true))
+        val receiver = RemoteReceiveState(
+            Sessions(), backgroundScope,
+            { settle -> RemoteChatState(harness.chats, backgroundScope, harness.store, "https://elsewhere", settleReminders = settle) },
+            harness.platform, { harness.platform.enabled }, harness.store, "https://fallback",
+        )
+        receiver.bind("alice", 1); runCurrent()
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+
+        assertEquals(1, harness.platform.alerts.size)
+        assertEquals("alice-main", harness.platform.alerts.single().first.sessionId)
+        assertFalse("the runtime's record is retired", harness.store.load(key).notificationOwed)
+        assertTrue("the fallback endpoint has no record to spend",
+            harness.store.load(ChatSyncKey("https://fallback", 1, "alice-main")).notificationOwed.not())
+    }
+
+    /**
+     * The no-runtime branch is reached the only way production can reach it: the session leaves
+     * the list while its record is being read. Settlement still spends the ledger's debt and the
+     * preview falls back because the runtime that could have supplied one is gone.
+     */
+    @Test fun `a session removed during the scan settles its debt without a runtime`() = runTest {
+        val harness = Harness()
+        // Other is read first, so main can leave the list before the scan reaches its record.
+        val sessions = Sessions(listOf("other", "main"))
+        val key = ChatSyncKey("https://fairy", 1, "alice-main")
+        harness.store.seed(key, ChatSyncRecord(0, true, notificationThrough = 1,
+            notificationEpisodeId = "alice-main/1", notificationOwed = true))
+        val loadGate = CompletableDeferred<Unit>()
+        var gateConsumed = false
+        // Only the receiver's ledger read is gated; the runtime keeps using the same store directly,
+        // so the scan can be suspended without freezing the session that is being observed.
+        val gated = object : ChatSyncStore {
+            override suspend fun load(key: ChatSyncKey): ChatSyncRecord {
+                if (!gateConsumed) { gateConsumed = true; loadGate.await() }
+                return harness.store.load(key)
+            }
+            override suspend fun save(key: ChatSyncKey, record: ChatSyncRecord) = harness.store.save(key, record)
+        }
+        val receiver = RemoteReceiveState(
+            sessions, backgroundScope,
+            { settle -> RemoteChatState(harness.chats, backgroundScope, harness.store, "https://fairy", settleReminders = settle) },
+            harness.platform, { harness.platform.enabled }, gated, "https://fairy",
+        )
+        receiver.bind("alice", 1); runCurrent()
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+        harness.chats.updates.getValue("alice-other").emit(
+            deliveryProjection(1).copy(sessionId = "alice-other", activity = RemoteActivity()),
+        ); runCurrent()
+        assertTrue("the scan reached the ledger and is waiting on the first record", gateConsumed)
+        assertTrue("nothing is published before the record is read", harness.platform.alerts.isEmpty())
+
+        sessions.setIds(listOf("other"))
+        receiver.owned.refresh(); runCurrent()
+        loadGate.complete(Unit); runCurrent()
+
+        assertEquals(1, harness.platform.alerts.size)
+        assertEquals("alice-main", harness.platform.alerts.single().first.sessionId)
+        assertEquals("Fairy 已完成本次活动", harness.platform.alerts.single().second)
+        assertFalse("the ledger's debt is retired without a runtime", harness.store.load(key).notificationOwed)
+    }
+
+    /**
+     * A stopped observation must not spend debt it is no longer allowed to publish.
+     *
+     * The ledger is readable whether or not reception is observing, so a list refresh after the
+     * receiver stopped would otherwise retire an episode silently — the reminder would disappear
+     * with no notification, and resuming would have nothing left to publish. The debt stays put
+     * until observation resumes and a session answers; only then is it consumed and published.
+     */
+    @Test fun `a stopped observation leaves the ledger's debt for the resumed one`() = runTest {
+        val harness = Harness()
+        val key = ChatSyncKey("https://fairy", 1, "alice-main")
+        harness.store.seed(key, ChatSyncRecord(0, true, notificationThrough = 1,
+            notificationEpisodeId = "alice-main/1", notificationOwed = true))
+        val receiver = receiver(harness)
+        receiver.bind("alice", 1); runCurrent()
+        receiver.stopObservation(); runCurrent()
+        // Background reception being off only stops observing; it must not settle the backlog.
+        receiver.owned.refresh(); runCurrent()
+        assertTrue("a stopped observation publishes nothing", harness.platform.alerts.isEmpty())
+        assertTrue("and does not spend the debt", harness.store.load(key).notificationOwed)
+
+        receiver.resumeObservation(); runCurrent()
+        harness.chats.updates.getValue("alice-main").emit(
+            deliveryProjection(1).copy(sessionId = "alice-main", activity = RemoteActivity()),
+        ); runCurrent()
+        assertEquals(1, harness.platform.alerts.size)
+        assertEquals("alice-main", harness.platform.alerts.single().first.sessionId)
+        assertFalse("the resumed observation retires the debt", harness.store.load(key).notificationOwed)
+    }
+
+    @Test fun `the reminder preview is the newest output by seq, not the last position`() = runTest {
+        val harness = Harness()
+        val receiver = receiver(harness)
+        receiver.bind("alice", 1); runCurrent()
+        // Position is first appearance, so the newest output can sit before a row
+        // that first appeared earlier and settled later. The preview names the
+        // newest by seq.
+        harness.chats.updates.getValue("alice-main").emit(
+            delivery("alice-main", 9).copy(
+                version = 2,
+                messages = listOf(
+                    RemoteChatMessage("delivery9", 0, 9, role = 2, status = 2, text = "delivered9"),
+                    RemoteChatMessage("older", 1, 5, role = 2, status = 2, text = "delivered5"),
+                ),
+            ),
+        ); runCurrent()
+
+        assertEquals("delivered9", harness.platform.alerts.single().second)
+    }
+
+    @Test fun `a refused publication for one landing still publishes the others`() = runTest {
+        val harness = Harness()
+        harness.platform.refusedSessions += "alice-other"
+        val receiver = receiver(harness, Sessions(listOf("main", "other", "third")))
+        receiver.bind("alice", 1); runCurrent()
+        harness.chats.updates.getValue("alice-main").emit(delivery("alice-main", 1)); runCurrent()
+        harness.chats.updates.getValue("alice-other").emit(delivery("alice-other", 2)); runCurrent()
+        harness.chats.updates.getValue("alice-third").emit(delivery("alice-third", 3)); runCurrent()
+
+        // Every landing is attempted even though one channel refuses; the refusal does not swallow
+        // the reminders that another landing could still deliver.
+        assertEquals(3, harness.platform.publishAttempts)
+        assertEquals(
+            listOf(
+                ChatSyncKey("https://fairy", 1, "alice-main") to "delivered1",
+                ChatSyncKey("https://fairy", 1, "alice-third") to "delivered3",
+            ),
+            harness.platform.alerts,
+        )
+        // The refusal was after consumption, so the lost landing is not left owed for a replay.
+        for (id in listOf("main", "other", "third")) {
+            assertFalse(harness.store.load(ChatSyncKey("https://fairy", 1, "alice-$id")).notificationOwed)
+        }
+        advanceUntilIdle()
+        assertEquals("the refused sound is not replayed", 3, harness.platform.publishAttempts)
+    }
+
     @Test fun `a refused publication after consumption loses one sound and is not replayed`() = runTest {
         val harness = Harness()
         val receiver = receiver(harness)
         receiver.bind("alice", 1); runCurrent()
         val key = ChatSyncKey("https://fairy", 1, "alice-main")
-        harness.platform.failNextPublish = true
+        harness.platform.refusedSessions += "alice-main"
         harness.chats.updates.getValue("alice-main").emit(delivery("alice-main", 1)); runCurrent()
 
         // The record was consumed before the attempt, which is exactly the trade: a crash or a

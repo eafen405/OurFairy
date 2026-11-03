@@ -61,6 +61,34 @@ CREATE TABLE sessions (
 CREATE INDEX sessions_by_user ON sessions(user_id);
 `
 
+/**
+ * A schema-version-5 deliveries table: the coordination rows before the v6
+ * attachment manifest. It is the only pre-v6 shape whose upgrade needs DDL —
+ * every other table is reached by re-running the current schema.
+ */
+const V5_DELIVERIES_SCHEMA = `
+CREATE TABLE meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+CREATE TABLE deliveries (
+  delivery_id TEXT PRIMARY KEY,
+  sender_short_id INTEGER NOT NULL,
+  sender_session_id TEXT NOT NULL,
+  recipient_short_id INTEGER NOT NULL,
+  recipient_session_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  status INTEGER NOT NULL DEFAULT 0,
+  message_id TEXT,
+  accepted_seq INTEGER,
+  created_by INTEGER NOT NULL,
+  updated_by INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+`
+
 const dir = mkdtempSync(join(tmpdir(), 'ourfairy-identity-store-'))
 const legacyPath = join(dir, 'legacy.sqlite')
 const futurePath = join(dir, 'future.sqlite')
@@ -165,6 +193,57 @@ describe('upgrading a v2 file', () => {
       'a refused file must not be altered: the version is checked before any DDL')
     const check = new DatabaseSync(futurePath)
     assert.equal(check.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version').value, '99')
+    check.close()
+  })
+})
+
+describe('refusing a file whose recorded version cannot be read', () => {
+  test('treats a non-integer version as a refusal, not as an older file', () => {
+    const path = join(dir, 'unreadable.sqlite')
+    const db = new DatabaseSync(path)
+    db.exec(V2_SCHEMA)
+    db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run('schema_version', 'not-a-number')
+    db.close()
+
+    // `Number('not-a-number')` is NaN, which fails `> version`, `=== version`
+    // and `< 1` alike; without this guard the migration would fall through to
+    // "rewrite the current shape" and restamp the corrupt file.
+    assert.throws(() => new IdentityStore({ path }), error => error.code === 'identity/schema-too-new')
+    assert.deepEqual(schemaFacts(path).tables.filter(name => name !== 'sqlite_sequence'),
+      ['invites', 'meta', 'sessions', 'users'],
+      'a refused file must not be altered')
+    const check = new DatabaseSync(path)
+    assert.equal(check.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version').value, 'not-a-number',
+      'the unreadable version must not be restamped')
+    check.close()
+  })
+})
+
+describe('upgrading a v5 file that already has deliveries', () => {
+  test('adds the attachment manifest column and keeps existing rows', () => {
+    const path = join(dir, 'v5.sqlite')
+    const db = new DatabaseSync(path)
+    db.exec(V5_DELIVERIES_SCHEMA)
+    db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run('schema_version', '5')
+    db.prepare(`INSERT INTO deliveries
+      (delivery_id, sender_short_id, sender_session_id, recipient_short_id, recipient_session_id, text, status, created_by, updated_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('d1', 1, 'session-a', 2, 'session-b', 'hello', 1, 1, 1, NOW, NOW)
+    db.close()
+
+    const upgraded = new IdentityStore({ path, now: () => NOW })
+    upgraded.close()
+
+    const facts = schemaFacts(path)
+    assert.ok(facts.columns_deliveries.includes('attachments_json'),
+      'an existing deliveries table must gain the v6 column through ALTER, not only through CREATE')
+    assert.ok(facts.tables.includes('users'), 'the rest of the schema is created by the same upgrade')
+
+    const check = new DatabaseSync(path)
+    const row = check.prepare('SELECT * FROM deliveries WHERE delivery_id = ?').get('d1')
+    assert.equal(row.attachments_json, '[]', 'an older row gets the empty manifest, never NULL')
+    assert.equal(row.text, 'hello', 'the row itself is preserved')
+    assert.equal(check.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version').value, '6')
     check.close()
   })
 })

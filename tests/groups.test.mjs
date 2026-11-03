@@ -1,3 +1,7 @@
+/**
+ * @covers backend/groups — this suite drives the group tools through the
+ * product's chat routes rather than importing the package.
+ */
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
@@ -5,6 +9,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { before, after, test } from 'node:test'
 import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const home = makeHome('ourfairy-groups-')
 const password = 'group-test-password'
@@ -39,6 +44,9 @@ async function tool(user, name, args, sessionId) {
 before(async () => {
   model = http.createServer(async (req, res) => {
     let data = ''; for await (const chunk of req) data += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(data, res)) return
     const body = JSON.parse(data); modelRequests.push(body)
     const blocks = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
     const commandIndex = blocks.findLastIndex(c => c.type === 'text' && c.text.startsWith('{"name":'))

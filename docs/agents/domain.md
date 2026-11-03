@@ -4,39 +4,47 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`GLOSSARY.md`** at the repo root, or
-- **`GLOSSARY-MAP.md`** at the repo root if it exists: it points at one `GLOSSARY.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`**: read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+- **`GLOSSARY-MAP.md`** at the repo root: points at one glossary per context — root `GLOSSARY.md` (product-wide),
+  `android/GLOSSARY.md` (terms only true for the client), `docs/glossary/external-senses.md` and
+  `docs/glossary/memory.md`. Read the ones relevant to the topic; the root glossary alone does not cover a
+  context's own terms.
+- **`docs/adr/`**: read the ADRs that touch the area you're about to work in. This repo keeps them under
+  `docs/adr/`, with no per-context ADR directory; a context-scoped decision is an ordinary ADR that names its
+  context.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
 ## File structure
 
-Single-context repo (most repos):
+Single-context repo (most repos) — one glossary at the root:
 
 ```
 /
 ├── GLOSSARY.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
+└── docs/adr/
+    └── 000N-<decision>.md
 ```
 
-Multi-context repo (presence of `GLOSSARY-MAP.md` at the root):
+Multi-context repo (presence of `GLOSSARY-MAP.md` at the root) — this repo:
 
 ```
 /
-├── GLOSSARY-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── GLOSSARY.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── GLOSSARY.md
-        └── docs/adr/
+├── GLOSSARY-MAP.md                    ← one entry per context
+├── GLOSSARY.md                        ← product-wide vocabulary
+├── android/
+│   └── GLOSSARY.md                    ← terms only true for the client
+├── docs/
+│   ├── adr/                           ← decisions that span contexts
+│   │   ├── 0001-upstream-extension-policy.md
+│   │   └── 0002-physical-memory-deletion.md
+│   └── glossary/
+│       ├── external-senses.md         ← what Fairy reads outside the app
+│       └── memory.md                  ← what Fairy keeps across sessions
+└── backend/                           ← product code
 ```
+
+A context's glossary sits where that context lives; a new context adds its own glossary file and registers it in
+`GLOSSARY-MAP.md` rather than appending terms to the root `GLOSSARY.md`.
 
 ## Use the glossary's vocabulary
 

@@ -14,6 +14,8 @@
     { "path": "./backend/chat" },
     { "path": "./backend/chat/tsconfig.test-support.json" },
     { "path": "./backend/groups" },
+    { "path": "./backend/memory" },
+    { "path": "./backend/skill-creator" },
     { "path": "./backend/search" },
     { "path": "./backend/speech" },
     { "path": "./backend/delivery" },

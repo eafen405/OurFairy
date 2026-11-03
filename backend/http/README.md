@@ -8,7 +8,7 @@ the error envelope.
 ## `./http`
 
 ```js
-import { bearerToken, postHandler, sendJson } from '@ourfairy/dsh-http/http'
+import { bearerToken, freezeSurface, mountRoutes, postHandler, sendJson } from '@ourfairy/dsh-http/http'
 ```
 
 `readJsonBody` is module-private; product routes reach it through `postHandler`.
@@ -16,6 +16,30 @@ Both are given the owning module's error class (`HttpError`) and error-code
 prefix (`codePrefix`); the caller passes them explicitly, because the catch in
 `postHandler` must see exactly one error type — the class that route declared —
 so its own errors are answered as 4xx and nothing else is mistaken for them.
+
+## Mounting a row's surface
+
+A row publishes its addresses once (`SURFACE`) and builds one handler per path;
+`mountRoutes` joins the two and registers the result on that row's fiber:
+
+```js
+mountRoutes(ctx, { label: 'ourfairy-gateway', surface: SURFACE, handlers })
+```
+
+The surface is the mounted set: every entry is registered as an exact route, in
+the surface's order, inside `ctx.effect`, so a disabled row mounts nothing and
+the routes disappear with its fiber. Before anything is registered the seam
+checks the pairing in both directions — a repeated path, a published path
+without a handler, and a handler for an unpublished path all fail the row's
+load — and the effect label defaults to the entry's error prefix when the row
+passes none.
+
+Admission stays in the handlers; this seam owns only the registration lifetime
+and the pairing. JSON routes keep delegating to `postHandler`; a route that
+answers SSE or raw bytes keeps its own `respond`; a raw-body route keeps its own
+fence, credential check and error mapping. `tests/mount-routes.test.mjs` drives
+the seam with a fake carrier; the product rows prove the mounted addresses over
+real HTTP in their own suites.
 
 ## Why the row is empty
 

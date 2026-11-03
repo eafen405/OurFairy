@@ -15,6 +15,10 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import java.util.UUID
 import java.io.File
+import java.io.IOException
+
+/** The one saved notice both attachment save paths report. */
+private const val ATTACHMENT_SAVED = "原件已保存"
 
 /** An unresolved client command, not authoritative message history. */
 data class PendingChatSend(
@@ -100,8 +104,8 @@ data class RemoteChatSnapshot(
      * Whether this session still has to answer before the account's backlog can be settled.
      *
      * A session that has not received its opening frame yet reports neither `syncing` nor a
-     * failure, so waiting on `syncing` alone let the first arrival spend the reminder before the
-     * other sessions said what they owed. A failed attempt has answered — it owes nothing on that
+     * failure, so waiting on `syncing` alone let the first arrival publish before the other
+     * sessions said what they owed. A failed attempt has answered — it owes nothing on that
      * connection — so it stops holding the others back.
      */
     internal val isCatchingUp: Boolean
@@ -127,6 +131,15 @@ class RemoteChatState(
 ) {
     private val mutable = MutableStateFlow(RemoteChatSnapshot())
     val snapshot: StateFlow<RemoteChatSnapshot> = mutable.asStateFlow()
+
+    /**
+     * The durable key this runtime commits under, or null while unbound.
+     *
+     * Reception reads a live session's debt with this key rather than rebuilding it from its own
+     * endpoint parameter, so the record the runtime settles and the record reception scans cannot
+     * name different keys.
+     */
+    internal val recordKey: ChatSyncKey? get() = key
     private var token: String? = null
     private var key: ChatSyncKey? = null
     private var epoch = 0L
@@ -146,6 +159,7 @@ class RemoteChatState(
     private var taskObserver: Job? = null
     private var taskEpoch = 0L
     private var notifier: (() -> Unit)? = null
+    private var titleNotifier: ((String, String) -> Unit)? = null
 
     suspend fun speechAvailability(expectedEpoch: Long): RemoteSpeechAvailability {
         check(expectedEpoch == attachmentEpoch)
@@ -163,7 +177,7 @@ class RemoteChatState(
 
     fun bind(credential: String?, selectedSessionId: String?, userShortId: Int?) {
         val selected = if (selectedSessionId != null && userShortId != null) {
-            ChatSyncKey(endpoint.trimEnd('/'), userShortId, selectedSessionId)
+            chatSyncKey(endpoint, userShortId, selectedSessionId)
         } else null
         if (credential == token && selected == key && observer?.isActive == true) return
         val same = selected == key && selected != null
@@ -194,6 +208,10 @@ class RemoteChatState(
             mutable.value = RemoteChatSnapshot(sessionId = selectedSessionId, attachmentEpoch = attachmentEpoch)
         } else mutable.value = mutable.value.copy(connected = false, connecting = false)
         if (credential == null || selected == null) return
+        // The binding is now waiting on its first answer. Set that before the observer coroutine
+        // runs: reception's backlog gate asks the same snapshot, and a launch that has not been
+        // dispatched yet must read as "has not answered", not as "answered with nothing owed".
+        mutable.value = mutable.value.copy(connecting = true)
         val boundEpoch = epoch
         observer = scope.launch {
             while (boundEpoch == epoch) {
@@ -232,6 +250,10 @@ class RemoteChatState(
                             projection = projection.copy(messages = orderedMessages()),
                             connected = true, connecting = false, failure = null, syncing = true,
                         )
+                        val title = projection.titleText()
+                        if (title != null && (previous == null || projection.titleSeq() > previous.titleSeq())) {
+                            titleNotifier?.invoke(projection.sessionId, title)
+                        }
                         scheduleSync(boundEpoch, opened, credential, selected)
                     }
                 } catch (cancelled: CancellationException) {
@@ -273,26 +295,32 @@ class RemoteChatState(
         notifier = notify
     }
 
-    /**
-     * The reminder this session still owes: the session it opens and the output to show. It is
-     * read from the durable record the settlement committed, so a backlog restored by a later run
-     * is still owed rather than silently dropped.
-     */
-    internal suspend fun owedReminder(): Pair<ChatSyncKey, String>? {
-        val selected = key ?: return null
-        val record = load(selected)
-        // The episode identity only answers "is anything owed"; session ids stay opaque.
-        if (record.notificationEpisodeId == null || !record.notificationOwed) return null
-        val preview = mutable.value.projection?.messages
-            ?.lastOrNull { it.role == 2 && it.seq <= record.consumedThrough }?.text
-            ?.take(160)?.ifBlank { null } ?: "Fairy 已完成本次活动"
-        return selected to preview
+    /** A newly observed title row refreshes the shared list, even when this chat is not selected. */
+    internal fun onTitle(notify: (String, String) -> Unit) {
+        titleNotifier = notify
     }
 
-    /** Consumed before the attempt: a crash here may miss the sound, but cannot replay it. */
-    internal suspend fun consumeReminder() {
-        val selected = key ?: return
-        update(selected) { if (it.notificationOwed) it.copy(notificationOwed = false) else it }
+    private fun RemoteChatProjection.titleSeq() = events
+        .lastOrNull { it["type"]?.jsonPrimitive?.content == "session/title" }
+        ?.get("seq")?.jsonPrimitive?.long ?: -1L
+
+    private fun RemoteChatProjection.titleText() = events
+        .lastOrNull { it["type"]?.jsonPrimitive?.content == "session/title" }
+        ?.get("data")?.let { it as? JsonObject }
+        ?.get("title")?.jsonPrimitive?.content
+
+    /**
+     * Consume the episode [key] owes, before reception attempts to publish it.
+     *
+     * Reception discovers debt in the ledger, not here; this method exists so that the write lands
+     * under the lock this session also commits its records with. Otherwise a settlement in flight
+     * could save a copy loaded before the consumption and resurrect a reminder already spent. The
+     * shared store rule reads through to the durable record: the in-memory copy may predate a
+     * record another run wrote, and the durable record is the authority for whether anything is
+     * owed.
+     */
+    internal suspend fun consumeReminder(key: ChatSyncKey) = recordLock.withLock {
+        records[key] = store.consumeReminder(key)
     }
 
     private fun scheduleSync(boundEpoch: Long, opened: Long, credential: String, selected: ChatSyncKey) {
@@ -360,8 +388,9 @@ class RemoteChatState(
                     // A detach or rebind landed while the claim was being persisted. The consumption
                     // above stays (it is durable progress on this log), but the reminder must not
                     // outlive the binding that claimed it: retiring it here is what keeps a rebind
-                    // from replaying a sound the user never saw.
-                    update(selected) { if (it.notificationOwed) it.copy(notificationOwed = false) else it }
+                    // from replaying a sound the user never saw. Use the same store rule reception
+                    // uses so this is not a second write path for the consumed fact.
+                    consumeReminder(selected)
                     return@launch
                 }
                 mutable.value = mutable.value.copy(
@@ -413,13 +442,37 @@ class RemoteChatState(
     }
     private fun covered(through: Long): Boolean = through < 0 ||
         (events.isNotEmpty() && events.firstKey() == 0L && events.headMap(through + 1).size.toLong() == through + 1)
+    /**
+     * Merge one snapshot or page's rows. Content still follows the newer seq, but a position is
+     * fixed by the message's first appearance: a copy that moves it, or a second id claiming the
+     * same place, is a protocol failure. The whole row batch is checked before any row is merged,
+     * so a refused batch cannot move a row the reader already saw.
+     */
     private fun mergeMessages(incoming: List<RemoteChatMessage>) {
+        val positionById = mutableMapOf<String, Long>()
+        val idByPosition = mutableMapOf<Long, String>()
+        messages.values.forEach {
+            positionById[it.messageId] = it.position
+            idByPosition[it.position] = it.messageId
+        }
+        incoming.forEach { message ->
+            val known = positionById[message.messageId]
+            require(known == null || known == message.position) { "同一消息的位置发生变化" }
+            val owner = idByPosition[message.position]
+            require(owner == null || owner == message.messageId) { "两条消息占用了同一位置" }
+            positionById[message.messageId] = message.position
+            idByPosition[message.position] = message.messageId
+        }
         incoming.forEach { message ->
             val previous = messages[message.messageId]
             if (previous == null || message.seq >= previous.seq) messages[message.messageId] = message
         }
     }
-    private fun orderedMessages() = messages.values.sortedWith(compareBy<RemoteChatMessage> { it.seq }.thenBy { it.messageId })
+    /**
+     * The transcript in the backend's presentation order. A message's position is its first
+     * appearance, so content freshness (`seq`) never decides where a row is shown.
+     */
+    private fun orderedMessages() = messages.values.sortedBy { it.position }
     private fun current(boundEpoch: Long, opened: Long) = boundEpoch == epoch && opened == connection
 
     /** A picker result belongs to the binding captured before the picker opened. */
@@ -490,12 +543,88 @@ class RemoteChatState(
         mutable.value = mutable.value.copy(attachments = mutable.value.attachments.filterNot { it.uploadId in uploadIds })
     }
 
+    /** Records one attachment-level message for the panel to show, e.g. a handoff with no receiver. */
+    fun noticeAttachment(message: String) {
+        mutable.value = mutable.value.copy(attachmentNotice = message)
+    }
+
     /** Download privately first. A late response never reaches a new binding's SAF target. */
     fun downloadAttachment(
         expectedEpoch: Long,
         messageId: String,
         attachment: RemoteChatAttachment,
         destination: File,
+        save: suspend (File) -> Unit,
+    ) = startAttachmentDownload(
+        expectedEpoch,
+        messageId,
+        attachment,
+        destination,
+        keepCompletedFile = false,
+        save,
+    )
+
+    /**
+     * Saves one attachment that is already complete in the preview cache — the no-receiver
+     * fallback — and records the result. A save captured under an older attachment epoch is
+     * dropped without running, so a late completion never writes to a new binding's target.
+     */
+    suspend fun saveCachedAttachment(
+        expectedEpoch: Long,
+        cached: File,
+        save: suspend (File) -> Unit,
+    ) {
+        if (expectedEpoch != attachmentEpoch) return
+        try {
+            save(cached)
+            if (expectedEpoch == attachmentEpoch) markAttachmentSaved()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            if (expectedEpoch == attachmentEpoch) {
+                mutable.value = mutable.value.copy(attachmentNotice = failure.description())
+            }
+        }
+    }
+
+    /**
+     * Download one attachment into the caller's cached preview file and report it once the bytes
+     * are complete. The file stays in place for the preview to show and save, and the caller
+     * deletes it when that preview closes.
+     *
+     * A complete file already at [destination] is reused, so opening the same attachment again
+     * reads the same bytes instead of downloading them a second time. Downloads are staged at a
+     * sibling `.part` path and renamed only after the last byte, so an interrupted download can
+     * never leave a truncated file that a later open would reuse as the original.
+     */
+    fun cacheAttachment(
+        expectedEpoch: Long,
+        messageId: String,
+        attachment: RemoteChatAttachment,
+        destination: File,
+        onReady: (File) -> Unit,
+    ) {
+        if (destination.isFile && destination.length() > 0) {
+            if (expectedEpoch == attachmentEpoch) onReady(destination) else destination.delete()
+            return
+        }
+        startAttachmentDownload(
+            expectedEpoch,
+            messageId,
+            attachment,
+            destination,
+            keepCompletedFile = true,
+        ) {
+            onReady(it)
+        }
+    }
+
+    private fun startAttachmentDownload(
+        expectedEpoch: Long,
+        messageId: String,
+        attachment: RemoteChatAttachment,
+        destination: File,
+        keepCompletedFile: Boolean,
         save: suspend (File) -> Unit,
     ) {
         val backend = attachmentsBackend
@@ -507,27 +636,46 @@ class RemoteChatState(
         }
         mutable.value = mutable.value.copy(downloading = true, attachmentNotice = null)
         download = scope.launch {
+            val target = if (keepCompletedFile) {
+                File(destination.parentFile, destination.name + ".part")
+            } else {
+                destination
+            }
             try {
-                backend.download(credential, selected.sessionId, messageId, attachment, destination)
+                target.parentFile?.mkdirs()
+                backend.download(credential, selected.sessionId, messageId, attachment, target)
                 if (expectedEpoch != attachmentEpoch) return@launch
+                if (keepCompletedFile && !target.renameTo(destination)) throw IOException("附件缓存无法写入")
                 save(destination)
-                if (expectedEpoch == attachmentEpoch) mutable.value = mutable.value.copy(attachmentNotice = "原件已保存")
+                if (!keepCompletedFile && expectedEpoch == attachmentEpoch) markAttachmentSaved()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
                 if (expectedEpoch == attachmentEpoch) mutable.value = mutable.value.copy(attachmentNotice = failure.description())
             } finally {
-                destination.delete()
+                if (keepCompletedFile) target.delete() else destination.delete()
                 if (expectedEpoch == attachmentEpoch) mutable.value = mutable.value.copy(downloading = false)
             }
         }
     }
 
-    fun send(text: String): Boolean {
-        val selected = key ?: return false
-        val credential = token ?: return false
+    /** Writes the one saved notice; both the direct save-as and the cached fallback use it. */
+    private fun markAttachmentSaved() {
+        mutable.value = mutable.value.copy(attachmentNotice = ATTACHMENT_SAVED)
+    }
+
+    /**
+     * Send one local command and answer with its requestId — the idempotency key of this one send,
+     * carried by [PendingChatSend.requestId] through persistence and retry — or null when the
+     * state refused the command (not bound, storage not ready, nothing to send, or a send already
+     * in flight). The caller reports the accepted send; the key is what makes a retry or a rebind
+     * the same event.
+     */
+    fun send(text: String): String? {
+        val selected = key ?: return null
+        val credential = token ?: return null
         val drafts = mutable.value.attachments
         if ((text.isBlank() && drafts.isEmpty()) || drafts.any { it.uploadId == null || it.uploading } ||
-            !mutable.value.storageReady || mutable.value.sending || mutable.value.pending != null) return false
+            !mutable.value.storageReady || mutable.value.sending || mutable.value.pending != null) return null
         val command = StoredChatSend(UUID.randomUUID().toString(), text, drafts.map { it.uploadId!! })
         mutable.value = mutable.value.copy(sending = true, pending = command.pending().copy(acceptanceUnknown = false), failure = null)
         scope.launch {
@@ -538,13 +686,20 @@ class RemoteChatState(
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) { commandFailure(selected, command, failure) }
         }
-        return true
+        return command.requestId
     }
-    fun retryPending() {
-        val selected = key ?: return
-        val credential = token ?: return
-        val command = mutable.value.pending ?: return
-        if (!command.acceptanceUnknown || mutable.value.sending) return
+    /**
+     * Retry the pending command with its original requestId.
+     *
+     * Answers true only when this state actually took the retry: not bound, no credential, no
+     * pending command, a command whose acceptance is not unknown, or one already sending all
+     * refuse it. The caller reports the requestId only when this answers true.
+     */
+    fun retryPending(): Boolean {
+        val selected = key ?: return false
+        val credential = token ?: return false
+        val command = mutable.value.pending ?: return false
+        if (!command.acceptanceUnknown || mutable.value.sending) return false
         mutable.value = mutable.value.copy(sending = true, failure = null)
         scope.launch {
             try {
@@ -554,6 +709,7 @@ class RemoteChatState(
             catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) { commandFailure(selected, StoredChatSend(command.requestId, command.text, command.uploadIds), failure) }
         }
+        return true
     }
     private suspend fun transmit(credential: String, selected: ChatSyncKey, command: StoredChatSend) {
         if (credential != token || selected != key) return
@@ -606,14 +762,23 @@ class RemoteChatState(
         }
     }
     fun stop() {
+        scope.launch { stopReply() }
+    }
+
+    /**
+     * Stop the reply of the session this state is bound to, awaiting the answer.
+     *
+     * [stop] is the same operation fired and forgotten. The archive flow awaits
+     * it so "stop the reply, then archive" is one ordered pair of requests
+     * instead of two racing ones — a stop is a no-op when nothing is running.
+     */
+    suspend fun stopReply() {
         val credential = token ?: return
         val selected = key ?: return
         val started = epoch
-        scope.launch {
-            try { backend.stop(credential, selected.sessionId) }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { if (started == epoch) mutable.value = mutable.value.copy(failure = failure.description()) }
-        }
+        try { backend.stop(credential, selected.sessionId) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (failure: Exception) { if (started == epoch) mutable.value = mutable.value.copy(failure = failure.description()) }
     }
     /** Opening or closing this view owns a polling lease, never the remote process. */
     fun observeTaskOutput(taskId: String) {

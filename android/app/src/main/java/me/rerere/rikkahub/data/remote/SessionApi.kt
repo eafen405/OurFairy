@@ -23,6 +23,12 @@ import java.io.IOException
  * `Date.now()` milliseconds (backend/sessions/src/service.mjs, `expose`), so on
  * the wire it is a number. It is decoded as the number it is rather than
  * accepting a second shape the server never sends.
+ *
+ * [title] is the session's name for display, already derived by the backend
+ * (model title, deterministic fallback, or a user rename). An empty title means
+ * the session has no name yet; the list shows a placeholder rather than the raw
+ * [id]. [titleSource] is [OwnedSessionTitleSource]; its default keeps an older
+ * backend, which sends neither field, decodable.
  */
 @Serializable
 data class OwnedSession(
@@ -30,7 +36,39 @@ data class OwnedSession(
     val owner: String = "",
     val primary: Boolean = false,
     val createdAt: Long = 0L,
+    val title: String = "",
+    val titleSource: Int = OwnedSessionTitleSource.FALLBACK,
 )
+
+/**
+ * The product's name for a session the backend has not titled yet.
+ *
+ * The console's current-session line, the session-list rows and the conversation
+ * title bar all render [OwnedSession.displayTitle], so an unnamed session reads
+ * the same in those three places instead of any of them falling back to the
+ * opaque [OwnedSession.id].
+ */
+const val UNTITLED_SESSION_TITLE: String = "新会话"
+
+/**
+ * The name to show for this session: the backend's title, or
+ * [UNTITLED_SESSION_TITLE] when it has none. The opaque id is never a display
+ * name.
+ */
+val OwnedSession.displayTitle: String
+    get() = title.ifEmpty { UNTITLED_SESSION_TITLE }
+
+/**
+ * Wire codes for [OwnedSession.titleSource], mirroring the backend's numeric
+ * enum (`TITLE_SOURCE` in `backend/sessions/src/events.ts`): 0 fallback,
+ * 1 provider (model), 2 user (rename). The source is meaningful only when the
+ * title is non-empty.
+ */
+object OwnedSessionTitleSource {
+    const val FALLBACK = 0
+    const val PROVIDER = 1
+    const val USER = 2
+}
 
 /** The account's sessions together with the one that is permanently its main. */
 data class OwnedSessions(
@@ -40,7 +78,15 @@ data class OwnedSessions(
 
 /** The session operations this app performs. [SessionApi] is the HTTP implementation. */
 interface SessionBackend {
-    suspend fun list(token: String): OwnedSessions
+    /**
+     * List this account's sessions.
+     *
+     * [archived] asks the same path for the archived view instead: the backend
+     * answers the caller's archived sessions and no primary, because the primary
+     * is never archived. One path and one filter point answer both views, so the
+     * two lists cannot drift apart.
+     */
+    suspend fun list(token: String, archived: Boolean = false): OwnedSessions
 
     suspend fun create(token: String): OwnedSession
 
@@ -49,6 +95,36 @@ interface SessionBackend {
     suspend fun primary(token: String): OwnedSession
 
     suspend fun read(token: String, sessionId: String): OwnedSession
+
+    /**
+     * Pin one session's title to [title].
+     *
+     * The answer is the session row the list would return, so callers adopt it
+     * instead of a list read of their own: the drawer row and the conversation's
+     * title bar then show the same value the backend folded.
+     */
+    suspend fun rename(token: String, sessionId: String, title: String): OwnedSession
+
+    /**
+     * Archive one session — this product's delete.
+     *
+     * The log, the messages and the history stay; what changes is that the
+     * session is no longer offered in the default list and can be restored.
+     * The backend refuses the primary session, which is where replies and
+     * deliveries from other users land.
+     */
+    suspend fun archive(token: String, sessionId: String): OwnedSession
+
+    /**
+     * Restore one archived session: it goes back into the default list with its
+     * log, its messages and its history untouched.
+     *
+     * The answer is the row the default list would return, so callers adopt it
+     * instead of a list read of their own. The backend refuses a session that is
+     * not in this caller's archive with `sessions/not-archived`; a session the
+     * caller does not own is refused as unknown, like every other route.
+     */
+    suspend fun restore(token: String, sessionId: String): OwnedSession
 }
 
 @Serializable
@@ -65,6 +141,13 @@ internal data class SessionEnvelope(
 
 @Serializable
 private data class SessionDocument(val sessionId: String)
+
+/** The archived view's request: the same list path, asked the other question. */
+@Serializable
+private data class ArchivedDocument(val archived: Boolean)
+
+@Serializable
+private data class RenameDocument(val sessionId: String, val title: String)
 
 /**
  * The remote session endpoints, over the same HTTP client and the same build-time
@@ -93,8 +176,15 @@ class SessionApi(
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) : SessionBackend {
 
-    override suspend fun list(token: String): OwnedSessions {
-        val envelope = call("/sessions/list", token = token)
+    override suspend fun list(token: String, archived: Boolean): OwnedSessions {
+        // The default view acts purely on the credential, so it stays bodyless
+        // (a media type the backend was never sent is what earns a 415); the
+        // archived view is the one case that asks a question in the body.
+        val envelope = call(
+            "/sessions/list",
+            document = if (archived) json.encodeToString(ArchivedDocument(true)) else null,
+            token = token,
+        )
         return OwnedSessions(
             sessions = envelope.sessions.orEmpty(),
             primarySessionId = envelope.primarySessionId,
@@ -113,6 +203,26 @@ class SessionApi(
 
     override suspend fun read(token: String, sessionId: String): OwnedSession =
         call("/sessions/read", document = json.encodeToString(SessionDocument(sessionId)), token = token)
+            .named()
+
+    /**
+     * `/sessions/rename` is the session family's address, served by the chat
+     * module because a rename needs a live session — which module answers it is
+     * a backend detail this client does not read into the path. The backend
+     * normalizes the title itself (collapsed whitespace, invisible characters
+     * removed, an over-long title cut on a UTF-8 boundary) and refuses one that
+     * leaves nothing visible with `sessions/empty-title`.
+     */
+    override suspend fun rename(token: String, sessionId: String, title: String): OwnedSession =
+        call("/sessions/rename", document = json.encodeToString(RenameDocument(sessionId, title)), token = token)
+            .named()
+
+    override suspend fun archive(token: String, sessionId: String): OwnedSession =
+        call("/sessions/archive", document = json.encodeToString(SessionDocument(sessionId)), token = token)
+            .named()
+
+    override suspend fun restore(token: String, sessionId: String): OwnedSession =
+        call("/sessions/restore", document = json.encodeToString(SessionDocument(sessionId)), token = token)
             .named()
 
     private suspend fun call(

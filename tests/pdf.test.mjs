@@ -1,3 +1,7 @@
+/**
+ * @covers backend/attachments — this suite uploads through the product's
+ * attachment routes and drives the PDF tools that row registers.
+ */
 import assert from 'node:assert/strict'
 import { before, after, test } from 'node:test'
 import { createHash } from 'node:crypto'
@@ -6,6 +10,7 @@ import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { dshDir, describeRun, leadingJsonObject, makeHome, messageBlocks, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 const sharp = createRequire(join(dshDir, 'packages/attachment/attachment-local/package.json'))('sharp')
 const home = makeHome('ourfairy-pdf-'), password = 'attachment-password'
 let model, port, admin, alice, bob
@@ -46,6 +51,9 @@ async function startToolModel() {
   const requests = []
   const server = createServer(async (req, res) => {
     let bytes = ''; for await (const chunk of req) bytes += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(bytes, res)) return
     if (!req.url.startsWith('/v1/messages')) {
       res.writeHead(404, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { type: 'not_found_error', message: 'inline image fallback' } })); return
     }

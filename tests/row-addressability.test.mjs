@@ -29,6 +29,10 @@
  *   `scoped-bash` and inserts a fixture row that provides the same `shell`
  *   service. Because the fixture extends the product's own scoped provider and
  *   calls `super.execute`, the replacement keeps the scope enforcement.
+ *
+ * @covers backend/delivery — disabling the delivery row must take
+ * `deliver_message` out of the model's catalog.
+ * @covers backend/groups — the same case for the group tools.
  */
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -44,6 +48,7 @@ import {
   dshDir, describeRun, httpJson, makeHome, messageBlocks, readReport, registerUser, removeHome, repoRoot,
   runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay,
 } from './helpers/backend.mjs'
+import { answerIfTitle } from './helpers/title-aware.mjs'
 
 const password = 'row-addressability-password'
 const dshBin = join(dshDir, 'apps', 'cli', 'lib', 'bin.js')
@@ -88,6 +93,9 @@ async function modelDouble() {
   const server = http.createServer(async (req, res) => {
     let data = ''
     for await (const chunk of req) data += chunk
+    // The deployment route also answers session-title requests; a double that
+    // scripts conversation turns must not treat one as a turn.
+    if (answerIfTitle(data, res)) return
     const body = JSON.parse(data)
     requests.push(body)
     const blocks = body.messages.flatMap(messageBlocks)

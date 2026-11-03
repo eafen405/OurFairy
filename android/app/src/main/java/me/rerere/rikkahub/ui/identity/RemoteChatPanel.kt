@@ -5,6 +5,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,6 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
@@ -62,8 +64,9 @@ import me.rerere.rikkahub.data.remote.RemoteAttachmentDraft
 import me.rerere.rikkahub.data.remote.RemoteChatAttachment
 import me.rerere.rikkahub.data.remote.RemoteChatState
 import me.rerere.rikkahub.data.remote.SessionsSnapshot
+import me.rerere.rikkahub.ui.fairy.InstrumentLevel
+import me.rerere.rikkahub.ui.fairy.InstrumentPanel
 import me.rerere.rikkahub.ui.fairy.LocalFairyTokens
-import me.rerere.rikkahub.ui.fairy.fairyPanel
 
 /**
  * A save target carries no usable media type of its own, so the download is written as opaque
@@ -71,17 +74,31 @@ import me.rerere.rikkahub.ui.fairy.fairyPanel
  */
 private const val SAVE_AS_MIME = "application/octet-stream"
 
-/** What a download click captured before the system file chooser took over the screen. */
+/** Shown when no installed app accepts the cached attachment; the panel then opens save-as. */
+private const val NO_EXTERNAL_RECEIVER = "没有能打开该文件的系统应用，请选择保存位置"
+
+/**
+ * What a download click captured before the system file chooser took over the screen.
+ * [cached] is set when the bytes are already in the preview cache (the no-receiver fallback), so
+ * saving reuses them instead of downloading the same attachment a second time.
+ */
 private data class PendingDownload(
     val epoch: Long,
     val messageId: String,
     val attachment: RemoteChatAttachment,
+    val cached: File? = null,
 )
 
 @Composable
 fun RemoteChatPanel(
     state: RemoteChatState,
     onReconnect: () -> Unit,
+    /**
+     * Called with the requestId of a send command that was accepted, and again when that same
+     * pending command is retried. The id is the one send's key, so a listener can report the event
+     * without the panel deciding whether it is new.
+     */
+    onSendAccepted: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val snapshot by state.snapshot.collectAsStateWithLifecycle()
@@ -96,6 +113,10 @@ fun RemoteChatPanel(
     // the one from the conversation the user was looking at when they chose the files.
     var selectionEpoch by remember(snapshot.attachmentEpoch) { mutableStateOf<Long?>(null) }
     var pendingDownload by remember(snapshot.attachmentEpoch) { mutableStateOf<PendingDownload?>(null) }
+    var previewPath by remember(snapshot.attachmentEpoch) { mutableStateOf<String?>(null) }
+    var textPreview by remember(snapshot.attachmentEpoch) {
+        mutableStateOf<RemoteAttachmentTextPreviewTarget?>(null)
+    }
 
     var speechBusy by remember(snapshot.attachmentEpoch) { mutableStateOf(false) }
     var speechError by remember(snapshot.attachmentEpoch) { mutableStateOf<String?>(null) }
@@ -136,6 +157,16 @@ fun RemoteChatPanel(
     val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(SAVE_AS_MIME)) { target ->
         val captured = pendingDownload.also { pendingDownload = null } ?: return@rememberLauncherForActivityResult
         if (target == null) return@rememberLauncherForActivityResult
+        val cached = captured.cached
+        if (cached != null) {
+            // The no-receiver fallback already downloaded the original; save that exact file.
+            scope.launch {
+                state.saveCachedAttachment(captured.epoch, cached) { file ->
+                    exportAttachment(context, target, file)
+                }
+            }
+            return@rememberLauncherForActivityResult
+        }
         scope.launch {
             // The state streams into this temp file, checks the account and session it was
             // captured under, and only then asks for the bytes to be handed to the chooser.
@@ -191,7 +222,13 @@ fun RemoteChatPanel(
                 acceptanceUnknown = pending.acceptanceUnknown,
                 busy = snapshot.sending,
                 onReconcile = state::reconcile,
-                onRetry = state::retryPending,
+                onRetry = {
+                    // The retried command keeps its requestId: reporting it again is how the
+                    // listener's own key makes the retry the same event. The state is the one that
+                    // knows whether it actually took the retry (bound, credential, pending,
+                    // unknown acceptance, not already sending); a refused retry is not reported.
+                    if (state.retryPending()) onSendAccepted(pending.requestId)
+                },
             )
         }
 
@@ -215,19 +252,77 @@ fun RemoteChatPanel(
         key(snapshot.attachmentEpoch) {
             RemoteTranscript(
                 messages = projection?.messages.orEmpty(),
-                attemptText = projection?.attempt?.text,
-                attemptKey = projection?.let { it.generation to it.attempt?.attemptId },
-                attemptTools = projection?.attempt?.tools.orEmpty(),
-                settledAttempt = projection?.settledAttempt?.let { attemptRowKey(projection.generation, it.attemptId) to it.seq },
+                generation = projection?.generation.orEmpty(),
+                attempt = projection?.attempt,
+                settledAttempt = projection?.settledAttempt,
                 modifier = Modifier.weight(1f),
                 downloadEnabled = !snapshot.downloading,
                 onDownload = { message, attachment ->
                     if (!snapshot.downloading) {
-                        pendingDownload = PendingDownload(snapshot.attachmentEpoch, message.messageId, attachment)
-                        saveAs.launch(attachment.name)
+                        fun saveOriginal() {
+                            pendingDownload = PendingDownload(snapshot.attachmentEpoch, message.messageId, attachment)
+                            saveAs.launch(attachment.name)
+                        }
+                        // One authenticated download into the coordinate's cached preview file,
+                        // shared by the image and text previews and the external handoff. The
+                        // path depends on the attachment's coordinates only, so reopening reads
+                        // the bytes on disk.
+                        fun cachePreview(open: (File) -> Unit) {
+                            val sessionId = snapshot.sessionId ?: return
+                            val destination = attachmentPreviewFile(
+                                context, sessionId, message.messageId, attachment.index, attachment.name,
+                            )
+                            state.cacheAttachment(
+                                snapshot.attachmentEpoch, message.messageId, attachment, destination,
+                            ) { file -> open(file) }
+                        }
+                        when (remoteAttachmentOpenDestination(attachment.mime, attachment.name, attachment.bytes)) {
+                            RemoteAttachmentDestination.IMAGE -> cachePreview { file ->
+                                previewPath = file.absolutePath
+                            }
+
+                            RemoteAttachmentDestination.TEXT -> cachePreview { file ->
+                                textPreview = RemoteAttachmentTextPreviewTarget(
+                                    path = file.absolutePath,
+                                    name = attachment.name,
+                                    layout = remoteAttachmentTextLayout(attachment.mime, attachment.name),
+                                )
+                            }
+
+                            RemoteAttachmentDestination.EXTERNAL -> cachePreview { file ->
+                                // Hand the cached original to an installed viewer. A device
+                                // without one falls back to save-as with those same bytes.
+                                sweepAttachmentPreviews(context, keep = file)
+                                val receiverMissing = launchLocalFileView(
+                                    context,
+                                    file,
+                                    attachmentMimeFor(attachment.mime, attachment.name),
+                                    attachment.name,
+                                    NO_EXTERNAL_RECEIVER,
+                                )
+                                if (receiverMissing != null) {
+                                    state.noticeAttachment(receiverMissing)
+                                    pendingDownload = PendingDownload(
+                                        snapshot.attachmentEpoch,
+                                        message.messageId,
+                                        attachment,
+                                        cached = file,
+                                    )
+                                    saveAs.launch(attachment.name)
+                                }
+                            }
+
+                            RemoteAttachmentDestination.SAVE_AS -> saveOriginal()
+                        }
                     }
                 },
             )
+        }
+        previewPath?.let { path ->
+            AttachmentImagePreview(path = path, onDismissRequest = { previewPath = null })
+        }
+        textPreview?.let { target ->
+            AttachmentTextPreview(target = target, onDismissRequest = { textPreview = null })
         }
         Spacer(Modifier.height(8.dp))
         Composer(
@@ -258,7 +353,11 @@ fun RemoteChatPanel(
             onSend = {
                 // Only the state knows whether the command was accepted; a refused send keeps
                 // the text so nothing the user typed disappears behind an error.
-                if (state.send(draft)) draft = ""
+                val requestId = state.send(draft)
+                if (requestId != null) {
+                    onSendAccepted(requestId)
+                    draft = ""
+                }
             },
             onStop = state::stop,
         )
@@ -381,7 +480,11 @@ private fun Composer(
     val running = replyStatus == 1 || replyStatus == 2
     val tokens = LocalFairyTokens.current
     var menuOpen by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).fairyPanel(tokens.panelShape).padding(4.dp)) {
+    InstrumentPanel(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        level = InstrumentLevel.RECESSED,
+        contentPadding = PaddingValues(4.dp),
+    ) {
         if (attachments.isNotEmpty()) {
             Column(Modifier.heightIn(max = 140.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {

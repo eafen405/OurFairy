@@ -1,0 +1,7 @@
+{
+  "parent": 223,
+  "title": "消息呈现顺序：跨页恢复与稳定位置",
+  "children": [
+    { "file": "01-position-recovery.md", "issue": 224, "title": "跨端 position 契约与 Android 有序恢复" }
+  ]
+}

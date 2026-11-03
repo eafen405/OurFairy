@@ -17,10 +17,10 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import {
-  dshDir, describeRun, makeHome, readReport, removeHome, runBackend, runBackendAsync, writeOverlay,
+  describeRun, makeHome, readReport, removeHome, runBackend, runBackendAsync, writeOverlay,
 } from './helpers/backend.mjs'
 
-const { startMockLlmServer } = await import(join(dshDir, 'packages/test-support/llm-mock-server/lib/index.js'))
+import { startTitleAwareModel } from './helpers/title-aware.mjs'
 const password = 'scoped-rows-password'
 const homes = []
 const servers = []
@@ -138,7 +138,7 @@ test('disabling one provider row leaves its capability absent or waiting with no
 
 test('a bash call under a disabled shell row fails clearly while read stays offered', async () => {
   const home = freshHome()
-  const model = await startMockLlmServer({
+  const model = await startTitleAwareModel({
     apiKey: 'mock-key',
     sequence: ['tool_call_success', 'success'],
     toolName: 'bash',

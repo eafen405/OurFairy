@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import me.rerere.rikkahub.data.datastore.DisplayPreferences
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
+import me.rerere.rikkahub.data.remote.RemoteChatAttempt
 import me.rerere.rikkahub.data.remote.RemoteChatMessage
 import me.rerere.rikkahub.ui.fairy.FairyAppTheme
 import org.junit.Assert.assertEquals
@@ -41,8 +42,10 @@ class RemoteTranscriptCopyTest {
                 FairyAppTheme {
                     RemoteTranscript(
                         messages = messages,
-                        attemptText = live,
-                        attemptKey = "g" to "a",
+                        generation = "g",
+                        attempt = live?.let {
+                            RemoteChatAttempt(attemptId = "a", revision = 0, text = it)
+                        },
                         downloadEnabled = false,
                         onDownload = { _, _ -> },
                         modifier = Modifier.fillMaxSize(),
@@ -65,7 +68,7 @@ class RemoteTranscriptCopyTest {
 
     @Test fun `settled fairy message copies its raw body`() {
         val body = "Fairy 的完整回复。"
-        show(listOf(RemoteChatMessage("fairy", 1, role = 2, status = 2, text = body)))
+        show(listOf(RemoteChatMessage("fairy", 0, 1, role = 2, status = 2, text = body)))
 
         longPress(body)
         compose.onNodeWithText("复制").performClick()
@@ -77,7 +80,7 @@ class RemoteTranscriptCopyTest {
 
     @Test fun `user message copies its raw body`() {
         val body = "用户的这行话。"
-        show(listOf(RemoteChatMessage("user", 1, role = 1, status = 2, text = body)))
+        show(listOf(RemoteChatMessage("user", 0, 1, role = 1, status = 2, text = body)))
 
         longPress(body)
         compose.onNodeWithText("复制").performClick()
@@ -113,6 +116,23 @@ class RemoteTranscriptCopyTest {
         assertEquals("第一段。\n第二段。", clipboardText())
     }
 
+    @Test fun `an open streaming menu copies all arrived text during paced reveal`() {
+        val prefix = "流".repeat(4)
+        val body = "流".repeat(80)
+        live = prefix
+        show(emptyList())
+
+        compose.mainClock.autoAdvance = false
+        longPress(prefix)
+        compose.runOnIdle { live = body }
+        compose.mainClock.advanceTimeBy(100)
+        compose.onNodeWithText(body).assertDoesNotExist()
+        compose.onNodeWithText("复制").performClick()
+        compose.waitForIdle()
+
+        assertEquals(body, clipboardText())
+    }
+
     @Test fun `a streaming row with no text yet does not offer copy`() {
         live = ""
         show(emptyList())
@@ -125,7 +145,7 @@ class RemoteTranscriptCopyTest {
 
     @Test fun `viewing the full settled message keeps the existing dialog`() {
         val body = "需要展开的完整回复。"
-        show(listOf(RemoteChatMessage("fairy", 1, role = 2, status = 2, text = body)))
+        show(listOf(RemoteChatMessage("fairy", 0, 1, role = 2, status = 2, text = body)))
 
         longPress(body)
         compose.onNodeWithText("查看全文").performClick()

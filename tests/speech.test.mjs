@@ -1,3 +1,7 @@
+/**
+ * @covers backend/speech — this suite drives the speech route through the
+ * launcher rather than importing the package.
+ */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createServer } from 'node:http'

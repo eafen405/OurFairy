@@ -14,7 +14,13 @@ import subprocess
 import time
 
 SCENARIOS = ("history", "single", "format", "stream", "burst")
-ACTIVITY = "me.rerere.rikkahub.ui.identity.PresentationBenchmarkActivity"
+# The combined workload (#268) is a separate baseline: it names its own scenario, activity and
+# result files, and `all` deliberately leaves it out so a #74 table never mixes the two.
+COMBINED = "multi-session"
+ACTIVITIES = {
+    COMBINED: "me.rerere.rikkahub.ui.identity.MultiSessionBenchmarkActivity",
+}
+DEFAULT_ACTIVITY = "me.rerere.rikkahub.ui.identity.PresentationBenchmarkActivity"
 LOG_TAG = "OurFairyPresentation"
 
 
@@ -59,13 +65,14 @@ def main():
     parser.add_argument("--adb", default="adb")
     parser.add_argument("--serial")
     parser.add_argument("--package", default="me.rerere.rikkahub")
-    parser.add_argument("--scenario", choices=(*SCENARIOS, "all"), default="all")
+    parser.add_argument("--scenario", choices=(*SCENARIOS, COMBINED, "all"), default="all")
     parser.add_argument("--rounds", type=int, default=1, help="Repeats of every selected scenario")
     parser.add_argument("--out", type=pathlib.Path, required=True)
     parser.add_argument("--scroll", action="store_true",
                         help="Alternate swipes during stream to exercise user scroll priority")
-    parser.add_argument("--timeout", type=float, default=180.0,
-                        help="Seconds one run may take before it is recorded as a timeout")
+    parser.add_argument("--timeout", type=float, default=None,
+                        help="Seconds one run may take before it is recorded as a timeout; "
+                             "defaults to 180 s, and to 600 s for the combined workload")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     adb = [args.adb] + (["-s", args.serial] if args.serial else [])
@@ -73,6 +80,11 @@ def main():
     def call(*command, timeout=60):
         return subprocess.run([*adb, *command], check=True, capture_output=True,
                               text=True, timeout=timeout).stdout
+
+    def run_timeout(scenario):
+        if args.timeout is not None:
+            return args.timeout
+        return 600.0 if scenario == COMBINED else 180.0
 
     call("get-state")
     device = {
@@ -91,7 +103,8 @@ def main():
     failures = []
     for round_index in range(1, args.rounds + 1):
         for scenario in selected:
-            if not wait_for_device(adb, args.timeout):
+            timeout = run_timeout(scenario)
+            if not wait_for_device(adb, timeout):
                 raise SystemExit(f"device unavailable before {scenario} round {round_index}; "
                                  f"see {args.out}")
             run_id = f"{scenario}-r{round_index}-{time.time_ns()}"
@@ -102,7 +115,7 @@ def main():
             selector = selectors.DefaultSelector()
             selector.register(log.stdout, selectors.EVENT_READ)
             try:
-                launch = call("shell", "am", "start", "-n", f"{args.package}/{ACTIVITY}",
+                launch = call("shell", "am", "start", "-n", f"{args.package}/{ACTIVITIES.get(scenario, DEFAULT_ACTIVITY)}",
                               "--es", "scenario", scenario, "--es", "runId", run_id)
                 (args.out / f"{scenario}-r{round_index}-launch.txt").write_text(launch)
                 if "Error" in launch:
@@ -110,7 +123,7 @@ def main():
                 next_swipe = started + 5
                 reverse = False
                 result = None
-                while time.monotonic() - started < args.timeout:
+                while time.monotonic() - started < timeout:
                     # Prefer the run's own result file: it is written before the log line and
                     # survives a rotated log ring, which a busy device produces routinely.
                     result = read_result_file(scenario, run_id, args.package, adb)
@@ -146,7 +159,7 @@ def main():
                     if late is not None:
                         (args.out / f"{scenario}-r{round_index}-late.json").write_text(
                             json.dumps(late, ensure_ascii=False, indent=2) + "\n")
-                    raise TimeoutError(f"{scenario} round {round_index} did not report in {args.timeout}s")
+                    raise TimeoutError(f"{scenario} round {round_index} did not report in {timeout}s")
                 if result.get("runId") != run_id:
                     raise TimeoutError(
                         f"{scenario} round {round_index}: the result belongs to run {result.get('runId')},"

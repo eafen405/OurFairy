@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import me.rerere.rikkahub.data.datastore.DisplayPreferences
+import me.rerere.rikkahub.data.remote.RemoteChatAttempt
 import me.rerere.rikkahub.data.remote.RemoteChatMessage
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
 import me.rerere.rikkahub.ui.fairy.AgoraMotionPolicy
@@ -35,7 +36,7 @@ import org.robolectric.annotation.GraphicsMode
 class RemoteTranscriptViewportTest {
     @get:Rule val compose = createComposeRule()
     private val history = (0..30).map { index ->
-        RemoteChatMessage("message-$index", index.toLong(), role = 1, status = 2,
+        RemoteChatMessage("message-$index", index.toLong(), index.toLong(), role = 1, status = 2,
             text = "历史消息 $index\n这是持续阅读的内容。\n第二行内容。")
     }
     private var live by mutableStateOf("开始回复。")
@@ -45,8 +46,14 @@ class RemoteTranscriptViewportTest {
             CompositionLocalProvider(LocalDisplayPreferences provides DisplayPreferences()) {
                 FairyAppTheme {
                     CompositionLocalProvider(LocalAgoraMotionPolicy provides AgoraMotionPolicy(true)) {
-                        RemoteTranscript(history, live, "g" to "a", false, { _, _ -> },
-                            modifier = Modifier.fillMaxSize())
+                        RemoteTranscript(
+                            messages = history,
+                            generation = "g",
+                            attempt = RemoteChatAttempt(attemptId = "a", revision = 0, text = live),
+                            downloadEnabled = false,
+                            onDownload = { _, _ -> },
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     }
                 }
             }

@@ -45,6 +45,7 @@ const SERVICE_ROWS = [
   ['jobs', 'jobs-local', '@deepseek-ai/dsh-jobs-local'],
   ['attachments', 'attachment-local', '@deepseek-ai/dsh-attachment-local'],
   ['ourfairyAttachments', 'attachments', '@ourfairy/dsh-attachments'],
+  ['ourfairySessions', 'sessions', '@ourfairy/dsh-sessions'],
   ['ourfairySpaces', 'spaces', '@ourfairy/dsh-spaces'],
   ['fs', 'scoped-fs', '@ourfairy/dsh-spaces'],
   ['shell', 'scoped-bash', '@ourfairy/dsh-spaces'],
@@ -188,6 +189,17 @@ interface ProbeEvent {
   readonly data?: { readonly message?: { readonly content?: readonly { readonly type?: string; readonly text?: string }[] } }
 }
 
+/** The native skill registry's own observation, as the probe reads it. */
+interface ProbeSkillsReport {
+  readonly complete: boolean
+  readonly names: string[]
+}
+
+/** The native skill registry, as the probe reads its global observation. */
+interface ProbeSkills {
+  snapshot(): Promise<{ readonly skills: readonly { readonly name: string }[]; readonly complete: boolean }>
+}
+
 /** The model section of the probe's report. */
 interface ProbeModelReport {
   provider: string
@@ -210,12 +222,28 @@ interface ProbeReport {
   rows: ProbeRow[]
   services: Record<string, ProbeServiceFacts>
   model: ProbeModelReport | null
+  skills: ProbeSkillsReport | null
   sessions: { root: string | null; files: string[] }
   configurationFailure: boolean
   failures: string[]
   finishedAt?: string
   agentless?: Record<string, string | undefined>
   error?: string
+}
+
+/**
+ * Read the native skill registry's global observation.
+ *
+ * With no agent scope this is the global layer alone: exactly the trusted
+ * bundled filesystem provider. `complete` is the registry's own answer that
+ * discovery settled; a complete observation is what lets a caller trust the
+ * absence of a skill as well as its presence.
+ */
+async function collectSkills(ctx: Context): Promise<ProbeSkillsReport | null> {
+  const skills = ctx.get('skills') as ProbeSkills | undefined
+  if (skills === undefined) return null
+  const snapshot = await skills.snapshot()
+  return { complete: snapshot.complete, names: snapshot.skills.map(skill => skill.name).sort() }
 }
 
 function fiberStateName(entry: ProbeLoaderEntry | undefined): string {
@@ -500,6 +528,7 @@ async function runProbe(ctx: Context): Promise<void> {
     rows: [],
     services: {},
     model: null,
+    skills: null,
     sessions: { root: null, files: [] },
     configurationFailure: false,
     failures: [],
@@ -519,6 +548,7 @@ async function runProbe(ctx: Context): Promise<void> {
     // Boot reports the composed selection too, so an external caller can assert
     // which initial model the bundle's row put into effect without running a turn.
     report.model = selectionReport(readAgentDefaultModel(ctx))
+    report.skills = await collectSkills(ctx)
     // Direct provider calls have no authenticated session; cwd must never supply one.
     report.agentless = {}
     for (const [name, operation] of [

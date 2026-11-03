@@ -12,15 +12,9 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,7 +22,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,20 +29,27 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.RemoteChatSnapshot
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.data.remote.SessionsSnapshot
-import me.rerere.rikkahub.ui.identity.IdentitySessionList
+import me.rerere.rikkahub.data.remote.displayTitle
 import me.rerere.rikkahub.ui.identity.RemoteChatPanel
+import me.rerere.rikkahub.ui.identity.SessionListOverlay
+import me.rerere.rikkahub.ui.identity.rememberSessionListOverlayState
 import org.koin.compose.koinInject
 
 @Composable
 fun FairyConversationPage(
-    sessionId: String?,
+    sessionId: String,
     onBack: () -> Unit,
     receive: RemoteReceiveState = koinInject(),
+    fairy: FairyInteraction = koinInject(),
+    /**
+     * The page's eye controller. A test can inject one and observe its real output
+     * (`pointer`, `glances`, `blinks`); production leaves it null and the page remembers one.
+     */
+    eye: FairyEyeController? = null,
     onOpenConversation: (String) -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -57,8 +57,11 @@ fun FairyConversationPage(
     val selected by receive.selectedChat.collectAsStateWithLifecycle()
     val selectedChat = selected
     val chat = selectedChat?.snapshot?.collectAsStateWithLifecycle()?.value
-    val drawer = rememberDrawerState(DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
+    val overlay = rememberSessionListOverlayState()
+    val pageEye = eye ?: remember { FairyEyeController(asleep = fairy.state.value.asleep) }
+    // The page owns the eye's transient animation; the continuous 待机 comes from the module so a
+    // screen already asleep on home is found asleep here too, and a touch wakes the same state.
+    val interaction by fairy.state.collectAsStateWithLifecycle()
     var opening by remember(sessionId) { mutableStateOf(true) }
     var failed by remember(sessionId) { mutableStateOf(false) }
     var retry by remember(sessionId) { mutableIntStateOf(0) }
@@ -66,54 +69,84 @@ fun FairyConversationPage(
     LaunchedEffect(sessionId, retry) {
         opening = true
         failed = false
-        if (sessionId == null && retry > 0) receive.owned.refresh()
         val ready = receive.owned.snapshot.first { !it.loading }
-        if (sessionId == null) {
-            opening = false
-            drawer.open()
-        } else {
-            val alreadySelected = ready.failure == null && ready.selectedId == sessionId &&
-                ready.sessions.any { it.id == sessionId }
-            failed = !alreadySelected && !receive.openSession(sessionId)
-            opening = false
-        }
+        val alreadySelected = ready.failure == null && ready.selectedId == sessionId &&
+            ready.sessions.any { it.id == sessionId }
+        failed = !alreadySelected && !receive.openSession(sessionId)
+        opening = false
     }
-    val settled = !opening && !failed && sessionId != null &&
+    val settled = !opening && !failed &&
         sessions.selectedId == sessionId && chat?.sessionId == sessionId
     val snapshot = chat.takeIf { settled }
-    val window = snapshot?.fairyWindow() ?: FairyWindowState(presence = FairyPresence.CONNECTING)
+    // The open session's row, the same one the drawer renders: its display title
+    // is what the bar shows, so an untitled session reads the list's placeholder
+    // here too instead of falling back to the Fairy nameplate.
+    val session = sessions.session(sessionId)
+    // 当前表现 comes from the interaction module and from this session's facts only. The route
+    // says which session this page presents even before it settles; until then it has no facts,
+    // and the module keeps the previous page's current appearance instead of flickering through
+    // the unknown presentation. Keeping the routed id (instead of presenting nothing while
+    // opening) is what lets the continuous 待机 and 当前表现 cross from the console into this page
+    // for the same session.
+    val context = FairyInteractionContext(sessionId)
+    val facts = snapshot?.fairyFacts()
+    // The page renders the module's snapshot; it never derives 当前表现 itself. The shared host
+    // reports this frame's facts and, on a return, reads the routed session's current runtime.
+    val host = rememberFairyPageHost(
+        fairy = fairy,
+        receive = receive,
+        currentSessionId = { sessionId },
+        context = context,
+        facts = facts,
+        eye = pageEye,
+        composer = { it.at(0.5f, 1f) },
+        content = { it.at(0.5f, 0.55f) },
+    )
+    val window = interaction.window
     val screenOpen = rememberFairyScreenOpen(window)
     val tokens = LocalFairyTokens.current
     val failure = sessions.failure?.let {
         if (it == SessionsSnapshot.UNREACHABLE) stringResource(R.string.identity_unreachable) else it
     }
+    // The session state owns the archive-follow rule: when the reader archives
+    // the session this page is standing in, it publishes that very id together
+    // with the selection it moved to. The page follows only that explicit fact,
+    // and then consumes it: the fact describes one archive, not a state the page
+    // should keep answering. It does not remember that the route once existed and
+    // cannot tell why a list changed, so a target that was never ours, has
+    // expired or whose archive was refused keeps showing "会话不可用" instead of
+    // navigating.
+    LaunchedEffect(sessionId, sessions.archivedSelectionId, sessions.selectedId) {
+        val followed = sessions.selectedId
+        if (sessions.archivedSelectionId == sessionId &&
+            followed != null && followed != sessionId
+        ) {
+            receive.owned.clearArchiveFollow()
+            onOpenConversation(followed)
+        }
+    }
 
-    ModalNavigationDrawer(
-        drawerState = drawer,
-        gesturesEnabled = drawer.isOpen,
-        drawerContent = {
-            ModalDrawerSheet(
-                modifier = Modifier.widthIn(max = 320.dp),
-                drawerContainerColor = tokens.panelOpaque,
-                drawerContentColor = tokens.textPrimary,
-            ) {
-                IdentitySessionList(
-                    state = receive.owned,
-                    onOpen = { id ->
-                        scope.launch {
-                            drawer.close()
-                            if (id != sessionId) onOpenConversation(id)
-                            else if (!settled) retry++
-                        }
-                    },
-                    onClose = { scope.launch { drawer.close() } },
-                    onHome = onBack,
-                    onSettings = { scope.launch { drawer.close(); onSettings() } },
-                )
-            }
-        },
+    SessionListOverlay(
+        state = overlay,
+        sessions = receive.owned,
+        standingSessionId = sessionId,
+        onOpenSession = onOpenConversation,
+        onHome = onBack,
+        onSettings = onSettings,
+        // Re-selecting the session this page already stands in is not a
+        // navigation: a page that has not settled yet retries its opening.
+        onReselectStanding = { if (!settled) retry++ },
+        stopReply = receive::stopReply,
     ) {
-        Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .fairySwipeNavigation(
+                    enabled = !overlay.isOpen,
+                    onSwipeRight = onBack,
+                )
+                .then(host.modifier),
+        ) {
             FairyBackground(watermark = false)
             FairyConversationSurface(screenOpen = screenOpen) {
                 if (settled && selectedChat != null) {
@@ -121,6 +154,7 @@ fun FairyConversationPage(
                         RemoteChatPanel(
                             state = selectedChat,
                             onReconnect = receive::resumeObservation,
+                            onSendAccepted = fairy::sent,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -137,13 +171,16 @@ fun FairyConversationPage(
                         )
                         if (!opening) {
                             TextButton(onClick = { retry++ }) { Text("重试") }
-                            TextButton(onClick = { scope.launch { drawer.open() } }) { Text("选择会话") }
+                            TextButton(onClick = overlay::open) { Text("选择会话") }
                         }
                     }
                 }
             }
             FairyWindowTopBar(
                 window = window,
+                eye = pageEye,
+                title = session?.displayTitle,
+                speechPulse = interaction.speechPulse,
                 screenOpen = screenOpen,
                 subtitle = when {
                     opening -> "正在打开会话…"
@@ -156,11 +193,9 @@ fun FairyConversationPage(
                     else -> "已连接"
                 },
                 onNavigateBack = onBack,
-                onOpenSessions = { scope.launch { drawer.open() } },
-                moreMenuContent = { dismiss ->
-                    DropdownMenuItem(text = { Text("首页") }, onClick = { dismiss(); onBack() })
-                    DropdownMenuItem(text = { Text("设置") }, onClick = { dismiss(); onSettings() })
-                },
+                onOpenSessions = overlay::open,
+                onOpenSettings = onSettings,
+                onNavigateHome = onBack,
             )
         }
     }
@@ -189,19 +224,3 @@ private fun FairyConversationSurface(
     }
 }
 
-internal fun RemoteChatSnapshot.fairyWindow(): FairyWindowState {
-    val working = activity.status == 2
-    val hasOutput = !projection?.attempt?.text.isNullOrBlank()
-    return FairyWindowState(
-        presence = when {
-            connecting -> FairyPresence.CONNECTING
-            !connected -> FairyPresence.OFFLINE
-            activity.status == 0 -> FairyPresence.CONNECTING
-            working && hasOutput -> FairyPresence.SPEAKING
-            working -> FairyPresence.THINKING
-            else -> FairyPresence.IDLE
-        },
-        expanded = connected && projection != null && projection.messages.isEmpty() && !hasOutput,
-        awaitingReply = working && 1 in activity.reasons && !hasOutput,
-    )
-}

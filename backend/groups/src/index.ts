@@ -10,6 +10,7 @@
 import { mkdirSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { defineTool, type InferArgs, type InferValue, type ParameterSchemaSpec, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { isUserSession } from '@ourfairy/dsh-identity/session'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
@@ -60,6 +61,10 @@ export function apply(ctx: Context) {
   type ToolValue = InferValue<typeof output.schema>
   const registrations = new Map<Agent, Set<string>>()
   function register(agent: Agent): undefined {
+    // Only a user's own session gets product tools by default; any other agent
+    // gets none until its creator grants them. A scope's own registration
+    // cannot be hidden by dsh's tool restriction, so the row enforces it here.
+    if (!isUserSession(agent.session.header)) return undefined
     const user = userOf(agent)
     const names = registrations.get(agent) ?? new Set<string>()
     registrations.set(agent, names)

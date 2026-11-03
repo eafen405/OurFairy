@@ -1,13 +1,14 @@
 # @ourfairy/dsh-sessions
 
 The product's session kernel: which authenticated identity owns a dsh session,
-and which of that identity's sessions is its fixed primary session. It stores
-nothing of its own.
+which of that identity's sessions is its fixed primary session, and which
+sessions the caller has archived. It stores one fact of its own — the archive —
+in its own SQLite file.
 
 ## Owns
 
-In one sentence: the ownership decision and the primary-session binding, exposed
-as `ctx.ourfairySessions` and the `/sessions/*` paths.
+In one sentence: the ownership decision, the primary-session binding and the
+caller's archive, exposed as `ctx.ourfairySessions` and the `/sessions/*` paths.
 
 - `SessionHeader.owner` as the ownership record, written through the
   `user:<shortId>` codec from `@ourfairy/dsh-identity/owner`.
@@ -20,23 +21,48 @@ as `ctx.ourfairySessions` and the `/sessions/*` paths.
   an ownerless reserved primary answers 409 `sessions/unowned-primary` — neither
   is adopted. The check runs before any handle is opened. `/primary` and
   `/create` are serialized per owner so a race cannot observe "no primary" twice.
+- The archive (`./archive-store`, one product SQLite file): one row per session
+  the caller has archived, with numeric `status` (0 active, 1 archived), the
+  archive instant, actor and timestamps, and the mandatory logical-delete column.
+  `owner_short_id` scopes the row to the caller; it is not a second ownership
+  authority — every write authorizes against the header first. `/sessions/restore`
+  moves that row back to `status = 0, archived_at = NULL`; it matches only a row
+  this caller holds as archived, so a foreign, unknown or merely active session
+  changes nothing, and a session that is not archived answers
+  `sessions/not-archived` (409) rather than pretending it does not exist. The
+  same store answers whether one named session is archived with a single indexed
+  row read (`isArchived`).
 - The one-shot event read exported as `./events`: `readSessionEvents` opens an
   observation, returns its events and cursor, and disposes it in `finally`.
 - The empty-session rule on `/sessions/create`: a session whose log carries no
   message event is entered again instead of duplicated — the primary while it is
   still empty, otherwise the newest empty ordinary session; only a session that
-  already has a message forces a new ordinary session.
+  already has a message forces a new ordinary session. The default view's
+  archive filter is what keeps an archived empty session out of that reuse.
+- The address `/sessions/rename`. It belongs to this family, but this package
+  does not serve it: a rename is accepted only on a live session, and opening one
+  is [`chat`](../chat/README.md)'s job. The path constant
+  (`SESSION_RENAME_PATH`) lives here so the family publishes each address once;
+  chat registers the handler.
+
+`list` is the archive's only filter point: it answers active sessions unless the
+caller asks for the archived view, so create's reuse, `conversation_search` and
+every other reader of the service see one consistent set without a per-caller
+filter.
 
 ## Does not own
 
 - Session storage, headers, logs or events. `sessions` creates the header and
   `sessionPersistence` writes and reads it; this package reaches session records
-  through that seam.
+  through that seam. Archiving never rewrites or deletes a log.
 - Users, short numbers or credentials. [`identity`](../identity/README.md)
   resolves the caller; this package only compares the resulting owner.
 - Message content, transcripts or projections; [`chat`](../chat/README.md) owns
   those. Reading events here decides only whether a log already has a message;
   it never projects or interprets the content.
+- The client's archived view. The backend answers it through `list(owner,
+  { archived: true })`; how the phone renders and switches to it is the client's
+  business.
 
 ## dsh seams
 
@@ -52,13 +78,24 @@ as `ctx.ourfairySessions` and the `/sessions/*` paths.
 | `sessionQuery.observeSession(id, { projectionMode: 'none' })` | the exported one-shot read in `./events`, used by create to decide whether a session's log already has a message |
 
 It also uses `postHandler` and `ownerOf` from `@ourfairy/dsh-identity` for the
-fence/body/envelope and the owner format.
+fence/body/envelope and the owner format, and the module's own `node:sqlite`
+store for the archive.
 
 ## Service
 
 `ctx.ourfairySessions`, exposing `authenticate(request)`, `create(owner)`,
-`primary(owner)`, `list(owner)`, `read(owner, sessionId)` and `expose(header,
-shortId)`. `create` returns the caller's empty session when one exists (the
-primary first, then the newest empty ordinary) and only materializes a new
-ordinary session otherwise. It injects `webServer`, `connection`, `identity`,
-`sessions`, `sessionPersistence` and `sessionQuery`.
+`primary(owner)`, `list(owner, { archived })`, `archive(owner, sessionId)`,
+`restore(owner, sessionId)`, `read(owner, sessionId)`,
+`canHostDelivery(owner, sessionId)` and `expose(header, shortId)`. `create`
+returns the caller's empty session when one exists (the primary first, then the
+newest empty ordinary) and only materializes a new ordinary session otherwise.
+`canHostDelivery` answers whether one session may host a delivery — the stored
+header exists, its owner is `ownerOf(owner.shortId)`, and the session is not
+archived. It reads the archive fact through the store's single-row read. A self
+delivery uses it to decide whether it keeps landing in the conversation it was
+issued from. `archive` refuses the primary session with
+`sessions/primary-not-archivable`; `restore` refuses a session that is not in the
+caller's archive with `sessions/not-archived`; a foreign or unknown session is
+refused by the same ownership check every route uses. It injects `webServer`,
+`connection`, `identity`, `sessions`, `sessionPersistence` and `sessionQuery`,
+and takes its archive file as the row's `path`.

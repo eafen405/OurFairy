@@ -17,8 +17,10 @@ import org.junit.Test
 class RemoteReceiveStateTest {
     private class Sessions : SessionBackend {
         var gate: CompletableDeferred<Unit>? = null
+        var reads = 0
         val authorized = mutableListOf<Pair<String, String>>()
-        override suspend fun list(token: String): OwnedSessions {
+        override suspend fun list(token: String, archived: Boolean): OwnedSessions {
+            reads += 1
             gate?.let { withContext(NonCancellable) { it.await() } }
             return OwnedSessions(listOf(OwnedSession("$token-main", primary = true), OwnedSession("$token-other")), "$token-main")
         }
@@ -27,9 +29,12 @@ class RemoteReceiveStateTest {
             if (!sessionId.startsWith(token)) throw IdentityRefused(403, "session/forbidden", "not yours")
             return OwnedSession(sessionId)
         }
+        override suspend fun rename(token: String, sessionId: String, title: String) = error("not used")
         override suspend fun select(token: String, sessionId: String) = read(token, sessionId)
         override suspend fun create(token: String) = OwnedSession("$token-created")
         override suspend fun primary(token: String) = OwnedSession("$token-main", primary = true)
+        override suspend fun archive(token: String, sessionId: String) = read(token, sessionId)
+        override suspend fun restore(token: String, sessionId: String) = error("not used")
     }
     private class Store : ChatSyncStore {
         val records = mutableMapOf<ChatSyncKey, ChatSyncRecord>()
@@ -49,6 +54,35 @@ class RemoteReceiveStateTest {
         override suspend fun receipt(token: String, sessionId: String, requestId: String): ChatReceipt? = null
         override suspend fun stop(token: String, sessionId: String) = error("receive teardown must not stop backend")
     }
+
+    /** A chat backend that only records stops, so the archive flow's target is visible. */
+    private class StoppingChats : RemoteChatBackend {
+        val stopped = mutableListOf<String>()
+        val updates = mutableMapOf<String, MutableSharedFlow<RemoteChatProjection>>()
+        override fun observe(token: String, sessionId: String) = updates.getOrPut(sessionId) { MutableSharedFlow() }
+        override suspend fun checkpoint(token: String, sessionId: String) = 100L
+        override suspend fun page(token: String, sessionId: String, throughSeq: Long, beforeSeq: Long): ChatHistoryPage = error("not used")
+        override suspend fun read(token: String, sessionId: String): RemoteChatProjection = error("not used")
+        override suspend fun send(token: String, sessionId: String, requestId: String, text: String, uploadIds: List<String>): ChatReceipt = error("not used")
+        override suspend fun receipt(token: String, sessionId: String, requestId: String): ChatReceipt? = null
+        override suspend fun stop(token: String, sessionId: String) { stopped += sessionId }
+    }
+
+    @Test fun `archive-time stop targets the row's own session, not the selected one`() = runTest {
+        val chats = StoppingChats()
+        val state = RemoteReceiveState(Sessions(), backgroundScope, { RemoteChatState(chats, backgroundScope, Store(), "https://fairy") })
+        state.bind("alice", 1); runCurrent()
+        // The page is standing in the main session while the drawer archives another row.
+        state.owned.select("alice-main"); runCurrent()
+
+        state.stopReply("alice-other")
+
+        assertEquals(listOf("alice-other"), chats.stopped)
+        // A row this account does not list has no runtime to stop.
+        state.stopReply("bob-private")
+        assertEquals(listOf("alice-other"), chats.stopped)
+    }
+
     @Test fun `account receiver observes every listed session and selected page shares its runtime`() = runTest {
         val backend = Chats()
         val state = RemoteReceiveState(Sessions(), backgroundScope, { RemoteChatState(backend, backgroundScope, Store(), "https://fairy") })
@@ -65,6 +99,57 @@ class RemoteReceiveStateTest {
         state.resumeObservation(); runCurrent()
         assertSame(other, state.selectedChat.value)
         assertEquals(4, backend.opens.size)
+    }
+
+    @Test fun `background title events coalesce into a trailing list refresh without an opening read`() = runTest {
+        val sessions = Sessions()
+        val backend = Chats()
+        val state = RemoteReceiveState(sessions, backgroundScope, { RemoteChatState(backend, backgroundScope, Store(), "https://fairy") })
+        state.bind("alice", 1); runCurrent()
+        assertSame(state.stateForSession("alice-main"), state.selectedChat.value)
+        val opened = sessions.reads
+
+        backend.updates.getValue("alice-other").emit(RemoteChatProjection("alice-other", version = 1)); runCurrent()
+        assertEquals("the opening projection must not re-read the list", opened, sessions.reads)
+
+        sessions.gate = CompletableDeferred()
+        backend.updates.getValue("alice-other").emit(RemoteChatProjection("alice-other", version = 2).copy(
+            cursor = 0, durableThroughSeq = 0,
+            events = listOf(kotlinx.serialization.json.Json.parseToJsonElement(
+                """{"seq":0,"type":"session/title","data":{"title":"后台兜底标题"}}""",
+            ) as kotlinx.serialization.json.JsonObject),
+        )); runCurrent()
+        assertEquals("a background session title must re-read the list", opened + 1, sessions.reads)
+
+        backend.updates.getValue("alice-other").emit(RemoteChatProjection("alice-other", version = 3).copy(
+            cursor = 1, durableThroughSeq = 1,
+            events = listOf(
+                kotlinx.serialization.json.Json.parseToJsonElement(
+                    """{"seq":0,"type":"session/title","data":{"title":"后台兜底标题"}}""",
+                ) as kotlinx.serialization.json.JsonObject,
+                kotlinx.serialization.json.Json.parseToJsonElement(
+                    """{"seq":1,"type":"session/title","data":{"title":"后台模型标题"}}""",
+                ) as kotlinx.serialization.json.JsonObject,
+            ),
+        )); runCurrent()
+        sessions.gate!!.complete(Unit); runCurrent()
+        assertEquals("a title landing during a list read needs a trailing read", opened + 2, sessions.reads)
+    }
+
+    @Test fun `a first projection refreshes a title that changed after the list read`() = runTest {
+        val sessions = Sessions()
+        val backend = Chats()
+        val state = RemoteReceiveState(sessions, backgroundScope, { RemoteChatState(backend, backgroundScope, Store(), "https://fairy") })
+        state.bind("alice", 1); runCurrent()
+        val opened = sessions.reads
+
+        backend.updates.getValue("alice-other").emit(RemoteChatProjection("alice-other", version = 1).copy(
+            cursor = 0, durableThroughSeq = 0,
+            events = listOf(kotlinx.serialization.json.Json.parseToJsonElement(
+                """{"seq":0,"type":"session/title","data":{"title":"列表读后变化的标题"}}""",
+            ) as kotlinx.serialization.json.JsonObject),
+        )); runCurrent()
+        assertEquals(opened + 1, sessions.reads)
     }
 
     @Test fun `the page drives the very session state reception binds and observes`() = runTest {
@@ -127,7 +212,9 @@ class RemoteReceiveStateTest {
         assertFalse(state.openSession("bob-private"))
         assertEquals("alice-other", state.owned.snapshot.value.selectedId)
         assertEquals(listOf("alice" to "alice-other", "alice" to "bob-private"), sessions.authorized)
-    }    @Test fun `one sessions long task does not block another sessions notification and each uses its own position`() = runTest {
+    }
+
+    @Test fun `one sessions long task does not block another sessions notification and each uses its own position`() = runTest {
         val store = Store()
         val backend = Chats()
         val alerts = mutableListOf<ChatSyncKey>()
@@ -137,7 +224,7 @@ class RemoteReceiveStateTest {
         }
         val receiver = RemoteReceiveState(Sessions(), backgroundScope, { settle ->
             RemoteChatState(backend, backgroundScope, store, "https://fairy", settleReminders = settle)
-        }, platform)
+        }, platform, { true }, store, "https://fairy")
         receiver.bind("alice", 1); runCurrent()
         backend.updates.getValue("alice-main").emit(deliveryProjection(1).copy(sessionId = "alice-main",
             activity = RemoteActivity(2, listOf(2), "alice-main/1", 1, 1))); runCurrent()

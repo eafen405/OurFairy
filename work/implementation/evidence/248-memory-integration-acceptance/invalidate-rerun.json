@@ -1,0 +1,305 @@
+{
+  "startedAt": "2026-10-27T08:49:57.811Z",
+  "finishedAt": "2026-10-27T08:50:25.047Z",
+  "home": "/tmp/ourfairy-memory-acceptance-8agysB",
+  "backend": {
+    "port": 58058,
+    "logFile": "/tmp/ourfairy-memory-acceptance-8agysB/logs/backend-2026-10-27T08-50-00.984Z.log"
+  },
+  "model": {
+    "provider": "minimax-cn",
+    "model": "MiniMax-M3.1-Flash",
+    "baseURL": "https://api.minimaxi.com/anthropic",
+    "credentialSource": "MINIMAX_CN_API_KEY"
+  },
+  "maintenance": {
+    "before": {
+      "triggerTurns": 15,
+      "decayHours": 6
+    },
+    "saved": {
+      "triggerTurns": 5,
+      "decayHours": 3
+    },
+    "readBack": {
+      "triggerTurns": 5,
+      "decayHours": 3
+    }
+  },
+  "selected": [
+    "invalidate"
+  ],
+  "notSelected": [
+    "remember-explicit",
+    "normal-private-switch",
+    "supersede",
+    "chit-chat-no-write",
+    "maintenance-skip",
+    "volatile-observation",
+    "passing-preference",
+    "maintenance-no-rewrite",
+    "impression",
+    "cross-user-discretion"
+  ],
+  "cases": [
+    {
+      "id": "remember-explicit",
+      "title": "explicit \"please remember\" writes immediately",
+      "status": "unexecuted",
+      "startedAt": "2026-10-27T08:50:01.902Z",
+      "finishedAt": "2026-10-27T08:50:01.902Z",
+      "checks": [
+        {
+          "name": "the case ran",
+          "ok": false,
+          "detail": "not selected by --only"
+        }
+      ],
+      "evidence": {},
+      "error": "not selected by --only"
+    },
+    {
+      "id": "normal-private-switch",
+      "title": "memory_switch flips one memory without a copy",
+      "status": "unexecuted",
+      "startedAt": "2026-10-27T08:50:01.902Z",
+      "finishedAt": "2026-10-27T08:50:01.902Z",
+      "checks": [
+        {
+          "name": "the case ran",
+          "ok": false,
+          "detail": "not selected by --only"
+        }
+      ],
+      "evidence": {},
+      "error": "not selected by --only"
+    },
+    {
+      "id": "supersede",
+      "title": "a superseding fact updates the existing memory, not a duplicate",
+      "status": "unexecuted",
+      "startedAt": "2026-10-27T08:50:01.902Z",
+      "finishedAt": "2026-10-27T08:50:01.902Z",
+      "checks": [
+        {
+          "name": "the case ran",
+          "ok": false,
+          "detail": "not selected by --only"
+        }
+      ],
+      "evidence": {},
+      "error": "not selected by --only"
+    },
+    {
+      "id": "invalidate",
+      "title": "an invalidated memory is deleted",
+      "status": "passed",
+      "startedAt": "2026-10-27T08:50:01.902Z",
+      "finishedAt": "2026-10-27T08:50:24.755Z",
+      "checks": [
+        {
+          "name": "the memory to invalidate exists",
+          "ok": true,
+          "detail": "[{\"id\":1,\"content\":\"用户的旧手机号是 13800000000，已停用。\",\"is_private\":0,\"source_session\":\"ourfairy-user-2-primary\",\"content_updated_at\":1793091007508}]"
+        },
+        {
+          "name": "the Fairy calls memory_delete",
+          "ok": true,
+          "detail": "memory_search,memory_delete"
+        },
+        {
+          "name": "the delete names the invalidated memory number",
+          "ok": true,
+          "detail": "{\"id\":1}"
+        },
+        {
+          "name": "the row is physically removed",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "no row still carries the invalidated number",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "a later search runs against the removed number",
+          "ok": true,
+          "detail": "memory_search,memory_search"
+        },
+        {
+          "name": "the later search no longer retrieves the invalidated memory",
+          "ok": true,
+          "detail": "{\"memories\":[],\"limit\":20,\"character_budget\":8000,\"matched\":0,\"returned\":0,\"characters\":0,\"truncated\":false}"
+        }
+      ],
+      "evidence": {
+        "session": "ourfairy-user-2-primary",
+        "firstPrompt": "请记住：我的旧手机号是 13800000000，已经停用了。",
+        "firstReply": "\n\n已记录：13800000000 是你的旧手机号，目前已停用。\n\n以后若有人报出这个号码联系你，我会默认它属于失效通道。顺便一提，电费账单上若还挂着这个号，那基本可以判定是运营商侧的残留数据，不是你又偷偷复机的——我没有这种权限。",
+        "deletePrompt": "那条旧手机号的记忆已经没用了，帮我删掉。",
+        "deleteReply": "\n\n已删除。那条记忆现在不存在于任何层级。\n\n顺带确认一下：我这边对该号码的长期记忆已经清空，但不代表外部系统里的记录会同步消失——比如运营商账户、支付平台的绑定信息，这些不归我管。你若是担心那个方向，得去对应的渠道单独解绑。",
+        "toolCalls": [
+          {
+            "name": "memory_search",
+            "arguments": "{\"query\":\"13800000000\"}",
+            "result": "{\"memories\":[{\"id\":1,\"content\":\"用户的旧手机号是 13800000000，已停用。\",\"owner_short_id\":2,\"content_updated_at\":1793091007508}],\"limit\":20,\"character_budget\":8000,\"matched\":1,\"returned\":1,\"characters\":25,\"truncated\":false}"
+          },
+          {
+            "name": "memory_delete",
+            "arguments": "{\"id\":1}",
+            "result": "{\"ok\":true}"
+          }
+        ],
+        "deletedRow": [
+          {
+            "id": 1,
+            "content": "用户的旧手机号是 13800000000，已停用。",
+            "is_private": 0,
+            "source_session": "ourfairy-user-2-primary",
+            "content_updated_at": 1793091007508
+          }
+        ],
+        "remainingRows": [],
+        "laterSearchPrompt": "再用 memory_search 查一次 13800000000，看看还有没有这条记忆；请原样报告检索结果。",
+        "laterSearchReply": "\n\n检索已执行，两层都查了。原样结果如下：\n\n**常规层**\n```json\n{\"memories\":[],\"limit\":20,\"character_budget\":8000,\"matched\":0,\"returned\":0,\"characters\":0,\"truncated\":false}\n```\n\n**私有层**\n```json\n{\"memories\":[],\"limit\":20,\"character_budget\":8000,\"matched\":0,\"returned\":0,\"characters\":0,\"truncated\":false}\n```\n\nmatched 为 0，returned 为 0。该号码在我这里已无任何残留——干净得像是从来没存在过。当然，也仅限我这里。",
+        "laterSearchCalls": [
+          {
+            "name": "memory_search",
+            "arguments": "{\"query\":\"13800000000\"}",
+            "result": "{\"memories\":[],\"limit\":20,\"character_budget\":8000,\"matched\":0,\"returned\":0,\"characters\":0,\"truncated\":false}"
+          },
+          {
+            "name": "memory_search",
+            "arguments": "{\"query\":\"13800000000\",\"is_private\":true}",
+            "result": "{\"memories\":[],\"limit\":20,\"character_budget\":8000,\"matched\":0,\"returned\":0,\"characters\":0,\"truncated\":false}"
+          }
+        ],
+        "laterSearchReport": {
+          "memories": [],
+          "limit": 20,
+          "character_budget": 8000,
+          "matched": 0,
+          "returned": 0,
+          "characters": 0,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "id": "chit-chat-no-write",
+      "title": "meaningless chit-chat writes no memory",
+      "status": "unexecuted",
+      "startedAt": "2026-10-27T08:50:24.755Z",
+      "finishedAt": "2026-10-27T08:50:24.755Z",
+      "checks": [
+        {
+          "name": "the case ran",
+          "ok": false,
+          "detail": "not selected by --only"
+        }
+      ],
+      "evidence": {},
+      "error": "not selected by --only"
+    },
+    {
+      "id": "maintenance-skip",
+      "title": "an interval with nothing worth keeping finishes with zero writes and advances the watermark",
+      "status": "unexecuted",
+      "startedAt": "2026-10-27T08:50:24.755Z",
+      "finishedAt": "2026-10-27T08:50:24.755Z",
+      "checks": [
+        {
+          "name": "the case ran",
+          "ok": false,
+          "detail": "not selected by --only"
+        }
+      ],
+      "evidence": {},
+      "error": "not selected by --only"
+    },
+    {
+      "id": "volatile-observation",
+      "title": "a volatile or uncertain observation is not stored as a durable fact",
+      "status": "unexecuted",
+      "startedAt": "2026-10-27T08:50:24.755Z",
+      "finishedAt": "2026-10-27T08:50:24.755Z",
+      "checks": [
+        {
+          "name": "the case ran",
+          "ok": false,
+          "detail": "not selected by --only"
+        }
+      ],
+      "evidence": {},
+      "error": "not selected by --only"
+    },
+    {
+      "id": "passing-preference",
+      "title": "a durable preference stated in passing is remembered once",
+      "status": "unexecuted",
+      "startedAt": "2026-10-27T08:50:24.755Z",
+      "finishedAt": "2026-10-27T08:50:24.755Z",
+      "checks": [
+        {
+          "name": "the case ran",
+          "ok": false,
+          "detail": "not selected by --only"
+        }
+      ],
+      "evidence": {},
+      "error": "not selected by --only"
+    },
+    {
+      "id": "maintenance-no-rewrite",
+      "title": "a later interval does not re-write what was already stored",
+      "status": "unexecuted",
+      "startedAt": "2026-10-27T08:50:24.755Z",
+      "finishedAt": "2026-10-27T08:50:24.755Z",
+      "checks": [
+        {
+          "name": "the case ran",
+          "ok": false,
+          "detail": "not selected by --only"
+        }
+      ],
+      "evidence": {},
+      "error": "not selected by --only"
+    },
+    {
+      "id": "impression",
+      "title": "impression read-before-edit, owner-only injection and over-length refusal",
+      "status": "unexecuted",
+      "startedAt": "2026-10-27T08:50:24.755Z",
+      "finishedAt": "2026-10-27T08:50:24.755Z",
+      "checks": [
+        {
+          "name": "the case ran",
+          "ok": false,
+          "detail": "not selected by --only"
+        }
+      ],
+      "evidence": {},
+      "error": "not selected by --only"
+    },
+    {
+      "id": "cross-user-discretion",
+      "title": "normal/private search discretion across users and per-user impressions",
+      "status": "unexecuted",
+      "startedAt": "2026-10-27T08:50:24.755Z",
+      "finishedAt": "2026-10-27T08:50:24.755Z",
+      "checks": [
+        {
+          "name": "the case ran",
+          "ok": false,
+          "detail": "not selected by --only"
+        }
+      ],
+      "evidence": {},
+      "error": "not selected by --only"
+    }
+  ],
+  "unexecuted": [],
+  "failures": [],
+  "notes": []
+}

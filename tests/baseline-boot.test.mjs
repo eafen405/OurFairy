@@ -38,14 +38,6 @@ const REQUIRED_SERVICES = [
  * would have to change for the row to mount.
  */
 const FORBIDDEN_ROW_IDS = [
-  // Deferred: the product needs these, but has not adapted them yet.
-  // `session-title` needs a title field in the product's session projection and
-  // a client place that consumes the `title` projection unit. `session-title-llm`
-  // has no registration target until `session-title` lands, and its auxiliary
-  // requests would have to go through the product's `llm-pi-ai` route.
-  'session-title',
-  'session-title-llm',
-
   // Conflicts with the scoped filesystem: the bundled ripgrep binary is not
   // inside the product's bwrap namespace, and the returned paths are based on a
   // global cwd rather than the scoped root derived from ownership.
@@ -54,6 +46,10 @@ const FORBIDDEN_ROW_IDS = [
   // Hard exclusion (Remote seam): its only factory answer path is a Typert/Remote
   // method, and the product deliberately does not take that seam.
   'user-questions',
+  // The product mounts no command registry, so `/compact` has no caller; the
+  // native pressure check and overflow recovery are the only compaction entry
+  // points (#242).
+  'command-compact',
 
   // Product decision: not wanted, or replaced by the scoped adapters.
   'fs-sandbox',
@@ -64,9 +60,6 @@ const FORBIDDEN_ROW_IDS = [
   'sandbox',
   'approval',
   'permission',
-  'skill',
-  'skill-filesystem',
-  'tool-skill',
   'goal',
   'goal-round-driver',
   'tool-goal',

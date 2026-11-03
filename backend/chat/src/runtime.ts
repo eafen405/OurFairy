@@ -2,13 +2,13 @@
 import { randomUUID } from 'node:crypto'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { SessionHistoryGapError, createSessionHistorySeam } from '@deepseek-ai/dsh-agent/session-history'
-import { readSessionEvents } from '@ourfairy/dsh-sessions/events'
+import { firstHumanMessageText, readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import { attemptText, attemptTools, taskAt, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.js'
 import { FAIRY_PERSONA } from './persona.js'
 import { SessionQueues } from './queues.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
-import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionHistorySeam } from '@deepseek-ai/dsh-agent/session-history'
 import type { OwnedSessionService } from '@ourfairy/dsh-sessions'
@@ -18,6 +18,10 @@ import type { OwnedSessionService } from '@ourfairy/dsh-sessions'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session-persistence'
+// The one title authority: this runtime backfills a historical session and
+// accepts a user rename through that service, never by writing the event itself.
+import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
+import type { SessionTitleService, SessionTitleSnapshot } from '@deepseek-ai/dsh-session-title'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionProjectionStateMap } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@ourfairy/dsh-sessions'
@@ -38,6 +42,27 @@ export type SessionOwner = NonNullable<ReturnType<OwnedSessionService['authentic
  */
 export function requestedSessionId(sessionId: unknown): SessionId {
   return sessionId as SessionId
+}
+
+/** How one open treats the historical title backfill. */
+export interface OpenOptions {
+  /**
+   * Whether the one historical title backfill may run. A rename opens a session
+   * to write a title the user chose, so it must not also spend the model request
+   * that generates one; every other caller keeps the backfill.
+   */
+  readonly titleBackfill?: boolean
+}
+
+/**
+ * Whether this session still needs the one historical title backfill: it has no
+ * title at all, or only the deterministic fallback. A provider or user title is
+ * left alone — an explicit refresh re-derives over a user-pinned title, which
+ * the rename capability forbids.
+ */
+function needsBackfill(titles: SessionTitleService, state: LiveSession): boolean {
+  const current = titles.get(state.session)
+  return current === undefined || current.source.kind === 'fallback'
 }
 
 /** The observed event window of one live session. */
@@ -163,6 +188,8 @@ export class SessionRuntime {
   declare ctx: Context
   #live = new Map<SessionId, LiveSession>()
   #opening = new Map<SessionId, Promise<LiveSession>>()
+  /** Sessions whose legacy title backfill was attempted in this process. */
+  #titleBackfilled = new Set<SessionId>()
   #queues = new SessionQueues()
   /** Non-null while one shared-configuration write is in flight (admission barrier). */
   #configWrite: Promise<void> | null = null
@@ -177,7 +204,7 @@ export class SessionRuntime {
   live(sessionId: SessionId): LiveSession | undefined { return this.#live.get(sessionId) }
 
   /** Authorize this owner, then return the one live session for `sessionId`. */
-  async open(owner: SessionOwner, sessionId: unknown): Promise<LiveSession> {
+  async open(owner: SessionOwner, sessionId: unknown, { titleBackfill = true }: OpenOptions = {}): Promise<LiveSession> {
     // The stored owner is checked even for a live Agent and before resume can repair/write.
     await this.ctx.ourfairySessions.read(owner, sessionId)
     // The owned-session service above is the authority that the id is a string;
@@ -187,7 +214,7 @@ export class SessionRuntime {
     if (live !== undefined) return live
     let opening = this.#opening.get(key)
     if (opening === undefined) {
-      opening = this.runSession(key, () => this.#resume(owner, key))
+      opening = this.runSession(key, () => this.#resume(owner, key, titleBackfill))
       this.#opening.set(key, opening)
     }
     try { return await opening } finally {
@@ -200,7 +227,114 @@ export class SessionRuntime {
   /** Serialize one outgoing delivery's preparation, apart from the target session's queue. */
   runDelivery<T>(deliveryId: SessionId, work: () => Promise<T>): Promise<T> { return this.#queues.runDelivery(deliveryId, work) }
 
-  async #resume(owner: SessionOwner, sessionId: SessionId) {
+  /**
+   * Append one event to a session at most once, resolving only once it is durable.
+   *
+   * This is the one write protocol for a session chat may or may not hold live.
+   * The caller supplies the two program-specific halves — how to recognise its
+   * event on the log and how to build it on a session — and this method owns
+   * everything around them:
+   *
+   * - the target session's queue, so this cannot race `open`/resume or another
+   *   writer; the caller must not still be running work in the same queue;
+   * - the live/cold branch, decided inside that queue;
+   * - the cold write handle's claim, `read`/`append`/`flush`/`close` order, and
+   *   the restored Session's four construction parameters;
+   * - dedupe against the live-preferred read when live, and against the stored
+   *   prefix when cold. The live read is what makes a retry after a failed
+   *   barrier find the event already committed in this process instead of
+   *   appending it twice; a persistence read would miss it;
+   * - the stored-prefix offset passed to `snapshotEvents`: the restored
+   *   constructor appends its own `session/end-seed`, so the durable suffix
+   *   starts at the prefix length, not at the new event's seq.
+   *
+   * The cold branch never enters or announces the restored Session: entering
+   * would make the next native resume of that id fail with `already exists`
+   * until the process restarts. The event is built on a throwaway Session whose
+   * only durable product is the appended suffix.
+   *
+   * @param sessionId - the session that receives the event.
+   * @param match - finds the caller's event in one log prefix, or undefined.
+   * @param build - appends the event to a Session and returns it.
+   * @returns the existing or newly appended event, durable when this resolves.
+   */
+  async appendOnce<E extends SessionEvent>(
+    sessionId: SessionId,
+    match: (events: readonly SessionEvent[]) => E | undefined,
+    build: (session: Session) => E,
+  ): Promise<E> {
+    return this.runSession(sessionId, async () => {
+      const state = this.#live.get(sessionId)
+      if (state !== undefined) {
+        // The live-preferred read sees events this process committed even when
+        // their barrier has not succeeded yet, which is exactly the retry case.
+        const event = match((await this.events(sessionId)).events) ?? build(state.session)
+        await this.barrier(state)
+        return event
+      }
+      const handle = await this.ctx.sessionPersistence.open(sessionId, 'write')
+      try {
+        const read = await handle.read()
+        let event = match(read.events)
+        if (event === undefined) {
+          // The handle hands its slice over as a readonly array; the session
+          // store takes the seed as it is, and the migration does not copy it.
+          // `prepare` validates the header in place and deep-freezes it, so the
+          // handle's own header must not be handed over directly: native resume
+          // clones it for the same reason (agent-loop `resumeWith`).
+          const session = this.ctx.sessions.prepare(sessionId, { seed: read.events as SessionEvent[],
+            meta: structuredClone(handle.header), inheritedEventCount: handle.inheritedEventCount, eventState: read.eventState })
+          event = build(session)
+          // The constructor appended `session/end-seed`, so the durable suffix
+          // begins at the stored prefix's length.
+          await handle.append(session.snapshotEvents(read.events.length as SessionLogOffset))
+        }
+        await handle.flush()
+        return event
+      } finally { await handle.close() }
+    })
+  }
+
+  /**
+   * Deliver one system-context user-role message to an owned session and start
+   * exactly one reply turn — but only when the session does not already carry
+   * it.
+   *
+   * This is the one trigger protocol for input the user did not type (the
+   * review entry): the message enters the native inbox like any queued prompt,
+   * so the model sees ordinary user-role context and the session runs a real
+   * turn. Its producer source keeps it out of the chat transcript, so no user
+   * bubble and no request receipt is fabricated.
+   *
+   * The whole check-deliver-flush sequence runs in the target session's queue,
+   * so two concurrent openings cannot both deliver. The matcher sees the
+   * message in both shapes a live session holds: the inbox splice (durable
+   * before the turn claims it) and the `user/message` the turn appends. A
+   * second click during either window therefore appends nothing and starts no
+   * second turn, and a retry after a failed flush finds the committed splice
+   * instead of delivering again.
+   *
+   * @param owner - the authenticated owner the session must belong to.
+   * @param sessionId - the session that receives the message.
+   * @param match - recognises one already-delivered message by its source.
+   * @param message - the user-role message to deliver; its source is preserved.
+   * @returns true when this call delivered the message and started its turn.
+   */
+  async promptOnce(owner: SessionOwner, sessionId: SessionId, match: (message: UserMessage) => boolean, message: UserMessage): Promise<boolean> {
+    const state = await this.open(owner, sessionId)
+    return this.runSession(sessionId, async () => {
+      const delivered = (events: readonly SessionEvent[]) => events.some(event => {
+        if (event.type === 'user/message') return match(event.data)
+        return event.type === 'agent/inbox/spliced' && event.data.inserted.some(match)
+      })
+      if (delivered((await this.events(sessionId)).events)) return false
+      this.followup(state, message)
+      await this.barrier(state)
+      return true
+    })
+  }
+
+  async #resume(owner: SessionOwner, sessionId: SessionId, titleBackfill: boolean) {
     const state = new LiveSession()
     await this.ctx.agents.resume({ resumeSessionId: sessionId,
       agentOptions: this.ctx.agentDefaultModel.currentSelection(),
@@ -282,7 +416,72 @@ export class SessionRuntime {
       },
     })
     this.#live.set(sessionId, state)
+    if (titleBackfill) this.backfillTitle(state)
     return state
+  }
+
+  /**
+   * Give a historical session the model title dsh never scheduled for it.
+   *
+   * `session-title` reacts only to a new `user/message` (and its request
+   * header), so a session written before the title rows were mounted has no
+   * `session/title` event and nothing will ever create one. The first open is
+   * that session's one chance: the refresh runs detached from the opening
+   * request, and a failure is logged and never retried. The durable title-request
+   * event makes an earlier failed attempt visible after a process restart too.
+   *
+   * The source is read twice on purpose. Schedule time decides whether there is
+   * work at all; the check right before the refresh is what keeps a user title
+   * safe, because the log read between them is asynchronous and a rename can
+   * land while it is in flight. An explicit refresh re-derives over a pinned
+   * title (that is its documented unpin), so backfill — automatic housekeeping —
+   * must never be the caller that reaches it.
+   */
+  backfillTitle(state: LiveSession): void {
+    const sessionId = state.sessionId
+    if (this.#titleBackfilled.has(sessionId)) return
+    const titles = this.ctx.get('sessionTitle')
+    if (titles === undefined) return
+    if (!needsBackfill(titles, state)) return
+    this.#titleBackfilled.add(sessionId)
+    void (async () => {
+      try {
+        const events = (await readSessionEvents(this.ctx, sessionId)).events
+        // The same eligibility rule the native service uses: a human message
+        // with visible text. A session without one has no title to generate.
+        if (firstHumanMessageText(events) === undefined) return
+        if (events.some(event => (event.type as string) === 'session/title-llm-request')) return
+        // A rename may have landed during that read: re-read the source, and
+        // leave a user title alone.
+        if (!needsBackfill(titles, state)) return
+        await titles.refresh(state.session)
+      } catch (error) {
+        this.ctx.logger.warn(`chat: session "${sessionId}": title backfill failed: ${String(error)}`)
+      }
+    })()
+  }
+
+  /**
+   * Pin one live session's title to the text the caller wrote.
+   *
+   * The title service owns the normalization (collapsed whitespace, removed
+   * control characters, the UTF-8 byte cap) and refuses text that leaves nothing
+   * visible. That one refusal is answered as `undefined` so this module keeps its
+   * own vocabulary; every other failure is a real failure and propagates.
+   *
+   * @param state - the live session to rename.
+   * @param title - the caller's text, untrusted.
+   * @returns the accepted snapshot, or undefined when it has no visible text.
+   */
+  renameTitle(state: LiveSession, title: string): SessionTitleSnapshot | undefined {
+    const titles = this.ctx.get('sessionTitle')
+    if (titles === undefined) throw new Error('chat: the session-title row is not mounted, so no title can be renamed')
+    try {
+      return titles.rename(state.session, title)
+    } catch (error) {
+      if (error instanceof SessionTitleInvalidError) return undefined
+      throw error
+    }
   }
 
   /** Routes pinned by replies that are running right now; the live sessions are the only roster. */

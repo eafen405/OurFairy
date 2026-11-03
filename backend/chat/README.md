@@ -26,6 +26,17 @@
 | `/chat/observe` | `{sessionId,maxEvents?}` | `text/event-stream`，见下 |
 | `/chat/jobs/output` | `{sessionId,taskId,from}` | `{ok:true,output}` |
 | `/chat/jobs/stop` | `{sessionId,taskId}` | `{ok:true,outcome}` |
+| `/sessions/rename` | `{sessionId,title}` | `{ok:true,session:<会话行>}` |
+
+`/sessions/rename` 是本模块服务的**会话家族**路由（路径常量仍在 `@ourfairy/dsh-sessions` 的
+`SESSION_RENAME_PATH`）：改名的对象是一个会话，路径按作用对象命名；但它只能由 chat 服务——
+原生 `sessionTitle.rename` 只接受已发布的活会话，而把会话变活（persona、身份段、模型选择）是
+chat 的职责。响应的会话行与 `/sessions/list` 的同一行由同一份代码（`expose` + `titleOf`）产生，
+两者不会漂移。错误码沿用 `sessions/*`：400 `sessions/invalid-request`（标题不是文本）、400
+`sessions/empty-title`（规范化后没有可见字符，此时不写入任何东西）、404
+`sessions/unknown-session`、403 `sessions/unowned-session`、401 `sessions/unauthorized`。
+超长标题不是错误：按 UTF-8 码点边界截断到 `maxTitleBytes`。改名的 open 不补生成标题，因此一次
+改名不花模型请求；用户标题此后不会被自动生成改写。
 
 `requestId` 是客户端生成的稳定非空字符串（≤128 字符），与 `text`、有序 `uploadIds` 一起构成
 请求身份：同一身份重发返回同一 receipt（进程重启后亦然），内容不同则 409
@@ -48,12 +59,21 @@
   快照序号，客户端用它丢弃过时快照。
 - `cursor`：最近观察到的原生事件 seq，空会话为 -1。`durableThroughSeq`：writer 屏障已确认
   的前缀，未知为 -1；它不表示客户端已应用该前缀。
-- `messages`：`{messageId,seq,requestId,role,status,text,attachments,tools?}`。`role` 1 用户、
-  2 Fairy；`status` 1 待定、2 完成、3 中断、4 失败。文本是原始文本，含空白与 Markdown。
-  `tools` 是该条消息请求的工具名，按 content block 顺序；只在该消息请求过工具时出现，不含
-  参数与工具输出。只有工具调用、没有可见文本的步骤因此不再是一行空文本。没有原生消息的
-  assistant 结算使用确定性身份 `attempt:<sessionId>:<seq>`。`messages` 按首次出现顺序排列，
-  不是 seq 顺序。
+- `messages`：`{messageId,position,seq,requestId,role,status,text,attachments,tools?,kind?,toolCallId?}`。
+  `role` 1 用户、2 Fairy、3 派生展示行；`status` 1 待定、2 完成、3 中断、4 失败。文本是原始文本，
+  含空白与 Markdown。`kind` 只在派生行出现：1 技能激活（`加载了skill:<name>`），2 技能审核
+  （后端 `skill_manage inspect` 结果里的 `display` 四块材料）；`toolCallId` 是该派生行配对的
+  工具调用标识。技能激活行由成功的原生 `skill` 工具结果确定性派生；技能审核行由成功且 JSON
+  含 `{kind:'skill-review',display}` 的 `skill_manage` 工具结果确定性派生。两者都只存在于投影，
+  不进入模型上下文、普通投递或正文检索；目录发布、失败读取、资源读取和 `/name` 文本都不产生
+  它们。同一工具调用标识重放时首次出现者生效，不移动位置、不新增 transition。
+  `position` 是该行在会话呈现顺序中的位置，由服务端按首次出现次序排定：会话内唯一，同一
+  `messageId` 跨分页、重连与 generation 稳定（冷恢复后的逐字段比较见
+  `tests/chat-cold-boundary.test.mjs`）。它只用于排列，不是 seq、不表示连续、也不表示内容新旧。
+  `messages` 按 `position` 升序排列，不是 seq 顺序。`tools` 是该条消息请求的工具名，按 content
+  block 顺序；只在该消息请求过工具时出现，不含参数与工具输出。只有工具调用、没有可见文本的
+  步骤因此不再是一行空文本。没有原生消息的 assistant 结算使用确定性身份
+  `attempt:<sessionId>:<seq>`。
 - `attempt`：`{attemptId,revision,text,tools?}`。`attemptId` 只在同一 generation 内唯一，`text` 是
   累计原始可见文本；`tools` 是这一步到目前为止请求过的工具名，按首次请求顺序，未请求时不出现。
   最终持久消息取代它，终止消息使用完整富文本渲染；被中止的步骤不会有消息，工具名因此也从
@@ -89,7 +109,12 @@
 
 `events` 是原生不可变 Session 事件，身份为 `(sessionId,seq)`，重叠的 seq 必须载荷相同。
 快照只能替换本连接范围内的旧快照，不能抹掉独立回填的更早历史；合并同一 `messageId` 时取
-较新的 seq。
+较新的 seq，但它的 `position` 必须与已收到的副本一致。缺少 `position`、同一 `messageId`
+换了位置、或两个 `messageId` 占同一位置都是协议错误：客户端对其仍持有的行应响亮失败并保留
+最后一个可信快照，不得回退到 seq 或 messageId 猜序。分页、重连、generation 与实时快照配对交付，不承诺
+新旧客户端混跑。客户端的拒绝、保留与不推进消费行为见
+`android/app/src/test/java/me/rerere/rikkahub/data/remote/RemoteChatStateTest.kt` 与
+`RemoteChatApiTest.kt`。
 
 `/chat/page` 请求 `{sessionId,throughSeq:C,beforeSeq:L,maxEvents?}`，返回
 `{sessionId,throughSeq,fromSeq:K,beforeSeq:K|null,hasMore,events,messages}`；其中
@@ -124,8 +149,9 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 每个单元声明 `key`、`stateVersion`、zod `stateSchema`、`init(header)` 与 `apply(state,event)`：
 `apply` 必须同步且纯，未解释的事件返回同一引用；state 必须能被 registry 做 JSON checkpoint。
 每个单元的 `stateVersion` 在折叠语义或 state 形状变化时递增，旧版本的持久化行会被丢弃并从
-`init` 重折。当前版本：transcript `4`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
-工具名），work `2`（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读这几行，
+`init` 重折。当前版本：transcript `7`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
+工具名 + 未完成 `skill` / `skill_manage` 调用的窄配对表 + 与 `skill_manage` 调用配对的审核结果
+派生行），work `2`（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读这几行，
 与本文件一起漂移即失败。
 
 - 任务与活动是同一次 fold：activity 依赖每个事件后的任务/report 快照，拆开会形成第二套
@@ -139,9 +165,25 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 - transcript 行记首次出现位置与后续状态转移（`first` / `transitions`），因此任意 `throughSeq`
   都能还原该行的 `seq` 与 `status`，无需重折前缀。`transitions` 按事件 seq 排序；只有会移动
   行位置的 transition 进入 `moves` 索引。read/page 从 `fromSeq` 开始只取窗口行，不再遍历
-  整份历史。
+  整份历史。传输 `position` 就是该行在 `rows` 中的下标，在读取时派生；`tests/projection-units.test.mjs`
+  断言每个 wire 行的 `position` 指向 `rows` 中同一 `messageId` 的行，且跨 cut 与窗口不变。
+  `position` 只是对既有行序的命名，transcript 的折叠逻辑与 `stateVersion` 不因此改变；折叠值
+  仍与冻结 fixture 逐字段比较，版本号的绑定见上面的「投影单元」。
 - receipt 由 transcript 单元的 `receipts` 回答（`receiptFrom`），`/chat/send` 的幂等与冲突检测
   从该映射取值。
+- transcript 单元维护 `callId -> {name,seq}` 的窄配对表，只收 `tool/call` 中 `name === 'skill'`
+  的事件；名称取自 `tool/call` 的原始 `arguments`（JSON 解析失败则跳过），不取可能被 pruner
+  改写的工具结果正文。`isError !== true` 的 append-surface `tool/result` 追加一行
+  `{messageId: 'skill-activation:<callId>', role: 3, kind: 1, status: 2, seq: 结果事件 seq,
+  toolCallId}`，并消费该表项；失败结果只消费、不追加。每次成功激活恰好一行，重放与断线补齐
+  按 `callId` 去重（首次出现胜出），位置跟随对应工具结果，不新增任何原生事件。
+- 审核展示行走同一 fold，并与调用方配对：`callId -> seq` 的窄表只收 `tool/call` 中
+  `name === 'skill_manage'` 的事件。只有该表中仍有待配对的 `callId`、且结果是成功
+  （`isError !== true`）、第一个文本块可解析为 `kind === 'skill-review'` 且 `display` 为非空
+  字符串时，才追加一行 `{messageId: 'skill-review:<callId>', role: 3, kind: 2, status: 2,
+  seq: 结果事件 seq, toolCallId}`，`text` 就是后端组合的 `display`。任何匹配结果都会消费该
+  表项：失败结果只消费、不追加；`bash` 等非 `skill_manage` 调用即使打印同样的 JSON 也不产生
+  审核行；普通 JSON（如 `list`）不产生；重复结果按 `callId` 首次出现胜出。
 - `/chat/read` 与 `/chat/observe` 从这两个单元读 durable 值；同一会话的所有观察者共享同一份
   单元状态（`tests/chat-multi-observer.test.mjs`）。
 
@@ -200,16 +242,18 @@ lost-page 用例）。
 Typert 传输，不提供本投影的耐久任务折叠；保留理由与漂移信号见
 [原生能力依赖记录](../../docs/decisions/native-capability-dependencies.md#job-output-and-stop)。
 
-### 跨用户投递
+### 投递消息
 
-`deliver_message({recipientShortId,text,files?})` 把指定文本与可选文件写入收件人的固定主
-会话，返回 `{deliveryId,sessionId,messageId,acceptedSeq}`。它不读取收件人历史，也不启动收件人
-推理。投递行本身的入口、禁用行为与表归属见 [delivery README](../delivery/README.md)。
+`deliver_message({recipientShortId,text,files?})` 把指定文本与可选文件写入收件方的会话：投递给
+本人时落在发起投递的那个会话，投递给其他用户时仍落在其固定主会话；发起会话已归档、或调用方没有
+可用的发起会话（未来的后台投递）时回落主会话。返回 `{deliveryId,sessionId,messageId,acceptedSeq}`，
+其中 `sessionId` 就是实际落点。它不读取收件人历史，也不启动收件人推理。落点规则与判定位置见
+[delivery README](../delivery/README.md)。
 
-投递身份由发送方会话 id 与原生工具调用 id 派生。业务表 `deliveries` 在追加前固定收件人与
-内容：状态 0 待协调、1 已持久送达、2 正在准备文件。原生 `delivery/message` 事件是送达事实，
-携带同一投递身份与真实发送方会话，外观为普通 Fairy 消息。重试按该身份核对：同一身份找到
-同一条消息，内容或收件人不同则拒绝；启动时按该身份核对未完成的行。
+投递身份由发送方会话 id 与原生工具调用 id 派生。业务表 `deliveries` 在追加前固定收件人、内容与
+落点（落点只判定一次，重试沿用记录）：状态 0 待协调、1 已持久送达、2 正在准备文件。原生
+`delivery/message` 事件是送达事实，携带同一投递身份与真实发送方会话，外观为普通 Fairy 消息。
+重试按该身份核对：同一身份找到同一条消息，内容或收件人不同则拒绝；启动时按该身份核对未完成的行。
 
 文件项为发送方当前可写范围内的 `{path}`，或本会话已接纳原件的 `{messageId,index}`，
 最多 8 个、单个 32 MiB、合计 64 MiB。`attachments_json` 保存有序的 `{selector,prepared}`：

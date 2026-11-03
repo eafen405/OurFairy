@@ -19,7 +19,8 @@ fun eventCoverage(from: Long, through: Long): List<JsonObject> = (from..through)
 /** A projected Fairy delivery at [seq], with the reminder facts the notification tests expect. */
 fun deliveryProjection(seq: Long, version: Long = 1) = RemoteChatProjection(
     sessionId = "s", generation = "g", version = version, cursor = seq,
-    messages = listOf(RemoteChatMessage("delivery$seq", seq, role = 2, status = 2, text = "delivered$seq")),
+    // One delivery per seq in these fixtures, so its seq is also a unique place.
+    messages = listOf(RemoteChatMessage("delivery$seq", seq, seq, role = 2, status = 2, text = "delivered$seq")),
     events = eventCoverage(0, seq),
     activity = RemoteActivity(status = 1, episodeId = "s/$seq", throughSeq = seq,
         completed = RemoteCompletedActivity("s/$seq", seq, seq, seq),

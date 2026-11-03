@@ -45,6 +45,9 @@ fun BoxScope.FairyBackground(modifier: Modifier = Modifier, watermark: Boolean =
     val scanlines = remember(density.density, tokens.scanline) {
         runCatching { scanlineBrush(density.density, 3f, tokens.scanline) }.getOrNull()
     }
+    val grid = remember(density.density, tokens.grid) {
+        runCatching { gridBrush(density.density, 24f, tokens.grid) }.getOrNull()
+    }
     Box(
         modifier
             .matchParentSize()
@@ -81,7 +84,7 @@ fun BoxScope.FairyBackground(modifier: Modifier = Modifier, watermark: Boolean =
                     measurer.measure(
                         WATERMARK_CAPTION,
                         TextStyle(
-                            fontFamily = tokens.labelFontFamily,
+                            fontFamily = tokens.telemetryFontFamily,
                             fontSize = (size.width * 0.03f).toSp(),
                             letterSpacing = (size.width * 0.009f).toSp(),
                             color = tokens.fairyLink.copy(alpha = 0.06f),
@@ -110,6 +113,7 @@ fun BoxScope.FairyBackground(modifier: Modifier = Modifier, watermark: Boolean =
                             )
                         }
                     }
+                    if (grid != null) drawRect(grid)
                     drawScanlines(scanlines, tokens.scanline, 3f)
                     drawCircle(glow, radius = glowRadius, center = glowCenter)
                 }
@@ -147,6 +151,24 @@ internal fun scanlineBrush(densityScale: Float, periodDp: Float, color: Color): 
         size = Size(1f, tile.toFloat()),
     ) {
         drawRect(color, topLeft = Offset.Zero, size = Size(1f, 1f))
+    }
+    return object : ShaderBrush() {
+        override fun createShader(size: Size) =
+            ImageShader(bitmap, TileMode.Repeated, TileMode.Repeated)
+    }
+}
+
+private fun gridBrush(densityScale: Float, periodDp: Float, color: Color): ShaderBrush {
+    val tile = (periodDp * densityScale).roundToInt().coerceAtLeast(4)
+    val bitmap = ImageBitmap(tile, tile)
+    CanvasDrawScope().draw(
+        density = Density(densityScale),
+        layoutDirection = LayoutDirection.Ltr,
+        canvas = Canvas(bitmap),
+        size = Size(tile.toFloat(), tile.toFloat()),
+    ) {
+        drawRect(color, size = Size(tile.toFloat(), 1f))
+        drawRect(color, size = Size(1f, tile.toFloat()))
     }
     return object : ShaderBrush() {
         override fun createShader(size: Size) =

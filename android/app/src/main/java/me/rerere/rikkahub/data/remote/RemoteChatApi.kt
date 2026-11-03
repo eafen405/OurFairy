@@ -32,7 +32,22 @@ data class RemoteChatAttachment(
 )
 
 /**
- * Wire role: 1 user, 2 Fairy. Status: 1 pending, 2 complete, 3 interrupted, 4 failed.
+ * Wire role: 1 user, 2 Fairy, 3 derived display row. Status: 1 pending, 2 complete,
+ * 3 interrupted, 4 failed.
+ *
+ * A role-3 row is projection-only and never a message either side sent. `kind` names what it
+ * displays: 1 is a skill activation (`加载了skill:<name>`), derived by the backend from a
+ * successful native `skill` tool result; 2 is reserved for the skill review row. `toolCallId`
+ * is the tool call the row was paired with, so a replay can be recognised without parsing text.
+ *
+ * `position` is the message's place in the session's presentation order, derived by the backend from
+ * the row's first appearance: unique within the session, and stable for one message across pages
+ * and reconnects. A generation change replaces this client's rows, so cross-generation stability is
+ * the backend's guarantee (its suite compares a cold restore field by field), not a check this
+ * client's merge can make. Position orders presentation only — it is not a seq, promises no
+ * continuity, and a larger position does not mean newer content, so a consumer that needs the
+ * newest output must compare `seq`. There is no default: a snapshot that omits it, moves one
+ * message's place, or gives two messages one place is refused rather than ordered by guesswork.
  *
  * `tools` names the tools one message requested, in the order it requested them. The backend
  * sends it only when the message requested something, so an older snapshot or an ordinary
@@ -41,6 +56,7 @@ data class RemoteChatAttachment(
 @Serializable
 data class RemoteChatMessage(
     val messageId: String,
+    val position: Long,
     val seq: Long,
     val requestId: String? = null,
     val role: Int,
@@ -48,7 +64,18 @@ data class RemoteChatMessage(
     val text: String,
     val attachments: List<RemoteChatAttachment> = emptyList(),
     val tools: List<String> = emptyList(),
+    /** Derived rows only: 1 skill activation; 2 is reserved for the skill review row. */
+    val kind: Int? = null,
+    /** The tool call a derived row was paired with; ordinary messages carry none. */
+    val toolCallId: String? = null,
 )
+
+/**
+ * The newest Fairy output by seq, or null. Position orders the transcript, so the newest output is
+ * not necessarily its last row. `throughSeq` bounds the answer to what the caller has accepted.
+ */
+internal fun List<RemoteChatMessage>.newestFairyOutput(throughSeq: Long = Long.MAX_VALUE): RemoteChatMessage? =
+    filter { it.role == 2 && it.seq <= throughSeq }.maxByOrNull { it.seq }
 
 /**
  * Cumulative raw text; attempt identity is scoped to the projection generation. `tools` names the
@@ -281,10 +308,16 @@ class RemoteChatApi(
 
             response.use {
                 val text = it.body.string()
-                val envelope = runCatching { json.decodeFromString<ChatEnvelope>(text) }.getOrNull()
-                    ?: throw IdentityUnreachable(
-                        IllegalStateException("the backend answered ${it.code} with an unreadable document"),
-                    )
+                // A decode failure keeps the response status and its own cause:
+                // an older backend that omits a required field is a protocol
+                // mismatch, and the serializer's message names the field.
+                val envelope = try {
+                    json.decodeFromString<ChatEnvelope>(text)
+                } catch (unreadable: Exception) {
+                    throw IdentityUnreachable(IllegalStateException(
+                        "the backend answered ${it.code} with an unreadable document", unreadable,
+                    ))
+                }
                 // A `200`-shaped body does not make a failed status a success:
                 // the body's claim and the transport's verdict must agree before
                 // an answer is adopted, exactly as SessionApi requires.

@@ -37,6 +37,7 @@ function freshHome() {
 /** The product rows this ticket gives a config contract, and the service each mounts. */
 const PRODUCT_ROWS = {
   identity: { name: '@ourfairy/dsh-identity', service: 'identity' },
+  sessions: { name: '@ourfairy/dsh-sessions', service: 'ourfairySessions' },
   spaces: { name: '@ourfairy/dsh-spaces', service: 'ourfairySpaces' },
   attachments: { name: '@ourfairy/dsh-attachments', service: 'ourfairyAttachments' },
 }
@@ -97,6 +98,7 @@ const INVALID_CONFIGS = [
     why: 'sessionTtlDays exceeds Number.MAX_SAFE_INTEGER',
   },
   { row: 'attachments', config: {}, field: '$.root', why: 'root is missing' },
+  { row: 'sessions', config: {}, field: '$.path', why: 'the archive database path is missing' },
 ]
 
 for (const scenario of INVALID_CONFIGS) {

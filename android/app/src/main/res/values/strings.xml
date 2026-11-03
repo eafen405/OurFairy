@@ -3,9 +3,7 @@
     <string name="app_name">OurFairy</string>
     <string name="back">Back</string>
     <string name="chat_page_save">Save</string>
-    <string name="code_block_collapse">Collapse</string>
     <string name="code_block_copy">Copy Code</string>
-    <string name="code_block_expand">Expand</string>
     <string name="code_block_preview">Preview</string>
     <string name="menu">Menu</string>
     <string name="fairy_nameplate">Fairy</string>

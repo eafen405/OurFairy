@@ -12,10 +12,14 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.junit.Assert.*
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoteAttachmentStateTest {
+    @get:Rule
+    val temporaryFolder = TemporaryFolder()
     private class Store : ChatSyncStore {
         val records = mutableMapOf<ChatSyncKey, ChatSyncRecord>()
         var fail = false
@@ -54,6 +58,7 @@ class RemoteAttachmentStateTest {
         val originals = mutableListOf<ByteArray>()
         val downloads = mutableListOf<DownloadCall>()
         var delivered = "original".toByteArray()
+        var downloadFailure: Exception? = null
         override suspend fun upload(token:String,sessionId:String,file:File,name:String,mime:String):RemoteAttachmentUpload {
             originals += file.readBytes()
             uploadGate?.let { withContext(NonCancellable) { it.await() } }
@@ -62,6 +67,7 @@ class RemoteAttachmentStateTest {
         override suspend fun download(token:String,sessionId:String,messageId:String,attachment:RemoteChatAttachment,destination:File) {
             downloads += DownloadCall(token,sessionId,messageId,attachment)
             downloadGate?.let { withContext(NonCancellable) { it.await() } }
+            downloadFailure?.let { throw it }
             destination.writeBytes(delivered)
         }
     }
@@ -76,8 +82,11 @@ class RemoteAttachmentStateTest {
         val file = original()
         state.addAttachment(state.snapshot.value.attachmentEpoch,file,"note.txt","text/plain"); runCurrent()
         assertArrayEquals("exact original\n".toByteArray(),files.originals.single())
-        assertTrue(state.send("")); runCurrent()
+        val accepted = state.send("")
+        assertNotNull(accepted)
+        runCurrent()
         val unknown = state.snapshot.value.pending!!
+        assertEquals("returned requestId is the pending command's own key", accepted, unknown.requestId)
         assertEquals(listOf("a".repeat(32)),unknown.uploadIds)
         assertTrue(unknown.acceptanceUnknown)
         val serialized = Json.encodeToString(store.load(ChatSyncKey("https://fairy", 1, "s1")))
@@ -102,7 +111,7 @@ class RemoteAttachmentStateTest {
         state.bind("alice","s1",1); runCurrent()
         state.addAttachment(state.snapshot.value.attachmentEpoch,original(),"note.txt","text/plain"); runCurrent()
         store.fail = true
-        assertTrue(state.send("note")); runCurrent()
+        assertNotNull(state.send("note")); runCurrent()
         assertTrue(chat.sent.isEmpty())
         assertEquals(listOf("a".repeat(32)),state.snapshot.value.pending?.uploadIds)
     }
@@ -161,7 +170,7 @@ class RemoteAttachmentStateTest {
         state.bind("bob","s1",2); runCurrent()
         chat.events.emit(RemoteChatProjection(
             sessionId="s1", generation="g1", version=1, cursor=0, durableThroughSeq=0,
-            messages=listOf(RemoteChatMessage("m1",0,null,2,2,"原件在这里",listOf(attachment))),
+            messages=listOf(RemoteChatMessage("m1",0,0,null,2,2,"原件在这里",listOf(attachment))),
             attempt=RemoteChatAttempt("a1",1,"正在回复"), replyStatus=1,
             throughSeq=0, fromSeq=0, events=listOf(remoteEvent(0)),
         )); runCurrent()
@@ -193,5 +202,125 @@ class RemoteAttachmentStateTest {
         assertTrue(chat.sent.isEmpty())
         assertTrue(files.originals.isEmpty())
         assertNull(state.snapshot.value.pending)
+    }
+
+    @Test fun `preview download keeps one cached file for the viewer to read and save`() = runTest {
+        val bytes = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)
+        val files = Files().apply { delivered = bytes }
+        val state = RemoteChatState(Chat(),backgroundScope,Store(),"https://fairy",attachmentsBackend=files)
+        state.bind("alice","s1",1); runCurrent()
+        val attachment = RemoteChatAttachment(0,1,"cat.png","image/png",4)
+        val destination = File(temporaryFolder.root, "preview")
+        var ready: File? = null
+
+        state.cacheAttachment(state.snapshot.value.attachmentEpoch,"m1",attachment,destination) { ready = it }
+        runCurrent()
+
+        assertEquals(destination,ready)
+        assertArrayEquals(bytes,destination.readBytes())
+        assertTrue("预览期间缓存文件必须仍在",destination.exists())
+        assertEquals(1,files.downloads.size)
+        assertEquals("alice",files.downloads.single().token)
+        assertEquals("s1",files.downloads.single().sessionId)
+        assertEquals("m1",files.downloads.single().messageId)
+        assertEquals(attachment,files.downloads.single().attachment)
+        assertFalse(state.snapshot.value.downloading)
+    }
+
+    @Test fun `reopening a cached attachment reuses its bytes without downloading again`() = runTest {
+        val files = Files().apply { delivered = byteArrayOf(1,2,3) }
+        val state = RemoteChatState(Chat(),backgroundScope,Store(),"https://fairy",attachmentsBackend=files)
+        state.bind("alice","s1",1); runCurrent()
+        val attachment = RemoteChatAttachment(2,1,"cat.png","image/png",3)
+        val destination = File(temporaryFolder.root, "preview")
+
+        state.cacheAttachment(state.snapshot.value.attachmentEpoch,"m1",attachment,destination) {}
+        runCurrent()
+        var reopened: File? = null
+        state.cacheAttachment(state.snapshot.value.attachmentEpoch,"m1",attachment,destination) { reopened = it }
+        runCurrent()
+
+        assertEquals(destination,reopened)
+        assertArrayEquals(byteArrayOf(1,2,3),destination.readBytes())
+        assertEquals("同一附件只应下载一次",1,files.downloads.size)
+    }
+
+    @Test fun `a preview download finishing after a session switch leaves no cached file`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val files = Files().apply { downloadGate = gate }
+        val state = RemoteChatState(Chat(),backgroundScope,Store(),"https://fairy",attachmentsBackend=files)
+        state.bind("alice","s1",1); runCurrent()
+        val destination = File(temporaryFolder.root, "preview")
+        val part = File(destination.parentFile, destination.name + ".part")
+        var ready: File? = null
+
+        state.cacheAttachment(state.snapshot.value.attachmentEpoch,"m1",RemoteChatAttachment(0,1,"cat.png","image/png",3),destination) { ready = it }
+        runCurrent()
+        assertTrue("下载中应标记",state.snapshot.value.downloading)
+        state.bind("alice","s2",1); runCurrent()
+        gate.complete(Unit); runCurrent()
+
+        assertNull(ready)
+        assertFalse(destination.exists())
+        assertFalse(part.exists())
+        assertFalse(state.snapshot.value.downloading)
+    }
+
+    @Test fun `a failed preview download reports the failure and leaves no cached file`() = runTest {
+        val files = Files().apply { downloadFailure = IOException("network lost") }
+        val state = RemoteChatState(Chat(),backgroundScope,Store(),"https://fairy",attachmentsBackend=files)
+        state.bind("alice","s1",1); runCurrent()
+        val destination = File(temporaryFolder.root, "preview")
+        var ready: File? = null
+
+        state.cacheAttachment(state.snapshot.value.attachmentEpoch,"m1",RemoteChatAttachment(0,1,"cat.png","image/png",3),destination) { ready = it }
+        runCurrent()
+
+        assertNull(ready)
+        assertFalse(destination.exists())
+        assertTrue(state.snapshot.value.attachmentNotice!!.isNotBlank())
+        assertFalse(state.snapshot.value.downloading)
+    }
+
+    @Test fun `saving the cached attachment reports the shared saved notice`() = runTest {
+        val state = RemoteChatState(Chat(),backgroundScope,Store(),"https://fairy",attachmentsBackend=Files())
+        state.bind("alice","s1",1); runCurrent()
+        val cached = File.createTempFile("cached", ".pdf").apply { writeText("exact cache") }
+        var saved: File? = null
+
+        state.saveCachedAttachment(state.snapshot.value.attachmentEpoch,cached) { saved = it }
+
+        assertEquals(cached,saved)
+        assertEquals("原件已保存",state.snapshot.value.attachmentNotice)
+        cached.delete()
+    }
+
+    @Test fun `a failed cached save reports the same description formatter and keeps the file`() = runTest {
+        val state = RemoteChatState(Chat(),backgroundScope,Store(),"https://fairy",attachmentsBackend=Files())
+        state.bind("alice","s1",1); runCurrent()
+        val cached = File.createTempFile("cached", ".pdf").apply { writeText("exact cache") }
+
+        state.saveCachedAttachment(state.snapshot.value.attachmentEpoch,cached) {
+            throw IOException("所选位置无法写入")
+        }
+
+        assertEquals("所选位置无法写入",state.snapshot.value.attachmentNotice)
+        assertTrue(cached.isFile)
+        cached.delete()
+    }
+
+    @Test fun `a cached save captured under an older epoch neither runs nor reports`() = runTest {
+        val state = RemoteChatState(Chat(),backgroundScope,Store(),"https://fairy",attachmentsBackend=Files())
+        state.bind("alice","s1",1); runCurrent()
+        val oldEpoch = state.snapshot.value.attachmentEpoch
+        val cached = File.createTempFile("cached", ".pdf").apply { writeText("exact cache") }
+        state.bind("alice","s2",1); runCurrent()
+        var saved = false
+
+        state.saveCachedAttachment(oldEpoch,cached) { saved = true }
+
+        assertFalse(saved)
+        assertNull(state.snapshot.value.attachmentNotice)
+        cached.delete()
     }
 }

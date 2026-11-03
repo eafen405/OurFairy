@@ -429,7 +429,18 @@ export class IdentityStore {
     const hasMeta = this.#db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get() !== undefined
     if (!hasMeta) return undefined
     const row = rowOf<{ value: string }>(this.#db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version'))
-    return row === undefined ? undefined : Number(row.value)
+    if (row === undefined) return undefined
+    // An unreadable version is a refusal, not an old file. `Number('x')` is
+    // `NaN`, which fails every comparison in `#migrate` and would fall through
+    // to "rewrite the current shape" — silently accepting a corrupt file and
+    // restamping it. The memory store and the session archive refuse the same
+    // shape; this store must too.
+    const version = Number(row.value)
+    if (!Number.isSafeInteger(version)) {
+      throw new IdentityError(500, 'identity/schema-too-new',
+        `this identity store cannot read the file's schema version ${JSON.stringify(row.value)}`)
+    }
+    return version
   }
 
   #setVersion(): void {

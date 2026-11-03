@@ -1,5 +1,5 @@
 {
-  "note": "Captured from the folds deleted in #90 over the real product log. Native message ids and session ids are generated per run, so rows are frozen without messageId; seq, requestId, role, status, text and attachments are the frozen values.",
+  "note": "Captured from the folds deleted in #90 over the real product log. Native message ids and session ids are generated per run, so rows are frozen without messageId; seq, requestId, role, status, text and attachments are the frozen values. #296 shifted every seq at or after the first catalog publication by one: the first pre-step now writes the native skill catalog into the log. The inserted user/message is not a transcript row, so only seq values, cut keys and work positions moved.",
   "transcript": [
     {
       "seq": 7,
@@ -10,7 +10,7 @@
       "attachments": []
     },
     {
-      "seq": 11,
+      "seq": 15,
       "requestId": null,
       "role": 2,
       "status": 2,
@@ -21,7 +21,7 @@
       ]
     },
     {
-      "seq": 17,
+      "seq": 21,
       "requestId": null,
       "role": 2,
       "status": 2,
@@ -29,7 +29,7 @@
       "attachments": []
     },
     {
-      "seq": 24,
+      "seq": 28,
       "requestId": "real-plain",
       "role": 1,
       "status": 2,
@@ -37,14 +37,14 @@
       "attachments": []
     },
     {
-      "seq": 25,
+      "seq": 29,
       "requestId": null,
       "role": 2,
       "status": 4,
       "text": "失败前原文\n**不能丢**。"
     },
     {
-      "seq": 28,
+      "seq": 32,
       "requestId": null,
       "role": 2,
       "status": 2,
@@ -52,7 +52,7 @@
       "attachments": []
     },
     {
-      "seq": 35,
+      "seq": 39,
       "requestId": "real-failed",
       "role": 1,
       "status": 2,
@@ -60,7 +60,7 @@
       "attachments": []
     },
     {
-      "seq": 36,
+      "seq": 40,
       "requestId": null,
       "role": 2,
       "status": 2,
@@ -73,14 +73,14 @@
     "activity": {
       "status": 1,
       "reasons": [],
-      "episodeId": "ourfairy-user-2-primary/31",
-      "startedSeq": 31,
-      "throughSeq": 38,
+      "episodeId": "ourfairy-user-2-primary/35",
+      "startedSeq": 35,
+      "throughSeq": 42,
       "completed": {
-        "episodeId": "ourfairy-user-2-primary/31",
-        "startedSeq": 31,
-        "outputSeq": 36,
-        "finishedSeq": 38
+        "episodeId": "ourfairy-user-2-primary/35",
+        "startedSeq": 35,
+        "outputSeq": 40,
+        "finishedSeq": 42
       }
     }
   },
@@ -105,7 +105,7 @@
         "attachments": []
       }
     ],
-    "11": [
+    "15": [
       {
         "seq": 7,
         "requestId": "real-tool",
@@ -115,7 +115,7 @@
         "attachments": []
       },
       {
-        "seq": 11,
+        "seq": 15,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -126,7 +126,7 @@
         ]
       }
     ],
-    "17": [
+    "21": [
       {
         "seq": 7,
         "requestId": "real-tool",
@@ -136,7 +136,7 @@
         "attachments": []
       },
       {
-        "seq": 11,
+        "seq": 15,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -147,7 +147,7 @@
         ]
       },
       {
-        "seq": 17,
+        "seq": 21,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -155,7 +155,7 @@
         "attachments": []
       }
     ],
-    "19": [
+    "23": [
       {
         "seq": 7,
         "requestId": "real-tool",
@@ -165,7 +165,7 @@
         "attachments": []
       },
       {
-        "seq": 11,
+        "seq": 15,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -176,93 +176,12 @@
         ]
       },
       {
-        "seq": 17,
+        "seq": 21,
         "requestId": null,
         "role": 2,
         "status": 2,
         "text": "工具之后回复。",
         "attachments": []
-      }
-    ],
-    "24": [
-      {
-        "seq": 7,
-        "requestId": "real-tool",
-        "role": 1,
-        "status": 2,
-        "text": "请先更新待办再回答。",
-        "attachments": []
-      },
-      {
-        "seq": 11,
-        "requestId": null,
-        "role": 2,
-        "status": 2,
-        "text": "",
-        "attachments": [],
-        "tools": [
-          "todo_write"
-        ]
-      },
-      {
-        "seq": 17,
-        "requestId": null,
-        "role": 2,
-        "status": 2,
-        "text": "工具之后回复。",
-        "attachments": []
-      },
-      {
-        "seq": 24,
-        "requestId": "real-plain",
-        "role": 1,
-        "status": 2,
-        "text": "再说一次。",
-        "attachments": []
-      }
-    ],
-    "25": [
-      {
-        "seq": 7,
-        "requestId": "real-tool",
-        "role": 1,
-        "status": 2,
-        "text": "请先更新待办再回答。",
-        "attachments": []
-      },
-      {
-        "seq": 11,
-        "requestId": null,
-        "role": 2,
-        "status": 2,
-        "text": "",
-        "attachments": [],
-        "tools": [
-          "todo_write"
-        ]
-      },
-      {
-        "seq": 17,
-        "requestId": null,
-        "role": 2,
-        "status": 2,
-        "text": "工具之后回复。",
-        "attachments": []
-      },
-      {
-        "seq": 24,
-        "requestId": "real-plain",
-        "role": 1,
-        "status": 2,
-        "text": "再说一次。",
-        "attachments": []
-      },
-      {
-        "seq": 25,
-        "requestId": null,
-        "role": 2,
-        "status": 4,
-        "text": "失败前原文\n**不能丢**。"
       }
     ],
     "28": [
@@ -275,7 +194,7 @@
         "attachments": []
       },
       {
-        "seq": 11,
+        "seq": 15,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -286,7 +205,7 @@
         ]
       },
       {
-        "seq": 17,
+        "seq": 21,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -294,30 +213,15 @@
         "attachments": []
       },
       {
-        "seq": 24,
+        "seq": 28,
         "requestId": "real-plain",
         "role": 1,
         "status": 2,
         "text": "再说一次。",
         "attachments": []
-      },
-      {
-        "seq": 25,
-        "requestId": null,
-        "role": 2,
-        "status": 4,
-        "text": "失败前原文\n**不能丢**。"
-      },
-      {
-        "seq": 28,
-        "requestId": null,
-        "role": 2,
-        "status": 2,
-        "text": "工具之后回复。",
-        "attachments": []
       }
     ],
-    "30": [
+    "29": [
       {
         "seq": 7,
         "requestId": "real-tool",
@@ -327,7 +231,7 @@
         "attachments": []
       },
       {
-        "seq": 11,
+        "seq": 15,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -338,7 +242,7 @@
         ]
       },
       {
-        "seq": 17,
+        "seq": 21,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -346,7 +250,7 @@
         "attachments": []
       },
       {
-        "seq": 24,
+        "seq": 28,
         "requestId": "real-plain",
         "role": 1,
         "status": 2,
@@ -354,22 +258,14 @@
         "attachments": []
       },
       {
-        "seq": 25,
+        "seq": 29,
         "requestId": null,
         "role": 2,
         "status": 4,
         "text": "失败前原文\n**不能丢**。"
-      },
-      {
-        "seq": 28,
-        "requestId": null,
-        "role": 2,
-        "status": 2,
-        "text": "工具之后回复。",
-        "attachments": []
       }
     ],
-    "35": [
+    "32": [
       {
         "seq": 7,
         "requestId": "real-tool",
@@ -379,7 +275,7 @@
         "attachments": []
       },
       {
-        "seq": 11,
+        "seq": 15,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -390,7 +286,7 @@
         ]
       },
       {
-        "seq": 17,
+        "seq": 21,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -398,7 +294,7 @@
         "attachments": []
       },
       {
-        "seq": 24,
+        "seq": 28,
         "requestId": "real-plain",
         "role": 1,
         "status": 2,
@@ -406,14 +302,43 @@
         "attachments": []
       },
       {
-        "seq": 25,
+        "seq": 29,
         "requestId": null,
         "role": 2,
         "status": 4,
         "text": "失败前原文\n**不能丢**。"
       },
       {
-        "seq": 28,
+        "seq": 32,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      }
+    ],
+    "34": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 15,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
+      },
+      {
+        "seq": 21,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -421,7 +346,82 @@
         "attachments": []
       },
       {
-        "seq": 35,
+        "seq": 28,
+        "requestId": "real-plain",
+        "role": 1,
+        "status": 2,
+        "text": "再说一次。",
+        "attachments": []
+      },
+      {
+        "seq": 29,
+        "requestId": null,
+        "role": 2,
+        "status": 4,
+        "text": "失败前原文\n**不能丢**。"
+      },
+      {
+        "seq": 32,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      }
+    ],
+    "39": [
+      {
+        "seq": 7,
+        "requestId": "real-tool",
+        "role": 1,
+        "status": 2,
+        "text": "请先更新待办再回答。",
+        "attachments": []
+      },
+      {
+        "seq": 15,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "",
+        "attachments": [],
+        "tools": [
+          "todo_write"
+        ]
+      },
+      {
+        "seq": 21,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 28,
+        "requestId": "real-plain",
+        "role": 1,
+        "status": 2,
+        "text": "再说一次。",
+        "attachments": []
+      },
+      {
+        "seq": 29,
+        "requestId": null,
+        "role": 2,
+        "status": 4,
+        "text": "失败前原文\n**不能丢**。"
+      },
+      {
+        "seq": 32,
+        "requestId": null,
+        "role": 2,
+        "status": 2,
+        "text": "工具之后回复。",
+        "attachments": []
+      },
+      {
+        "seq": 39,
         "requestId": "real-failed",
         "role": 1,
         "status": 2,
@@ -429,7 +429,7 @@
         "attachments": []
       }
     ],
-    "36": [
+    "40": [
       {
         "seq": 7,
         "requestId": "real-tool",
@@ -439,7 +439,7 @@
         "attachments": []
       },
       {
-        "seq": 11,
+        "seq": 15,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -450,7 +450,7 @@
         ]
       },
       {
-        "seq": 17,
+        "seq": 21,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -458,7 +458,7 @@
         "attachments": []
       },
       {
-        "seq": 24,
+        "seq": 28,
         "requestId": "real-plain",
         "role": 1,
         "status": 2,
@@ -466,14 +466,14 @@
         "attachments": []
       },
       {
-        "seq": 25,
+        "seq": 29,
         "requestId": null,
         "role": 2,
         "status": 4,
         "text": "失败前原文\n**不能丢**。"
       },
       {
-        "seq": 28,
+        "seq": 32,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -481,7 +481,7 @@
         "attachments": []
       },
       {
-        "seq": 35,
+        "seq": 39,
         "requestId": "real-failed",
         "role": 1,
         "status": 2,
@@ -489,7 +489,7 @@
         "attachments": []
       },
       {
-        "seq": 36,
+        "seq": 40,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -497,7 +497,7 @@
         "attachments": []
       }
     ],
-    "38": [
+    "42": [
       {
         "seq": 7,
         "requestId": "real-tool",
@@ -507,7 +507,7 @@
         "attachments": []
       },
       {
-        "seq": 11,
+        "seq": 15,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -518,7 +518,7 @@
         ]
       },
       {
-        "seq": 17,
+        "seq": 21,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -526,7 +526,7 @@
         "attachments": []
       },
       {
-        "seq": 24,
+        "seq": 28,
         "requestId": "real-plain",
         "role": 1,
         "status": 2,
@@ -534,14 +534,14 @@
         "attachments": []
       },
       {
-        "seq": 25,
+        "seq": 29,
         "requestId": null,
         "role": 2,
         "status": 4,
         "text": "失败前原文\n**不能丢**。"
       },
       {
-        "seq": 28,
+        "seq": 32,
         "requestId": null,
         "role": 2,
         "status": 2,
@@ -549,7 +549,7 @@
         "attachments": []
       },
       {
-        "seq": 35,
+        "seq": 39,
         "requestId": "real-failed",
         "role": 1,
         "status": 2,
@@ -557,7 +557,7 @@
         "attachments": []
       },
       {
-        "seq": 36,
+        "seq": 40,
         "requestId": null,
         "role": 2,
         "status": 2,

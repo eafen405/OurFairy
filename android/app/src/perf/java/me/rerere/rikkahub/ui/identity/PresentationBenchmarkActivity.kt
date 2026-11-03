@@ -119,7 +119,7 @@ class PresentationBenchmarkActivity : ComponentActivity() {
                     stateNanos.clear()
                     frameLatencyNanos.clear()
                     observed = 0
-                    startHeap = usedHeap()
+                    startHeap = usedHeapBytes()
                     windowOpen.complete(Unit)
                     state.bind("perf-token", backend.sessionId, 1)
                 }
@@ -147,15 +147,11 @@ class PresentationBenchmarkActivity : ComponentActivity() {
                         Text(summary, style = MaterialTheme.typography.bodySmall)
                         RemoteTranscript(
                             messages = snapshot.projection?.messages.orEmpty(),
-                            attemptText = snapshot.projection?.attempt?.text,
-                            attemptKey = snapshot.projection?.let { it.generation to it.attempt?.attemptId },
+                            generation = snapshot.projection?.generation.orEmpty(),
+                            attempt = snapshot.projection?.attempt,
+                            settledAttempt = snapshot.projection?.settledAttempt,
                             downloadEnabled = false,
                             onDownload = { _, _ -> },
-                            settledAttempt = snapshot.projection?.let { projection ->
-                                projection.settledAttempt?.let {
-                                    attemptRowKey(projection.generation, it.attemptId) to it.seq
-                                }
-                            },
                             onFinalPresented = {
                                 if (!terminalPresented.isCompleted && backend.terminalEmitNanos > 0) {
                                     terminalRichMs =
@@ -199,22 +195,22 @@ class PresentationBenchmarkActivity : ComponentActivity() {
             put("unappliedAtEnd", if (newestApplied) 0 else 1)
             put("terminalPresented", if (workload.replyChars > 0) terminalRichMs >= 0 else null)
             put("terminalRichPresentedMs", if (workload.replyChars > 0) terminalRichMs else null)
-            put("receiveToStateP50Ms", percentile(stateNanos, 0.50))
-            put("receiveToStateP95Ms", percentile(stateNanos, 0.95))
-            put("receiveToFrameP50Ms", percentile(frameLatencyNanos, 0.50))
-            put("receiveToFrameP95Ms", percentile(frameLatencyNanos, 0.95))
-            put("frameP95Ms", percentile(frameNanos, 0.95))
+            put("receiveToStateP50Ms", percentileMillis(stateNanos, 0.50))
+            put("receiveToStateP95Ms", percentileMillis(stateNanos, 0.95))
+            put("receiveToFrameP50Ms", percentileMillis(frameLatencyNanos, 0.50))
+            put("receiveToFrameP95Ms", percentileMillis(frameLatencyNanos, 0.95))
+            put("frameP95Ms", percentileMillis(frameNanos, 0.95))
             put("frameCount", frameNanos.size)
             put("overRefreshBudgetRatio", frameNanos.count { it > refreshBudget }.toDouble() / frameNanos.size.coerceAtLeast(1))
             put("consumedThrough", snapshot.consumedThrough)
             put("initialized", snapshot.initialized)
             put("failure", snapshot.failure)
             put("heapStartBytes", startHeap)
-            put("heapEndBytes", usedHeap())
+            put("heapEndBytes", usedHeapBytes())
         }
         // One file per run: a later run of the same scenario must never be mistaken for this one,
         // and a reader on the device does not have to parse the log ring.
-        val name = if (runId == null) "presentation-$scenario.json" else "presentation-$scenario-$runId.json"
+        val name = resultFileName(scenario, runId)
         val file = java.io.File(filesDir, name)
         file.writeText(result.toString(2))
         Log.i(LOG_TAG, result.toString())
@@ -227,10 +223,6 @@ class PresentationBenchmarkActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private fun usedHeap(): Long = Runtime.getRuntime().let { it.totalMemory() - it.freeMemory() }
-
-    private fun percentile(values: List<Long>, quantile: Double): Double =
-        if (values.isEmpty()) 0.0 else values.sorted()[((values.size - 1) * quantile).toInt()] / 1_000_000.0
 
     private companion object {
         const val LOG_TAG = "OurFairyPresentation"

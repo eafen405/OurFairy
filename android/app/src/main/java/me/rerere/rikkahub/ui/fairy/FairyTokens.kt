@@ -10,37 +10,38 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Fixed Fairy dark tokens that sit outside the Material3
- * [androidx.compose.material3.ColorScheme] slots. Provided by [AgoraTheme] via
+ * [androidx.compose.material3.ColorScheme] slots. Provided by [FairyAppTheme] via
  * [LocalFairyTokens]; components read from here instead of hard-coding values.
  *
- * Blue marks only Fairy's identity and working state; generic interaction
- * uses the ice-white [primary].
+ * Fairy animation keeps its electric-blue identity. Instrument signal cyan is
+ * separate and only marks primary actions, focus and live status.
  */
 @Immutable
 data class FairyTokens(
     /** Page vertical gradient: top and bottom stops. */
-    val bgTop: Color = Color(0xFF0B1733),
-    val bgBottom: Color = Color(0xFF04070F),
-    /** Page scanlines: 1 px lines on a 3 dp period. */
-    val scanline: Color = Color.White.copy(alpha = 0.025f),
-    /** Fairy window screen: radial center and edge. */
+    val bgTop: Color = Color(0xFF08111F),
+    val bgBottom: Color = Color(0xFF030711),
+    /** Cached page texture: a 3% 24 dp grid with quieter 1 px scanlines. */
+    val grid: Color = Color(0xFF72D7FF).copy(alpha = 0.03f),
+    val scanline: Color = Color.White.copy(alpha = 0.012f),
+    /** Fairy window screen keeps the character's original deep-blue material. */
     val screenCenter: Color = Color(0xFF0D2257),
     val screenEdge: Color = Color(0xFF050B1F),
     /** Window bar, composer, dialogs, sheets, menus. */
-    val panel: Color = Color(0xFF0E1A36).copy(alpha = 0.92f),
-    /** Console plate fill: lit at the top, falling into [panelBottom]. */
-    val panelTop: Color = Color(0xFF1B2F5E),
-    val panelBottom: Color = Color(0xFF0C1730),
+    val panel: Color = Color(0xFF0A1426).copy(alpha = 0.96f),
+    /** Instrument glass: a restrained top light over a dark lower plate. */
+    val panelTop: Color = Color(0xFF142238),
+    val panelBottom: Color = Color(0xFF091321),
     /** File cards, quick prompts, list items, secondary capsules. */
-    val pill: Color = Color(0xFF16244A),
-    /** 1 dp panel outline, window bar bottom edge, dividers. */
-    val hairline: Color = Color.White.copy(alpha = 0.08f),
-    /** Fairy identity: emblem ring, resting accent bar, relay badge. */
+    val pill: Color = Color(0xFF101C2E),
+    /** 1 dp inner panel outline, window bar bottom edge, dividers. */
+    val hairline: Color = Color.White.copy(alpha = 0.10f),
+    /** Fairy identity remains electric blue across eyes, emblem and animation. */
     val fairyBlue: Color = Color(0xFF1F55E0),
-    /** Fairy working state: glow peak, active accent bar, thinking dots. */
     val fairyGlow: Color = Color(0xFF3D8BFF),
-    /** Links in Fairy's text, activity hint text. */
     val fairyLink: Color = Color(0xFF8FB8FF),
+    /** Instrument focus, primary action and live status; never drives Fairy animation. */
+    val signal: Color = Color(0xFF72D7FF),
     /** Send key, primary buttons, switches, generic progress. */
     val primary: Color = Color(0xFFEAF0FF),
     val onPrimary: Color = Color(0xFF0A1633),
@@ -54,25 +55,30 @@ data class FairyTokens(
     /** Errors and the stop key. */
     val danger: Color = Color(0xFFFF5A4E),
     val onDanger: Color = Color.White,
-    val textPrimary: Color = Color(0xFFEAF0FF),
-    val textMuted: Color = Color(0xFF8C9AB8),
-    val panelShape: Shape = RoundedCornerShape(20.dp),
-    val screenShape: Shape = RoundedCornerShape(14.dp),
-    /** Console readout plate: chamfered, so it needs no corner brackets. */
-    val consoleShape: Shape = FairyChamferShape(cut = 16.dp),
+    val textPrimary: Color = Color(0xFFEAF3FF),
+    val textMuted: Color = Color(0xFFA9B8D8),
+    val panelShape: Shape = RoundedCornerShape(6.dp),
+    val controlShape: Shape = RoundedCornerShape(4.dp),
+    val screenShape: Shape = RoundedCornerShape(6.dp),
+    /** Primary instrument plates use machined corners without extra brackets. */
+    val consoleShape: Shape = FairyChamferShape(cut = 10.dp),
     val userBubbleShape: Shape = RoundedCornerShape(
-        topStart = 18.dp,
-        topEnd = 6.dp,
-        bottomEnd = 18.dp,
-        bottomStart = 18.dp,
+        topStart = 6.dp,
+        topEnd = 2.dp,
+        bottomEnd = 6.dp,
+        bottomStart = 6.dp,
     ),
-    /** MiSans Heavy subset: titles, nameplates, buttons. */
-    val titleFontFamily: FontFamily = TitleFamily,
-    /** Outfit 900: small latin labels, HUD words and numbers. */
+    /** Industrial display face for page and section titles. */
+    val titleFontFamily: FontFamily = DisplayFamily,
+    /** MiSans for Chinese functions and controls. */
+    val functionFontFamily: FontFamily = TitleFamily,
+    /** Outfit for the H.D.D wordmark. */
     val labelFontFamily: FontFamily = LabelFamily,
+    /** JetBrains Mono for telemetry, identifiers and short status readouts. */
+    val telemetryFontFamily: FontFamily = TelemetryFamily,
 ) {
-    /** Top-centered radial ambient light on the page. */
-    val ambientGlow: Color get() = fairyGlow.copy(alpha = 0.16f)
+    /** A faint top-centered ambient light, not a glow on every surface. */
+    val ambientGlow: Color get() = fairyGlow.copy(alpha = 0.055f)
 
     /** Opaque panel for surfaces that must not show content through. */
     val panelOpaque: Color get() = bgTop

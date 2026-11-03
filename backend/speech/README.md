@@ -25,3 +25,11 @@ budget.
 `OURFAIRY_ASR_MAX_GLOBAL_IN_FLIGHT` and `OURFAIRY_ASR_MAX_USER_IN_FLIGHT`.
 Disconnecting the exchange aborts its cloud request and releases its
 concurrent-request budget.
+
+The row's vocabulary and legality rules live in one dependency-free module,
+`src/policy.ts` (exported as `@ourfairy/dsh-speech/policy`): the eight field
+names, the five limit fields, the default credential reference, the endpoint and
+environment-name grammars, and the positive-integer rule. This row's `Config`,
+the per-request checks and the gateway's `/gateway/asr` view and save read it.
+The bundle seeds and the Config keys cannot import it; `tests/speech-policy.test.mjs`
+pins both to it.

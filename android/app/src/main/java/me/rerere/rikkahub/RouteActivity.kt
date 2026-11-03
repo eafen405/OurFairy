@@ -34,7 +34,6 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation3.runtime.NavKey
-import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
@@ -51,20 +50,22 @@ import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.data.datastore.DisplayPreferencesStore
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
 import me.rerere.rikkahub.data.remote.AccountSession
+import me.rerere.rikkahub.data.remote.GatewayBackend
+import me.rerere.rikkahub.data.remote.IdentityBackend
+import me.rerere.rikkahub.data.remote.ImpressionBackend
+import me.rerere.rikkahub.data.remote.SkillsBackend
+import me.rerere.rikkahub.ui.fairy.FairyInteraction
+import me.rerere.rikkahub.data.remote.RemoteReceiveState
 import me.rerere.rikkahub.service.AndroidRemoteNotifications
 import me.rerere.rikkahub.service.RemoteReceiveController
+import me.rerere.rikkahub.ui.destination.DestinationActions
+import me.rerere.rikkahub.ui.destination.DestinationPageScope
+import me.rerere.rikkahub.ui.destination.FairyDestinations
 import me.rerere.rikkahub.ui.fairy.FairyAppTheme
-import me.rerere.rikkahub.ui.fairy.FairyConsolePage
-import me.rerere.rikkahub.ui.fairy.FairyConversationPage
+import me.rerere.rikkahub.ui.fairy.FairyCrtPowerDown
 import me.rerere.rikkahub.ui.fairy.FairyLastLocation
-import me.rerere.rikkahub.ui.fairy.FairySettingsPage
-import me.rerere.rikkahub.ui.identity.GatewayPage
-import me.rerere.rikkahub.ui.identity.IdentityAccessPolicy
-import me.rerere.rikkahub.ui.identity.IdentityDestination
 import me.rerere.rikkahub.ui.identity.IdentityNotReadyPage
-import me.rerere.rikkahub.ui.identity.IdentityRegisterPage
 import me.rerere.rikkahub.ui.identity.IdentityScope
-import me.rerere.rikkahub.ui.identity.IdentitySignInPage
 import me.rerere.rikkahub.ui.identity.openRemoteNotification
 import me.rerere.rikkahub.ui.identity.restoreIdentitySession
 import okhttp3.OkHttpClient
@@ -75,6 +76,12 @@ class RouteActivity : ComponentActivity() {
     private val displayPreferences by inject<DisplayPreferencesStore>()
     private val remoteReceiveController by inject<RemoteReceiveController>()
     private val accountSession by inject<AccountSession>()
+    private val remoteReceiveState by inject<RemoteReceiveState>()
+    private val identityBackend by inject<IdentityBackend>()
+    private val gatewayBackend by inject<GatewayBackend>()
+    private val impressionBackend by inject<ImpressionBackend>()
+    private val skillsBackend by inject<SkillsBackend>()
+    private val fairy by inject<FairyInteraction>()
     private var navStack: MutableList<NavKey>? = null
     private var identityReady = false
     private val pendingIntents = ArrayDeque<Intent>()
@@ -107,7 +114,29 @@ class RouteActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    private fun handleIntent(intent: Intent) {
+    /**
+     * Route one delivered notification intent.
+     *
+     * `onNewIntent` only forwards to it, and the Activity-level test drives this
+     * directly: what a notification does when it arrives before the account has
+     * settled is only observable through this entry point.
+     */
+    internal fun handleIntent(intent: Intent) {
+        if (intent.action == AndroidRemoteNotifications.ACTION_OPEN_SKILLS) {
+            val backStack = navStack?.takeIf { identityReady } ?: run {
+                pendingIntents.addLast(intent)
+                return
+            }
+            val target = AndroidRemoteNotifications.skillsTarget(intent) ?: return
+            val identity = accountSession.identity.value ?: return
+            // The endpoint and account are the admission rule: a reminder for another deployment
+            // or another account must not open this device's skills page.
+            if (target.endpoint.trimEnd('/') != BuildConfig.IDENTITY_ENDPOINT.trimEnd('/')
+                || target.userShortId != identity.user.shortId) return
+            backStack.clear()
+            backStack.addAll(FairyDestinations.resumedStack(FairyDestinations.SKILLS_ROUTE, null))
+            return
+        }
         if (intent.action != AndroidRemoteNotifications.ACTION_OPEN_REMOTE) return
         val backStack = navStack?.takeIf { identityReady } ?: run {
             pendingIntents.addLast(intent)
@@ -116,9 +145,13 @@ class RouteActivity : ComponentActivity() {
         val target = AndroidRemoteNotifications.target(intent) ?: return
         lifecycleScope.launch {
             if (openRemoteNotification(target, BuildConfig.IDENTITY_ENDPOINT, accountSession, remoteReceiveController::openNotification)) {
+                // Endpoint, account and session ownership were settled above;
+                // the catalog answers where a conversation stands, and the gate
+                // below still decides whether its page may compose.
                 backStack.clear()
-                backStack.add(Screen.Home)
-                backStack.add(Screen.Conversation(target.sessionId))
+                backStack.addAll(
+                    FairyDestinations.resumedStack(FairyDestinations.CONVERSATION_ROUTE, target.sessionId),
+                )
             }
         }
     }
@@ -133,6 +166,9 @@ class RouteActivity : ComponentActivity() {
         val currentIdentity by session.identity.collectAsStateWithLifecycle()
         val user = currentIdentity?.user
         var identitySettled by remember { mutableStateOf(false) }
+        // Sign-in hands control here so the CRT collapse can play after the session
+        // is live but before the gate swaps the page out from under it.
+        var poweringDown by remember { mutableStateOf(false) }
         val identityScope = IdentityScope(signedIn = user != null, isAdmin = user?.isAdmin == true)
         val backStack = rememberNavBackStack(Screen.SignIn)
         val lastLocation = remember { FairyLastLocation(this@RouteActivity) }
@@ -155,101 +191,54 @@ class RouteActivity : ComponentActivity() {
         }
         CompositionLocalProvider(LocalDisplayPreferences provides preferences) {
             Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }.background(MaterialTheme.colorScheme.background)) {
-                val destination = (backStack.lastOrNull() as? Screen)?.toIdentityDestination()
                 when {
                     !identitySettled -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                    IdentityAccessPolicy.mayCompose(destination, identityScope) -> NavDisplay(
-                        backStack = backStack,
-                        entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator()),
-                        modifier = Modifier.fillMaxSize(),
-                        onBack = { backStack.removeLastOrNull() },
-                        transitionSpec = {
-                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
-                            else slideInHorizontally { it } togetherWith
-                                slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+                    poweringDown || FairyDestinations.mayCompose(backStack.lastOrNull() as? Screen, identityScope) -> FairyCrtPowerDown(
+                        active = poweringDown,
+                        onCollapsed = {
+                            backStack.clear()
+                            backStack.add(Screen.Home)
+                            poweringDown = false
                         },
-                        popTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith slideOutHorizontally { it }
-                        },
-                        predictivePopTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith slideOutHorizontally { it }
-                        },
-                        entryProvider = entryProvider {
-                            entry<Screen.SignIn> {
-                                IdentitySignInPage(
-                                    onSignedIn = {
-                                        backStack.clear()
-                                        backStack.add(Screen.Home)
-                                    },
-                                    onRegister = {
-                                        backStack.clear()
-                                        backStack.add(Screen.Register)
-                                    },
-                                )
-                            }
-
-                            entry<Screen.Register> {
-                                IdentityRegisterPage(
-                                    onRegistered = {
-                                        backStack.clear()
-                                        backStack.add(Screen.Home)
-                                    },
-                                    onBackToSignIn = {
-                                        backStack.clear()
-                                        backStack.add(Screen.SignIn)
-                                    },
-                                )
-                            }
-
-                            entry<Screen.Home> {
-                                FairyConsolePage(
-                                    onOpen = { backStack.add(it) },
-                                )
-                            }
-
-                            entry<Screen.Settings> {
-                                FairySettingsPage(
-                                    onOpenGateway = { backStack.add(Screen.Gateway) },
-                                    onSignedOut = {
-                                        backStack.clear()
-                                        backStack.add(Screen.SignIn)
-                                    },
-                                    onBack = { backStack.removeLastOrNull() },
-                                )
-                            }
-
-                            entry<Screen.Conversation> { key ->
-                                FairyConversationPage(
-                                    sessionId = key.sessionId,
-                                    onBack = {
-                                        backStack.clear()
-                                        backStack.add(Screen.Home)
-                                    },
-                                    onOpenConversation = { id -> backStack[backStack.lastIndex] = Screen.Conversation(id) },
-                                    onSettings = { backStack.add(Screen.Settings) },
-                                )
-                            }
-
-                            entry<Screen.Sessions> {
-                                FairyConversationPage(
-                                    sessionId = null,
-                                    onBack = {
-                                        backStack.clear()
-                                        backStack.add(Screen.Home)
-                                    },
-                                    onOpenConversation = { id -> backStack[backStack.lastIndex] = Screen.Conversation(id) },
-                                    onSettings = { backStack.add(Screen.Settings) },
-                                )
-                            }
-
-                            entry<Screen.Gateway> {
-                                GatewayPage(
-                                    onBack = { backStack.removeLastOrNull() },
-                                )
-                            }
-
-                        },
-                    )
+                    ) {
+                        val pageScope = DestinationPageScope(
+                            actions = DestinationActions(
+                                push = { backStack.add(it) },
+                                replace = { screen -> backStack[backStack.lastIndex] = screen },
+                                pop = { backStack.removeLastOrNull() },
+                                reset = { stack ->
+                                    backStack.clear()
+                                    backStack.addAll(stack)
+                                },
+                                identityCompleted = { poweringDown = true },
+                            ),
+                            session = session,
+                            receive = remoteReceiveState,
+                            identityBackend = identityBackend,
+                            gatewayBackend = gatewayBackend,
+                            impressionBackend = impressionBackend,
+                            skillsBackend = skillsBackend,
+                            fairy = fairy,
+                        )
+                        NavDisplay(
+                            backStack = backStack,
+                            entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator()),
+                            modifier = Modifier.fillMaxSize(),
+                            onBack = { backStack.removeLastOrNull() },
+                            transitionSpec = {
+                                if (backStack.size == 1) fadeIn() togetherWith fadeOut()
+                                else slideInHorizontally { it } togetherWith
+                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+                            },
+                            popTransitionSpec = {
+                                slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith slideOutHorizontally { it }
+                            },
+                            predictivePopTransitionSpec = {
+                                slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith slideOutHorizontally { it }
+                            },
+                            entryProvider = { key -> FairyDestinations.entryOf(key as Screen, pageScope) },
+                        )
+                    }
                     else -> IdentityNotReadyPage(identity = identityScope, onSignIn = {
                         backStack.clear()
                         backStack.add(Screen.SignIn)
@@ -260,21 +249,13 @@ class RouteActivity : ComponentActivity() {
     }
 }
 
-internal fun Screen.toIdentityDestination(): IdentityDestination = when (this) {
-    Screen.SignIn -> IdentityDestination.SIGN_IN
-    Screen.Register -> IdentityDestination.REGISTER
-    Screen.Home, Screen.Settings -> IdentityDestination.ACCOUNT
-    Screen.Sessions -> IdentityDestination.SESSIONS
-    is Screen.Conversation -> IdentityDestination.CONVERSATION
-    Screen.Gateway -> IdentityDestination.GATEWAY
-}
-
 sealed interface Screen : NavKey {
     @Serializable data object SignIn : Screen
     @Serializable data object Register : Screen
     @Serializable data object Home : Screen
-    @Serializable data object Sessions : Screen
     @Serializable data class Conversation(val sessionId: String) : Screen
     @Serializable data object Settings : Screen
     @Serializable data object Gateway : Screen
+    @Serializable data object Impression : Screen
+    @Serializable data object Skills : Screen
 }

@@ -7,17 +7,38 @@
  * @module @ourfairy/dsh-sessions/src/http
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { postHandler } from '@ourfairy/dsh-http/http'
+import { freezeSurface, postHandler } from '@ourfairy/dsh-http/http'
 import { SessionScopeError, type OwnedSessionService, type SessionOwner } from './service.js'
 
-/** Paths this module owns, in the order the carrier registers them. */
-export const SESSION_PATHS = Object.freeze([
-  '/sessions/create',
-  '/sessions/list',
-  '/sessions/select',
-  '/sessions/primary',
-  '/sessions/read',
+/**
+ * The addresses this row publishes, in the order the carrier registers them.
+ *
+ * `create`, `list` and `primary` answer from the caller's own ownership;
+ * `select`, `read`, `archive` and `restore` name one session and refuse it
+ * unless the caller owns it.
+ */
+export const SURFACE = freezeSurface([
+  { path: '/sessions/create', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/list', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/select', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/primary', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/read', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/archive', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/restore', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
 ])
+
+/** Paths this module owns, in the order the carrier registers them. */
+export const SESSION_PATHS = Object.freeze(SURFACE.map(entry => entry.path))
+
+/**
+ * The rename path. Its subject is one session, so it belongs to this family's
+ * addresses — but this module cannot serve it: a rename is accepted only on a
+ * live session, and opening one is the chat module's job (persona, identity
+ * section, model selection), which this module must not depend on. The chat row
+ * registers the handler for this exact path; the string lives here so the
+ * family has one source for the addresses it publishes.
+ */
+export const SESSION_RENAME_PATH = '/sessions/rename'
 
 /** One handler the carrier registers on the web server. */
 export type SessionHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>
@@ -41,31 +62,43 @@ export function sessionHandlers({ service, fence }: {
     codePrefix: 'sessions',
     internalMessage: 'the owned-session module failed to handle this request',
   })
-  /** One owned session, answered as `{ ok, session }`. Both read routes share it. */
+  /** One owned session, answered as `{ ok, session }`. The one-session routes share it. */
   const oneSession = (resolve: (caller: SessionOwner, sessionId: unknown) => Promise<Parameters<OwnedSessionService['expose']>[0]>) => post(async (body, request) => {
     const caller = callerOf(request)
-    return { ok: true, session: service.expose(await resolve(caller, body.sessionId), caller.shortId) }
+    const header = await resolve(caller, body.sessionId)
+    return { ok: true, session: service.expose(header, caller.shortId, await service.titleOf(header.id)) }
   })
 
   return new Map([
     ['/sessions/create', post(async (_body, request) => {
       const caller = callerOf(request)
-      return { ok: true, session: service.expose(await service.create(caller), caller.shortId) }
+      const header = await service.create(caller)
+      return { ok: true, session: service.expose(header, caller.shortId, await service.titleOf(header.id)) }
     })],
-    ['/sessions/list', post(async (_body, request) => {
+    ['/sessions/list', post(async (body, request) => {
       const caller = callerOf(request)
-      const listed = await service.list(caller)
+      // The archived view is the same path and the same credential; only the
+      // question changes. Reading the flag here keeps one filter point in the
+      // service, so every caller that does not ask for the archive sees the
+      // active sessions and nothing else.
+      const listed = await service.list(caller, { archived: body.archived === true })
+      // One batch fold for the whole list: a title read per row would repeat
+      // the persistence listing and could disagree with the one the batch saw.
+      const titles = await service.titlesOf(listed.sessions.map(header => header.id))
       return {
         ok: true,
-        sessions: listed.sessions.map(header => service.expose(header, caller.shortId)),
+        sessions: listed.sessions.map(header => service.expose(header, caller.shortId, titles.get(header.id))),
         primarySessionId: listed.primarySessionId,
       }
     })],
     ['/sessions/select', oneSession((caller, sessionId) => service.read(caller, sessionId))],
     ['/sessions/primary', post(async (_body, request) => {
       const caller = callerOf(request)
-      return { ok: true, session: service.expose(await service.primary(caller), caller.shortId) }
+      const header = await service.primary(caller)
+      return { ok: true, session: service.expose(header, caller.shortId, await service.titleOf(header.id)) }
     })],
     ['/sessions/read', oneSession((caller, sessionId) => service.read(caller, sessionId))],
+    ['/sessions/archive', oneSession((caller, sessionId) => service.archive(caller, sessionId))],
+    ['/sessions/restore', oneSession((caller, sessionId) => service.restore(caller, sessionId))],
   ])
 }

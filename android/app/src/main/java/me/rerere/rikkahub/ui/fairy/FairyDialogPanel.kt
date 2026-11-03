@@ -41,19 +41,19 @@ internal val FairyDialogPaddingV = 12.dp
 
 /** Inner padding of the chat transcript's Fairy panel (issue #215); the dialog keeps its own. */
 internal val FairyMessagePaddingH = 14.dp
-internal val FairyDialogShape = RoundedCornerShape(14.dp)
+internal val FairyDialogShape = RoundedCornerShape(6.dp)
 
 private const val DIALOG_BREATH_MS = 1600
 private const val DIALOG_FLOW_MS = 2600
-private val DialogFillTop = Color(0xFF0B1631)
-private val DialogFillBottom = Color(0xFF060C1E)
+private val DialogFillTop = Color(0xFF0B1524)
+private val DialogFillBottom = Color(0xFF060C16)
 private val DialogBorder = Color(0xFFC9D5EE)
 private val DialogBorderActive = Color(0xFF9CC2FF)
 
 /**
  * Fairy's reply surface after the in-game dialog box (no avatar, no
  * continue marker): a deep-navy panel with a faint diagonal hatch and a top
- * inner highlight, framed by a thick light outline with a dark inner line.
+ * inner highlight, framed by a 1 dp inner outline with a dark inner line.
  *
  * While the message is the working tail ([active]) the outline turns
  * glow-blue, a soft halo breathes around it and a bright highlight flows
@@ -90,7 +90,7 @@ internal fun Modifier.fairyDialogPanel(active: Boolean): Modifier {
         val outline = FairyDialogShape.createOutline(size, layoutDirection, this) as Outline.Rounded
         val rect = outline.roundRect
         val shape = Path().apply { addRoundRect(rect) }
-        val border = 2.dp.toPx()
+        val border = 1.dp.toPx()
         val inner = Path().apply { addRoundRect(rect.inset(border)) }
         val fill = Brush.verticalGradient(
             0f to DialogFillTop.copy(alpha = 0.9f),

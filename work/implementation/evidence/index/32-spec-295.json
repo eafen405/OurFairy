@@ -1,0 +1,41 @@
+{
+  "title": "Fairy Skill 系统与工作流学习（规格 #295）",
+  "entries": [
+    {
+      "dirs": [
+        "296-skill-runtime"
+      ],
+      "note": "#296 原生 `skill`/`skill-filesystem`（`includeDefaultRoots:false`、仅部署 bundled 根、`watch:false`）/`tool-skill` 与产品行 `@ourfairy/dsh-skill-creator` 一起挂载；技能包验证与规范化清单（POSIX 排序、全文件 SHA-256、可执行位、拒绝符号链接/非普通文件/作者主机路径）、独立 `skill.sqlite`（WAL、版本化迁移、`BEGIN IMMEDIATE`、同作用域名唯一）、每用户选择池（个人优先遮蔽共有、禁用个人后共有回归、归档/禁用派生状态与动作作用域）、每 Agent 的 `ourfairy-skills` provider（`agent.ctx.inject(['skills'])`，激活时复核清单哈希）、只读版本资源贡献、`/skills/list|detail|preference`、部署 seed 与 bundled Skill Creator；聊天投影新增 role 3 kind 1 `加载了skill:xxx` 行（按 tool call id 去重、冷恢复一次、失败/目录/`/name` 文本不产生）；Android Skills 页与激活行。真实启动器/模型替身 + Robolectric；真实模型与真机未执行。"
+    },
+    {
+      "dirs": [
+        "297-create"
+      ],
+      "note": "#297 `skill_manage` list/inspect/create/review（仅用户会话）；按 `focus` 从持久日志取本轮/指定 turn 的步骤与工具调用作为来源；候选经 `tmp/` 隔离写入 `candidates/`，由 bwrap 一次性环境按代表场景真实执行（系统记录命令、退出码、输出摘要与环境，超时/中止，不写共享 env 根，跑完删除）；审核包与确定性四块 `display`（整条结果 <7600 字符，全文按 `expand` 有界展开）；审核状态机（要求修改产生新草稿/新哈希，旧批准与验证不沿用）、并发批准只发布一次、首次个人批准默认启用；`/skills/review-open` 以系统上下文注入候选引用，聊天 role 3 kind 2 审核行；记忆维护与记忆策略补「工作流→Skill、稳定事实→记忆、不双写」；Android 待审入口/审核面板/设置角标。"
+    },
+    {
+      "dirs": [
+        "298-sharing"
+      ],
+      "note": "#298 技能地址安装（GitHub tree/blob 解析到固定 commit 后取 commit tarball、`github:` 简写、直接 `.tar.gz/.tgz`；严格 tar 读取拒绝路径逃逸、符号链接、硬链接、设备/FIFO 与超限，外部内容只进 `tmp/` 后走同一候选/验证/审核路径，并记录地址、固定版本、摘要与许可证；zip 明确拒绝）；共有提案按当次用户回合的显式共享措辞记录提议者与同意，共有候选仅提议者与法厄同可见、仅法厄同批准，普通用户不能批准，共有批准不写入任何人的启用偏好；个人/共有归档与恢复权限、内容/历史/偏好保留、目录与只读资源移除及在线失效；`/skills/archive|restore`、`reviewResults` 与客户端一次性提醒（复用既有通知通道/账本，无后端推送）；Android 归档/恢复、动作作用域与提醒。GitHub 网络用本地替身。"
+    },
+    {
+      "dirs": [
+        "299-evolution"
+      ],
+      "note": "#299 技能修订候选（必须给出可验证目标收益；完整重写；父版本/目标收益/来源；未变化场景复用旧验证、变化场景重跑并标注复用来源）；核心正文 >110% 时审核展示旧/新字符数与百分比并要求本人在展示后独立回复「确认增长」，后端按同会话、同用户、精确文本、位于最近一次 inspect 之后校验消息引用，模型布尔、伪造、乱序、跨会话与旧哈希均拒绝；批准在单个事务内复核状态/哈希/归档/当前指针/增长确认并原子切换，保留启用偏好、审核期旧版继续可用、历史版本不进入目录与只读资源；`pendingRevision` 派生；回滚以历史干净内容形成新的待审候选；Android 待审修订/增长提示。"
+    },
+    {
+      "dirs": [
+        "300-learning"
+      ],
+      "note": "#300 后台学习：schema v2 三表（检测水位/冻结切点/认领、不可变复用信号与撤销行、所有者+任务键唯一创建认领）；1 秒 tick 的用户会话检测（阈值、静默、冻结切点、零信号推进水位、失败恢复同一子会话、完成只看持久 turn/end + 一次结构化提交）；有界材料投影；无 owner 的检测子会话只注册 `submit_signals`，任务键复用/语法与撤销；模糊证据一次独立审查，不确定不触发；两个独立会话达到门槛后原子认领，创建子会话只拥有有界证据读取/候选提交/验证执行/无改进工具，复用同一 Skill Creator、候选与验证路径；创建失败只重试认领；客户端复用既有待审提醒；`scripts/skill-acceptance.ts` 与 `npm run acceptance:skill`（`--plan` 无凭据运行，真实模型样本与调用/token 记录）。真实模型验收 2026-11-03 在 MiniMax-M3.1-Flash 上执行：8 个样本全量 8/8 通过（light 10 次 / deep 12 次，input 167,369 / output 56,774 token），验收中发现并修正了纯辅助工具区间误报（检测措辞 + 无工具/无可撤销信号的前置检查）与三个验收脚本缺陷（`maxEvents` 上限、turn 预算、同区间多信号的撤销匹配）。"
+    },
+    {
+      "dirs": [
+        "295-review"
+      ],
+      "note": "#295 两轴复审修复与真实模型验收后续：共有技能可由法厄同创建修订与回滚、修订必须关联证据、移除模型可自填的 `license`；聊天 role 3 审核行按 `skill_manage` callId 配对（`stateVersion` 7），bash 伪造同形 JSON 不产生行；提醒只对后台候选与法厄同可见的共有提案；客户端文案入 stringResource；学习子会话装配/完成/重试去重为 `learning-child.ts`；`skill_learning_state` 去掉从未写入的 `deleted_at`（对齐 `maintenance_state`）；包根导出收窄；多个 skill 套件补 `OURFAIRY_MEMORY_MAINTENANCE_TURNS=50`。真实模型验收的最终全量与修复记录见本目录与 #300 证据。"
+    }
+  ]
+}

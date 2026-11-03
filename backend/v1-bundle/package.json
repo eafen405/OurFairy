@@ -21,7 +21,9 @@
     "@ourfairy/dsh-attachments": "file:../attachments",
     "@ourfairy/dsh-spaces": "file:../spaces",
     "@ourfairy/dsh-delivery": "file:../delivery",
-    "@ourfairy/dsh-groups": "file:../groups"
+    "@ourfairy/dsh-groups": "file:../groups",
+    "@ourfairy/dsh-memory": "file:../memory",
+    "@ourfairy/dsh-skill-creator": "file:../skill-creator"
   },
   "exports": {
     "./package.json": "./package.json",

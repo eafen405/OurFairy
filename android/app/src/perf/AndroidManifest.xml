@@ -8,5 +8,9 @@
             android:name=".ui.identity.PresentationBenchmarkActivity"
             android:exported="true"
             android:label="OurFairy presentation measurement" />
+        <activity
+            android:name=".ui.identity.MultiSessionBenchmarkActivity"
+            android:exported="true"
+            android:label="OurFairy multi-session measurement" />
     </application>
 </manifest>
