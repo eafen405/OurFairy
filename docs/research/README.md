@@ -27,6 +27,10 @@
 | [2026-10-23-typescript-install-chain.md](2026-10-23-typescript-install-chain.md) | 2026-10-23 | 安装链与构建产物：`files`、`productSourceHash`、模板与 doctor 的事实层与失效路径。（#200） |
 | [2026-10-23-typescript-test-gates.md](2026-10-23-typescript-test-gates.md) | 2026-10-23 | TypeScript 迁移期的测试、构建前置与门禁分流：import 路径、build-before-test 与 CI/precommit 的分流判断。（#202） |
 | [2026-10-26-context-memory-dreaming.md](2026-10-26-context-memory-dreaming.md) | 2026-10-26 | 上下文治理、长期记忆与 DREAMING：Letta、Mem0、Graphiti、LangMem、SillyTavern 的一手资料与复用边界。（#240） |
+| [2026-11-01-dsh-superagent-prototype.md](2026-11-01-dsh-superagent-prototype.md) | 2026-11-01 | 官方实验性插件仓库 dsh-superagent 原型的源码调查：挂载形态、原生 API 逐条对照、两层 Session 的编排与持久化，以及可复用与不可复用的逐条判断。 |
+| [2026-11-02-skill-system-existing-seams.md](2026-11-02-skill-system-existing-seams.md) | 2026-11-02 | OurFairy 记忆维护与锁定 DSH Skill 机制的源码调查：增量水位、维护子会话、原生目录与工具、个人作用域及存储缺口。 |
+| [2026-11-02-hermes-skill-evolution.md](2026-11-02-hermes-skill-evolution.md) | 2026-11-02 | Hermes Agent 后台自改进审查与 curator 的一手调查：创建提示词、审核默认值、效果评估缺口、扫描与回滚。 |
+| [2026-11-02-skill-ecosystem-patterns.md](2026-11-02-skill-ecosystem-patterns.md) | 2026-11-02 | Anthropic Agent Skills、Claude Code、DSH 与 Voyager 的一手对照：A/B 验证、渐进披露、安装信任与成功判定。 |
 | [android-notification-audit.md](android-notification-audit.md) | 2026-10-14 | Android / vivo 通知结论审计：纠正 Force Stop、Doze 维护窗口、FGS 超时与 vpush 资格的误述。 |
 | [android-notifications.md](android-notifications.md) | 2026-10-13 | rikkahub 现有通知能力核查：系统通知构建、点击定位与会话入口的源码位置。 |
 | [backend-references.md](backend-references.md) | 2026-10-13 | Koishi、Open WebUI、LibreChat 的后端骨架参考，以及没有可直接照搬的结论。 |

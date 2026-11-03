@@ -39,6 +39,7 @@ class FairyDestinationsTest {
         Admission(Screen.Settings, visitor = false, agent = true, phaethon = true, staleAdmin = false),
         Admission(Screen.Gateway, visitor = false, agent = false, phaethon = true, staleAdmin = false),
         Admission(Screen.Impression, visitor = false, agent = true, phaethon = true, staleAdmin = false),
+        Admission(Screen.Skills, visitor = false, agent = true, phaethon = true, staleAdmin = false),
     )
 
     @Test
@@ -101,6 +102,7 @@ class FairyDestinationsTest {
         ),
         Restore(Screen.Gateway, stack = listOf(Screen.Home, Screen.Settings, Screen.Gateway)),
         Restore(Screen.Impression, stack = listOf(Screen.Home, Screen.Settings, Screen.Impression)),
+        Restore(Screen.Skills, stack = listOf(Screen.Home, Screen.Settings, Screen.Skills)),
     )
 
     @Test
@@ -205,7 +207,7 @@ class FairyDestinationsTest {
             routes.toSet(),
             screens.map(FairyDestinations::routeOf).toSet(),
         )
-        assertEquals("the product has seven destinations", 7, routes.size)
+        assertEquals("the product has eight destinations", 8, routes.size)
     }
 
     /**
@@ -223,6 +225,7 @@ class FairyDestinationsTest {
         Screen.Settings,
         Screen.Gateway,
         Screen.Impression,
+        Screen.Skills,
     )
 
     @Test

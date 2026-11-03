@@ -59,8 +59,14 @@ chat 的职责。响应的会话行与 `/sessions/list` 的同一行由同一份
   快照序号，客户端用它丢弃过时快照。
 - `cursor`：最近观察到的原生事件 seq，空会话为 -1。`durableThroughSeq`：writer 屏障已确认
   的前缀，未知为 -1；它不表示客户端已应用该前缀。
-- `messages`：`{messageId,position,seq,requestId,role,status,text,attachments,tools?}`。`role` 1 用户、
-  2 Fairy；`status` 1 待定、2 完成、3 中断、4 失败。文本是原始文本，含空白与 Markdown。
+- `messages`：`{messageId,position,seq,requestId,role,status,text,attachments,tools?,kind?,toolCallId?}`。
+  `role` 1 用户、2 Fairy、3 派生展示行；`status` 1 待定、2 完成、3 中断、4 失败。文本是原始文本，
+  含空白与 Markdown。`kind` 只在派生行出现：1 技能激活（`加载了skill:<name>`），2 技能审核
+  （后端 `skill_manage inspect` 结果里的 `display` 四块材料）；`toolCallId` 是该派生行配对的
+  工具调用标识。技能激活行由成功的原生 `skill` 工具结果确定性派生；技能审核行由成功且 JSON
+  含 `{kind:'skill-review',display}` 的 `skill_manage` 工具结果确定性派生。两者都只存在于投影，
+  不进入模型上下文、普通投递或正文检索；目录发布、失败读取、资源读取和 `/name` 文本都不产生
+  它们。同一工具调用标识重放时首次出现者生效，不移动位置、不新增 transition。
   `position` 是该行在会话呈现顺序中的位置，由服务端按首次出现次序排定：会话内唯一，同一
   `messageId` 跨分页、重连与 generation 稳定（冷恢复后的逐字段比较见
   `tests/chat-cold-boundary.test.mjs`）。它只用于排列，不是 seq、不表示连续、也不表示内容新旧。
@@ -143,8 +149,9 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 每个单元声明 `key`、`stateVersion`、zod `stateSchema`、`init(header)` 与 `apply(state,event)`：
 `apply` 必须同步且纯，未解释的事件返回同一引用；state 必须能被 registry 做 JSON checkpoint。
 每个单元的 `stateVersion` 在折叠语义或 state 形状变化时递增，旧版本的持久化行会被丢弃并从
-`init` 重折。当前版本：transcript `4`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
-工具名），work `2`（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读这几行，
+`init` 重折。当前版本：transcript `7`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
+工具名 + 未完成 `skill` / `skill_manage` 调用的窄配对表 + 与 `skill_manage` 调用配对的审核结果
+派生行），work `2`（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读这几行，
 与本文件一起漂移即失败。
 
 - 任务与活动是同一次 fold：activity 依赖每个事件后的任务/report 快照，拆开会形成第二套
@@ -164,6 +171,19 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
   仍与冻结 fixture 逐字段比较，版本号的绑定见上面的「投影单元」。
 - receipt 由 transcript 单元的 `receipts` 回答（`receiptFrom`），`/chat/send` 的幂等与冲突检测
   从该映射取值。
+- transcript 单元维护 `callId -> {name,seq}` 的窄配对表，只收 `tool/call` 中 `name === 'skill'`
+  的事件；名称取自 `tool/call` 的原始 `arguments`（JSON 解析失败则跳过），不取可能被 pruner
+  改写的工具结果正文。`isError !== true` 的 append-surface `tool/result` 追加一行
+  `{messageId: 'skill-activation:<callId>', role: 3, kind: 1, status: 2, seq: 结果事件 seq,
+  toolCallId}`，并消费该表项；失败结果只消费、不追加。每次成功激活恰好一行，重放与断线补齐
+  按 `callId` 去重（首次出现胜出），位置跟随对应工具结果，不新增任何原生事件。
+- 审核展示行走同一 fold，并与调用方配对：`callId -> seq` 的窄表只收 `tool/call` 中
+  `name === 'skill_manage'` 的事件。只有该表中仍有待配对的 `callId`、且结果是成功
+  （`isError !== true`）、第一个文本块可解析为 `kind === 'skill-review'` 且 `display` 为非空
+  字符串时，才追加一行 `{messageId: 'skill-review:<callId>', role: 3, kind: 2, status: 2,
+  seq: 结果事件 seq, toolCallId}`，`text` 就是后端组合的 `display`。任何匹配结果都会消费该
+  表项：失败结果只消费、不追加；`bash` 等非 `skill_manage` 调用即使打印同样的 JSON 也不产生
+  审核行；普通 JSON（如 `list`）不产生；重复结果按 `callId` 首次出现胜出。
 - `/chat/read` 与 `/chat/observe` 从这两个单元读 durable 值；同一会话的所有观察者共享同一份
   单元状态（`tests/chat-multi-observer.test.mjs`）。
 

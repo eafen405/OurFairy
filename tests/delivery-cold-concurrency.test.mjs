@@ -233,7 +233,8 @@ before(async () => {
       ? turnBlocks.findLast(block => block.type === 'text' && block.text.startsWith('{"name":'))
       : undefined
     const userText = turnBlocks.findLast(block => block.type === 'text' && !block.text.startsWith('{"name":')
-      && !block.text.startsWith('Current runtime context.'))?.text ?? ''
+      && !block.text.startsWith('Current runtime context.')
+      && !block.text.startsWith('<system-reminder>'))?.text ?? ''
     const reply = `CHAT:${userText}`
     res.writeHead(200, { 'content-type': 'text/event-stream' })
     const emit = event => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)

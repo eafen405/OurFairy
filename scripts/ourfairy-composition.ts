@@ -208,6 +208,8 @@ export function isolatedEnv(layout: Layout, { root = repoRoot, extra = {} }: { r
     HOME: layout.userHome,
     DSH_HOME: layout.dshHome,
     OURFAIRY_HOME: layout.home,
+    // The deployment's trusted bundled skill root: the only native scan root.
+    OURFAIRY_BUNDLED_SKILLS_DIR: join(root, 'backend', 'skill-creator', 'bundled'),
     XDG_CACHE_HOME: join(layout.home, 'cache'),
     XDG_CONFIG_HOME: join(layout.home, 'config'),
     XDG_DATA_HOME: join(layout.home, 'data'),

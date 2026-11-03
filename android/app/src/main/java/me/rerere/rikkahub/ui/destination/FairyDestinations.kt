@@ -12,6 +12,7 @@ import me.rerere.rikkahub.ui.identity.IdentityRegisterPage
 import me.rerere.rikkahub.ui.identity.IdentityScope
 import me.rerere.rikkahub.ui.identity.IdentitySignInPage
 import me.rerere.rikkahub.ui.identity.ImpressionPage
+import me.rerere.rikkahub.ui.identity.SkillsPage
 
 /**
  * Where a cold start lands when the stored coordinates name nothing that can be
@@ -36,6 +37,7 @@ object FairyDestinations {
 
     /** The route a conversation is stored under; its id is the second coordinate. */
     const val CONVERSATION_ROUTE = "conversation"
+    const val SKILLS_ROUTE = "skills"
 
     private val signIn = FairyDestination(
         route = "sign_in",
@@ -96,6 +98,8 @@ object FairyDestinations {
             backend = identityBackend,
             onBack = actions.pop,
             onOpenImpression = { actions.push(Screen.Impression) },
+            onOpenSkills = { actions.push(Screen.Skills) },
+            skillsBackend = skillsBackend,
         )
     }
 
@@ -115,9 +119,24 @@ object FairyDestinations {
         ImpressionPage(onBack = actions.pop, session = session, backend = impressionBackend)
     }
 
+    private val skills = FairyDestination(
+        route = SKILLS_ROUTE,
+        access = DestinationAccess.SignedIn,
+        restore = DestinationRestore.Resume(listOf(Screen.Home, Screen.Settings, Screen.Skills)),
+    ) {
+        SkillsPage(
+            onBack = actions.pop,
+            session = session,
+            backend = skillsBackend,
+            // The pending entry asks the backend to append the candidate reference to the caller's
+            // fixed primary session, then opens that conversation.
+            onOpenConversation = { sessionId -> actions.push(Screen.Conversation(sessionId)) },
+        )
+    }
+
     /** Every destination the product has, in the order the table declares them. */
     val entries: List<FairyDestination> = listOf(
-        signIn, register, home, conversation, settings, gateway, impression,
+        signIn, register, home, conversation, settings, gateway, impression, skills,
     )
 
     /**
@@ -137,6 +156,7 @@ object FairyDestinations {
         Screen.Settings -> settings
         Screen.Gateway -> gateway
         Screen.Impression -> impression
+        Screen.Skills -> skills
     }
 
     /** The destination the top of the stack is, or null for an empty stack. */

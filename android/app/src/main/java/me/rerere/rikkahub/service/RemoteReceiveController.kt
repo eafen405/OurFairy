@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.RemoteReceivePlatform
 import me.rerere.rikkahub.data.remote.RemoteReceiveState
+import me.rerere.rikkahub.data.remote.SkillsReviewNotifier
 
 data class RemoteReceiveServiceStatus(val running: Boolean = false, val message: String = "后台接收未开启")
 
@@ -21,6 +22,8 @@ class RemoteReceiveController(
     private val service: RemoteReceiveServiceHost,
     lifecycle: Lifecycle,
     scope: CoroutineScope,
+    /** The skills reminder pass; absent only in tests that do not exercise it. */
+    private val skillsReview: SkillsReviewNotifier? = null,
 ) {
     private val mutableStatus = MutableStateFlow(RemoteReceiveServiceStatus())
     val status = mutableStatus.asStateFlow()
@@ -31,9 +34,15 @@ class RemoteReceiveController(
             override fun onStart(owner: LifecycleOwner) {
                 if (platform.enabled.value && account.isSignedIn) requestService()
                 reconcile()
+                observeSkills()
             }
 
-            override fun onStop(owner: LifecycleOwner) = reconcile()
+            override fun onStop(owner: LifecycleOwner) {
+                reconcile()
+                // The app is leaving the foreground: a candidate or decision observed now is
+                // published as one local reminder, and the durable ledger records it.
+                observeSkills()
+            }
         })
         scope.launch {
             account.identity.collect { identity ->
@@ -42,6 +51,7 @@ class RemoteReceiveController(
                 if (identity == null) stopService()
                 else if (platform.enabled.value && platform.isForeground()) requestService()
                 reconcile()
+                observeSkills()
             }
         }
     }
@@ -82,6 +92,13 @@ class RemoteReceiveController(
         starting = false
         mutableStatus.value = RemoteReceiveServiceStatus(message = reason ?: "接收服务已停止；重新打开应用可恢复")
         reconcile()
+    }
+
+    /** Ask the skills reminder to compare its sets with the account's durable ledger. */
+    private fun observeSkills() {
+        val notifier = skillsReview ?: return
+        val identity = account.identity.value ?: return
+        notifier.observe(identity.token, identity.user.shortId)
     }
 
     /** Ask the platform now, never a remembered answer: publication asks the same object. */

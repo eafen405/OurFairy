@@ -22,6 +22,7 @@ import me.rerere.rikkahub.service.RemoteReceiveServiceLauncher
 import me.rerere.rikkahub.ui.fairy.FairyInteraction
 import me.rerere.rikkahub.ui.fairy.FairyUiMemory
 import me.rerere.rikkahub.data.remote.AndroidChatSyncStore
+import me.rerere.rikkahub.data.remote.AndroidSkillsReviewLedger
 import me.rerere.rikkahub.data.remote.ChatSyncStore
 import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.AndroidKeystoreCredentialStore
@@ -34,6 +35,10 @@ import me.rerere.rikkahub.data.remote.ImpressionApi
 import me.rerere.rikkahub.data.remote.ImpressionBackend
 import me.rerere.rikkahub.data.remote.SessionApi
 import me.rerere.rikkahub.data.remote.SessionBackend
+import me.rerere.rikkahub.data.remote.SkillsApi
+import me.rerere.rikkahub.data.remote.SkillsBackend
+import me.rerere.rikkahub.data.remote.SkillsReviewLedger
+import me.rerere.rikkahub.data.remote.SkillsReviewNotifier
 import okhttp3.OkHttpClient
 import org.koin.dsl.module
 
@@ -66,6 +71,10 @@ val identityModule = module {
         ImpressionApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
     }
 
+    single<SkillsBackend> {
+        SkillsApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
+    }
+
     single<RemoteAttachmentBackend> { RemoteAttachmentApi(identityEndpoint, get<OkHttpClient>()) }
 
     single<RemoteSpeechBackend> { RemoteSpeechApi(identityEndpoint, get<OkHttpClient>()) }
@@ -76,7 +85,20 @@ val identityModule = module {
 
     single<ChatSyncStore> { AndroidChatSyncStore(get<Context>()) }
 
+    single<SkillsReviewLedger> { AndroidSkillsReviewLedger(get<Context>()) }
+
     single { AndroidRemoteNotifications(get<Context>()) }
+
+    single {
+        SkillsReviewNotifier(
+            backend = get<SkillsBackend>(),
+            ledger = get<SkillsReviewLedger>(),
+            platform = get<AndroidRemoteNotifications>(),
+            endpoint = identityEndpoint,
+            notificationsEnabled = { get<AndroidRemoteNotifications>().enabled.value },
+            scope = get<AppScope>(),
+        )
+    }
 
     single {
         val runtimeScope = get<AppScope>()
@@ -113,7 +135,7 @@ val identityModule = module {
         // process lifecycle only tells reception when to ask for it again.
         RemoteReceiveController(get<AccountSession>(), get<RemoteReceiveState>(),
             get<AndroidRemoteNotifications>(), get<RemoteReceiveServiceLauncher>(),
-            ProcessLifecycleOwner.get().lifecycle, get<AppScope>())
+            ProcessLifecycleOwner.get().lifecycle, get<AppScope>(), get<SkillsReviewNotifier>())
     }
 
     single {

@@ -56,6 +56,7 @@ class FairyLastLocationTest {
             Triple(Screen.Settings, "settings", listOf(Screen.Home, Screen.Settings)),
             Triple(Screen.Gateway, "gateway", listOf(Screen.Home, Screen.Settings, Screen.Gateway)),
             Triple(Screen.Impression, "impression", listOf(Screen.Home, Screen.Settings, Screen.Impression)),
+            Triple(Screen.Skills, "skills", listOf(Screen.Home, Screen.Settings, Screen.Skills)),
             Triple(Screen.Conversation("main"), "conversation", listOf(Screen.Home, Screen.Conversation("main"))),
         )
         for ((screen, route, stack) in resumable) {

@@ -5,6 +5,9 @@ import me.rerere.rikkahub.data.remote.AccountSession
 /** Intent coordinates identify a target; only the current account and backend may admit it. */
 data class RemoteNotificationTarget(val endpoint: String, val userShortId: Int, val sessionId: String)
 
+/** The skills page a skill reminder opens, gated by the same endpoint/account rule. */
+data class SkillsNotificationTarget(val endpoint: String, val userShortId: Int)
+
 suspend fun openRemoteNotification(
     target: RemoteNotificationTarget,
     endpoint: String,
