@@ -52,6 +52,13 @@ const script = {
   holdText: undefined,
   /** Hold the next detection child request until the test releases it. */
   holdDetection: undefined,
+  /**
+   * Answer main-session requests with plain text only. The default emits one
+   * harmless `bash` step on the first request of each turn so the interval has
+   * a real tool call and the detection engine's no-action pre-check lets it
+   * through; tests about that pre-check set this.
+   */
+  plainMain: false,
 }
 
 /** A detection callback that submits one payload once per run, and again after a recovery instruction. */
@@ -286,6 +293,13 @@ before(async () => {
       return
     }
     seen.main.push({ body, tools })
+    // Keep the main-session branch observable but realistic: one real tool
+    // call per turn unless the case is about a text-only interval. The engine's
+    // no-action pre-check would otherwise complete every test interval before
+    // a child ran.
+    const action = script.plainMain || toolUses(body) > 0
+      ? undefined
+      : ['bash', { command: 'printf skill-learning-action', description: 'do the reusable step' }]
     if (script.holdText !== undefined && !held && requestText(body).includes(script.holdText)) {
       // Hold exactly the first request whose conversation carries the marker;
       // later turns repeat earlier messages, so the marker is consumed once.
@@ -294,7 +308,7 @@ before(async () => {
       await new Promise(resolve => { heldRelease = resolve })
       held = false
     }
-    answer(response, undefined)
+    answer(response, action)
   })
   model.listen(0, '127.0.0.1')
   await once(model, 'listening')
@@ -417,6 +431,7 @@ function resetScript(overrides = {}) {
   script.failCreation = 0
   script.holdText = undefined
   script.holdDetection = undefined
+  script.plainMain = false
   held = false
   heldRelease = undefined
   heldDetection = undefined
@@ -517,6 +532,20 @@ describe('background detection', () => {
     assert.equal(signals().filter(row => row.source_session === session).length, 0)
     assert.ok(state.watermark_seq > 0)
     assert.ok(seen.detection.length >= 1, 'the child still ran and submitted an empty list')
+  })
+
+  test('a text-only interval with no revocable signal completes without a child', async () => {
+    resetScript({ plainMain: true })
+    const session = await newSession(bob)
+    await sendPlain(bob, session, '今天天气不错，随便聊两句')
+    const state = await waitFor('the pre-checked interval', () => {
+      const row = learningState(session)
+      return row !== undefined && row.status === 0 && row.watermark_seq > 0 ? row : undefined
+    })
+    assert.equal(seen.detection.length, 0,
+      'no detection child is created for an interval with no tool call and no revocable signal')
+    assert.equal(signals().filter(row => row.source_session === session).length, 0)
+    assert.ok(state.watermark_seq > 0, 'the cheap pre-check still advances the watermark')
   })
 
   test('a failed detection keeps the watermark and resumes the same child', async () => {
@@ -780,7 +809,10 @@ describe('background detection', () => {
     const original = await waitFor('the first success signal', () => signals().find(row => row.source_session === session))
 
     // The next interval carries the user's correction; the detection prompt
-    // lists the earlier success so the child can revoke it by id.
+    // lists the earlier success so the child can revoke it by id. The
+    // correction is text-only, which the no-action pre-check must still send:
+    // a revocable signal is exactly the case that pre-check must not drop.
+    script.plainMain = true
     script.detection = submittedOnce({ signals: [{ taskKey: 'deploy:hotfix', status: 3, revokesSignalId: original.id }] })
     await sendPlain(alice, session, '刚才那个热修流程不对，你漏了回滚步骤，别记成成功')
     const revocation = await waitFor('the revocation row', () => signals().find(entry => entry.revokes_signal_id === original.id))
@@ -797,7 +829,9 @@ describe('background detection', () => {
     assert.equal(unchanged.evidence_end_seq, original.evidence_end_seq)
 
     // A second session's success is the only valid evidence left: one session,
-    // so no claim is made and no candidate is produced.
+    // so no claim is made and no candidate is produced. This new session has
+    // no revocable signal, so it needs a real tool call to pass the pre-check.
+    script.plainMain = false
     script.detection = submissions([{ taskKey: 'deploy:hotfix', status: 0 }])
     const other = await newSession(alice)
     await sendPlain(alice, other, '另一个会话成功走完热修流程')

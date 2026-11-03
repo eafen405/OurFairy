@@ -189,7 +189,7 @@ function projectionOf(answer: Answer): Projection {
 }
 
 async function readChat(runtime: Runtime, identity: Identity, sessionId: string): Promise<Projection> {
-  const answer = await request(runtime.port, '/chat/read', { token: identity.token, body: { sessionId, maxEvents: 512 } })
+  const answer = await request(runtime.port, '/chat/read', { token: identity.token, body: { sessionId, maxEvents: 256 } })
   if (answer.status !== 200) fail(`/chat/read answered ${answer.status}: ${answer.text.slice(0, 500)}`)
   return projectionOf(answer)
 }
@@ -522,8 +522,8 @@ async function assertRealRoute(runtime: Runtime): Promise<{ provider: string; mo
 async function caseMeaningless(runtime: Runtime, shared: Shared): Promise<CaseOutcome> {
   void shared
   const session = await newSession(runtime, runtime.alice)
-  await sendTurn(runtime, runtime.alice, session, '今天天气怎么样？随便聊聊就好。')
-  await sendTurn(runtime, runtime.alice, session, '那讲个短笑话吧，不用做任何事。')
+  await sendTurn(runtime, runtime.alice, session, '你好呀，今天心情不错，随便聊两句就好，不用查资料。')
+  await sendTurn(runtime, runtime.alice, session, '那讲个短笑话吧，不用做任何事、不用调用工具、也不用查任何东西。')
   const row = await waitInterval(runtime, session)
   const stored = signalsOf(runtime, session)
   return {
@@ -595,23 +595,33 @@ async function caseTwoSessions(runtime: Runtime, shared: Shared): Promise<CaseOu
 
 async function caseLateCorrection(runtime: Runtime, shared: Shared): Promise<CaseOutcome> {
   if (shared.successSession === undefined || shared.successSignalId === undefined) fail('one-success did not leave a signal to correct')
-  const original = signalsOf(runtime).find(signal => number(signal.id) === shared.successSignalId)
+  // One real interval may submit several success signals (one per workflow it
+  // found). The correction names a workflow, not an id, so accept a revocation
+  // of any of the session's earlier success signals instead of assuming the
+  // model will pick the first one the acceptance happened to read.
+  const before = signalsOf(runtime).filter(signal => string(signal.source_session) === shared.successSession)
+  if (before.length === 0) fail('one-success left no signal row to correct')
   // The correction interval needs `learningTurns` closed turns after the last
   // watermark, so the correction is followed by one more real turn.
   await sendTurn(runtime, runtime.alice, shared.successSession,
     '刚才那个流程其实不算成功，你漏了检查脚本的真实输出，请不要把它记成成功经验。')
   await sendTurn(runtime, runtime.alice, shared.successSession,
     '请记住这个纠正：以后这个流程必须先检查脚本的真实输出。')
-  const revocation = await waitFor('the revocation row', () => signalsOf(runtime).find(signal =>
-    number(signal.revokes_signal_id) === shared.successSignalId), 240_000) as JsonObject
-  const after = signalsOf(runtime).find(signal => number(signal.id) === shared.successSignalId)
+  const revocation = await waitFor('the revocation row', () => signalsOf(runtime).find(signal => {
+    if (number(signal.status) !== 3 || string(signal.source_session) !== shared.successSession) return false
+    const revokedId = number(signal.revokes_signal_id)
+    return revokedId !== undefined && before.some(row => number(row.id) === revokedId)
+  }), 480_000) as JsonObject
+  const revokedId = number(revocation.revokes_signal_id) ?? -1
+  const original = before.find(row => number(row.id) === revokedId)
+  const after = signalsOf(runtime).find(signal => number(signal.id) === revokedId)
   return {
     checks: [
       { name: 'the late correction inserts a revocation row', ok: number(revocation.status) === 3, detail: `status ${String(revocation.status)}` },
       { name: 'the original evidence row is not rewritten', ok: JSON.stringify(after) === JSON.stringify(original), detail: JSON.stringify(after) },
-      { name: 'the revocation is a new row', ok: number(revocation.id) !== shared.successSignalId, detail: `${String(revocation.id)} revokes ${String(shared.successSignalId)}` },
+      { name: 'the revocation is a new row', ok: number(revocation.id) !== revokedId, detail: `${String(revocation.id)} revokes ${String(revokedId)}` },
     ],
-    evidence: { revocation, original: after },
+    evidence: { revocation, original: after, revokedSignalId: revokedId },
   }
 }
 
@@ -683,7 +693,7 @@ async function caseAddressInstall(runtime: Runtime, shared: Shared, address: str
     }
   }
   const session = await newSession(runtime, runtime.alice)
-  await sendTurn(runtime, runtime.alice, session, `帮我从这个地址安装技能：${address}`)
+  await sendTurn(runtime, runtime.alice, session, `请用 skill_manage 的 address 参数直接安装这个地址的技能包，不要自己下载内容再转成 files：${address}`)
   const pending = await waitFor('an installed candidate', async () => {
     const list = await request(runtime.port, '/skills/list', { token: runtime.alice.token, body: {} })
     return array(list.json.pending).map(record).find(entry => number(entry?.sourceType) === 1)
@@ -700,7 +710,7 @@ async function caseAddressInstall(runtime: Runtime, shared: Shared, address: str
 /* ── report plumbing ────────────────────────────────────────────────────── */
 
 function parse(argv: string[]): Options {
-  const options: Options = { home: undefined, out: undefined, address: undefined, only: [], plan: false, keep: false, turnTimeoutMs: 240_000, learningTurns: DEFAULT_LEARNING_TURNS }
+  const options: Options = { home: undefined, out: undefined, address: undefined, only: [], plan: false, keep: false, turnTimeoutMs: 480_000, learningTurns: DEFAULT_LEARNING_TURNS }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--plan') options.plan = true

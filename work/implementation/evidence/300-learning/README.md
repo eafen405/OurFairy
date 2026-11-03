@@ -128,24 +128,58 @@ Ticket: [#300](https://github.com/eafen405/OurFairy/issues/300)，spec [#295](..
 | `MINIMAX_CN_API_KEY=fake OURFAIRY_MINIMAX_BASE_URL=http://127.0.0.1:9 npm run acceptance:skill -- --only meaningless` | exit 1，`this acceptance refuses a loopback model double` |
 | 无凭据 `npm run acceptance:skill` | exit 1，明确要求 `MINIMAX_CN_API_KEY` / `MINIMAX_API_KEY` |
 
-## 真实模型验收状态
+## 真实模型验收（2026-11-03 执行）
 
-**未执行（not executed）**：本环境没有可用的 `MINIMAX_CN_API_KEY`（也未提供
-`MINIMAX_API_KEY`），也没有 MiniMax 网络凭据。`--plan` 已实际运行并通过；loopback 拒绝与
-缺凭据拒绝已实际验证。真实运行需要：
+环境：MiniMax 官方路由 `minimax-cn / MiniMax-M3.1-Flash`
+（`https://api.minimaxi.com/anthropic`）。凭据只从仓库根目录被 `.gitignore` 覆盖的
+`MINIMAX_CN_API_KEY.env` 以环境变量注入；没有进入 Git、没有写入任何报告或证据文件。
 
-```
-set -a; . /home/eafen405/projects/MINIMAX_API_KEY.env; set +a
-export MINIMAX_CN_API_KEY="$MINIMAX_API_KEY"
-npm run acceptance:skill -- --address <技能包地址>
-```
+最终一次全量（`node scripts/skill-acceptance.ts --address <GitHub tree 地址>`，exit 0，
+`2026-11-03T07:31:21Z`–`07:46:39Z`）：
 
-报告会记录每个样本的轻量/深度模型调用次数、输入/输出 token、实际结果与未执行项；本次没有
-把未执行升级为通过。
+| 样本 | 结果 | light | deep | input | output |
+|---|---|---|---|---|---|
+| meaningless | passed（无工具调用，light 0） | 0 | 0 | 6,533 | 309 |
+| one-success | passed | 2 | 0 | 13,932 | 4,176 |
+| two-sessions | passed | 2 | 7 | 27,506 | 9,688 |
+| late-correction | passed（撤销新行，原行不改写） | 2 | 0 | 11,557 | 13,788 |
+| duplicate-existing | passed（不静默制造重复候选） | 4 | 5 | 43,062 | 10,529 |
+| explicit-creation | passed | 0 | 0 | 20,035 | 4,026 |
+| common-proposal | passed | 0 | 0 | 22,774 | 6,954 |
+| address-install | passed（pending version 5） | 0 | 0 | 21,970 | 7,304 |
+| 合计 | 8/8 | 10 | 12 | 167,369 | 56,774 |
+
+地址安装使用真实 GitHub tree 地址
+`https://github.com/anthropics/skills/tree/main/skills/internal-comms`，由安装路径解析到固定
+commit 后取 tarball；样本要求模型直接把地址交给 `skill_manage` 的 `address`，而不要自己下载
+内容再转成 `files`。
+
+### 验收过程中发现并修复的问题
+
+1. **纯辅助工具区间不应产生成功信号。** 第一次真实运行里 `meaningless` 出现
+   `weather-lookup:open-meteo-forecast` 信号：模型真的用 bash 查了天气，属于实际执行过的流程。
+   第二次改成纯寒暄后，模型又调用了 `impression_read` / `memory_add` / `memory_search` /
+   `memory_delete`，轻量检测仍产生 1 条信号。检测策略因此补了一句：只有记忆读写、印象、待办、
+   技能目录查询等辅助操作、没有实际执行步骤的区间不产生成功信号。最终运行 `meaningless`
+   零信号、light 0（同时命中下面的确定性前置检查）。
+2. **确定性前置检查。** `(watermark, cut]` 内没有任何 `tool/call`、且本会话没有可撤销信号时，
+   检测区间直接以零信号完成并推进水位，不启动轻量模型（`material.ts intervalHasToolCalls`
+   + `learning.ts`）。有文本纠正但存在可撤销信号的区间仍进入子会话，避免漏掉撤销。确定性
+   用例见 `tests/skill-learning.test.mjs` 的 “a text-only interval with no revocable signal
+   completes without a child” 和 late-correction 的文本纠正用例。
+3. **验收脚本的匹配缺陷（不是产品缺陷）。** `late-correction` 曾失败：真实模型在 one-success
+   同一区间提交了两条成功信号（bash 脚本与技能打包），纠正子会话撤销了第二条，而脚本只比对
+   第一条的 id；子会话日志显示 `submit_signals` 返回 `{"ok":true,"accepted":2}`，撤销行确已
+   写入。脚本改为接受该会话任一先前成功信号的撤销，有效；另外把默认 turn 预算从 240s 提到
+   480s（地址安装的全流程会超过 4 分钟），并修正 `/chat/read` 的 `maxEvents` 上限（256，不是
+   512）。最终全量在最终代码与脚本上 8/8 通过。
+4. 第一次全量（run 5）曾 7/8，仅 late-correction 因上述匹配缺陷失败；该脚本修复后单独重跑
+   通过（exit 0），最终全量复跑 8/8。
+
+`--plan`、无凭据拒绝与 loopback 拒绝仍按原样执行。
 
 ## 未完成项 / 风险
 
-- 真实模型验收未执行（原因同上）；这是本票唯一未完成的验收面。确定性替身测试不替代它。
 - 地址安装样本需要 `--address`；未传时按 unexecuted 记录。共有提案、显式创建、去重三个样本
   依赖真实模型按提示调用 `skill_manage`，报告按实际行为判分，不视为确定性保证。
 - 创建子会话使用触发源会话的模型路由；源会话已冷时回退部署默认路由。这一选择记录在

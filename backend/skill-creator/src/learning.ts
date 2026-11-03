@@ -50,7 +50,7 @@ import {
   isValidTaskKey,
 } from './learning-policy.js'
 import { ChildRuns, learningChildSetup, successfulCalls, turnCompleted } from './learning-child.js'
-import { assembleLearningMaterial, closedUserTurns, type ClosedTurn } from './material.js'
+import { assembleLearningMaterial, closedUserTurns, intervalHasToolCalls, type ClosedTurn } from './material.js'
 import { SkillError } from './service.js'
 import { SIGNAL_STATUS, type LearningRow, type NewSignal, type SignalRow, type SkillStore } from './store.js'
 import type { Context } from '@deepseek-ai/cordis'
@@ -371,6 +371,21 @@ export class LearningEngine {
     const frozen = this.#store.learning(sourceId)
     if (frozen === undefined || frozen.child_session === null) return
     const settings = this.#options.settings()
+    // Cheap pre-check before any model call: an interval with no tool call and
+    // no revocable earlier signal cannot carry an executed reusable workflow
+    // and cannot owe a late correction. Complete it with zero signals; a
+    // text-only correction interval still reaches the child because a
+    // revocable signal exists.
+    const revocable = this.#store.revocableSignals(facts.ownerShortId, sourceId, MAX_REVOCABLE_SIGNALS)
+    if (revocable.length === 0 && !intervalHasToolCalls({ events, watermarkSeq: latest.watermark_seq, cutSeq: cut.seq })) {
+      this.#store.completeLearning({
+        sourceSession: sourceId,
+        cutSeq: cut.seq,
+        childSession: frozen.child_session,
+      })
+      this.#options.log?.('info', `skill learning for ${sourceId} completed interval at ${String(cut.seq)} with zero signals: no tool calls and no revocable signal`)
+      return
+    }
     const material = assembleLearningMaterial({
       events,
       watermarkSeq: latest.watermark_seq,
@@ -384,7 +399,7 @@ export class LearningEngine {
       cutSeq: cut.seq,
       material,
       taskKeys: this.#store.taskKeys(facts.ownerShortId, MAX_EXISTING_TASK_KEYS),
-      revocable: this.#store.revocableSignals(facts.ownerShortId, sourceId, MAX_REVOCABLE_SIGNALS),
+      revocable,
       watermarkSeq: latest.watermark_seq,
     })
   }

@@ -147,3 +147,15 @@ lintDebug`.
   described; the affected commands were rerun alone and the final full suite is the authority.
 - No test-runner or concurrency setting was changed, and the two known `bundle-manifest` timeout
   cases did not recur in either full run.
+
+## 验收后续（2026-11-03）
+
+真实模型验收在合并前执行（凭据来自被 `.gitignore` 覆盖的 `MINIMAX_CN_API_KEY.env`，未入库）。
+最终全量 8/8 通过（MiniMax-M3.1-Flash，light 10 / deep 12，input 167,369 / output 56,774），
+详细表格、验收中发现的两个产品语义修正（辅助工具区间不产生成功信号；无工具且无可撤销信号的
+区间不启动检测子会话）和三个验收脚本缺陷（`maxEvents` 上限、整体 turn 预算、同区间多信号的
+撤销匹配）记录在 [300 的验收 README](../300-learning/README.md#真实模型验收2026-11-03-执行)。
+
+对应代码提交在 `fix/295-review` 的 `acceptance(#295)` 提交：`learning-policy.ts` 的检测措辞、
+`material.ts` 的 `intervalHasToolCalls`、`learning.ts` 的前置检查、`tests/skill-learning.test.mjs`
+的新用例，以及 `scripts/skill-acceptance.ts` 的上述修正。
