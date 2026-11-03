@@ -48,6 +48,12 @@
         "248-memory-integration-acceptance"
       ],
       "note": "#248 记忆增量集成与真实模型验收：`npm run acceptance:memory` 用真实 v1 profile + 真实 MiniMax-M3.1-Flash（拒绝回环替身，主/子会话都从各自 session log 核对路由）跑 11 条质量样本、67 项检查全过（明确记忆、稳定偏好、寒暄不写、易变观察不写、事实更新、失效删除、普通/私密切换、跨用户层隔离与印象、维护零写入推进/不重复、印象先读后写/注入/超长；复核加强 invalidate 后该例 7/7，当前全量应为 69 项）；维护门槛经真实 `/gateway/maintenance` 从 15/6 降到 5/3；真实运行暴露的会话摘要、用户画像、IP/位置推断、时间限定观察、元记忆与待办写入，以有 owner 的 `ourfairy:memory-policy` 段、`memory_add` 描述与维护子会话策略修复（`memory-policy` 测试固定接线，前后样本在证据目录）；`npm test` 381/381、`combo:verify` 三行 ok、Android 387 tests + lint 0 errors、dsh compaction-basic 158 + config catalog 15；真实 500K 压缩、真机与默认 15/6 真实节奏未执行；复核轮 dsh 另跑 typecheck 5/5 与 check:ci:static 59/64（5 个既有 fork 漂移失败），dsh 全量测试与覆盖率未跑"
+    },
+    {
+      "dirs": [
+        "240-adversarial-review"
+      ],
+      "note": "#240 落地后对抗性 review（三个视角 + 外部一手研究）：**未重跑** npm test / combo:verify / Android（本机 combo.json 的 localPath 与当前机器不符，锁定 dsh 检出未构建），结论来自源码、测试源码与证据 JSON 的静态阅读外加独立复现脚本。P0 三条：①store.ts:195 预算 break 使装不下的大记忆之后的小条目一并丢弃，实测 [7000,2000,14,14] 只返回 1 条、改 continue 返回 3 条（7016 字符），而 service.ts:256-263 自认「永不被检索返回=不可达不可修改」；②维护失败 RETRY_MS=2000 无上限无退避无死信，卡住时 43200 次/天、子会话请求超线性增长可超 1M 上下文窗口自锁；③2b3608d（17:01）改变了模型可见的工具输出（去掉 memory_add/edit/switch 的 id 返回、描述 1817→2143 字符、删除私密检索规则），而 results.json（07:44）与 invalidate-rerun.json（08:50）均早于它，验收证据证明的不是 HEAD 行为。P1：私密层只写不读（426 字符 MEMORY_POLICY 中「私密」出现 0 次）；维护子会话 11 例 childWrites 全为 0、0 例覆盖正向写入与跨会话召回；用户无记忆列表且「靠问」撞在字面子串匹配上（实测「宠物」「工作」「猫的名字」均 0 命中，「用户」4/4）。P2：本行零 logger（7 处 catch 吞掉）、1Hz tick 驱动最小 3 小时时钟、#active check-then-act 且 resume 路径无事务兜底。外部研究否决了 FTS5 trigram（<3 字中文查询恒零命中，本机实测 + SQLite 官方 §4.3.4）与「写清何时使用能提升调用率」（文献不一致），并将「加常驻索引提升使用率」降级为无实测支撑的推断。三个视角交叉指向同一处：用户无法核对记忆、纠正路径依赖已知会漏的检索。"
     }
   ]
 }

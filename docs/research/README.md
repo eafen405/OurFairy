@@ -31,6 +31,7 @@
 | [2026-11-02-skill-system-existing-seams.md](2026-11-02-skill-system-existing-seams.md) | 2026-11-02 | OurFairy 记忆维护与锁定 DSH Skill 机制的源码调查：增量水位、维护子会话、原生目录与工具、个人作用域及存储缺口。 |
 | [2026-11-02-hermes-skill-evolution.md](2026-11-02-hermes-skill-evolution.md) | 2026-11-02 | Hermes Agent 后台自改进审查与 curator 的一手调查：创建提示词、审核默认值、效果评估缺口、扫描与回滚。 |
 | [2026-11-02-skill-ecosystem-patterns.md](2026-11-02-skill-ecosystem-patterns.md) | 2026-11-02 | Anthropic Agent Skills、Claude Code、DSH 与 Voyager 的一手对照：A/B 验证、渐进披露、安装信任与成功判定。 |
+| [2026-11-03-memory-recall-and-injection.md](2026-11-03-memory-recall-and-injection.md) | 2026-11-03 | 记忆召回与注入：主动调用 vs 被动注入的两级形态、SQLite FTS5 对中文的可用性与下限、字面关键词的失败模式、后台蒸馏的质量证据缺口。 |
 | [android-notification-audit.md](android-notification-audit.md) | 2026-10-14 | Android / vivo 通知结论审计：纠正 Force Stop、Doze 维护窗口、FGS 超时与 vpush 资格的误述。 |
 | [android-notifications.md](android-notifications.md) | 2026-10-13 | rikkahub 现有通知能力核查：系统通知构建、点击定位与会话入口的源码位置。 |
 | [backend-references.md](backend-references.md) | 2026-10-13 | Koishi、Open WebUI、LibreChat 的后端骨架参考，以及没有可直接照搬的结论。 |
