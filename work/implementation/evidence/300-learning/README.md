@@ -181,3 +181,12 @@ npm run acceptance:skill -- --address <技能包地址>
 `OURFAIRY_MEMORY_MAINTENANCE_TURNS` 设为 50（与 `launchEnv` 对学习阈值的 50 同一理由），
 之后全量 594/594、595/595 连续通过。失败是测试读取“全局最后请求”的脆弱断言，不是产品行为
 回归；学习/维护子会话本身均由各自测试覆盖。
+
+## Review fixes (spec #295)
+
+The review moved the duplicated learning-child setup, `successfulCalls`/`turnCompleted` and the
+active/running/retry bookkeeping into `src/learning-child.ts`, dropped the dead `deleted_at` from
+`skill_learning_state` (it follows `maintenance_state`), added the same
+`OURFAIRY_MEMORY_MAINTENANCE_TURNS` guard to the other skill suites, and required revision evidence
+in the background `submit_candidate` contract. See the
+[spec review-fix evidence](../295-review/README.md).
