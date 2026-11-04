@@ -22,6 +22,7 @@
  */
 import { bearerToken, freezeSurface, postHandler } from '@ourfairy/dsh-http/http'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
+import { IMPRESSION_PROMPT_FOOTER as PROMPT_FOOTER, IMPRESSION_PROMPT_HEADER as PROMPT_HEADER } from './impression-prompt.js'
 import { ImpressionError, toolRegistrar } from './tool-kit.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -36,12 +37,6 @@ export const IMPRESSION_MAX_CHARACTERS = 8000
 
 /** The scoped system prompt section carrying one user's impression. */
 const IMPRESSION_SECTION = 'ourfairy:impression'
-
-/** The sentence introducing the injected body. */
-const PROMPT_HEADER = '以下是当前用户的印象，是每次互动都需要的整体认识，不是长期记忆条目：'
-
-/** The sentence that keeps a model edit deliberate and read-first. */
-const PROMPT_FOOTER = '只有用户明确要求时才修改印象；修改前先用 impression_read 读取，再用 impression_edit 整份替换。'
 
 /** One user's impression, as both the page and the model read it. */
 export type ImpressionView = {

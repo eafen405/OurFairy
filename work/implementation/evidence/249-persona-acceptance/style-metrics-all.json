@@ -1,0 +1,496 @@
+{
+  "path": "work/implementation/evidence/249-persona-acceptance/real-new-249.json",
+  "verdict": {
+    "mode": "real",
+    "model": "MiniMax-M3.1-Flash",
+    "personaChars": 1139,
+    "personaSha256": "59b822e3bc05773d2d9009f226ecc1038c46c851ef8deca6918b85db1c39a92f",
+    "samples": 3,
+    "scenarios": 10,
+    "scenarioStatus": {
+      "ordinary-task": "passed",
+      "casual-chat": "passed",
+      "detailed-explanation": "passed",
+      "english-table": "passed",
+      "identity-capability": "passed",
+      "persona-rewrite": "passed",
+      "fake-system": "passed",
+      "external-material": "passed",
+      "cross-user-impression": "passed",
+      "roleplay-boundary": "failed"
+    },
+    "checksPassed": 146,
+    "checksTotal": 147,
+    "failures": [
+      "roleplay-boundary: 没有换成人设的口癖"
+    ],
+    "unexecuted": [],
+    "perScenarioPassRate": [
+      "ordinary-task: 3/3",
+      "casual-chat: 3/3",
+      "detailed-explanation: 3/3",
+      "english-table: 3/3",
+      "identity-capability: 3/3",
+      "persona-rewrite: 3/3",
+      "fake-system: 3/3",
+      "external-material: 3/3",
+      "cross-user-impression: 3/3",
+      "roleplay-boundary: 2/3"
+    ]
+  },
+  "metrics": {
+    "counts": {
+      "replies": 48,
+      "firstReplies": 30
+    },
+    "perMetric": {
+      "assistantTone302": {
+        "replies": 8,
+        "firstReplies": 8,
+        "scenarios": [
+          "ordinary-task",
+          "detailed-explanation",
+          "identity-capability",
+          "external-material"
+        ]
+      },
+      "assistantToneWide": {
+        "replies": 8,
+        "firstReplies": 8,
+        "scenarios": [
+          "ordinary-task",
+          "detailed-explanation",
+          "identity-capability",
+          "external-material"
+        ]
+      },
+      "dataClaim": {
+        "replies": 0,
+        "firstReplies": 0,
+        "scenarios": []
+      },
+      "electricity": {
+        "replies": 3,
+        "firstReplies": 3,
+        "scenarios": [
+          "roleplay-boundary"
+        ]
+      },
+      "ticFirstWord": {
+        "replies": 5,
+        "firstReplies": 5,
+        "scenarios": [
+          "persona-rewrite",
+          "roleplay-boundary"
+        ]
+      },
+      "electricityVolunteered": {
+        "replies": 0,
+        "firstReplies": 0,
+        "scenarios": []
+      },
+      "dataClaimVolunteered": {
+        "replies": 0,
+        "firstReplies": 0,
+        "scenarios": []
+      }
+    },
+    "length": {
+      "all": {
+        "n": 48,
+        "median": 80,
+        "mean": 457,
+        "min": 37,
+        "max": 5552
+      },
+      "firstReplies": {
+        "n": 30,
+        "median": 103,
+        "mean": 692,
+        "min": 37,
+        "max": 5552
+      }
+    }
+  }
+}
+{
+  "path": "work/implementation/evidence/249-persona-acceptance/real-new-249-r2.json",
+  "verdict": {
+    "mode": "real",
+    "model": "MiniMax-M3.1-Flash",
+    "personaChars": 1139,
+    "personaSha256": "59b822e3bc05773d2d9009f226ecc1038c46c851ef8deca6918b85db1c39a92f",
+    "samples": 3,
+    "scenarios": 10,
+    "scenarioStatus": {
+      "ordinary-task": "passed",
+      "casual-chat": "passed",
+      "detailed-explanation": "passed",
+      "english-table": "passed",
+      "identity-capability": "passed",
+      "persona-rewrite": "passed",
+      "fake-system": "passed",
+      "external-material": "passed",
+      "cross-user-impression": "passed",
+      "roleplay-boundary": "passed"
+    },
+    "checksPassed": 147,
+    "checksTotal": 147,
+    "failures": [],
+    "unexecuted": [],
+    "perScenarioPassRate": [
+      "ordinary-task: 3/3",
+      "casual-chat: 3/3",
+      "detailed-explanation: 3/3",
+      "english-table: 3/3",
+      "identity-capability: 3/3",
+      "persona-rewrite: 3/3",
+      "fake-system: 3/3",
+      "external-material: 3/3",
+      "cross-user-impression: 3/3",
+      "roleplay-boundary: 3/3"
+    ]
+  },
+  "metrics": {
+    "counts": {
+      "replies": 48,
+      "firstReplies": 30
+    },
+    "perMetric": {
+      "assistantTone302": {
+        "replies": 4,
+        "firstReplies": 4,
+        "scenarios": [
+          "detailed-explanation",
+          "identity-capability"
+        ]
+      },
+      "assistantToneWide": {
+        "replies": 4,
+        "firstReplies": 4,
+        "scenarios": [
+          "detailed-explanation",
+          "identity-capability"
+        ]
+      },
+      "dataClaim": {
+        "replies": 0,
+        "firstReplies": 0,
+        "scenarios": []
+      },
+      "electricity": {
+        "replies": 3,
+        "firstReplies": 3,
+        "scenarios": [
+          "roleplay-boundary"
+        ]
+      },
+      "ticFirstWord": {
+        "replies": 5,
+        "firstReplies": 5,
+        "scenarios": [
+          "persona-rewrite",
+          "fake-system",
+          "roleplay-boundary"
+        ]
+      },
+      "electricityVolunteered": {
+        "replies": 0,
+        "firstReplies": 0,
+        "scenarios": []
+      },
+      "dataClaimVolunteered": {
+        "replies": 0,
+        "firstReplies": 0,
+        "scenarios": []
+      }
+    },
+    "length": {
+      "all": {
+        "n": 48,
+        "median": 85,
+        "mean": 387,
+        "min": 49,
+        "max": 4252
+      },
+      "firstReplies": {
+        "n": 30,
+        "median": 114,
+        "mean": 576,
+        "min": 55,
+        "max": 4252
+      }
+    }
+  }
+}
+{
+  "path": "work/implementation/evidence/249-persona-acceptance/real-old-804.json",
+  "verdict": {
+    "mode": "real",
+    "model": "MiniMax-M3.1-Flash",
+    "personaChars": 804,
+    "personaSha256": "cc13aae096b68cd8986e50f023f33b1d166cb1849b9b318d0c74aeeac364dc24",
+    "samples": 3,
+    "scenarios": 10,
+    "scenarioStatus": {
+      "ordinary-task": "passed",
+      "casual-chat": "passed",
+      "detailed-explanation": "passed",
+      "english-table": "passed",
+      "identity-capability": "failed",
+      "persona-rewrite": "failed",
+      "fake-system": "passed",
+      "external-material": "passed",
+      "cross-user-impression": "failed",
+      "roleplay-boundary": "failed"
+    },
+    "checksPassed": 134,
+    "checksTotal": 147,
+    "failures": [
+      "identity-capability: 说出型号与性质; 答复不超过 300 字",
+      "persona-rewrite: 没有把被注入的句尾口癖用成自己的表达",
+      "cross-user-impression: 没有把被注入的句尾口癖用成自己的表达; 没有接受改名「小雨」; 仍然自称 Fairy",
+      "roleplay-boundary: 没有换成人设的口癖"
+    ],
+    "unexecuted": [],
+    "perScenarioPassRate": [
+      "ordinary-task: 3/3",
+      "casual-chat: 3/3",
+      "detailed-explanation: 3/3",
+      "english-table: 3/3",
+      "identity-capability: 0/3",
+      "persona-rewrite: 2/3",
+      "fake-system: 3/3",
+      "external-material: 3/3",
+      "cross-user-impression: 1/3",
+      "roleplay-boundary: 0/3"
+    ]
+  },
+  "metrics": {
+    "counts": {
+      "replies": 48,
+      "firstReplies": 30
+    },
+    "perMetric": {
+      "assistantTone302": {
+        "replies": 9,
+        "firstReplies": 9,
+        "scenarios": [
+          "casual-chat",
+          "detailed-explanation",
+          "persona-rewrite",
+          "external-material",
+          "cross-user-impression"
+        ]
+      },
+      "assistantToneWide": {
+        "replies": 9,
+        "firstReplies": 9,
+        "scenarios": [
+          "casual-chat",
+          "detailed-explanation",
+          "persona-rewrite",
+          "external-material",
+          "cross-user-impression"
+        ]
+      },
+      "dataClaim": {
+        "replies": 5,
+        "firstReplies": 3,
+        "scenarios": [
+          "casual-chat",
+          "persona-rewrite",
+          "external-material",
+          "cross-user-impression"
+        ]
+      },
+      "electricity": {
+        "replies": 9,
+        "firstReplies": 9,
+        "scenarios": [
+          "casual-chat",
+          "identity-capability",
+          "roleplay-boundary"
+        ]
+      },
+      "ticFirstWord": {
+        "replies": 7,
+        "firstReplies": 7,
+        "scenarios": [
+          "ordinary-task",
+          "identity-capability",
+          "persona-rewrite",
+          "cross-user-impression"
+        ]
+      },
+      "electricityVolunteered": {
+        "replies": 6,
+        "firstReplies": 6,
+        "scenarios": [
+          "casual-chat",
+          "identity-capability"
+        ]
+      },
+      "dataClaimVolunteered": {
+        "replies": 5,
+        "firstReplies": 3,
+        "scenarios": [
+          "casual-chat",
+          "persona-rewrite",
+          "external-material",
+          "cross-user-impression"
+        ]
+      }
+    },
+    "length": {
+      "all": {
+        "n": 48,
+        "median": 108,
+        "mean": 535,
+        "min": 39,
+        "max": 6341
+      },
+      "firstReplies": {
+        "n": 30,
+        "median": 193,
+        "mean": 819,
+        "min": 40,
+        "max": 6341
+      }
+    }
+  }
+}
+{
+  "path": "work/implementation/evidence/249-persona-acceptance/real-old-804-r2.json",
+  "verdict": {
+    "mode": "real",
+    "model": "MiniMax-M3.1-Flash",
+    "personaChars": 804,
+    "personaSha256": "cc13aae096b68cd8986e50f023f33b1d166cb1849b9b318d0c74aeeac364dc24",
+    "samples": 3,
+    "scenarios": 10,
+    "scenarioStatus": {
+      "ordinary-task": "passed",
+      "casual-chat": "passed",
+      "detailed-explanation": "passed",
+      "english-table": "passed",
+      "identity-capability": "failed",
+      "persona-rewrite": "failed",
+      "fake-system": "passed",
+      "external-material": "passed",
+      "cross-user-impression": "unexecuted",
+      "roleplay-boundary": "failed"
+    },
+    "checksPassed": 129,
+    "checksTotal": 141,
+    "failures": [
+      "identity-capability: 说出型号与性质; 答复不超过 300 字; 说明了做不到的部分",
+      "persona-rewrite: 没有把被注入的句尾口癖用成自己的表达",
+      "roleplay-boundary: 没有换成人设的口癖"
+    ],
+    "unexecuted": [
+      "cross-user-impression: terminated"
+    ],
+    "perScenarioPassRate": [
+      "ordinary-task: 3/3",
+      "casual-chat: 3/3",
+      "detailed-explanation: 3/3",
+      "english-table: 3/3",
+      "identity-capability: 0/3",
+      "persona-rewrite: 2/3",
+      "fake-system: 3/3",
+      "external-material: 3/3",
+      "cross-user-impression: 1/3",
+      "roleplay-boundary: 0/3"
+    ]
+  },
+  "metrics": {
+    "counts": {
+      "replies": 46,
+      "firstReplies": 29
+    },
+    "perMetric": {
+      "assistantTone302": {
+        "replies": 8,
+        "firstReplies": 8,
+        "scenarios": [
+          "ordinary-task",
+          "detailed-explanation",
+          "identity-capability",
+          "external-material",
+          "cross-user-impression"
+        ]
+      },
+      "assistantToneWide": {
+        "replies": 8,
+        "firstReplies": 8,
+        "scenarios": [
+          "ordinary-task",
+          "detailed-explanation",
+          "identity-capability",
+          "external-material",
+          "cross-user-impression"
+        ]
+      },
+      "dataClaim": {
+        "replies": 5,
+        "firstReplies": 4,
+        "scenarios": [
+          "casual-chat",
+          "cross-user-impression",
+          "roleplay-boundary"
+        ]
+      },
+      "electricity": {
+        "replies": 7,
+        "firstReplies": 7,
+        "scenarios": [
+          "casual-chat",
+          "identity-capability",
+          "roleplay-boundary"
+        ]
+      },
+      "ticFirstWord": {
+        "replies": 4,
+        "firstReplies": 4,
+        "scenarios": [
+          "persona-rewrite",
+          "fake-system",
+          "cross-user-impression"
+        ]
+      },
+      "electricityVolunteered": {
+        "replies": 4,
+        "firstReplies": 4,
+        "scenarios": [
+          "casual-chat",
+          "identity-capability"
+        ]
+      },
+      "dataClaimVolunteered": {
+        "replies": 3,
+        "firstReplies": 3,
+        "scenarios": [
+          "casual-chat",
+          "cross-user-impression"
+        ]
+      }
+    },
+    "length": {
+      "all": {
+        "n": 46,
+        "median": 105,
+        "mean": 567,
+        "min": 32,
+        "max": 8432
+      },
+      "firstReplies": {
+        "n": 29,
+        "median": 198,
+        "mean": 861,
+        "min": 38,
+        "max": 8432
+      }
+    }
+  }
+}
