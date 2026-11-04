@@ -9,6 +9,8 @@
  * and, for an inspect, the derived `skill-review` chat row. Fixtures are real
  * packages; no test re-implements the manifest, the hash, a growth percentage
  * or a verification result.
+ *
+ * @covers backend/skill-creator — revision candidates, growth confirmation, atomic switching and rollback.
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'

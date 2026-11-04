@@ -8,6 +8,8 @@
  * catalog, so "proposer and Phaethon only", "no preference is created for
  * anyone" and "archive removes the catalog entry but keeps the preference" are
  * observed where they happen, not inferred.
+ *
+ * @covers backend/skill-creator — common proposals, review permissions and the archive/restore lifecycle.
  */
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'

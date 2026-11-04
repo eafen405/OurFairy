@@ -5,6 +5,8 @@
  * direct archive URLs; the real launcher, real SQLite store and real review path
  * do the rest. The fixtures are real package bytes, so the recorded manifest
  * hash and license are read back from the row rather than recomputed here.
+ *
+ * @covers backend/skill-creator — address install through the shipped composition, including its fetch policy.
  */
 import assert from 'node:assert/strict'
 import { createHash, randomBytes } from 'node:crypto'

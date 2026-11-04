@@ -18,6 +18,47 @@ import { linkTypes } from '../../scripts/link-types.ts'
 /** Absolute path of this ticket worktree (the repository under test). */
 export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
+/**
+ * Refuse to run when a product package's build output is missing.
+ *
+ * `npm test` builds first (`pretest`), but `npm run build` is `tsc.ts --fresh`,
+ * which removes every `backend/*\/dist` before compiling again. A test process
+ * that starts inside that window sees `ERR_MODULE_NOT_FOUND` for the package
+ * under test, or a launcher that exits naming a `files` entry that publishes
+ * nothing — hundreds of red failures whose cause is "a build is running", not
+ * "the product broke". This turns that whole class into one loud message about
+ * the real cause.
+ *
+ * The maintenance subagent's baseline probe is the package least likely to have
+ * been built by hand, so its output is the one that goes missing first; checking
+ * every package the bundle declares keeps the message honest about the whole
+ * set rather than guessing which file a caller will import next.
+ */
+function assertProductBuild(root) {
+  const backend = join(root, 'backend')
+  if (!existsSync(backend)) return
+  const missing = []
+  for (const entry of readdirSync(backend, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const dir = join(backend, entry.name)
+    if (!existsSync(join(dir, 'package.json'))) continue
+    const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    // A package that publishes no JavaScript (the bundle ships YAML and locale
+    // data only) has no build output to wait for.
+    if (!Array.isArray(manifest.files) || !manifest.files.some(pattern => pattern.endsWith('.js'))) continue
+    if (!existsSync(join(dir, 'dist'))) missing.push(`backend/${entry.name}/dist`)
+  }
+  if (missing.length === 0) return
+  throw new Error(
+    `the product build output is missing for ${missing.length} package(s): ${missing.join(', ')}.`
+    + ` Either \`npm test\` (which builds first) was interrupted, or a \`npm run build\` is`
+    + ` running right now — that command clears every backend/*/dist before rebuilding, so a`
+    + ` test that starts inside that window fails as if the product broke.`
+    + ` Run \`npm run build\` and let it finish, then run the tests again.`)
+}
+
+assertProductBuild(repoRoot)
+
 /** Companion checkout selected by the same resolver as the launcher. */
 export const dshDir = repoPath(readCombo(repoRoot).combo, 'dsh', repoRoot)
 
