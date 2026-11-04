@@ -11,9 +11,22 @@
 
 1. **两条硬断言把不该由测试保证的事固定住了**（`docs.test.mjs` 扫未跟踪文件、`projection-units-real` 冻结绝对 seq）。两条都已在干净基线上实测复现，各有确定的根因和可执行的修法。
 2. **`@covers` 只写在 35/101 个文件里**，related-gate 因此对 `skill-creator` 与 6 个 `scripts/*.ts` 完全失效——改了这些文件，门禁**选不中本就会红的测试**，退化成 `typecheck`。这是"门禁看起来跑了、其实没跑到"的一类。
-3. **测试分层实际上只有两层**：46 个纯启停集成、27 个直 import 单元、10 个混合、**0 个 live-llm 层在 `npm test` 里**。live-llm 全靠 `acceptance:*` 手动脚本，在门禁之外。缺的那层不是"覆盖不够"，是"分层里有一层没接进门禁"。
+3. **测试分层实际上只有两层**：46 个纯启停集成、27 个直 import 单元、10 个混合、**0 个 live-llm 层在 `npm test` 里**。live-llm 全靠 `acceptance:*` 手动脚本。这一层不进门禁是**有意的设计**（README:105/118 明确写了），我**不建议**把它接进 CI——只指出 `acceptance:skill` 存在于 `package.json` 却不在 README（§5.1）。
 
 按影响排序的完整问题清单在 §7，含每条的删除/合并/补强建议与节省估算。
+
+### 0.1 本稿撤回的 4 条结论（复核后被反证）
+
+初稿有 4 条结论经队友/Lead 复核后**不成立，已撤回**，保留在此以免被后人引用：
+
+| # | 初稿结论 | 撤回理由 |
+| --- | --- | --- |
+| 1 | `pretest` 改成 `npm run typecheck`（增量）可消除构建竞争 | **实测反证**：增量 `tsc -b` **修不好"部分缺失的 dist"**——只删 `dist/index.js` 保留 `.tsbuildinfo` 时，`typecheck` 报 exit=0 却不重建（`After: index.d.ts`）。`--fresh` 是唯一自愈路径。改法收窄为"加构建锁"（§6.1） |
+| 2 | `tests/precommit.test.mjs:16-26` 注释与代码不符（说"命令不跑"但跑了） | **`docs-keeper` 反证 + 我复核**：`--print` 在 `precommit.ts:316-318` 打印后**直接 return**，任何门禁命令都不执行。注释准确，撤回 |
+| 3 | README 没写 `acceptance:*` 不在 `npm test`/CI 内 | **`docs-keeper` 反证 + 我复核**：`README.md:105` 与 `:118` 都写了且加粗。是我只读了「跑测试」节、没读下面的「真实服务验收」节。**但顺此查出真实缺口**：`acceptance:skill` 在 `package.json` 里有、README 里查不到（§5.1） |
+| 4 | 删 `tests/groups-row.test.mjs`（与 `row-addressability:408` 重复，省 15 s） | **Lead 否决 + 我逐条比对确认不等价**：`groups-row` 独有 3 个观测点（管理员 `group_create` 被拒、`bash` 在 group 根被拒走 script 通道、拒绝后私有空间仍可用）。保留（§4.1） |
+
+教训与本次审查的主线一致：**"看起来重复/看起来不一致"本身也需要实测**，我前 3 条都犯了自己在这份报告里批评的错——只读了代码没跑验证。
 
 ---
 
@@ -164,6 +177,31 @@ ReclaimOlderThanMs: param.NewOpt[int64]  // 紧接着是一个 (2000) 调用括�
 
 **建议：** 遍历前剥掉围栏代码块（三反引号包裹的段落），再匹配链接。这是让 §1.1 的修法安全落地的前提，建议与 §1.1 同一次改动。
 
+### 2.3b 失败信息里写死的数字（`route-inventory.test.mjs:146`）
+
+```js
+// :145  ← 断言本身正确：实测 json=41
+assert.deepEqual(countsOf(ALL.map(entry => entry.body)), { json: 41, binary: 2, none: 1 },
+  '35 addresses read a JSON object; chunk and transcriptions read raw bytes; the GET reads none')
+//                                    ^^ 实测 json 是 41，这里写 35
+```
+
+实测该行 `body` 分布是 `{"json":41,"binary":2,"none":1}`，所以 **`41/2/1` 正确、而同一行失败信息里的 `35` 是错的**。
+
+**为什么这条特别值得修**：`assert` 永远不会抓到它（断言是对的），只有**当它红的时候**人才会读这句话——也就是**在最需要看清事实的时刻给出一个错的数字**。数字已经会在 `actual`/`expected` 的 diff 里出现，在文案里再抄一遍必然漂。
+
+**建议：** 失败信息不写数字，写来源与分类：
+
+```js
+'every address declares its request body; json rows read a JSON object, chunk and transcriptions read raw bytes, the GET reads none'
+```
+
+这条与 `docs-keeper` 复核一致（其清单 §」复述代码」类）。
+
+### 2.3c 本报告自身踩中了 §2.3（实证）
+
+我在写这份报告时，引用那段 Go 代码（`param.NewOpt[int64]` 后面紧跟一个 `(2000)` 调用括号）作为示例，结果 **`docs.test.mjs` 立刻把我的报告也报成坏链**（`… -> 2000`，连报 4 次）。这不是巧合，是 §2.3 那个正则缺陷的**可复现证明**：任何人写文档解释这个话题，都会撞上它。这也是为什么 §7 里 #1 和 #2 必须同批修。
+
 ### 2.4 值得表扬的一处（作为写法范例）
 
 `tests/ecosystem-boundary.test.mjs:88-124` 的 `CITED_CHECKS`：文档每一条"这个限制有测试守着"的声称，都被拿去和**真实测试标题**对账，标题改名或删除就红。这是"声称须可执行"的正确落地方式，建议 §7 的问题都按这个模式修。
@@ -242,7 +280,16 @@ story-coverage, template-reuse
 
 它的 28 个用例里，选择逻辑的每条规则都有独立用例（模式分类、Android 附加、merge、`--full`、45 条上限、`testFiles` 与 `npm test` glob 的一致性、hook 可执行位、CI 的 job 切分）。这部分**是本次审查里质量最高的测试**，不需要改。
 
-唯一可提的：`tests/precommit.test.mjs:16-26` 的文件头注释有一句「The commands themselves are not run: this file pins the classification…」——但实测 `:298-330` 的 `'the merge entry point asks for the full gate itself'` **确实 `execFileSync` 跑了 `scripts/precommit.ts --print`**。注释与代码已经不一致，属文档漂移（一句话修正即可）。
+**一处我原稿写错、已撤回的指控**：我曾写这条注释与代码不一致（因为 `:313` 确实 `execFileSync` 了 `scripts/precommit.ts`）。`docs-keeper` 核出反证，我复核确认其对：
+
+```js
+// tests/precommit.test.mjs:313
+execFileSync(process.execPath, ['scripts/precommit.ts', '--print', '--merge'], { ... })
+// scripts/precommit.ts:316-318
+if (print) { process.stdout.write(...); return }   // ← 打印完直接 return
+```
+
+`--print` 在跑任何门禁命令**之前**就返回（`precommit.ts:316-318`）。所以「The commands themselves are not run」**准确**：该文件断言的是**决策**（mode / commands / paths），不是门禁跑通。这条撤回，§3.4 的结论是"无需改动"。
 
 ---
 
@@ -266,7 +313,19 @@ tests/row-addressability.test.mjs:408  'disabling the groups row removes its too
 | `tests/groups-row.test.mjs` | **15.4 s** | 1 |
 | `tests/row-addressability.test.mjs` | **59.6 s** | 6 |
 
-**建议：删 `tests/groups-row.test.mjs`**（整文件），保留 `row-addressability.test.mjs:408` 那份——后者与 shell/fs provider 的四个同类用例同处一个文件，读起来是"逐 provider 验证可寻址性"的一条线，比孤立的一个文件更成体系。**节省 ~15 s**，且不影响 §3 的选择器（两个文件都已被 `@covers backend/groups` 选中）。
+**我原稿建议删 `tests/groups-row.test.mjs`，Lead 否决，我复核后同意保留——因为它们并不等价。**
+
+我原稿只说"场景高度重叠"，没有验证断言集是否等价。逐条比对后，`groups-row` 有 3 处断言在 `row-addressability:408` 里**不存在**：
+
+| 差异 | `groups-row.test.mjs` | `row-addressability.test.mjs:408` |
+| --- | --- | --- |
+| **管理员**调用 `group_create` 被拒 | 有（`:125`，`tool(admin, 'group_create', …)`） | 无（该用例只用 alice） |
+| **`bash` 在 group 根**被拒 | 有（`:121`，`workdir: groupRoot`） | 无（只有 `read` / `write` 两个路径被拒） |
+| 拒绝之后**私有空间仍可用** | 有（`:129` 复读私有文件） | 无 |
+
+第二、三条尤其重要：`bash` 走的是 `spaces` 的 script 通道，与 `read`/`write` 的文件通道是**不同的授权路径**——只测 `read`/`write` 被拒，证明不了脚本通道也被关。"拒绝之后仍可用"则是防止测试在越权把整个 spaces 搞坏时假通过。
+
+所以这是 **"场景相同、观测点不同"**，不是机械复制（跨文件重复标题实测确实是 0）。**保留两个文件。节省 15 s 不值得减掉 3 个独立观测点。** 我撤回删除建议。
 
 ### 4.2 重复的 inline 测试辅助函数
 
@@ -326,7 +385,25 @@ npm run acceptance:skill    scripts/skill-acceptance.ts
 
 CI（`.github/workflows/check.yml`）**一条都不跑**。所以"真模型下的质量"在整个自动化门禁里是零覆盖，只有人记得手动跑时才有。
 
-**判断与建议：** 这不是"要加厚"，相反——**承认这一层不进门禁是合理的**（个人项目、真模型有成本），但要把这件事**写清楚**，而不是让它默默存在。具体：在 README「跑测试」节补一句"live-llm 层不在 `npm test` 与 CI 内，交付前手动跑 `acceptance:*`"，并让 `.github/workflows/check.yml` 的注释说明为何不跑。现状是"读代码的人会以为三层都跑了"。
+**我原稿说"README 没写这件事"是错的，已撤回。** `docs-keeper` 指出并附了原文，我复核确认：
+
+```
+README.md:105  `acceptance:real` 是操作者显式发起的真实服务验收，**不属于 `npm test` 或 CI**。
+README.md:118  `acceptance:memory` 是记忆增量的真实轻量模型质量样本，同样**不属于 `npm test` 或 CI**。
+```
+
+两句都在，且加粗。**这一层的边界是有文档的**，我此前只读了「跑测试」节、没读到下面的「真实服务验收」节。
+
+**但顺着这条核下去，发现一个真实的缺口**（归 `docs-keeper` 清单 §6.3，我复核成立）：
+
+```
+$ grep -n "acceptance:skill" README.md     → 无命中
+$ node -e "…scripts…" | grep acceptance    → real / memory / skill
+```
+
+`package.json` 有 **`acceptance:skill`**（`scripts/skill-acceptance.ts`），README 的真实服务验收节**只写了 `real` 与 `memory`**。属"环境里有、文档查不到"。这是文档缺口，不是我的测试质量轴，仅记录并交叉给 `docs-keeper`。
+
+**我的判断不变：** 这一层不进门禁是**合理的设计**（个人项目、真模型有成本）。我不建议把它接进 CI。
 
 ### 5.2 过厚的地方：`skill-*` 一族
 
@@ -377,7 +454,41 @@ without its build output. Run 'npm run build' to produce it.
 
 **建议：** 在 `tests/helpers/backend.mjs` 的 `startedPort()` 附近，或 `scripts/ourfairy-backend.ts` 的 `start` 前置一次 `backend/*/dist` 非空检查，缺了就**一次**响亮报 `run 'npm run build'`，而不是让每个套件各自崩。这属于"把已有检查提前到更早的接缝"，不是新机制，符合「规模校准」。
 
-**另一条更省事的替代**：把 `pretest` 从 `npm run build`（= `--fresh`）改成 `npm run typecheck`（增量 `tsc -b`），因为 `npm test` 前本来就需要产物、不需要"清空重来"。`--fresh` 只在交付/CI 需要。**这个改动最小、收益最大**，且不新增代码。
+**关于「把 `pretest` 改成 `npm run typecheck`」——我实测后撤回这条建议。**
+
+先澄清一个事实（我原稿没说清，Lead 也问过）：本仓库的 `typecheck` **不是** `--noEmit`，它同样是 `tsc -b`，**会产出 `.js`**。`scripts/tsc.ts:8-10` 的注释写明了原因：「`-b` is both the build and the type check; `--noEmit` is not a second mode (it injects noEmit into referenced projects and fails with TS6310)」。实测：
+
+```
+$ rm -rf backend/search/dist && npm run typecheck
+exit=0  after: index.d.ts index.js     ← 产物被完整重建
+```
+
+所以"`typecheck` 不产出 `.js`、会让干净检出跑不了测试"这个担心**不成立**。
+
+**但这条建议仍然要撤回，理由是我随后实测出的另一个更强的问题——增量构建修不好"部分缺失"的 `dist`：**
+
+```
+$ rm backend/probe/dist/index.js      # 只删 .js，保留 .tsbuildinfo
+$ npm run typecheck
+exit=0                                 # ← 报成功
+after: index.d.ts                      # ← index.js 没有重建！
+```
+
+原因：`tsBuildInfoFile` 是 `dist/.tsbuildinfo`（14 个包全一致），`tsc -b` 认为"这个项目的输出是最新的"，于是跳过 emit。而**`--fresh` 恰好能修**（它先 `rmSync` 整个 `dist`、连 `.tsbuildinfo` 一起删，所以增量状态失效、必然重新 emit）：
+
+```
+$ rm -rf backend/probe/dist && npm run build     # --fresh
+exit=0  after: index.d.ts index.js               ← 修复
+```
+
+**结论：`pretest` 现在这条 `--fresh` 链路，是"部分产物缺失"的唯一自愈路径。** 把它换成增量构建，会让 `dist` 半损的工作区永远修不回来（而且是以"构建成功"的方式静默失败）。这比原来的并发问题更难查。
+
+因此本条的修法收窄为一条：**只解决"两个构建并发"，不改 `--fresh`**。
+
+- **推荐：给 `scripts/tsc.ts` 加构建锁**（`.tsbuildinfo` 旁的 lockfile，第二个构建等待或响亮失败）。既消除并发互删，又完全不动语义与自愈能力。`cleanProducts()` 删 `dist` 时会把锁一起删掉，所以锁文件要放在 `dist` 之外（例如仓库根的 `.build.lock`），否则锁自己会被清掉。
+- 备用：`cleanProducts()` 保留，但 `pretest` 改为在 `npm test` 前检查 `backend/*/dist/*.js` 非空、缺失才触发 `--fresh`。这条更省构建时间，但引入"什么时候算缺"的判断，不如构建锁直接。
+
+**Lead 裁决：本条本轮不做**（改构建脚本需独立验证），列入下一批。
 
 ### 6.2 根因二：孤儿后端进程
 
@@ -400,29 +511,39 @@ Lead 清理了 6 个 `ppid=1`、cwd 指向**已被删除的 worktree** 的后端
 
 ## 7. 可执行清单
 
-按"改什么 / 为什么 / 怎么改 / 省多少 / 风险"排列。**P0 = 真缺陷，会弄红门禁或让门禁漏测**。
+按"改什么 / 为什么 / 怎么改 / 省多少 / 风险"排列。**P0 = 真缺陷，会弄红门禁或让门禁漏测。**
 
-### P0
+**分批状态（按 Lead 裁决）：**
+- ✅ **本轮不改代码** —— 本轮是审查，所有条目都只登记建议。修 `tests/`、`scripts/`、源码需独立验证。
+- 🔜 **下一批 A（P0 #1–#4）**：都是小改动、可独立验证、收益明确，建议紧接着做。
+- 🔜 **下一批 B（P0 #5、P1、P2）**：涉及构建脚本或较大重构，需独立验证后再动。
+
+### P0（🔜 下一批 A，除 #5）
 
 | # | 文件 | 问题 | 建议改法 | 收益 | 风险 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `tests/docs.test.mjs:16-27` | 扫未跟踪的 `work/tmp/`，任何人放 scratch md 就能弄红全量 | `markdownFiles()` 改为 `git ls-files -z '*.md'` + 保留点目录排除（实测 641 文件、0 坏链） | 门禁不再被临时文件左右 | 低；需与 #2 同批 |
 | 2 | `tests/docs.test.mjs:31` | 链接正则把代码块里的 `](` + 数字 当链接 | 匹配前剥掉三反引号围栏块 | #1 才能安全落地 | 低 |
 | 3 | `tests/projection-units-real.test.mjs:96-113` + `tests/fixtures/projection-real-expected.json` | 冻结绝对 seq，被 `backfillTitle` 的 fire-and-forget 竞态左右（实测延迟 50 ms 即翻转） | 断言相对结构（工具行紧跟其请求的用户消息、seq 严格单调），或加"等标题落定"屏障 | 消除 1 个真缺陷、1 类未来复发 | 中；需重生成 fixture 的 seq 字段 |
-| 4 | `tests/skill-creation.test.mjs`、`skill-evolution.test.mjs`、`skill-install-product.test.mjs`、`skill-review-entry.test.mjs`、`skill-sharing.test.mjs` | 5 个最重整机套件（合计 ~164 s）门禁选不中 | 各加一行 `@covers backend/skill-creator` | 源码改动时找回 164 s 的真实验证 | 极低（纯注释） |
-| 5 | `package.json` `pretest` | `pretest` 用 `--fresh`，与其他构建互相 rmSync 产物 | 改 `pretest` 为 `npm run typecheck`（增量），`--fresh` 只留给交付/CI | 消除整类"缺模块"假红 | 低 |
+| 4 | `tests/skill-creation.test.mjs`、`skill-evolution.test.mjs`、`skill-install-product.test.mjs`、`skill-review-entry.test.mjs`、`skill-sharing.test.mjs` | 5 个最重整机套件（合计 ~164 s）门禁选不中 | 各加一行 `@covers backend/skill-creator` | 源码改动时找回 164 s 的真实验证 | 极低（纯注释）；**需跑 `precommit.test.mjs` 验证真的选中了** |
 
-### P1
+### P0（🔜 下一批 B）
 
 | # | 文件 | 问题 | 建议改法 | 收益 | 风险 |
 | --- | --- | --- | --- | --- | --- |
-| 6 | `tests/groups-row.test.mjs`（整文件） | 与 `row-addressability.test.mjs:408` 同一场景、几乎同标题 | 删除该文件 | **~15 s** | 低 |
+| 5 | `scripts/tsc.ts`（**不是** `package.json pretest`） | 两个构建并发时 `cleanProducts()` 互相 `rmSync` 产物 | **加构建锁**（仓库根 `.build.lock`，放 `dist` 之外）。**不要**把 `pretest` 改成增量构建——实测增量构建修不好"部分缺失的 dist"（见 §6.1） | 消除整类"缺模块"假红 | 中；改构建脚本需独立验证 |
+
+### P1（🔜 下一批 B）
+
+| # | 文件 | 问题 | 建议改法 | 收益 | 风险 |
+| --- | --- | --- | --- | --- | --- |
+| 6 | ~~`tests/groups-row.test.mjs`~~ | ~~与 `row-addressability.test.mjs:408` 重复~~ | ❌ **已撤回，保留该文件**。逐条比对后二者**不等价**：`groups-row` 独有 3 个观测点——管理员调 `group_create` 被拒（`:125`）、`bash` 在 group 根被拒（`:121`，走的是 script 通道而非文件通道）、拒绝后私有空间仍可用（`:129`）。详见 §4.1 | 不删 | —— |
 | 7 | `tests/precommit.test.mjs:229-238` | 用 `scripts/real-acceptance.ts` 当"无测试引用"样例，但 `real-acceptance.test.mjs` 就在引用它 | 样例换成 `scripts/pdf-flash-smoke.ts`（实测无测试提及） | 用例恢复为真 | 低 |
 | 8 | `tests/real-acceptance.test.mjs:150` | 用 `['scripts','real-acceptance.ts'].join('/')` 躲选择器，副作用是自己永远选不中 | 改字面量，让 related-gate 能选中本套件 | 4 个用例纳入门禁 | 低；需同步改 #7 |
 | 9 | `tests/identity-interfaces.test.mjs:104-114`（整个用例） | 读源码再正则，充当结构检查（违反 `CODING_STANDARDS.md:7`）；等价改写即可绕过 | 删除该用例；`:38-45` 的运行时断言已覆盖同一事实 | 去掉 1 个假通过用例 | 低 |
 | 10 | 6 个文件共 38 处自由文本择一断言（见 §2.1 分布表）；先做断言"成功"的 7 处 | `/create\|wrote\|write\|success/i` 对成功写入近乎恒真 | 改断言工具结果结构（照 `row-addressability.test.mjs:398` 的 `unknown tool "X"` 范例） | 7 条断言变成真验证 | 低 |
 
-### P2
+### P2（🔜 下一批 B）
 
 | # | 位置 | 建议 | 收益 |
 | --- | --- | --- | --- |
@@ -443,9 +564,10 @@ Lead 清理了 6 个 `ppid=1`、cwd 指向**已被删除的 worktree** 的后端
 
 | 项 | 当前 | 改后 |
 | --- | --- | --- |
-| 单跑省下的固定成本 | —— | `groups-row` 删除 **~15 s** |
-| 全量套件（串行） | 458.6 s | ~443 s（约 −3.3%） |
-| 门禁"选不中"的真实验证 | 漏 ~164 s（skill-creator） | 补回 |
-| 假红造成的返工 | 本次审查中 3 份互相矛盾的基线、≥2 小时 | 消除 |
+| 全量套件（串行） | 458.6 s | 不变（**没有删除任何用例**：唯一拟删项 `groups-row` 已撤回） |
+| 门禁"选不中"的真实验证 | 漏 ~164 s（skill-creator 5 个整机套件） | **补回 164 s 的真实验证**（不缩短耗时，是把漏掉的验证找回来） |
+| 假红造成的返工 | 本次审查中 3 份互相矛盾的基线、≥2 小时 | 消除（修 §6.1 的构建并发） |
+
+**关于"能省多少时间"的诚实回答：几乎省不了，也不该靠删测试来省。** 这套 458.6 s 的构成是：665 个用例里最慢的 12 个占了绝大部分（`session-titles` 52 s、`owned-sessions` 49 s、`gateway` 的 shared-selection 46 s、`session-rename` 40 s、`growth confirmation` 38 s……），而它们全都在做真实启停——**这正是这一层存在的价值**。要提速只能靠把 `npm test` 拆成快/慢两组（快组进门禁、慢组进交付），但那会改变 `AGENTS.md`「验证节奏」的现有约定，超出本次审查的授权范围，仅作为观察记录在此。
 
 全量耗时的量级问题**不在用例数量**：665 个用例里，慢的 12 个占了绝大部分时间（`session-titles` 52 s、`owned-sessions` 49 s、`gateway` 的 shared-selection 46 s、`session-rename` 40 s、`growth confirmation` 38 s……），它们都在做真实启停。**这些不该优化**——它们是这一层的价值所在。要提速只能靠分层（把 `npm test` 拆成快/慢两组，快组进门禁、慢组进交付），但那会改变 `AGENTS.md`「验证节奏」的现有约定，超出本次审查的授权范围，仅作为观察记录在此。
