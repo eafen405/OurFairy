@@ -39,6 +39,7 @@ const anchors = {
   '@deepseek-ai/dsh-llm-pi-ai': join(dshDir, 'packages', 'llm', 'llm-pi-ai', 'package.json'),
   '@deepseek-ai/dsh-llm-mock-server': join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'package.json'),
   '@deepseek-ai/dsh-agent': join(dshDir, 'packages', 'core', 'agent', 'package.json'),
+  '@deepseek-ai/dsh-system-prompt': join(dshDir, 'packages', 'core', 'system-prompt', 'package.json'),
   '@deepseek-ai/dsh-jobs': join(dshDir, 'packages', 'jobs', 'jobs', 'package.json'),
   '@deepseek-ai/schemastery': join(dshDir, 'vendor', 'schemastery', 'package.json'),
   zod: join(dshDir, 'package.json'),

@@ -6,6 +6,7 @@ import { ChatRuntimeFacade } from './runtime-facade.js'
 import { installJobs } from './jobs.js'
 import { registerProjectionUnits } from './units.js'
 import { installSpillRead } from './spill-read.js'
+import { installPromptGuard } from './prompt-guard.js'
 import { respondToChatObserver } from './observe.js'
 import { SESSION_RENAME_PATH, SessionScopeError } from '@ourfairy/dsh-sessions'
 import type { Context } from '@deepseek-ai/cordis'
@@ -60,6 +61,7 @@ export const inject = ['webServer', 'connection', 'ourfairySessions', 'ourfairyS
   'agentLoop',
   'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'llm', 'sessionPersistence', 'jobs', 'sessionProjections']
 export function apply(ctx: Context): void {
+  installPromptGuard(ctx)
   // Every registered unit folds on the native event drive, once per session and
   // shared by every observer; `register` installs its own effect on this fiber.
   registerProjectionUnits(ctx)
