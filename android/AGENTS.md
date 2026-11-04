@@ -19,8 +19,8 @@
 ## 验证
 
 ```bash
-ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew test lintDebug assembleDebug
-ANDROID_HOME=/home/eafen405/Android/Sdk ./gradlew assembleRelease -Pourfairy.identityEndpoint=https://your-backend.example
+ANDROID_HOME=/path/to/Android/Sdk ./gradlew test lintDebug assembleDebug
+ANDROID_HOME=/path/to/Android/Sdk ./gradlew assembleRelease -Pourfairy.identityEndpoint=https://your-backend.example
 ```
 
 测试通过、APK 构建和设备验收分别报告。涉及包体时读取实际 APK 和 merged manifest；比较时说明构建类型、ABI 和源码基线。
