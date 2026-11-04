@@ -41,7 +41,7 @@ export function apply(ctx: Context, config: { readonly root: string }): void {
       // memory maintenance child gets only its own narrow material and
       // instruction, and an ownerless context cannot name a private space.
       if (shortIdOf(agent.session.header?.owner) === undefined) return ''
-      return `Authorized file spaces: ${scope.writeRoots(agent.session).map(root => JSON.stringify(root)).join(', ')}. Private space: ${scope.privateRoot(agent.session)}. Public files are shared. Use the shared env directory for dependencies; network access is available. File rights do not change with cwd or escalation.`
+      return `授权文件空间：${scope.writeRoots(agent.session).map(root => JSON.stringify(root)).join('、')}。私有空间：${scope.privateRoot(agent.session)}。公共文件为共享。依赖装在共享 env 目录，网络可用；换目录或提权都不改变文件权限。`
     } })
   })
 }

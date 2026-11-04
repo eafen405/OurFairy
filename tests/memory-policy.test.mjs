@@ -26,6 +26,21 @@ const password = 'memory-policy-password'
 const MEMORY_TOOLS = ['memory_add', 'memory_delete', 'memory_edit', 'memory_search', 'memory_switch']
 const MAIN_POLICY_MARKER = '不要写会话摘要、用户画像'
 const MAIN_ONLY_MARKER = '用户明确要求记住时立即用 memory_add 保存'
+/**
+ * The stable prefix of the `ourfairy:spaces` section (`spaces/src/index.ts`).
+ *
+ * The section is the deployment's own voice, so the marker is Chinese; matching
+ * the English text it used to be written in would make the assertion below pass
+ * without checking anything.
+ *
+ * Where it can surface: `ourfairy:spaces` is a prompt **context**, not a
+ * section. `complete: true` on the child's section replaces the section list
+ * but leaves contexts rendered, and the agent loop delivers them as a runtime
+ * context message. The maintenance child never registers that context at all,
+ * so the real request body must not carry this marker anywhere — hence the
+ * whole-body check below rather than a `system`-only one.
+ */
+const SPACES_PROMPT_MARKER = '授权文件空间：'
 let port, model, modelPort, admin
 /** Every request body the double received, in arrival order. */
 const requests = []
@@ -173,7 +188,10 @@ test('memory policy lives on memory_add while maintenance keeps its own prompt',
   assert.match(childSystem, /可复用的工作流.*skill_manage.*记忆/u, 'the child carries the same workflow→skill boundary')
 
   assert.equal(childSystem.includes(MAIN_ONLY_MARKER), false, 'the owned prompt policy is not inherited by the child')
-  assert.equal(childSystem.includes('Authorized file spaces'), false,
+  // The spaces contribution is a prompt context, which the agent loop delivers
+  // as a runtime-context message rather than a `system` section, so the whole
+  // request body is checked — a `system`-only check cannot see it.
+  assert.equal(JSON.stringify(child).includes(SPACES_PROMPT_MARKER), false,
     'the spaces prompt context contributes nothing to the maintenance preset')
   assert.match(childSystem, /你是长期记忆维护子代理/, 'the child carries its own maintenance instruction')
   assert.equal(childSystem.includes('Check the [exit code: N] marker'), false,
