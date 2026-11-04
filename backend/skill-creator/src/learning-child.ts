@@ -54,7 +54,7 @@ export function learningChildSetup(policy: string, register: (agentCtx: Context)
   return agentCtx => {
     agentCtx.tools.restrict({ allow: [] })
     register(agentCtx)
-    agentCtx.systemPrompt.section({ name: LEARNING_SECTION, order: 0, text: policy, interpolate: false })
+    agentCtx.systemPrompt.section({ name: LEARNING_SECTION, order: 0, text: policy, interpolate: false, complete: true })
   }
 }
 

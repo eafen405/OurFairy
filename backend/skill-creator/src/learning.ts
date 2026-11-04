@@ -762,12 +762,12 @@ export class LearningEngine {
   /** Resume one persisted detection child under the current light-model route. */
   #resumeChild(childSession: SessionId, interval: DetectionInterval): Promise<AgentHandle> {
     const settings = this.#options.settings()
-    const policy = `${detectionPrompt({
+    const policy = detectionPrompt({
       taskKeys: interval.taskKeys,
       revocable: interval.revocable,
       watermarkSeq: interval.watermarkSeq,
       cutSeq: interval.cutSeq,
-    })}\n\n${DETECTION_RETRY_MESSAGE}`
+    })
     return this.#ctx.agents.resume({
       resumeSessionId: childSession,
       agentOptions: { provider: settings.provider, model: settings.model },
