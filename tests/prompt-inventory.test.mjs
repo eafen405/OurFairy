@@ -23,6 +23,7 @@ import {
   describeRun, makeHome, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay,
 } from './helpers/backend.mjs'
 import { answerIfTitle } from './helpers/title-aware.mjs'
+import { FAIRY_PERSONA } from '../backend/chat/src/persona.ts'
 
 const password = 'prompt-inventory-password'
 const INVENTORY_FIXTURE = new URL('../backend/chat/test-support/prompt-inventory.ts', import.meta.url).pathname
@@ -187,6 +188,12 @@ test('one owner turn lists every deployment prompt section with its size', async
 
   // The deployment prompt is exactly the product sections, then the dsh
   // tool-usage lines. Order is part of the voice: the persona opens the prompt.
+  //
+  // This list is deliberately a second, independent source rather than derived
+  // from the product's registration sites: its job is to be the witness that
+  // catches "someone added or moved a section", and a derived list would move
+  // with the change it is supposed to catch. When a section is added on
+  // purpose, update this list in the same commit — that edit is the review.
   assert.deepEqual(names, DEPLOYMENT_SECTIONS, 'the assembled prompt is the deployment prompt, in order')
 
   // #302 moved the memory write rule into the memory_add description, so the
@@ -213,11 +220,14 @@ test('one owner turn lists every deployment prompt section with its size', async
       assert.ok(section.characters > 0, `${section.name} contributes text`)
     }
   }
-  // The persona is the deployment's own text and #302 does not touch it: the
-  // ticket removed a prompt section, it did not rewrite her voice. Pinning the
-  // size makes an accidental edit to that text visible here.
+  // The persona section must be the deployment's own constant, whatever its
+  // current text is. Deriving the expected size from `FAIRY_PERSONA` keeps this
+  // check aimed at "the persona that shipped is the persona assembled" rather
+  // than at one frozen length: a pinned number would fail every time the text is
+  // legitimately revised, which is what this assertion used to do (#302).
   const persona = inventory.sections.find(section => section.name === 'ourfairy:persona')
-  assert.equal(persona.characters, 804, 'the deployment persona is unchanged by #302')
+  assert.equal(persona.characters, [...FAIRY_PERSONA].length,
+    'the assembled persona section is exactly the deployment constant')
 
   // The joined total is what the model actually reads; it must match the wire.
   assert.equal(inventory.joinedCharacters, [...systemOf(request)].length,
