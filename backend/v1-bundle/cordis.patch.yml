@@ -436,6 +436,9 @@
             learningProvider: !!js process.env.OURFAIRY_SKILL_LEARNING_PROVIDER ?? 'minimax-cn'
             learningMaxMaterialChars: !!js Number(process.env.OURFAIRY_SKILL_LEARNING_MAX_MATERIAL_CHARS ?? 12000)
             learningMaxTurns: !!js Number(process.env.OURFAIRY_SKILL_LEARNING_MAX_TURNS ?? 4)
+            # The creation claim's persisted retry budget: consecutive failed
+            # creation runs before the claim settles as terminal (1-20, default 5).
+            learningCreationAttempts: !!js Number(process.env.OURFAIRY_SKILL_CREATION_ATTEMPTS ?? 5)
             # The address install's download/package bound. The test suite lowers
             # it to keep an oversized-download case small; production keeps 10 MiB.
             installMaxBytes: !!js Number(process.env.OURFAIRY_SKILL_INSTALL_MAX_BYTES ?? 10485760)

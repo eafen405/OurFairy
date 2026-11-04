@@ -1142,8 +1142,18 @@ class FairyPagesTest {
         destination(Screen.Skills)
         compose.waitForIdle()
 
-        compose.onNodeWithText("backend-derived-skill").assertExists()
+        // The archived row starts inside its collapsed group; the group heading is the backend's
+        // state, and opening it is the only way to the row.
         compose.onNodeWithText("已归档").assertExists()
+        compose.onNodeWithText("backend-derived-skill").assertDoesNotExist()
+        compose.onNodeWithTag("skill-group-4").performScrollTo().performClick()
+        // The tap lands inside one frame and its recomposition renders in the next; the page has
+        // the window bar's animations, so the clock is advanced rather than left auto-advancing.
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithText("backend-derived-skill").performScrollTo().assertExists()
         compose.onNodeWithText("没有等待审核的项目。").assertDoesNotExist()
         compose.onNodeWithText("pending-skill").assertExists()
         compose.runOnIdle { assertEquals("the skills page read the scope's backend", 1, skillReads) }
@@ -1162,7 +1172,7 @@ class FairyPagesTest {
         }
     }
 
-    @Test fun `settings shows the pending skill badge from the backend count`() {
+    @Test fun `settings shows the pending skill badge from the backend count while the group is closed`() {
         show {
             FairySettingsPage(
                 {}, {}, account, backend = identityBackend, onBack = {},
@@ -1170,10 +1180,32 @@ class FairyPagesTest {
             )
         }
         compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+
+        // The page reads the count once on entry; the badge is visible before the group opens.
+        compose.onAllNodesWithText("待审 1").assertCountEquals(1)
+        compose.runOnIdle { assertEquals("the settings page reads the count once on entry", 1, skillReads) }
 
         compose.onNodeWithText("技能").performScrollTo().performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("待审 1").assertExists()
+        compose.onAllNodesWithText("待审 1").assertCountEquals(1)
+        compose.runOnIdle { assertEquals("opening the group does not re-read the count", 1, skillReads) }
+    }
+
+    @Test fun `settings does not read or badge the pending count before sign-in`() {
+        val signedOut = AccountSession(identityBackend, InMemoryCredentialStore())
+        show {
+            FairySettingsPage(
+                {}, {}, signedOut, backend = identityBackend, onBack = {},
+                onOpenSkills = {}, skillsBackend = skillsBackend,
+            )
+        }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+
+        compose.onNodeWithText("技能").performScrollTo().assertExists()
+        compose.onAllNodesWithText("待审 1").assertCountEquals(0)
+        compose.runOnIdle { assertEquals("a signed-out settings page asks the backend nothing", 0, skillReads) }
     }
 
     @Test fun `settings opens the skill selection pool`() {

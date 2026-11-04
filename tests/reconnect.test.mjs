@@ -281,7 +281,11 @@ test('new history and checkpoint routes keep the cold/live ownership fence and v
     { sessionId, throughSeq: cut, beforeSeq: 0, maxEvents: 0 },
     { sessionId, throughSeq: cut, beforeSeq: 0, maxEvents: 257 },
     { sessionId, throughSeq: cut, beforeSeq: -1 },
-  ]) assert.equal((await request('/chat/page', bob.token, body)).status, 400, JSON.stringify(body))
+  ]) {
+    const refused = await request('/chat/page', bob.token, body)
+    assert.equal(refused.status, 400, JSON.stringify(body))
+    assert.equal(refused.body.error?.code, 'chat/invalid-page', `${JSON.stringify(body)} must be 400 chat/invalid-page`)
+  }
   const terminal = await request('/chat/page', bob.token, { sessionId, throughSeq: cut, beforeSeq: 0 })
   assert.deepEqual(terminal.body.page, { sessionId, throughSeq: cut, fromSeq: 0, beforeSeq: null, hasMore: false, events: [], messages: [] })
   for (const path of ['/chat/page', '/chat/checkpoint']) {

@@ -23,15 +23,23 @@ interface SkillsNotificationPlatform : RemoteForegroundPlatform {
  * view of recently decided candidates; this class compares those two sets with the account's
  * durable ledger and publishes one merged local notification per newly observed set. The ledger is
  * written before the publication attempt, so a crash may lose one sound but can never replay it.
- * A notification suppressed by the foreground or by the user's switch is recorded too: the page's
- * badge remains the in-app surface, and the reminder is not replayed on the next background move.
+ * A notification suppressed by the foreground or by a closed skills channel is recorded too: the
+ * page's badge remains the in-app surface, and the reminder is not replayed on the next background
+ * move. The gate is the skills channel's own availability ([remindersAllowed]), never the
+ * background-receive switch: reception controls chat delivery, not whether a candidate may be
+ * announced.
  */
 class SkillsReviewNotifier(
     private val backend: SkillsBackend,
     private val ledger: SkillsReviewLedger,
     private val platform: SkillsNotificationPlatform?,
     private val endpoint: String,
-    private val notificationsEnabled: () -> Boolean,
+    /**
+     * Whether the skills reminder may be posted right now: the skills channel's availability
+     * (permission, system notifications enabled, channel importance). It is deliberately not the
+     * background-receive switch — turning reception off must not silence skill reminders.
+     */
+    private val remindersAllowed: () -> Boolean,
     private val scope: CoroutineScope,
 ) {
     private val mutex = Mutex()
@@ -73,7 +81,9 @@ class SkillsReviewNotifier(
                 pending = pending.takeLast(MAX_TRACKED),
                 decided = decided.takeLast(MAX_TRACKED),
             ))
-            if (!notificationsEnabled()) return
+            // One gate, asked after the ledger consumed the set: the skills channel. A closed
+            // channel suppresses this publication only; the page badge carries the pending fact.
+            if (!remindersAllowed()) return
             val target = platform ?: return
             if (target.isForeground()) return
             target.publishSkills(key.endpoint, userShortId, previewOf(pool, freshPending, freshDecided))

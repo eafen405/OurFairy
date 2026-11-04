@@ -1,11 +1,10 @@
 /** Owned HTTP controls over the native job registry, authorized like model tools. */
-import { JobId } from '@deepseek-ai/dsh-jobs'
 import { SessionScopeError as ChatError } from '@ourfairy/dsh-sessions'
 import { taskStatusOf } from './units.js'
 import { requestedSessionId } from './runtime.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { SessionOwner, SessionRuntime } from './runtime.js'
+import type { LiveSession, SessionOwner, SessionRuntime } from './runtime.js'
 
 /**
  * `Number.isSafeInteger` as a type guard, so a checked value narrows to a
@@ -38,27 +37,28 @@ export function installJobs(ctx: Context, runtime: SessionRuntime) {
     const state = runtime.live(event.job.owner as SessionId)
     if (state !== undefined) runtime.changed(state)
   })
+  /** The one task a request names, or the existing 404; both controls share this lookup. */
+  const taskOr404 = (state: LiveSession, taskId: unknown) => {
+    const found = runtime.taskOf(state, taskId)
+    if (found === null) throw new ChatError(404, 'chat/job-not-found', 'task does not belong to this session')
+    return found
+  }
   const jobOutput = async (owner: SessionOwner, { sessionId, taskId, from }: Record<string, unknown>) => {
     const state = await runtime.open(owner, requestedSessionId(sessionId))
     if (!isSafeInteger(from) || from < 0) throw new ChatError(400, 'chat/invalid-offset', 'from must be a nonnegative byte offset')
-    const task = (await runtime.projection(state, { maxEvents: 1 })).tasks.find(task => task.taskId === taskId)
-    if (task === undefined) throw new ChatError(404, 'chat/job-not-found', 'task does not belong to this session')
-    if (task.availability === 0) return { taskId, availability: 0, chunks: [], next: task.output.total,
-      ...task.output, lossy: true, status: task.status }
-    // The task was found by its id, so the request's taskId is that string.
-    const id = JobId((taskId as string).slice(ctx.jobs.generation.length + 1))
-    const output = ctx.jobs.readAt(id, from, state.sessionId)
-    const job = ctx.jobs.get(id, state.sessionId)
+    const found = taskOr404(state, taskId)
+    if (found.jobId === null) return { taskId, availability: 0, chunks: [], next: found.task.output.total,
+      ...found.task.output, lossy: true, status: found.task.status }
+    const output = ctx.jobs.readAt(found.jobId, from, state.sessionId)
+    const job = ctx.jobs.get(found.jobId, state.sessionId)
     return { taskId, availability: 1, chunks: output.chunks, next: output.next, lossy: output.lossy,
       earliest: job.output.earliest, total: job.output.total, status: taskStatusOf(job.status) }
   }
   const jobStop = async (owner: SessionOwner, { sessionId, taskId }: Record<string, unknown>) => {
     const state = await runtime.open(owner, requestedSessionId(sessionId))
-    const task = (await runtime.projection(state, { maxEvents: 1 })).tasks.find(task => task.taskId === taskId)
-    if (task === undefined) throw new ChatError(404, 'chat/job-not-found', 'task does not belong to this session')
-    if (task.availability === 0) return 0
-    // The task was found by its id, so the request's taskId is that string.
-    const result = ctx.jobs.kill(JobId((taskId as string).slice(ctx.jobs.generation.length + 1)), state.sessionId, 'cancelled by the user')
+    const found = taskOr404(state, taskId)
+    if (found.jobId === null) return 0
+    const result = ctx.jobs.kill(found.jobId, state.sessionId, 'cancelled by the user')
     await runtime.barrier(state)
     return stopOutcomeOf(result)
   }

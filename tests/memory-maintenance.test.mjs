@@ -674,3 +674,59 @@ test('the memory row refuses a maintenance setting outside the policy range, nam
     }
   }
 })
+
+test('the maintenance source predicate is the shared user-session rule, for live and persisted sessions', async () => {
+  const { MaintenanceEngine } = await import('../backend/memory/dist/maintenance.js')
+  const flush = () => new Promise(resolve => setImmediate(resolve))
+  const observed = []
+  const store = {
+    maintenance(sourceSession) { observed.push(sourceSession); return undefined },
+    maintenanceRows() { return [] },
+  }
+  const ctx = {
+    agents: { get: () => undefined },
+    sessionPersistence: { stat: async () => undefined, list: async () => [] },
+  }
+  const settings = () => ({ turns: 15, decayHours: 6, model: 'model', provider: 'provider' })
+
+  const engine = new MaintenanceEngine(ctx, store, settings)
+  const agent = header => ({ session: { id: header.id, header } })
+  engine.watch(agent({ id: 'watched-user', owner: 'user:7' }))
+  engine.watch(agent({ id: 'watched-owned-child', owner: 'user:7', parentSession: 'parent' }))
+  engine.watch(agent({ id: 'watched-preset', owner: 'user:7', agentPreset: 'some-preset' }))
+  engine.watch(agent({ id: 'watched-ownerless' }))
+  await flush()
+  await flush()
+  assert.deepEqual(observed, ['watched-user'],
+    'watch follows only an owned top-level non-preset session')
+  await engine.close()
+
+  // The boot scan applies the same rule to persisted headers, so a restart does
+  // not promote a child/preset session the live predicate refused.
+  const bootStore = {
+    maintenance(sourceSession) { observed.push(`boot:${sourceSession}`); return undefined },
+    maintenanceRows() { return [] },
+  }
+  const bootCtx = {
+    agents: { get: () => undefined },
+    sessionPersistence: {
+      stat: async () => undefined,
+      list: async () => [
+        { header: { id: 'persisted-user', owner: 'user:7' } },
+        { header: { id: 'persisted-owned-child', owner: 'user:7', parentSession: 'parent' } },
+        { header: { id: 'persisted-preset', owner: 'user:7', agentPreset: 'some-preset' } },
+        { header: { id: 'persisted-ownerless' } },
+      ],
+    },
+  }
+  const boot = new MaintenanceEngine(bootCtx, bootStore, settings)
+  boot.start()
+  try {
+    await flush()
+    await flush()
+    await flush()
+  } finally {
+    await boot.close()
+  }
+  assert.deepEqual(observed.filter(entry => typeof entry === 'string' && entry.startsWith('boot:')), ['boot:persisted-user'])
+})

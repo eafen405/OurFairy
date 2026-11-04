@@ -10,18 +10,30 @@
  * are recorded, so a later remote change cannot rewrite the candidate. A `.zip`
  * is refused rather than read by an untested extractor.
  *
- * The extractor is the security boundary: it accepts only regular files and
- * directories, rejects absolute paths, `..`, backslashes, NUL, symlinks,
- * hardlinks and devices, and bounds the compressed download, the inflated bytes
- * and the entry count. Extraction happens under `tmp/` in the skill data root,
- * which is not a native scan root; the package is then validated and staged by
- * the ordinary creation path. This module never executes package code, never
- * registers a plugin and never bypasses review.
+ * The extractor is the security boundary on the bytes: it accepts only regular
+ * files and directories, rejects absolute paths, `..`, backslashes, NUL,
+ * symlinks, hardlinks and devices, and bounds the compressed download, the
+ * inflated bytes and the entry count. Extraction happens under `tmp/` in the
+ * skill data root, which is not a native scan root; the package is then
+ * validated and staged by the ordinary creation path. This module never
+ * executes package code, never registers a plugin and never bypasses review.
+ *
+ * The fetcher is the security boundary on the network. Every hop (the initial
+ * address and each redirect) must be http(s), an https-to-http downgrade is
+ * refused, and every resolved host address must be a public unicast address:
+ * loopback, RFC 1918, link-local, unique-local, multicast, unspecified and
+ * carrier-grade NAT targets are refused. Cloud metadata endpoints stay refused
+ * even when the private-network switch is on. The switch exists for tests and
+ * for a deployment that deliberately points the install bases at an internal
+ * host (`OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS=1`); it is off by
+ * default.
  *
  * @module @ourfairy/dsh-skill-creator/src/install
  */
 import { createHash, randomUUID } from 'node:crypto'
+import { lookup } from 'node:dns/promises'
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { isIP } from 'node:net'
 import { dirname, join, resolve, sep } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { DEFAULT_MAX_PACKAGE_BYTES, DEFAULT_MAX_PACKAGE_FILES, readSkillFrontmatter } from './package.js'
@@ -100,6 +112,183 @@ export function installBasesFromEnv(env: NodeJS.ProcessEnv = process.env): {
   return {
     apiBase: base(env.OURFAIRY_GITHUB_API_BASE, GITHUB_DEFAULTS.apiBase),
     codeloadBase: base(env.OURFAIRY_GITHUB_CODELOAD_BASE, GITHUB_DEFAULTS.codeloadBase),
+  }
+}
+
+/**
+ * The network policy one install fetch applies.
+ *
+ * `allowPrivateNetworks` is the explicit escape hatch for tests and for a
+ * deployment that deliberately installs from an internal registry. It never
+ * permits a cloud metadata address.
+ */
+export interface InstallNetworkPolicy {
+  readonly allowPrivateNetworks: boolean
+}
+
+/**
+ * Read the explicit private-network switch from the environment.
+ *
+ * The default (unset, `0`, any other value) refuses private targets. This is
+ * read once by {@link SkillInstall}, next to the install bases it qualifies.
+ */
+export function installNetworkPolicyFromEnv(env: NodeJS.ProcessEnv = process.env): InstallNetworkPolicy {
+  const value = env.OURFAIRY_SKILL_INSTALL_ALLOW_PRIVATE_NETWORKS
+  return { allowPrivateNetworks: value === '1' || value === 'true' }
+}
+
+/**
+ * Cloud metadata endpoints an install must never reach, even when private
+ * networks are allowed: the IPv4 link-local address shared by the large cloud
+ * providers, its AWS IPv6 sibling, and the Alibaba Cloud metadata address.
+ */
+const CLOUD_METADATA_ADDRESSES: ReadonlySet<string> = new Set([
+  '169.254.169.254',
+  'fd00:ec2::254',
+  '100.100.100.200',
+])
+
+/** The bare host of one URL: no IPv6 brackets, lower-case. */
+function hostOf(url: URL): string {
+  const host = url.hostname.startsWith('[') && url.hostname.endsWith(']')
+    ? url.hostname.slice(1, -1)
+    : url.hostname
+  return host.toLowerCase()
+}
+
+/** The four octets of an IPv4 literal, or undefined. */
+function ipv4Octets(address: string): number[] | undefined {
+  if (isIP(address) !== 4) return undefined
+  return address.split('.').map(Number)
+}
+
+/** The eight hextets of an IPv6 literal, or undefined. */
+function ipv6Hextets(address: string): number[] | undefined {
+  const literal = address.split('%')[0] as string
+  if (isIP(literal) !== 6) return undefined
+  // A dotted-quad tail (`::ffff:127.0.0.1`) is legal IPv6 text; URL parsing
+  // normally normalizes it, but a resolver answer is not guaranteed to.
+  const dotted = /^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/u.exec(literal)
+  let text = literal
+  if (dotted !== null) {
+    const octets = (dotted[2] as string).split('.').map(Number)
+    if (octets.length !== 4 || octets.some(value => !Number.isInteger(value) || value < 0 || value > 255)) return undefined
+    text = `${dotted[1]}${((octets[0] as number) * 256 + (octets[1] as number)).toString(16)}:${((octets[2] as number) * 256 + (octets[3] as number)).toString(16)}`
+  }
+  const halves = text.split('::')
+  if (halves.length > 2) return undefined
+  const parse = (parts: string): number[] | undefined => {
+    if (parts === '') return []
+    const values: number[] = []
+    for (const part of parts.split(':')) {
+      if (!/^[0-9a-f]{1,4}$/u.test(part)) return undefined
+      values.push(Number.parseInt(part, 16))
+    }
+    return values
+  }
+  const head = parse(halves[0] as string)
+  const tail = parse(halves.length === 2 ? halves[1] as string : '')
+  if (head === undefined || tail === undefined) return undefined
+  const missing = 8 - head.length - tail.length
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return undefined
+  return [...head, ...Array.from({ length: missing }, () => 0), ...tail]
+}
+
+/** The dotted-quad text of an IPv4-mapped IPv6 address, or undefined. */
+function mappedIpv4(hextets: readonly number[]): string | undefined {
+  if (!hextets.slice(0, 5).every(value => value === 0) || hextets[5] !== 0xffff) return undefined
+  const high = hextets[6] as number
+  const low = hextets[7] as number
+  return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`
+}
+
+/** Whether one resolved address is a cloud metadata endpoint. */
+function isMetadataAddress(address: string): boolean {
+  const literal = address.toLowerCase().split('%')[0] as string
+  if (CLOUD_METADATA_ADDRESSES.has(literal)) return true
+  const hextets = ipv6Hextets(literal)
+  if (hextets === undefined) return false
+  const mapped = mappedIpv4(hextets)
+  return mapped !== undefined && CLOUD_METADATA_ADDRESSES.has(mapped)
+}
+
+/**
+ * Whether one resolved address is loopback, private, link-local, unique-local,
+ * multicast, unspecified or otherwise reserved. An address this module cannot
+ * parse fails closed.
+ */
+function isForbiddenAddress(address: string): boolean {
+  const v4 = ipv4Octets(address)
+  if (v4 !== undefined) {
+    const [first, second] = v4 as [number, number, number, number]
+    return first === 0 // "this network" / unspecified
+      || first === 10
+      || first === 127
+      || (first === 100 && second >= 64 && second <= 127) // carrier-grade NAT
+      || (first === 169 && second === 254) // link-local, includes metadata
+      || (first === 172 && second >= 16 && second <= 31)
+      || (first === 192 && second === 168)
+      || first >= 224 // multicast and reserved
+  }
+  const v6 = ipv6Hextets(address)
+  if (v6 === undefined) return true
+  const mapped = mappedIpv4(v6)
+  if (mapped !== undefined) return isForbiddenAddress(mapped)
+  const first = v6[0] as number
+  if (v6.every(value => value === 0)) return true // ::
+  if (v6.slice(0, 7).every(value => value === 0) && v6[7] === 1) return true // ::1
+  if ((first & 0xfe00) === 0xfc00) return true // fc00::/7 unique-local
+  if ((first & 0xffc0) === 0xfe80) return true // fe80::/10 link-local
+  if ((first & 0xff00) === 0xff00) return true // ff00::/8 multicast
+  return false
+}
+
+/** The addresses one host resolves to; an IP literal is its own single answer. */
+async function resolveTargetAddresses(host: string): Promise<string[]> {
+  const literal = host.split('%')[0] as string
+  if (isIP(literal) !== 0) return [literal]
+  try {
+    return (await lookup(host, { all: true, verbatim: true })).map(entry => entry.address)
+  } catch {
+    throw new SkillError(502, 'skills/install-fetch-failed', `could not resolve install host ${JSON.stringify(host)}`)
+  }
+}
+
+/**
+ * Check one URL before the fetcher opens it.
+ *
+ * The URL must be http(s), an https-to-http redirect is refused, and every
+ * resolved address must be public unicast. The check runs on the initial
+ * address and again on every redirect target.
+ *
+ * @param url - the hop about to be fetched.
+ * @param policy - the private-network switch.
+ * @param previous - the hop that redirected here, when this is a redirect.
+ * @throws {SkillError} `skills/invalid-address` for a non-http(s) hop,
+ *   `skills/insecure-redirect` for an https-to-http downgrade and
+ *   `skills/install-forbidden-target` for a blocked address.
+ */
+export async function assertFetchTarget(url: URL, policy: InstallNetworkPolicy, previous?: URL): Promise<void> {
+  if (url.username !== '' || url.password !== '') {
+    throw new SkillError(400, 'skills/invalid-address', 'install addresses must not carry credentials')
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new SkillError(400, 'skills/invalid-address', `install target ${url.toString()} must use http or https`)
+  }
+  if (previous !== undefined && previous.protocol === 'https:' && url.protocol === 'http:') {
+    throw new SkillError(403, 'skills/insecure-redirect',
+      `refusing the https-to-http redirect from ${previous.host} to ${url.host}`)
+  }
+  const host = hostOf(url)
+  for (const address of await resolveTargetAddresses(host)) {
+    if (isMetadataAddress(address)) {
+      throw new SkillError(403, 'skills/install-forbidden-target',
+        `install target ${host} resolves to a cloud metadata address`)
+    }
+    if (!policy.allowPrivateNetworks && isForbiddenAddress(address)) {
+      throw new SkillError(403, 'skills/install-forbidden-target',
+        `install target ${host} resolves to a private, loopback, link-local or reserved address`)
+    }
   }
 }
 
@@ -232,19 +421,31 @@ function isRedirect(status: number): boolean {
 /**
  * Fetch one URL with a bounded redirect count, timeout and response size.
  *
- * The size check happens before and while the body is read, so an oversized
- * response is refused instead of buffered in full first.
+ * Every hop is re-checked against the network policy before it is opened, so a
+ * redirect cannot move the fetch onto loopback, a private network, a cloud
+ * metadata endpoint or a downgraded protocol. The size check happens before
+ * and while the body is read, so an oversized response is refused instead of
+ * buffered in full first.
  */
-async function fetchBytes(url: string, { maxBytes, timeoutMs, accept }: {
+async function fetchBytes(url: string, { maxBytes, timeoutMs, accept, allowPrivateNetworks }: {
   readonly maxBytes: number
   readonly timeoutMs: number
   readonly accept: string
+  readonly allowPrivateNetworks: boolean
 }): Promise<FetchedBytes> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), Math.max(1, timeoutMs))
   try {
-    let current = url
+    const policy: InstallNetworkPolicy = { allowPrivateNetworks }
+    let previous: URL | undefined
+    let current: URL
+    try {
+      current = new URL(url)
+    } catch {
+      throw new SkillError(400, 'skills/invalid-address', `install address ${url} is not a URL`)
+    }
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+      await assertFetchTarget(current, policy, previous)
       let response: Response
       try {
         response = await fetch(current, {
@@ -254,28 +455,33 @@ async function fetchBytes(url: string, { maxBytes, timeoutMs, accept }: {
         })
       } catch (error) {
         throw new SkillError(502, 'skills/install-fetch-failed',
-          `could not fetch ${current}: ${error instanceof Error ? error.message : String(error)}`)
+          `could not fetch ${current.toString()}: ${error instanceof Error ? error.message : String(error)}`)
       }
       if (isRedirect(response.status)) {
         const location = response.headers.get('location')
         await response.body?.cancel().catch(() => undefined)
         if (location === null) {
-          throw new SkillError(502, 'skills/install-fetch-failed', `${current} answered a redirect without a location`)
+          throw new SkillError(502, 'skills/install-fetch-failed', `${current.toString()} answered a redirect without a location`)
         }
         if (redirects === MAX_REDIRECTS) {
           throw new SkillError(502, 'skills/install-fetch-failed', `${url} redirected more than ${MAX_REDIRECTS} times`)
         }
-        current = new URL(location, current).toString()
+        previous = current
+        try {
+          current = new URL(location, current)
+        } catch {
+          throw new SkillError(502, 'skills/install-fetch-failed', `${current.toString()} answered a malformed redirect location`)
+        }
         continue
       }
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined)
-        throw new SkillError(502, 'skills/install-fetch-failed', `${current} answered HTTP ${response.status}`)
+        throw new SkillError(502, 'skills/install-fetch-failed', `${current.toString()} answered HTTP ${response.status}`)
       }
       const declared = Number(response.headers.get('content-length'))
       if (Number.isFinite(declared) && declared > maxBytes) {
         await response.body?.cancel().catch(() => undefined)
-        throw new SkillError(413, 'skills/install-too-large', `${current} is ${declared} bytes; the install limit is ${maxBytes}`)
+        throw new SkillError(413, 'skills/install-too-large', `${current.toString()} is ${declared} bytes; the install limit is ${maxBytes}`)
       }
       const chunks: Buffer[] = []
       let total = 0
@@ -287,7 +493,7 @@ async function fetchBytes(url: string, { maxBytes, timeoutMs, accept }: {
           total += value.byteLength
           if (total > maxBytes) {
             await reader.cancel().catch(() => undefined)
-            throw new SkillError(413, 'skills/install-too-large', `${current} exceeds the install limit of ${maxBytes} bytes`)
+            throw new SkillError(413, 'skills/install-too-large', `${current.toString()} exceeds the install limit of ${maxBytes} bytes`)
           }
           chunks.push(Buffer.from(value))
         }
@@ -545,6 +751,7 @@ export class SkillInstall {
   readonly #timeoutMs: number
   readonly #apiBase: string
   readonly #codeloadBase: string
+  readonly #network: InstallNetworkPolicy
 
   constructor(options: {
     /** The skill data root; staging lives under its `tmp/`. */
@@ -553,6 +760,8 @@ export class SkillInstall {
     readonly timeoutMs?: number
     readonly apiBase?: string
     readonly codeloadBase?: string
+    /** Explicitly allow private targets; defaults to the environment switch. */
+    readonly allowPrivateNetworks?: boolean
   }) {
     this.#root = options.root
     this.#maxBytes = options.maxBytes
@@ -560,6 +769,8 @@ export class SkillInstall {
     const bases = installBasesFromEnv()
     this.#apiBase = (options.apiBase ?? bases.apiBase).replace(/\/+$/u, '')
     this.#codeloadBase = (options.codeloadBase ?? bases.codeloadBase).replace(/\/+$/u, '')
+    const policy = installNetworkPolicyFromEnv()
+    this.#network = { allowPrivateNetworks: options.allowPrivateNetworks ?? policy.allowPrivateNetworks }
   }
 
   /** Resolve one repository ref to the commit SHA the install records. */
@@ -570,6 +781,7 @@ export class SkillInstall {
       maxBytes: MAX_COMMIT_DOCUMENT_BYTES,
       timeoutMs: this.#timeoutMs,
       accept: 'application/vnd.github+json',
+      allowPrivateNetworks: this.#network.allowPrivateNetworks,
     })
     let parsed: unknown
     try {
@@ -605,6 +817,7 @@ export class SkillInstall {
           maxBytes: this.#maxBytes,
           timeoutMs: this.#timeoutMs,
           accept: 'application/gzip, application/octet-stream, */*',
+          allowPrivateNetworks: this.#network.allowPrivateNetworks,
         })
         const packageDir = extractSkillArchive(downloaded.bytes, {
           targetDir: join(staging, 'package'),
@@ -628,6 +841,7 @@ export class SkillInstall {
         maxBytes: this.#maxBytes,
         timeoutMs: this.#timeoutMs,
         accept: 'application/gzip, application/octet-stream, */*',
+        allowPrivateNetworks: this.#network.allowPrivateNetworks,
       })
       const digest = createHash('sha256').update(downloaded.bytes).digest('hex')
       const packageDir = extractSkillArchive(downloaded.bytes, {

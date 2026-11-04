@@ -108,6 +108,47 @@ let heldDetection
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 
+/** The background creation attempt ceiling the bundle defaults to. */
+const CREATION_ATTEMPT_CAP = 5
+
+/**
+ * Run one write against the live SQLite file through a second connection.
+ *
+ * The tests only use this where a durable state cannot be forced through the
+ * model double: an interrupted claim's persisted attempt count, a persisted
+ * running interval whose child is gone, and a settled review decision.
+ */
+function exec(sql, ...parameters) {
+  const database = new DatabaseSync(databasePath)
+  try {
+    database.exec('PRAGMA busy_timeout = 3000')
+    database.prepare(sql).run(...parameters)
+  } finally {
+    database.close()
+  }
+}
+
+/** Start the backend on the shared isolated home; `extraEnv` overrides row config env. */
+function startRun(extraEnv = {}) {
+  return runBackendAsync(startArgs(), {
+    OURFAIRY_HOME: home,
+    OURFAIRY_PHAETHON_PASSWORD: password,
+    MINIMAX_CN_API_KEY: 'mock-skill-learning-key',
+    OURFAIRY_MINIMAX_BASE_URL: `http://127.0.0.1:${model.address().port}`,
+    OURFAIRY_SKILL_LEARNING_TURNS: '1',
+    OURFAIRY_SKILL_LEARNING_MODEL: 'MiniMax-M3.1-Flash',
+    ...extraEnv,
+  })
+}
+
+/** Stop the running backend and start a fresh one on the same home. */
+async function restartBackend(extraEnv = {}) {
+  const stopped = await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home })
+  assert.equal(stopped.code, 0, describeRun('stop', stopped))
+  run = await startRun(extraEnv)
+  port = startedPort(run)
+}
+
 /** One product POST, asserting the HTTP status through the shared helper. */
 function request(path, token, body = {}) {
   return httpJson(port, path, { token, body })
@@ -889,14 +930,39 @@ describe('background detection', () => {
   })
 
   test('two detections completing at once produce one claim and one creation child', async () => {
-    // `/sessions/create` re-enters an empty session, so each source gets one
-    // real turn before the next session is requested; the workflow turns below
-    // then belong to two different durable sessions.
-    resetScript({ detection: submissions([]) })
+    // Two durable source sessions, each prepared by one settled interval. The
+    // preparation intervals write a success signal of their own, which (a) gives
+    // each later text-only workflow interval a revocable signal so it reaches a
+    // detection child without depending on the one-tool-per-session double, and
+    // (b) keeps the script swap from racing a still-pending preparation child.
+    resetScript({
+      // One success signal per preparation interval; submit exactly once per run
+      // like a real child, or the double would loop on its own tool result.
+      detection: body => {
+        const blocks = (body?.messages ?? []).flatMap(message => Array.isArray(message.content) ? message.content : [])
+        const submitted = blocks.some(block => block.type === 'tool_use' && block.name === 'submit_signals')
+        if (submitted) return undefined
+        return {
+          signals: [{
+            taskKey: requestText(body).includes('第一个会话的准备') ? 'prep:one' : 'prep:two',
+            status: 0,
+          }],
+        }
+      },
+    })
     const first = await newSession(alice)
     await sendPlain(alice, first, '并发工作流：第一个会话的准备')
     const second = await newSession(alice)
     await sendPlain(alice, second, '并发工作流：第二个会话的准备')
+    await waitFor('both preparation intervals', () => {
+      const firstRow = learningState(first)
+      const secondRow = learningState(second)
+      const prepSignals = signals().filter(row => row.task_key === 'prep:one' || row.task_key === 'prep:two')
+      return firstRow?.status === 0 && firstRow.watermark_seq > 0
+        && secondRow?.status === 0 && secondRow.watermark_seq > 0
+        && prepSignals.length === 2 ? true : undefined
+    }, 30_000)
+
     resetScript({
       detection: submissions([{ taskKey: 'parallel:workflow', status: 0 }]),
       creation: [['finish_no_improvement', { reason: '并发去重后没有新的改进' }]],
@@ -917,6 +983,31 @@ describe('background detection', () => {
     const settled = await waitFor('the parallel claim outcome', () => creationJobs().find(row => row.id === job.id && row.state === 3), 30_000)
     assert.ok(settled)
     assert.equal(new Set(signals().filter(row => row.task_key === 'parallel:workflow').map(row => row.source_session)).size, 2)
+    assert.equal(creationJobs().filter(row => row.task_key === 'prep:one' || row.task_key === 'prep:two').length, 0,
+      'the single-session preparation signals never claim')
+  })
+
+  test('a persisted running interval whose child session is gone is released and re-observed', async () => {
+    resetScript({ detection: submissions([{ taskKey: 'missing:child', status: 0 }]) })
+    const session = await newSession(bob)
+    // Reproduce the crash shape memory maintenance already recovers from: a
+    // running interval naming a child session that does not exist. The source
+    // has no closed turn yet, so nothing claims before the injection.
+    exec(`INSERT OR REPLACE INTO skill_learning_state
+      (source_session, watermark_seq, cut_seq, last_closed_at, child_session, status, retry_at, attempts, updated_at)
+      VALUES (?, -1, 5, 100, 'ourfairy-skill-learning-ghost', 1, NULL, 1, ?)`, session, Date.now())
+
+    await sendPlain(bob, session, '检测子会话已经丢失的第一条工作流')
+    // The resume path must notice the missing child and release the interval;
+    // the same source is then observed again and a fresh interval settles.
+    const state = await waitFor('the re-observed interval', () => {
+      const row = learningState(session)
+      return row !== undefined && row.status === 0 && row.watermark_seq > 0 ? row : undefined
+    }, 20_000)
+    assert.notEqual(state.child_session, 'ourfairy-skill-learning-ghost', 'a fresh child owns the recovered interval')
+    assert.equal(state.attempts, 0, 'a child that never existed does not spend the interval budget')
+    assert.equal(signals().filter(row => row.source_session === session).length, 1)
+    assert.ok(seen.detection.length >= 1, 'the source was observed again after the release')
   })
 
   test('a restart resumes the same failed detection child from durable state', async () => {
@@ -957,5 +1048,186 @@ describe('background detection', () => {
     const header = sessionHeader(childBefore)
     assert.equal(header.owner, undefined)
     assert.equal(header.parentSession, session)
+  })
+
+  test('the creation prompt carries the user\'s recently rejected skills as dedupe context', async () => {
+    // A user refusal has to be visible to the deep-creation dedupe (E6): a
+    // rejected workflow must not come back just because two more sessions
+    // succeeded. The version row is seeded directly because the review path has
+    // its own tests; here only the creation prompt's dedupe input matters.
+    const owner = alice.user.shortId
+    const now = Date.now()
+    exec(`INSERT INTO skill (name, scope, owner_short_id, created_by, updated_by, created_at, updated_at)
+      VALUES ('rejected-workflow', 1, ?, ?, ?, ?, ?)`, owner, owner, owner, now, now)
+    const skillId = rows("SELECT id FROM skill WHERE name = 'rejected-workflow'")[0].id
+    exec(`INSERT INTO skill_version
+      (skill_id, package_path, manifest, manifest_hash, core_characters, source_type, status,
+       reviewer, reviewed_at, review_note, created_by, created_at, updated_at)
+      VALUES (?, 'candidates/rejected-workflow', '[]', 'seed-hash', 10, 2, 2, ?, ?, '用户不需要这个工作流', ?, ?, ?)`,
+    skillId, owner, now, owner, now, now)
+
+    resetScript({
+      detection: submissions([{ taskKey: 'dedupe:rejected', status: 0 }]),
+      creation: [['finish_no_improvement', { reason: '用户拒绝过同类工作流，没有可证明的改进' }]],
+    })
+    const first = await newSession(alice)
+    await sendPlain(alice, first, '去重上下文：先跑一次')
+    const second = await newSession(alice)
+    await sendPlain(alice, second, '去重上下文：再跑一次')
+
+    const creation = await waitFor('the creation child request', () => seen.creation[0], 30_000)
+    const prompt = systemText(creation.body)
+    assert.match(prompt, /用户最近拒绝\/要求修改的个人技能/u, 'the dedupe section names the refusal history')
+    assert.match(prompt, /rejected-workflow/u, 'the rejected skill name reaches the child')
+    assert.match(prompt, /已拒绝/u)
+    assert.match(prompt, /用户不需要这个工作流/u, 'the recorded review reason reaches the child')
+    const job = await waitFor('the no-improvement claim', () => creationJobs().find(row => row.task_key === 'dedupe:rejected' && row.state === 3), 30_000)
+    assert.ok(job)
+  })
+
+  test('a revocation after the claim settles as no improvement and never names a candidate', async () => {
+    resetScript({
+      detection: submissions([{ taskKey: 'revoked:claim', status: 0 }]),
+      creation: [() => {
+        // The claim already froze its two signals and the child is talking to
+        // the model; the user's correction lands now. The child then ends with
+        // plain text, so only the settlement recheck can notice the revocation.
+        const victim = signals().find(row => row.task_key === 'revoked:claim')
+        assert.ok(victim, 'the claim has a contributing signal to revoke')
+        exec(`INSERT INTO skill_reuse_signal
+          (owner_short_id, task_key, source_session, evidence_start_seq, evidence_end_seq, status,
+           revokes_signal_id, judged_at, processing, created_at, updated_at)
+          VALUES (?, ?, ?, 0, 1, 3, ?, ?, 3, ?, ?)`,
+        victim.owner_short_id, victim.task_key, victim.source_session, victim.id, Date.now(), Date.now(), Date.now())
+        return undefined
+      }],
+    })
+    const first = await newSession(alice)
+    await sendPlain(alice, first, '撤销窗口：第一个会话成功')
+    const second = await newSession(alice)
+    await sendPlain(alice, second, '撤销窗口：第二个会话成功')
+
+    const job = await waitFor('the no-op claim after the revocation', () =>
+      creationJobs().find(row => row.task_key === 'revoked:claim' && row.state === 3), 30_000)
+    assert.equal(job.candidate_version_id, null, 'a revoked claim never names a candidate')
+    assert.equal(rows('SELECT * FROM skill_version WHERE source_location LIKE ?', '%revoked:claim%').length, 0,
+      'no draft was created for the invalidated claim')
+    // Detection watermarks are never blocked by a claim that lost its evidence.
+    assert.ok(learningState(first).watermark_seq > 0)
+    assert.ok(learningState(second).watermark_seq > 0)
+  })
+
+  test('a failed verification keeps the claim retryable and the draft pending until the budget ends in terminal', async () => {
+    resetScript({
+      detection: submissions([{ taskKey: 'verify:failing', status: 0 }]),
+      creation: [
+        ['submit_candidate', {
+          files: [{ path: 'SKILL.md', content: '---\nname: broken-verification\ndescription: Use when testing a failing verification report.\n---\n\n# Broken\n' }],
+          scenarios: [{ name: 'always fails', command: 'exit 1' }],
+          evidence: [{ kind: 'session', ref: 'two failing verification sessions' }],
+        }],
+        ['run_verification', {}],
+      ],
+    })
+    const first = await newSession(alice)
+    await sendPlain(alice, first, '验证必失败：第一个会话')
+    const second = await newSession(alice)
+    await sendPlain(alice, second, '验证必失败：第二个会话')
+
+    // B2: a failed system verification is not a settle-able outcome; the claim
+    // reports failed and the draft stays pending instead of becoming a dead
+    // "candidate" the reviewer would see as settled.
+    const failed = await waitFor('the claim failed by its verification', () =>
+      creationJobs().find(row => row.task_key === 'verify:failing' && row.state === 4), 40_000)
+    assert.equal(failed.attempts, 1)
+    assert.ok(failed.candidate_version_id, 'the child submitted a draft before verification failed')
+    const draft = rows('SELECT * FROM skill_version WHERE id = ?', failed.candidate_version_id)[0]
+    assert.equal(draft.status, 0, 'the failed verification never settles a candidate')
+    assert.equal(JSON.parse(draft.verification).complete, true, 'the report really was recorded')
+    assert.equal(JSON.parse(draft.verification).failed.length, 1)
+
+    // B1: the attempt budget is durable. Spend it down to the last run, so the
+    // next failure must end terminal instead of retrying forever.
+    exec('UPDATE skill_creation_job SET attempts = ? WHERE id = ?', CREATION_ATTEMPT_CAP - 1, failed.id)
+    const terminal = await waitFor('the terminal claim', () =>
+      creationJobs().find(row => row.id === failed.id && row.state === 5), 40_000)
+    assert.equal(terminal.attempts, CREATION_ATTEMPT_CAP)
+    assert.equal(terminal.next_retry_at, null)
+    assert.equal(terminal.candidate_version_id, failed.candidate_version_id,
+      'the claim still names the draft, but it settled terminal rather than candidate')
+    assert.equal(rows('SELECT * FROM skill_version WHERE id = ?', failed.candidate_version_id)[0].status, 0,
+      'the draft stays pending for the user to reject; the system does not silently decide it')
+
+    // A terminal claim is not relaunched and spends no further attempt.
+    await delay(3_000)
+    const still = creationJobs().find(row => row.id === failed.id)
+    assert.equal(still.state, 5)
+    assert.equal(still.attempts, CREATION_ATTEMPT_CAP, 'a terminal claim never retries automatically')
+  })
+
+  test('a terminal claim is not relaunched by a restart', async () => {
+    // The previous case leaves a terminal claim in the shared home; a restart
+    // rebuilds every claim from durable state and must leave it exactly there.
+    const before = creationJobs().find(row => row.task_key === 'verify:failing' && row.state === 5)
+    assert.ok(before, 'the terminal claim from the previous case exists')
+    const creationsBefore = seen.creation.length
+
+    await restartBackend()
+
+    await delay(3_500)
+    const after = creationJobs().find(row => row.id === before.id)
+    assert.equal(after.state, 5)
+    assert.equal(after.attempts, before.attempts)
+    assert.equal(after.next_retry_at, null)
+    assert.equal(seen.creation.length, creationsBefore, 'a restart never relaunches a terminal claim')
+  })
+
+  test('a detection interval that spends its budget is given up and only a newer closed turn releases it', async () => {
+    // A one-attempt budget makes the give-up deterministic without waiting for
+    // four failed runs. The row is persisted, so the restart below must see the
+    // same budget instead of starting over.
+    await restartBackend({ OURFAIRY_SKILL_LEARNING_MAX_TURNS: '1' })
+    resetScript({ detection: () => undefined, failDetection: 20 })
+    const session = await newSession(alice)
+    await sendPlain(alice, session, '检测预算会耗尽的第一个闭合回合')
+
+    const gaveUp = await waitFor('the given-up interval', () => {
+      const row = learningState(session)
+      return row !== undefined && row.status === 3 ? row : undefined
+    }, 30_000)
+    assert.equal(gaveUp.attempts, 1, 'one failed run with a one-attempt budget is given up')
+    assert.equal(gaveUp.watermark_seq, -1, 'giving up never advances the watermark')
+    assert.ok(gaveUp.cut_seq > 0, 'the abandoned cut stays frozen for the release rule')
+    const cut = gaveUp.cut_seq
+    const abandonedMaterial = /检测预算会耗尽的第一个闭合回合/u
+    const detectionCount = () => seen.detection.filter(entry => abandonedMaterial.test(requestText(entry.body))).length
+    assert.equal(detectionCount(), 1, 'the failed attempt created one detection child')
+
+    // No reset-and-reclaim loop on the same cut: the old behaviour started a new
+    // child every retry window, burning the deep route forever.
+    await delay(3_500)
+    assert.equal(detectionCount(), 1, 'a given-up interval never re-claims its own cut')
+
+    // The budget is durable: a restart reads the same attempts and cut and does
+    // not resume the abandoned child.
+    await restartBackend({ OURFAIRY_SKILL_LEARNING_MAX_TURNS: '1' })
+    await delay(3_000)
+    const afterRestart = learningState(session)
+    assert.deepEqual([afterRestart.status, afterRestart.attempts, afterRestart.cut_seq], [3, 1, cut],
+      'a restart cannot reset the detection attempt budget')
+    assert.equal(detectionCount(), 1, 'a restart does not resume a given-up interval')
+
+    // Only a newer closed user turn is new evidence: it releases the source and
+    // a fresh interval (with a fresh budget) settles.
+    resetScript({ detection: submissions([{ taskKey: 'budget:recovered', status: 0 }]) })
+    await sendPlain(alice, session, '新回合带来新的证据，释放这个源会话')
+    const recovered = await waitFor('the released interval', () => {
+      const row = learningState(session)
+      return row !== undefined && row.status === 0 && row.watermark_seq > cut ? row : undefined
+    }, 30_000)
+    assert.equal(recovered.attempts, 0, 'the released interval starts with a fresh attempt budget')
+    assert.ok(recovered.watermark_seq > cut, 'the new interval covers the newer closed turn')
+    assert.ok(seen.detection.some(entry => requestText(entry.body).includes('新回合带来新的证据')),
+      'a new closed turn starts a fresh detection child')
   })
 })
