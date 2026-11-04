@@ -9,6 +9,8 @@
  * and, for an inspect, the derived `skill-review` chat row. Fixtures are real
  * packages; no test re-implements the manifest, the hash or a verification
  * result.
+ *
+ * @covers backend/skill-creator — the model-visible creation contract, real verification and the source-graded review rules.
  */
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'

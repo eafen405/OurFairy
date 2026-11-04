@@ -14,6 +14,10 @@
 # their own `dist/`, which the line above already ignores.
 *.tsbuildinfo
 
+# The product build's mutual-exclusion lock. It sits beside the build rather
+# than in `backend/*/dist`, because `tsc.ts --fresh` removes those directories.
+/.ourfairy-build.lock
+
 # Client build output and local-only build inputs. The android/ directory keeps its
 # own rules in android/.gitignore and the module .gitignore files; these lines are
 # the repository-level backstop, and tests/android-source.test.mjs fails if any of

@@ -10,6 +10,8 @@
  * model must receive it in a turn nobody typed a chat message for, the chat
  * projection must not show it as a user bubble, and a repeated or concurrent
  * open must neither stack references nor start another turn.
+ *
+ * @covers backend/skill-creator — the pending-entry review turn and its system-context reference.
  */
 import assert from 'node:assert/strict'
 import { once } from 'node:events'

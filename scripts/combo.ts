@@ -211,16 +211,30 @@ export function verifyCombination({ root = repoRoot, allowDrift = false }: { roo
     }
 
     const locked = entry.productCommit
-    const ok = tip === locked
+    // The branch ref can match the lock while the worktree sits somewhere
+    // else: a checkout still on an older commit keeps `origin/<branch>` at the
+    // locked value, so comparing refs alone reported a combination this
+    // worktree does not build against. Both facts are required — the ref is
+    // what the next fetch carries, HEAD is what the build reads.
+    const head = revParse(path, 'HEAD')
+    const refOk = tip === locked
+    const headOk = head === locked
+    const ok = refOk && headOk
     const row: ComboRow = {
       ...base,
       expected: locked,
-      actual: tip,
+      actual: headOk ? tip : `${tip} (worktree at ${head ?? 'unknown'})`,
       ok,
     }
-    if (!ok) {
+    if (!refOk) {
       const failure = `${key}: ${entry.integrationBranch} is ${tip} but combo.json locks ${locked};`
         + ` run 'git -C ${path} checkout ${locked}' (or update combo.json when the combination intentionally moves)`
+      row.failure = failure
+      failures.push(failure)
+    } else if (!headOk) {
+      const failure = `${key}: ${entry.integrationBranch} is at the locked ${locked},`
+        + ` but this worktree's HEAD is ${head ?? 'unreadable'};`
+        + ` run 'git -C ${path} checkout ${locked}' so the build reads the locked tree`
       row.failure = failure
       failures.push(failure)
     }
