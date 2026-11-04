@@ -175,6 +175,10 @@ export function makeWorld() {
     // the way — the same degradation a profile without that row has.
     get(name) { return this[name] },
     ourfairySessions: { async read() {} },
+    // The identity section names the caller by the stored user row. This world
+    // stores no users, so every caller falls back to its short number — the
+    // same degradation a profile with an empty identity store has.
+    identity: { users: { byShortId: () => undefined } },
     agentDefaultModel: { currentSelection: () => ({ provider: 'mock', model: 'mock' }) },
     agents: {
       async resume({ resumeSessionId, setup }) {

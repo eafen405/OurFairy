@@ -79,6 +79,9 @@ function makeWorld() {
     // Optional services are read through `ctx.get`; this world mounts the title
     // row, because the backfill is the whole subject.
     get(name) { return this[name] },
+    // The identity section names the caller by the stored user row; this world
+    // stores no users, so every caller falls back to its short number.
+    identity: { users: { byShortId: () => undefined } },
     sessionTitle: titles,
     ourfairySessions: { async read() {} },
     agentDefaultModel: { currentSelection: () => ({ provider: 'mock', model: 'mock' }) },

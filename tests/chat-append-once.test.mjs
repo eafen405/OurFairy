@@ -87,6 +87,9 @@ function makeWorld({ failLiveFlush = false } = {}) {
     effect(execute) { return execute() },
     get() { return undefined },
     ourfairySessions: { async read() {} },
+    // The identity section names the caller by the stored user row; this world
+    // stores no users, so every caller falls back to its short number.
+    identity: { users: { byShortId: () => undefined } },
     agentDefaultModel: { currentSelection: () => ({ provider: 'mock', model: 'mock' }) },
     agents: {
       async resume({ resumeSessionId, setup }) {
