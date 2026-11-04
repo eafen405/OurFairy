@@ -26,7 +26,7 @@
 | --- | --- |
 | Node | `^22.19.0 \|\| >=24.2.0`（`import.meta.main` 自 22.18.0 与 24.2.0 起提供） |
 | pnpm | 用 corepack 固定：`corepack pnpm@11.28.5` |
-| deepseek-harness 检出 | 路径与锁定提交见 [combo.json](combo.json) 的 `repos.dsh` |
+| deepseek-harness 检出 | `combo.json` 的 `repos.dsh.localPath` 只是默认位置提示；检出不在那里时用 `OURFAIRY_DSH_DIR=/path/to/deepseek-harness` 覆盖，命令与测试都认这一条 |
 | Linux 沙箱 | bubblewrap（`bwrap`），并允许创建非特权用户命名空间 |
 | PDF 页面渲染 | Poppler（`poppler-utils` 提供的 `/usr/bin/pdftoppm`） |
 | JDK / Android SDK | 只在构建客户端时需要，见下文 |
@@ -40,10 +40,19 @@
 ```sh
 npm run build       # 编译产品包：链接类型、清理产物、tsc -b
 npm test            # 全量：node --test "tests/**/*.test.mjs"
-npm run combo:verify   # 版本组合：本仓库、dsh、客户端来源三条
-npm run backend:doctor # 环境自检：工具链、profile 装配、包与行、插件兼容、原生能力
+npm run combo:verify   # 组合登记表自洽：本仓库、dsh、客户端来源三条
+npm run backend:doctor # 本机检出可用：工具链、profile 装配、包与行、插件兼容、原生能力
 npm run specs:status   # spec 与小修批次的推送、合并、内容落地与 worktree（--offline 跳过 tracker）
 ```
+
+`combo:verify` 回答的是「登记表对不对」，`backend:doctor` 回答的是「这台机器能不能跑」。
+
+| 命令 | 它检查的事实 |
+| --- | --- |
+| `combo:verify` | 组合登记表自洽：本仓库基于集成分支、dsh 的分支 tip 等于锁定提交、客户端来源与声明一致 |
+| `backend:doctor` | 本机检出可用：dsh 检出存在、处在锁定提交上、四条构建产物齐全、profile 装配与插件兼容 |
+
+两者各管一段：dsh 的分支 tip 对得上、工作树却停在别的提交时，`combo:verify` 通过，`backend:doctor` 失败——它先查检出存在、再查 `apps/cli/lib/bin.js` 已构建，最后比对工作树 HEAD 与锁定提交。
 
 `npm test` 不联网、不调用真实模型：它经启动器起真实后端，模型与网络走替身。耗时随机器与并发负载
 变化，以测试输出的 `duration_ms` 为准；本次环境修复的测量见

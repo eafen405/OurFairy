@@ -36,14 +36,16 @@
 客户端票也在这里开 worktree（客户端已在本仓库内，拓扑见根 [`README.md`](../../README.md)）。
 
 ```bash
-# OurFairy 侧（本仓库，含 android/ 客户端）
-git -C /home/eafen405/projects/OurFairy worktree add \
-  /home/eafen405/projects/OurFairy/.worktrees/<NN>-<slug> -b ticket/<NN>-<slug> main
+# OurFairy 侧（本仓库，含 android/ 客户端）；在仓库根执行
+git worktree add .worktrees/<NN>-<slug> -b ticket/<NN>-<slug> main
 
-# dsh 侧（仅当该票要改 dsh）
-git -C /home/eafen405/projects/deepseek-harness worktree add \
-  /home/eafen405/projects/deepseek-harness/.worktrees/<NN>-<slug> -b ticket/<NN>-<slug> product/ourfairy-v1
+# dsh 侧（仅当该票要改 dsh）；OURFAIRY_DSH_DIR 指定检出位置，见本节末尾
+git -C "$OURFAIRY_DSH_DIR" worktree add \
+  "$OURFAIRY_DSH_DIR/.worktrees/<NN>-<slug>" -b ticket/<NN>-<slug> product/ourfairy-v1
 ```
+
+`OURFAIRY_DSH_DIR` 覆盖 dsh 检出位置；未设时回落到
+`combo.json` 的 `repos.dsh.localPath`（见根 [`README.md`](../../README.md) 的「先决条件」）。
 
 规则：
 
@@ -76,8 +78,8 @@ git -C /home/eafen405/projects/deepseek-harness worktree add \
 ## 4. 常用命令
 
 ```bash
-# dsh：安装（已装，勿重复全量装）
-cd /home/eafen405/projects/deepseek-harness && corepack pnpm@11.28.5 install
+# dsh：安装（已装；需要重装时跑这一条）
+cd "$OURFAIRY_DSH_DIR" && corepack pnpm@11.28.5 install
 # dsh：构建宿主库（改动 src 后必须重建，否则测试跑的是旧产物）
 corepack pnpm@11.28.5 run build:lib:host
 # dsh：跑相关测试（示例）
