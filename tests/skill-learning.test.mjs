@@ -21,6 +21,8 @@ import { after, before, describe, test } from 'node:test'
 import { describeRun, httpJson, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 import { answerIfTitle } from './helpers/title-aware.mjs'
 
+const { readSkillFrontmatter } = await import('../backend/skill-creator/dist/package.js')
+
 const home = makeHome('ourfairy-skill-learning-')
 const password = 'skill-learning-password'
 const skillRoot = join(home, 'dsh-home', 'skill')
@@ -160,6 +162,13 @@ function systemText(body) {
   if (typeof system === 'string') return system
   if (!Array.isArray(system)) return ''
   return system.filter(block => block.type === 'text').map(block => block.text).join('\n')
+}
+
+/** Dedicated children do not inherit unrelated native tool guidance. */
+function assertNoInheritedToolGuidance(body) {
+  const prompt = systemText(body)
+  assert.equal(prompt.includes('Check the [exit code: N] marker'), false, 'bash operations guidance is excluded')
+  assert.equal(prompt.includes('Track every background job id you start'), false, 'jobs operations guidance is excluded')
 }
 
 /** How many assistant tool_use blocks one request already carries. */
@@ -486,6 +495,7 @@ describe('background detection', () => {
     assert.match(systemText(detection.body), /技能复用信号的轻量检测/u)
     assert.match(requestText(detection.body), /请把发布清单的流程跑一遍/u, 'the frozen interval user message is the child material')
     assert.match(systemText(detection.body), /现有任务键：无/u)
+    assertNoInheritedToolGuidance(detection.body)
 
     const state = await waitFor('the completed detection interval', () => {
       const row = learningState(session)
@@ -563,8 +573,10 @@ describe('background detection', () => {
 
     const resumed = await waitFor('the resumed child request', () => seen.detection[1], 30_000)
     // The resumed child is the same durable session: its request carries the
-    // previous material plus the recovery instruction.
+    // previous material plus the recovery instruction only in the durable user message.
     assert.match(requestText(resumed.body), /上一轮检测没有完成/u)
+    assert.equal(systemText(resumed.body).includes('上一轮检测没有完成'), false,
+      'the recovery instruction is not duplicated into the resumed system prompt')
     const state = await waitFor('the resumed completion', () => {
       const row = learningState(session)
       return row !== undefined && row.status === 0 && row.watermark_seq > 0 ? row : undefined
@@ -630,6 +642,7 @@ describe('background detection', () => {
     assert.equal(review.body.model, 'MiniMax-M3.1-Flash', 'the review child uses the light route')
     assert.match(systemText(review.body), /独立的轻量审查子代理/u)
     assert.match(systemText(review.body), /review:success/u, 'the review prompt names the candidate task key')
+    assertNoInheritedToolGuidance(review.body)
 
     const stored = await waitFor('the reviewed success signal', () => {
       const row = signals().find(entry => entry.source_session === session)
@@ -694,7 +707,13 @@ describe('background detection', () => {
     assert.match(prompt, /release-notes:publish/u)
     assert.match(prompt, /已有待审候选：/u)
     assert.match(prompt, /当前个人技能：/u)
-    assert.match(prompt, /Skill Creator/u, 'the shipped Skill Creator body is reused')
+    const shippedBody = readSkillFrontmatter(join('backend', 'skill-creator', 'bundled', 'skill-creator')).body
+    assert.ok(prompt.includes(shippedBody), 'the complete shipped Skill Creator body is reused without excerpting')
+    assert.match(prompt, /skill_manage、inspect、review 与等待用户决定的交互步骤均由主会话执行/u,
+      'interactive creation and review stay in the main session')
+    assert.ok(prompt.indexOf('你是后台技能创建子代理') > prompt.indexOf('# Skill Creator'),
+      'the background-specific four-tool contract follows the complete interactive guidance')
+    assertNoInheritedToolGuidance(creation.body)
     assert.match(requestText(creation.body), /后台技能创建任务/u)
 
     // The second session's detection prompt reused the key the first wrote.
@@ -800,6 +819,11 @@ describe('background detection', () => {
     assert.equal(learningState(first).watermark_seq, watermarkFirst, 'the retry never rolls a detection watermark back')
     assert.equal(learningState(second).watermark_seq, watermarkSecond)
     assert.ok(seen.creation.length >= 2, 'the creation child was resumed')
+    const resumed = seen.creation.at(-1)
+    assert.match(requestText(resumed.body), /上一轮创建没有完成/u,
+      'the durable user message carries the creation recovery instruction')
+    assert.equal(systemText(resumed.body).includes('上一轮创建没有完成'), false,
+      'the creation recovery instruction is not duplicated into the resumed system prompt')
   })
 
   test('a late correction inside a later interval revokes the earlier success and the old evidence is not rewritten', async () => {

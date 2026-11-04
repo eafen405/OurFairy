@@ -460,6 +460,7 @@ export class MaintenanceEngine {
       order: 0,
       text: MAINTENANCE_POLICY,
       interpolate: false,
+      complete: true,
     })
   }
 

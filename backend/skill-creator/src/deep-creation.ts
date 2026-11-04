@@ -316,23 +316,27 @@ export class SkillCreationEngine {
     return this.#ctx.agents.resume({
       resumeSessionId: childSession,
       ...(route === undefined ? {} : { agentOptions: route }),
-      setup: learningChildSetup(`${policy}\n\n${CREATION_RETRY_MESSAGE}`, agentCtx => this.#registerTools(agentCtx, jobId, job, signals)),
+      setup: learningChildSetup(policy, agentCtx => this.#registerTools(agentCtx, jobId, job, signals)),
     })
   }
 
   /**
-   * The creation prompt: the contract, the claim's task context, the bounded
-   * dedupe lists and the shipped Skill Creator body.
+   * The creation prompt: the claim's task context, the bounded dedupe lists,
+   * the complete shipped Skill Creator body, then the background-specific
+   * contract so its four-tool flow overrides the body's interactive flow.
    */
   #prompt(job: CreationJobRow, signals: readonly SignalRow[]): string {
-    const parts = [CREATION_POLICY, `任务键：${job.task_key}。`]
+    const parts = [`任务键：${job.task_key}。`]
     const sessions = [...new Set(signals.map(signal => signal.source_session))].slice(0, MAX_PROMPT_SESSIONS)
     const signalLines = signals.slice(0, MAX_PROMPT_SESSIONS * 4).map(signal =>
       `- 信号 ${signal.id}：${signal.task_key}，证据区间 ${String(signal.evidence_start_seq)}–${String(signal.evidence_end_seq)}，来源会话 ${signal.source_session}`)
     parts.push(`贡献证据（共 ${String(signals.length)} 条成功信号，来自 ${String(sessions.length)} 个独立会话）：\n${signalLines.join('\n')}`)
     parts.push(this.#dedupeSection(job.owner_short_id))
     const body = this.#skillCreatorBody()
-    if (body !== '') parts.push(`以下是本次使用的 Skill Creator 指导：\n\n${body}`)
+    if (body !== '') {
+      parts.push(`以下是本次使用的完整 Skill Creator 指导。其中 skill_manage、inspect、review 与等待用户决定的交互步骤均由主会话执行，不是本后台子代理的动作：\n\n${body}`)
+    }
+    parts.push(CREATION_POLICY)
     return parts.join('\n\n')
   }
 

@@ -160,6 +160,10 @@ test('the owned prompt and the maintenance child carry the memory policy at thei
   assert.equal(childSystem.includes('Authorized file spaces'), false,
     'the spaces prompt context contributes nothing to the maintenance preset')
   assert.match(childSystem, /你是长期记忆维护子代理/, 'the child carries its own maintenance instruction')
+  assert.equal(childSystem.includes('Check the [exit code: N] marker'), false,
+    'the maintenance prompt does not inherit bash operations guidance')
+  assert.equal(childSystem.includes('Track every background job id you start'), false,
+    'the maintenance prompt does not inherit jobs operations guidance')
   assert.deepEqual([...child.tools.map(tool => tool.name)].sort(), [...MEMORY_TOOLS].sort(),
     'the child still sees only the five memory tools')
 })
