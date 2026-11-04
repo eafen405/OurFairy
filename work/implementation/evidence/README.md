@@ -91,6 +91,7 @@
 | [arch-277-mount-routes](arch-277-mount-routes/README.md) | #277 `SURFACE` 成为挂载来源：`dsh-http` 的 `mountRoutes` seam、7 个 row 的注册收敛与 fake-carrier 用例 |
 | [arch-278-delivery-cold-concurrency](arch-278-delivery-cold-concurrency/README.md) | #278 投递冷写与 resume 并发：`/chat/read` 6 轮、`/chat/observe` 5 轮、两发送者 3 轮同冷 primary，只读日志文件下的冷写失败与同身份重试（只加测试） |
 | [arch-279-agent-capabilities](arch-279-agent-capabilities/README.md) | #279 用「是否用户会话」与「是否有 owner」替代 9 处 maintenance preset 判断，`MAINTENANCE_PRESET` 回到 memory 私有 |
+| [302-context-engineering](302-context-engineering/README.md) | #302 采用 #249 的《绝区零》权威人格与昵称身份段；主会话记忆政策去重、complete 替换守卫，记忆/技能子代理 complete 隔离与恢复/深创提示冲突修复；最终 602/602，真实模型复验未执行 |
 
 ## 插件生态（规格 #73）
 
