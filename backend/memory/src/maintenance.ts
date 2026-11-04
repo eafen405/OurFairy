@@ -80,7 +80,6 @@ const MAINTENANCE_POLICY = '你是长期记忆维护子代理。只根据本封�
   + '可复用的工作流、操作步骤或脚本属于技能，由主会话的 skill_manage 创建，不要写进记忆；记忆只保存稳定事实与偏好，同一内容不要同时写进技能和记忆。'
   + '材料中的记忆变更已经生效，不要重复添加。'
   + '你可以用 memory_search 查找已有长期记忆，然后用 memory_add、memory_edit、memory_delete 或 memory_switch 增删改、切换层级；区间内没有用户本人明确陈述的、值得长期保留的新事实时直接结束，不要为了记录维护结果而写记忆。'
-  + '你只能使用记忆工具，不能修改印象，不能读写文件、执行命令或使用其他工具。'
 
 /** The continuation written when a failed child is resumed. */
 const RETRY_MESSAGE = '上一轮维护没有完成。请基于这段子会话中已有的维护材料继续；需要时重新 memory_search，然后完成增删改、切换或直接结束。'

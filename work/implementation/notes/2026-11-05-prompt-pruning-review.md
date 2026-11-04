@@ -126,6 +126,11 @@ OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 node /tmp/dump-full.mjs
 | **B 措辞改写** | 意思保留，换正向表述 / 翻译成中文 | 约 **2000 字符**（英文→中文后自然缩短） | 需要同步改测试断言 |
 | **C 必须保留** | 安全边界、精确字段名、精确字面量、唯一告知 | 不可删 | — |
 
+`[R]` **⚠ 这三档里的 A 档要打个折。** 我写完全文、又对照 Lead 已提交的 `ff795b0` 后，
+撤回了两处「整段删」的判断（SM-1 与 SM-8，共 303 字符）——那两段里各有一句**指针 / 触发条件**，
+不是重复。见 §8 的对照表。**A 档的实际净值因此是约 940 字符**（§8.1 逐项列出），
+其中不包含 `skill_manage` 的任何一段——`ff795b0` 已经把 `skill_manage` 从 4311 压到 1126，那一块做完了。
+
 ---
 
 ## 3. A. 七个系统提示段：逐字原文 + 分段字符数 + 精简建议
@@ -628,12 +633,17 @@ Authorized file spaces: ${...}. Private space: ${...}. Public files are shared. 
 | SM-10 | **[10] 263 → 压缩到约 100** | **压缩** | `[R]` 「Archive removes it from the catalog and selectable pool but keeps its content, history and preferences; restore does not reset preferences」——**返回体自己会说**（`[S]` `tools.ts:338` 返回 `{ ok: true, action, skill: updated.item }`，`updated.item` 带状态字段）。`relevance`：读返回就知道的内容不该写在描述里 | 保留「个人由本人、共有由法厄同」的权限句 |
 | SM-11 | **[11] 131 → 删** | **删** | `pruning / duplication`：[4] 已说「The backend derives the owner from the calling session」，[7] 已说「no package text can approve itself」。这段是**全段第三次**说「这些你都不能提交」。而且 `[R]` 它属于 negation 形态的重复——「不能提交 X、Y、Z」把六个被禁动词全部激活 | 见「五处重复」#3 |
 
-`[R]` **可删量估算（保守版，只删 SM-1 / SM-8 / SM-11，其余保留）**：
-`193 + 110 + 131 = 434 字符`，**0 断言变红**。
-**激进版（全部压缩成中文）**：4311 → 约 **1100–1300**，与 Lead 的 1125 草案同量级。
+`[R]` **可删量估算（保守版）**：`193 + 110 + 131 = 434 字符`，**0 断言变红**。
+**激进版（全部压缩成中文）**：4311 → 约 **1100–1300**。
 
-`[R]` **建议 Lead 照这个顺序做**：先删 [1][8][11]（纯删，0 测试改动），验证 `tests/skill-creation.test.mjs` 绿；
-再整体改写中文（那时 `:817-820` 必须同步改）。**两件事不要合并做**——合并了就分不清失败是哪一步引入的。
+`[R]` **⚠ 这三条我在写完 §8 后撤回了 SM-1 与 SM-8**——Lead 的 `ff795b0` 用 58 与 36 字符的**指针句**保留了它们，
+比我的「整段删」更稳（理由见 §8 对照表）。**这一栏的 434 因此不作数**：
+按`ff795b0` 的实际做法，保守版真实可删量是 **SM-11 的 35 字符**。
+`[R]` 唯一我要坚持的仍是 SM-11（纯 negation，一次激活 6 个被禁概念）。它是可议项，不是 defect。
+
+`[R]` **建议 Lead 的顺序**：先做 §6 第 1 步那 15 项**零风险纯删**（不碰测试），跑 `tests/skill-creation.test.mjs` 与
+`tests/memory-policy.test.mjs` 应全绿；再单独做 §6 第 2 步的中文化（那时 `:817-820`、`:162-165` 必须同步改）。
+**两件事不要合并做**——合并了就分不清失败是哪一步引入的。
 
 ### 4.2 memory 五条 — `backend/memory/src/tools.ts:39-82`
 
@@ -945,23 +955,39 @@ pdf_read_pages    182  Read 1–5 selected 1-based PDF pages from a qualified fi
 
 `[S]` **代码事实**（这是裁决的关键证据，不是我的判断）：
 
-1. `approvalMessageId` 的**校验逻辑**在 `backend/skill-creator/src/evolution.ts:335-345` 的 `approvalConfirmationOf`：
-   必须是一次 `user/message`，且在 `latestInspectSeq` **之后**。
-2. 「哪个 id 可用」的**发现逻辑**在同文件 `:349-351` 的 `approvalConfirmationCandidate`：它**独立重算一遍**，不依赖 inspect 被调用过——注释明写「derived without an `inspect` call」。
-3. `[S]` 拒绝时的错误文本**已经完整写明了规则**（`creation.ts:1785`）：
-   `this candidate is not a personal explicit create: inspect it to show the review material, let the user reply after the display, then approve with approvalMessageId`
-   以及 `:1794`：`approvalMessageId must name the user's own message sent in this session after this candidate's latest inspect display; create and approve cannot share one user turn`
+1. `approvalMessageId` 的**校验逻辑**在 `backend/skill-creator/src/evolution.ts:335-345` 的 `approvalConfirmationOf`，
+   它调用 `:313-326` 的 `approvalMessages`。
+2. **`approvalMessages` 的第一句就是 `const inspectSeq = latestInspectSeq(events, versionId); if (inspectSeq === undefined) return []`**
+   （`evolution.ts:315-316`）。`latestInspectSeq`（`:218-227`）只认**成功的 `action: 'inspect'` 调用**。
+   所以：**没有过一次成功的 inspect，就没有任何可用作批准证据的用户消息**——inspect 是**硬前置**，不是建议。
+3. 「哪个 id 可用」的**发现逻辑**是 `:349-351` 的 `approvalConfirmationCandidate`，
+   它同样走 `approvalMessages`，**因此同样要求 inspect 已经发生过**。
+4. `[S]` 拒绝时的错误文本**已经完整写明了规则**（`creation.ts:1785`、`:1794`）：
+   `inspect it to show the review material, let the user reply after the display, then approve with approvalMessageId`
+   / `must name the user's own message sent in this session after this candidate's latest inspect display; create and approve cannot share one user turn`
 
-`[R]` **裁决：三处合成一处，放在 `review` 段。**
+### ⚠ 更正：我在初稿里写错过一处，这里改正
 
-| 保什么 | 理由 |
-| --- | --- |
-| 在 `review` 段保留「哪些来源需要 `approvalMessageId`」的**分级表**（install / background learning / evolution / rollback / seed / every common candidate） | `[S]` 这是 `approvalEvidenceRequired(scope, sourceType)`（`creation.ts:333-335`）的唯一模型侧说明。模型不知道分级就会对个人显式创建也去要 id，多花一轮 |
-| 在 `review` 段保留「用户自己发出的、在展示之后的那条消息」 | `[S]` `approvalConfirmationOf` 的判据 |
-| **删 `list` 段那 320 字符里的「Use `list` — not another `inspect` — to discover the id… inspecting again before approving makes the earlier reply stale」** | `[S]` **这是描述里唯一一处「不成立」的地方**：`approvalConfirmationCandidate` 按 `latestInspectSeq` 重算，所以**再 inspect 一次确实会让先前的回复作废**——这点描述没说错。但「用 `list` 而不是再 `inspect`」是**操作建议**，不是约束；而且 `[S]` `skill_manage` 的 `list` 分支（`tools.ts:230-238`）返回 `pending`/`pool`/`reviewResults`，`inspect` 分支（`:239-249`）返回同一份 id。两条路都通，只是代价不同（inspect 会刷新锚点）。`[R]` 保留一句「已 inspect 过就用 list，再 inspect 会让先前回复作废」即可，约 60 字符 |
-| **删 `review` 段「(`${list`/`inspect` name the available id）」** | 上一条已经说了 |
+`[S]` 我初稿写「`approvalConfirmationCandidate` 的注释明写 *derived without an `inspect` call*，所以两条路都通」——
+**这是错的，我把注释安到了错误的函数上。**
+「derived without an `inspect` call」那句（`evolution.ts:278-279`）属于 **`confirmationCandidate`**，即**增长确认**（`确认增长`）的发现函数，
+不是批准的。批准的 `approvalConfirmationCandidate` 明确依赖 inspect。
 
-`[R]` **净省约 260 字符，且不损失任何判据。**
+`[R]` **后果：`list` 段那 320 字符不是「操作建议」，它是承载真实规则的**——
+「inspect 一次 → 用户回复 → 用 list 取那个 id，不要为了取 id 再 inspect 一次（再 inspect 会刷新锚点，让刚才那条回复作废）」。
+这条链条每一步都对应代码事实，删掉它模型会在取 id 时反复 inspect、把自己唯一的批准证据作废。
+
+`[R]` **裁决修正：重复项 5 的真实重复量远小于 task-7 假设的「三处各解释一次」。**
+
+| 段落 | 它真正承载什么 | 能否删 |
+| --- | --- | --- |
+| `list`[3] 的 id 部分 | **取 id 的操作链**（inspect → 回复 → list，别重复 inspect） | **不能删**，只能压缩约 80 字符 |
+| `inspect`[6] | 只在展示清单里列「the approval rule for this source」，**没解释 id** | 本来就不是重复 |
+| `review`[7] 的 id 部分 | **哪些来源需要它**（分级表）+ **它必须是什么**（用户自己、展示之后） | 保留；可删掉重复的「（`list`/`inspect` name the available id）」约 44 字符 |
+
+`[R]` 所以这一项实际可省 **约 124 字符，不是我初稿说的 260**。
+`[R]` 而且**核心结论反了**：task-7 让我判定「三者留一个」，我的回答是**`list` 与 `review` 两份都必须留**，
+因为它们回答的是两个不同问题（「怎么拿到 id」vs「谁需要 id」）。**这是 `co-location` 说得不够近，不是 `duplication`。**
 
 ### 重复项 6（我新发现）：persona L10 × `IDENTITY_TAIL` 说同一件事
 
@@ -1118,7 +1144,57 @@ OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 node --test tests/docs.test.mjs
 
 ---
 
-## 8. 复现命令
+## 8. 对照 Lead 的已落地版本 `ff795b0`（4311 → 1126）
+
+`[S]` 我写完本文时，Lead 已提交 `ff795b0 refactor(#304): skill_manage 描述改中文并去掉重复，4311 → 1126 字符`。
+
+`[S]` 我实测该提交的分段字符：`58 / 52 / 123 / 219 / 170 / 137 / 188 / 36 / 36 / 72 / 35 = 1126`。
+`[S]` `OURFAIRY_DSH_DIR=… node --test tests/skill-creation.test.mjs` → **16/16 通过**。
+
+`[R]` 逐条对照我的建议，**三处 Lead 没删而我建议删**，一处他没有删而我同意保留：
+
+| 我的建议 | `ff795b0` 的做法 | 差额 | 我的判断 |
+| --- | --- | --- | --- |
+| **SM-1 删 [1] 193 → 删** | **保留，改成 58 字符的中文触发句** | +58 | `[R]` **Lead 的选择更稳，我改主意**：我原判断「`action` enum 已列举」，但 enum 只给**动词**不给**触发条件**（「用户要求」「按地址安装」）。按 `context pointer` 杠杆，工具描述的第一句就是指针，它决定何时调用。58 字符的指针是对的。**我的 SM-1 判断偏激，撤回** |
+| **SM-8 删 [8] 110 → 删** | **保留，改成 36 字符** | +36 | `[R]` 保留了对：他把它从「独立一段」**并进了 review 的语义**（「共有候选只由法厄同决定，提议者可读不可批，**其修订与回滚也只由法厄同执行**」）。这是 `co-location` 而不是 `duplication`——同一段里说完。我原判「重复」是按「独立段」位置判的，位置变了就不是重复。**我的 SM-8 判断偏激，撤回** |
+| **SM-11 删 [11] 131 → 删** | **保留，改成 35 字符** | +35 | `[R]` 我仍然认为这句偏 negation（一次激活 6 个被禁概念）。但 35 字符的成本低，且 `[S]` 参数表缺字段这个「结构保障」对**读描述的模型**不显式。**这是可议项，不是错误**：要极致可以删，收益 35 字符 |
+| **重复项 1：删 [6] 里的 fence 句** | **已删** | 0 | 一致 ✓ |
+| **重复项 3：删 owner 派生 × 合并到结尾** | **已合并成结尾一句** | 0 | 一致 ✓ |
+| **重复项 4：删 [8] 独立段** | **已合并**（见上） | — | 位置合并 = 我要的效果 |
+| **重复项 5：`approvalMessageId` 三处合一** | **部分做了**：`list` 只留「本次可用的批准消息 id」 | 0 | `[R]` **这里我与 Lead 的判断分歧，而且按 §5 重复项 5 的更正，我认为该分歧要按代码定**：`list` 那 320 字符承载的是「inspect → 用户回复 → list 取 id，别重复 inspect」这条**有代码支撑的操作链**（`evolution.ts:315-316` 的 `inspectSeq === undefined` 早退），不是操作建议。Lead 删到 123 字符后，「再 inspect 会让先前回复作废」这半句还在（`ff795b0` 的分段 [3] 保留了它），**所以这条链仍然完整**——结论：**Lead 的做法可接受，我初稿的裁决错了**，已在 §5 重复项 5 里改正 |
+| **K-10 `确认增长` 逐字** | **保留为「确认增长」** | — | 一致 ✓ |
+| **K-11 参数字段名保英文** | **全部保英文** | — | 一致 ✓ |
+
+`[R]` **净结论：`ff795b0` 与我的建议实质一致，差额 129 字符来自我两处判断偏激（SM-1、SM-8）。
+剩下的 35 字符（SM-11）是我唯一仍想删的，但它是可议项，不是 defect。**
+
+### 8.1 `ff795b0` 之后还剩什么可做（按我的 §6 落地顺序，仍未动的部分）
+
+`[S]` `ff795b0` 只动了 `skill_manage` 与 `tests/skill-creation.test.mjs` 两个文件。**本文第 1 步的其余 15 项全部还在**：
+
+| 未动 | 位置 | 可省 | 风险 |
+| --- | --- | --- | --- |
+| **FAIRY_PERSONA L18 元指令** | `persona.ts:23` | 31 | 零 |
+| **FAIRY_PERSONA 六条风格示例** | `persona.ts:14-19` | 369 | 零（见 §6 步 1.14 的保留意见） |
+| **`MAINTENANCE_POLICY` [7] 前半** | `maintenance.ts:83` | ~60 | 零 |
+| **`MAINTENANCE_POLICY` [8] 前半** | `maintenance.ts:84` | ~10 | 零 |
+| **`DETECTION_POLICY` [3] 材料说明** | `learning-policy.ts:108` | 52 | 零 |
+| **`DETECTION_POLICY` [13] 前半** | `learning-policy.ts:118` | ~22 | 零 |
+| **`REVIEW_POLICY` [8]** | `learning-policy.ts:128` | 23 | 零 |
+| **`CREATION_POLICY` [9] 第四次双写警告** | `learning-policy.ts:140` | 28 | 零 |
+| **`CREATION_POLICY` [10] 前半** | `learning-policy.ts:141` | ~62 | 零 |
+| **`memory_add` `{ok:true}` ×4** | `memory/tools.ts:40,57,66,75` | 152 | 零 |
+| **`impression_edit` 的维护声明** | `memory/impression.ts:169` | ~38 | 零 |
+| **`ourfairy:spaces` 中文化** | `spaces/src/index.ts:44` | ~97 | 零（只有 doesNotMatch） |
+| **其余 12 条英文描述中文化** | 见 §4 | 可观 | 零（无 description 断言） |
+
+`[R]` **合计还有约 940 字符的零风险可删量**，全都不需要改测试。
+`[R]` 我建议 Lead **下一步先做 `ourfairy:spaces` 与 `MAINTENANCE_POLICY`**——前者是唯一破坏中文一致性的英文段，
+后者是测试上最自由（196 字符）又最该瘦身的一段（否定密度最高）。
+
+---
+
+## 9. 复现命令
 
 ```bash
 cd /home/fatfish/OurFairy

@@ -393,7 +393,9 @@ test('the child reads only interval messages, attachment names and memory change
   const system = JSON.stringify(child.body.system ?? '')
   assert.equal(system.includes('你是Fairy'), false, 'the child does not inherit the Fairy persona')
   assert.equal(system.includes('当前已认证用户短号'), false, 'the child does not inherit the source identity prompt')
-  assert.equal(JSON.stringify(child.body).includes('Authorized file spaces'), false, 'the deployment file-space prompt is skipped for the maintenance preset')
+  // The `ourfairy:spaces` section speaks the deployment's Chinese voice; a
+  // stale English marker here would make this assertion pass vacuously.
+  assert.equal(JSON.stringify(child.body).includes('授权文件空间：'), false, 'the deployment file-space prompt is skipped for the maintenance preset')
   const sourceUserMessages = child.body.messages.filter(message => message.role === 'user'
     && JSON.stringify(message.content).includes('TURN:'))
   assert.equal(sourceUserMessages.length, 1, 'source turns exist only inside the material, not as separate child messages')
