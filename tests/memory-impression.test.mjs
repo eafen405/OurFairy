@@ -285,6 +285,11 @@ test('the impression is injected only into its owner\'s system prompt, fresh on 
   assert.doesNotMatch(bobSystem, /ALICE-OWN-MARKER|ADMIN-OWN-MARKER/)
   assert.doesNotMatch(adminSystem, /ALICE-OWN-MARKER|BOB-OWN-MARKER/,
     'the administrator does not receive another user\'s impression')
+  assert.ok(aliceSystem.includes('当前用户印象（每次互动所需的整体认识，独立于长期记忆）：\nALICE-OWN-MARKER'),
+    'a compact frame distinguishes the impression from long-term memory')
+  assert.doesNotMatch(aliceSystem, /只有用户明确要求时才修改印象；修改前先用 impression_read/,
+    'the editing protocol stays on the tools instead of repeating around every prompt body')
+  assert.match(adminSystem, /当前用户是主人，称呼“主人”。/, 'identity alone gives Phaethon the owner address')
 
   // An edit is visible to the very next turn: the section is a provider
   // evaluated at assembly, not a string frozen when the Agent was created.

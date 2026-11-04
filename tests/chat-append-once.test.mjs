@@ -87,6 +87,7 @@ function makeWorld({ failLiveFlush = false } = {}) {
     effect(execute) { return execute() },
     get() { return undefined },
     ourfairySessions: { async read() {} },
+    identity: { users: { byShortId() { return undefined } } },
     agentDefaultModel: { currentSelection: () => ({ provider: 'mock', model: 'mock' }) },
     agents: {
       async resume({ resumeSessionId, setup }) {

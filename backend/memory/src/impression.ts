@@ -37,11 +37,8 @@ export const IMPRESSION_MAX_CHARACTERS = 8000
 /** The scoped system prompt section carrying one user's impression. */
 const IMPRESSION_SECTION = 'ourfairy:impression'
 
-/** The sentence introducing the injected body. */
-const PROMPT_HEADER = '以下是当前用户的印象，是每次互动都需要的整体认识，不是长期记忆条目：'
-
-/** The sentence that keeps a model edit deliberate and read-first. */
-const PROMPT_FOOTER = '只有用户明确要求时才修改印象；修改前先用 impression_read 读取，再用 impression_edit 整份替换。'
+/** The compact frame introducing the persistent overall understanding. */
+const PROMPT_HEADER = '当前用户印象（每次互动所需的整体认识，独立于长期记忆）：'
 
 /** One user's impression, as both the page and the model read it. */
 export type ImpressionView = {
@@ -104,7 +101,7 @@ export class ImpressionService {
   promptText(shortId: number): string {
     const row = this.#store.impression({ shortId })
     if (row === undefined || row.content === '') return ''
-    return `${PROMPT_HEADER}\n${row.content}\n${PROMPT_FOOTER}`
+    return `${PROMPT_HEADER}\n${row.content}`
   }
 
   /** Drop one calling session's read authorization when its Agent is disposed. */
@@ -160,7 +157,7 @@ export function registerImpressions(agent: Agent, service: ImpressionService, re
 
   const add = toolRegistrar(agent, registered)
   add('impression_read', {
-    description: 'Read the current user\'s impression: the persistent overall understanding Fairy keeps for this user and receives at every interaction. Read it before editing; this read opens the edit for this session. A user without an impression reads an empty body.',
+    description: 'Read the current user\'s persistent overall understanding, injected at every interaction. A missing impression reads as empty. A successful read opens impression_edit for this session.',
     parameters: {},
     execute: async (_args, exec) => {
       const caller = toolCallerOf(exec)
@@ -169,7 +166,7 @@ export function registerImpressions(agent: Agent, service: ImpressionService, re
     },
   })
   add('impression_edit', {
-    description: `Replace the current user's whole impression with content. At most ${String(IMPRESSION_MAX_CHARACTERS)} Unicode characters; longer text is refused and never truncated. Call impression_read in this session first. Edit only when the user explicitly asks you to change their impression, never as part of memory maintenance.`,
+    description: `Replace the current user's whole impression only when the user explicitly asks. Call impression_read in this session first; memory maintenance never edits impressions. At most ${String(IMPRESSION_MAX_CHARACTERS)} Unicode characters; longer text is refused and never truncated.`,
     parameters: { content: { type: 'string', required: true } },
     execute: async (args, exec) => {
       try {
