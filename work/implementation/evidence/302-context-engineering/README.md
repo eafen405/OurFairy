@@ -18,7 +18,7 @@
 | dsh 集成 | `c41af067cf1d5bb94fa89ca42f4cd4f054db4b17` |
 | OurFairy 主会话守卫 | `6867d50bd3` |
 | OurFairy 人格与提示去重 | `7c692265515c48a8782f96ac4fc715667a7532ad` |
-| OurFairy 最终集成 | `255730e936` |
+| OurFairy 最终集成（含同步后的 origin/main） | `adafcee6e0` |
 
 `combo.json` 的 dsh `productCommit` 已锁到 `c41af067cf1d5bb94fa89ca42f4cd4f054db4b17`。
 
@@ -32,7 +32,7 @@
 | 子代理分支相关测试 | 22/22；加强完整 Skill Creator 正文断言后 skill-learning 16/16；其提交钩子 related gate 156/156 |
 | `node --test tests/prompt-guard.test.mjs` | 3/3；普通主会话、complete 拒绝、内部子代理完整提示 |
 | 人格/去重分支最终提交钩子 | related gate 214/214，`combo:verify` 三行 ok |
-| 最终 OurFairy 合并 `255730e936` 的 pre-merge 钩子 | `npm test` 602/602，`combo:verify` 三行 ok |
+| 最终 OurFairy 合并 `adafcee6e0` 的 pre-merge 钩子 | `npm test` 665/665，`combo:verify` 三行 ok；同步进来的 Android 改动同时经过 `test lintDebug`，3m24s、BUILD SUCCESSFUL |
 
 一次守卫提交因隔离 HOME 中 corepack 下载 pnpm 超时未完成；使用已有 `COREPACK_HOME=/home/eafen405/.cache/node/corepack` 缓存后，同一改动完整钩子 602/602 通过。该失败不计为代码失败，也不掩盖首次结果。
 
