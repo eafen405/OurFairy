@@ -814,10 +814,16 @@ describe('explicit skill creation, review and publish', () => {
     const withTools = requests.filter(body => Array.isArray(body.tools))
     const tool = withTools.at(-1).tools.find(entry => entry.name === 'skill_manage')
     assert.ok(tool !== undefined, 'the user session advertises skill_manage')
-    assert.match(tool.description, /reusable procedure/u)
-    assert.match(tool.description, /memory/u)
-    assert.match(tool.description, /Never write the same content to both/u)
-    assert.match(tool.description, /pending candidate/u)
+    // The description is the deployment's own voice: it states the boundary
+    // that decides where content goes, in the language the Fairy speaks.
+    assert.match(tool.description, /可复用的流程/u)
+    assert.match(tool.description, /记忆/u)
+    assert.match(tool.description, /同一内容只写一边/u)
+    assert.match(tool.description, /待审候选/u)
+    // The untrusted-content rule lives in its own section, not here: repeating
+    // it would carry one meaning twice on the same session.
+    assert.doesNotMatch(tool.description, /不受信|不可信数据/u,
+      'the trust rule belongs to its section, not to this description')
   })
 })
 
