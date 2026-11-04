@@ -154,14 +154,18 @@ test('memory policy lives on memory_add while maintenance keeps its own prompt',
   const source = requests.find(body => !isChild(body))
   assert.ok(source !== undefined, 'the source session made a model request')
   const sourceSystem = systemOf(source)
+  // Every section this deployment owns speaks its own voice, including the
+  // `tool:` rows dsh registers: `prompt-voice` restates them when the tool is
+  // visible. The markers below are the deployment's wording, not dsh's — a
+  // marker copied from upstream would pass only while nothing rewrites it.
   const guidance = [
     ['persona', '你是《绝区零》中的 Fairy'],
     ['identity', `当前已认证用户短号：${user.user.shortId}`],
-    ['bash', 'Check the [exit code: N] marker'],
-    ['read', 'Use the read tool'],
-    ['write', 'Read an existing file before overwriting it'],
-    ['edit', 'Read a file before editing it'],
-    ['jobs', 'Track every background job id'],
+    ['bash', '用 bash 时读每条的 exit code'],
+    ['read', '看文本文件用 read'],
+    ['write', '用 write 覆盖已有文件前先读一遍'],
+    ['edit', '改文件前先读一遍'],
+    ['jobs', '后台任务用 job_output 收结果'],
   ].map(([name, marker]) => [name, sourceSystem.indexOf(marker)])
   for (const [name, index] of guidance) assert.ok(index >= 0, `${name} guidance is present`)
   for (let index = 1; index < guidance.length; index += 1) {
@@ -194,10 +198,19 @@ test('memory policy lives on memory_add while maintenance keeps its own prompt',
   assert.equal(JSON.stringify(child).includes(SPACES_PROMPT_MARKER), false,
     'the spaces prompt context contributes nothing to the maintenance preset')
   assert.match(childSystem, /你是长期记忆维护子代理/, 'the child carries its own maintenance instruction')
+  // `prompt-voice` empties a tool section whose tool the agent cannot see, so
+  // the child pays neither dsh's English nor the deployment's restatement. A
+  // marker left over from the English wording would make these pass vacuously.
   assert.equal(childSystem.includes('Check the [exit code: N] marker'), false,
-    'the maintenance prompt does not inherit bash operations guidance')
+    'the maintenance prompt does not inherit dsh bash operations guidance')
+  assert.equal(childSystem.includes('用 bash 时读每条的 exit code'), false,
+    'the maintenance prompt does not inherit the restated bash guidance')
   assert.equal(childSystem.includes('Track every background job id you start'), false,
-    'the maintenance prompt does not inherit jobs operations guidance')
+    'the maintenance prompt does not inherit dsh jobs operations guidance')
+  assert.equal(childSystem.includes('后台任务用 job_output 收结果'), false,
+    'the maintenance prompt does not inherit the restated jobs guidance')
+  assert.equal(childSystem.includes('看文本文件用 read'), false,
+    'the maintenance prompt does not inherit the restated read guidance')
   assert.deepEqual([...child.tools.map(tool => tool.name)].sort(), [...MEMORY_TOOLS].sort(),
     'the child still sees only the five memory tools')
   const childAddTool = child.tools.find(tool => tool.name === 'memory_add')

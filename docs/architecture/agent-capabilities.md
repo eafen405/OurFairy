@@ -28,18 +28,25 @@
 | 记忆维护子 | 无 | 有 | memory 授予的记忆工具 | memory（创建者） |
 | 将来的非用户 agent | 由创建者决定 | 由创建者决定 | 空 | 创建者显式授予 |
 
-本文件不列「agent 种类 × 具体工具名」：除上面两种外还没有第二种 agent 落地，具体工具
-由各 row 自己的注册决定，不在这里重复。
+本文件不列「agent 种类 × 具体工具名」：具体工具由各 row 自己的注册决定，不在这里
+重复。当前落地的非用户 agent 有三种——记忆维护子、技能学习检测子、技能深创子；前两种
+各有自己的 complete 段和工具面，第三种沿用创建模块的完整 Skill Creator 正文。
 
 ## 三类判断不能混用
 
 旧代码把「是不是维护子」当成三个不同问题的代理；现在它们各有名字：
 
-- **工具行问「这是用户自己的会话吗」**：search、groups、delivery 在注册工具前调用
-  `isUserSession(agent.session.header)`。不是用户会话就一个工具都不注册。
+- **工具行问「这是用户自己的会话吗」**：注册工具前调用
+  `isUserSession(agent.session.header)`，不是用户会话就一个工具都不注册。这条判定的
+  消费者是全部需要工具面的行，不止 search、groups、delivery 三行：`tests/agent-capabilities-doc.test.mjs`
+  从源码数出调用它的包，与本文件列出的数量比对。
 - **文件与附件行问「这条会话有 owner 吗」**：spaces 的 sandbox 策略、工作目录、文件空间
   prompt，以及 attachments 的 stream/execute 刷新，用 `shortIdOf(header.owner)` 判断。
   这些不是工具授权，只决定私有根、共享根或附件刷新是否存在。
+- **skill-creator 的注册也问它**：`skill_manage` 只注册在用户会话上。它的学习检测、
+  学习审查与深创三个子代理都不该看见这个工具，判定它们是不是用户会话就够了。
+- **chat 的装配守卫问同一个问题**：`prompt-guard` 只在用户会话上拒绝别的包用 complete 段
+  顶掉部署提示——内部子代理本来就可以有自己的完整提示，拦它会拦错。
 - **memory 问「这是不是我创建的维护子」**：`MAINTENANCE_PRESET` 留在 memory 内部。维护子由
   memory 创建，memory 对它注册自己的记忆工具并跳过仅属于用户的 policy/impressions；这是
   创建者给自己的子授权，不是产品通用标记。其它产品包不再导入这个常量。
@@ -56,8 +63,14 @@
 - [`tests/agent-capabilities.test.mjs`](../../tests/agent-capabilities.test.mjs)：用户会话、
   维护子、有 owner 且有 parent、无 owner 且无 preset 等 header 形状都锁在判定上。
 - [`tests/model-double.test.mjs`](../../tests/model-double.test.mjs)：用户主会话的模型工具
-  目录仍是 26 个工具（含 #297 的 `skill_manage`）。
+  目录是 `model-double` 里那张手写清单，由测试与装配比对。主人比普通代理人多一个
+  `group_create`：它只在 `shortId === 1 && isAdmin` 时注册。
 - [`tests/memory-maintenance.test.mjs`](../../tests/memory-maintenance.test.mjs)：维护子仍
   恰好看到 memory 的五个记忆工具。
 - [`tests/row-addressability.test.mjs`](../../tests/row-addressability.test.mjs)：禁用
   delivery 或 groups 行后，对应工具从用户的工具目录消失。
+- [`tests/prompt-inventory.test.mjs`](../../tests/prompt-inventory.test.mjs)：真实装配的段
+  清单、每段字符数与合计，从 `system-prompt/assemble` 的 waterfall 读出来，与模型实际收到
+  的文本比对。段清单的权威在那里与各包源码，不在本文件的散文里。
+- [`tests/agent-capabilities-doc.test.mjs`](../../tests/agent-capabilities-doc.test.mjs)：
+  本文件里凡以数字或行名表述的主张，都与源码派生值比对。
