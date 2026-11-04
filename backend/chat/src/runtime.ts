@@ -5,6 +5,7 @@ import { SessionHistoryGapError, createSessionHistorySeam } from '@deepseek-ai/d
 import { firstHumanMessageText, readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import { attemptText, attemptTools, taskAt, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.js'
 import { FAIRY_PERSONA, ownerIdentity } from './persona.js'
+import { installPromptGuard } from './prompt-guard.js'
 import { SessionQueues } from './queues.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
@@ -349,6 +350,9 @@ export class SessionRuntime {
         const nickname = this.ctx.identity.users.byShortId(owner.shortId)?.name
         agentCtx.systemPrompt.section({ name: 'ourfairy:identity', order: 1, interpolate: false,
           text: ownerIdentity(owner.shortId, nickname) })
+        // This agent is the deployment voice. Refuse any assembly where another
+        // plugin's complete section replaced it (#302).
+        installPromptGuard(agentCtx)
         const changed = () => this.changed(state)
         // A turn pins the shared selection read at its start: a running reply,
         // including its tool-continuation steps, never switches mid-turn.

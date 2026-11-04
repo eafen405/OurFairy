@@ -57,10 +57,17 @@ dsh 提交与既有 [dsh 骨架研究](dsh-skeleton.md) 一致，可直接沿用
 | 条件 | 证据 | 性质 |
 | --- | --- | --- |
 | 人格文本只来自部署配置 `personaPrefix` / `personaSuffix`（order 0 与 10200），仓库不提供终端用户编辑入口 | `constructor` 里直接注册两个 section；包文档"Known Limitations"写明"there is no end-user prompt-editing API" [D2][D5] | 前半为代码事实，后半为**文档声称** |
-| `includeHarnessIdentity: false` 去掉固定的 `You are an AI agent powered by DeepSeek Harness.`（order −1000）；配一个 `complete: true` 的 section 可让整段系统提示由 OurFairy 独占 | [D2][D3] | 代码事实 |
+| `includeHarnessIdentity: false` 去掉固定的 `You are an AI agent powered by DeepSeek Harness.`（order −1000）；配一个 `complete: true` 的 section 可让整段系统提示由 OurFairy 独占 —— 但代价是**同时抹掉所有其他 section**（见下方更正） | [D2][D3] | 代码事实 |
 | 同一层重复注册同名 section/context 抛错；作用域层注册**遮蔽**同名全局；多个生效的 complete section 装配失败 | `section()` / `context()` 文档注释与 `assemble()` 的 complete 检查 [D2] | 代码事实 |
 
 **必须写清的边界**：`complete: true` 解决的是"独占"，不是"锁"。任何人若在同一 agent 作用域注册同名 section 即可覆盖全局人格；dsh 没有、也不打算有"此段不可覆盖"的表达。这是**装配约定**，需要在 #8 的插件清单里作为硬约束写死，而不是依赖模型自觉。
+
+> **更正（2026-11-03，#302）**：本表上一行把 `complete: true + includeHarnessIdentity: false` 写成"让整段系统提示由 OurFairy 独占"的可用手段，**这个表述在本产品是错的，不要照它实施**。
+> `assemble()` 对单个 `complete` section 的处理是把 `sections` 整体换成它那一条（`packages/core/system-prompt/src/index.ts`，`sections: completeSection === undefined ? transformed.sections : [completeSection]`），
+> 而 tool schema 在 waterfall 之前就已算好并原样保留。所以在 OurFairy 上它抹掉的不只是 dsh 的身份段，而是**人设、身份、印象、技能信任，以及 dsh 五条工具用法说明**，
+> 同时 27 个工具照旧声明 —— 模型「有工具但不知道怎么用」，表现为调错而不是报错。
+> #302 已在真实组合上实测：一条第三方 `complete: true` section 把 2 494 字符的 system prompt 压成 45 字符，`ourfairy:persona` 与工具用法全部消失。
+> 正确做法是**永不注册 `complete`**，用 `system-prompt/assemble` waterfall 编排；守卫见 `tests/prompt-inventory.test.mjs`。
 
 ### 1.3 dsh：装配失败是 fail-closed 的（代码事实）
 
@@ -210,7 +217,7 @@ MaiBot 的两个注入块文本是最清楚的措辞侧样本，值得原样记�
 
 以下是研究产出的候选判据与验证项，**不是决定**：
 
-1. **人格落点**：`complete: true` 的 section + `includeHarnessIdentity: false`，让 OurFairy 独占系统提示；作用域遮蔽规则必须写成插件清单里的硬约束（不注册同名 section/context），因为 dsh 不提供锁。
+1. **人格落点（已更正，#302）**：**不要**用 `complete: true` 的 section。它会把产品的人设与 dsh 五条工具用法一并抹掉而 tool schema 保留（实测：2 494 → 45 字符，见 §1.2 更正）。改用普通 `section(order)` 注册 + `system-prompt/assemble` waterfall 编排，并配一条断言装配段清单的检查。作用域遮蔽规则仍须写成插件清单里的硬约束（不注册同名 section/context），因为 dsh 不提供锁。
 2. **动态事实落点**：随会话变化的事实走 `ctx.systemPrompt.context()`，它会变成带 `source` 标记的 user 角色快照，并有现成的撤销消息语义。
 3. **注入围栏模板**：dsh 的 `REFERENCE_WARNING` + `<referenced-sessions>` 信封 + tag-safe JSON 是检索面唯一有完整组合的先例；MaiBot 的 `【…-内部参考】` + "若与当前对话冲突，以当前对话为准"是措辞侧的补充形态。两者可叠加，**但都属提示叮嘱，不是保证**。
 4. **投递消息的角色归属仍未决**：Fairy 起草、来源是 A 的文本进入 B 的上下文，应当是 user 侧、assistant 侧还是带来源标记的独立消息，三个参照项目都没有答案。

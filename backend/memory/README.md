@@ -44,8 +44,9 @@ impression as part of memory work.
 
 ## What the Fairy writes
 
-Long-term memory is not a transcript summary. An owned Agent's prompt carries the
-`ourfairy:memory-policy` section, and the maintenance child carries the same rule
+Long-term memory is not a transcript summary. The `memory_add` tool description
+carries the write rule for an owned Agent (since #302 the prompt carries no
+copy of it), and the maintenance child carries the same rule
 in its own instruction: only a user's explicit request to remember, or a stable
 long-term attribute, repeated habit or shared experience the user stated, is
 stored. Session summaries, user profiles, personality guesses,
