@@ -105,6 +105,7 @@ function makeWorld() {
     // the way — the same degradation a profile without that row has.
     get(name) { return this[name] },
     ourfairySessions: { async read() {} },
+    identity: { users: { byShortId() { return undefined } } },
     agentDefaultModel: { currentSelection: () => ({ provider: 'mock', model: 'mock' }) },
     agents: {
       async resume({ resumeSessionId, setup }) {

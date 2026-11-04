@@ -306,7 +306,8 @@ spill 文件，贡献返回空；声明它会让所有 chat 路由等待一个�
 | `sessionQuery` | `inject` | 不直接调用；经 `src/runtime.ts` 的 `readSessionEvents(this.ctx, …)`，由 `backend/sessions/src/events.ts` 调 `ctx.sessionQuery.observeSession`。 |
 | `systemPrompt` | `inject` | Agent setup 注册人格与身份段；装配 waterfall 拒绝用户主会话中的 `complete` 替换。后者由 `tests/prompt-guard.test.mjs` 经真实 SystemPrompt 接缝固定，内部子代理仍可使用自己的完整提示。 |
 | `spillStore` | 不声明，动态读取 | `ctx.get('spillStore')?.root`；缺席是受支持的降级，理由见读取处注释。 |
-| `identity`、`tools` | 不声明 | chat 内没有 `ctx.identity`/`ctx.tools` 引用；可用性由保留声明传递：`ourfairySessions` 自己 inject `identity`，`agentLoop` 自己 inject `tools`（`AgentLoop.inject`）。 |
+| `identity` | `inject` | `src/runtime.ts` 打开会话时经 `ctx.identity.users.byShortId` 读取已认证用户的昵称，供 `ownerIdentity` 生成称呼。 |
+| `tools` | 不声明 | chat 内没有 `ctx.tools` 引用；可用性由保留声明传递：`agentLoop` 自己 inject `tools`（`AgentLoop.inject`）。 |
 
 其余条目在源码里各有使用处；新增或删除 `inject` 时，以 `src/index.ts` 的声明与注释为准，并在
 提交说明里写明依据。`spillStore` 的动态读取与缺席语义写在 `src/spill-read.ts` 的读取处；本节

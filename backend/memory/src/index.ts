@@ -20,7 +20,7 @@ import { MAINTENANCE_DECAY_HOURS, MAINTENANCE_TURNS } from './maintenance-policy
 import { MaintenanceEngine, readMaintenanceSettings, type MaintenanceField } from './maintenance.js'
 import { MemoryService } from './service.js'
 import { MemoryStore } from './store.js'
-import { registerMemoryPolicy, registerMemoryTools } from './tools.js'
+import { registerMemoryTools } from './tools.js'
 import { MAINTENANCE_PRESET } from './preset.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -116,9 +116,6 @@ export function apply(ctx: Context, config: MemoryConfig): void {
     // does not paint its surface onto an unrelated agent.
     const header = agent.session.header
     if (isUserSession(header) || header.agentPreset === MAINTENANCE_PRESET) registerMemoryTools(agent, service, names)
-    // The owned Fairy gets the write/no-write policy. The maintenance child is
-    // ownerless and carries its own policy instead.
-    registerMemoryPolicy(agent, names)
     // An owned session gets the impression section and tools; an ownerless one
     // (the maintenance child) gets neither, so memory work cannot read or
     // rewrite an impression.

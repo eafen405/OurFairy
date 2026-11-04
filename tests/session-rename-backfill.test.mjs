@@ -81,6 +81,7 @@ function makeWorld() {
     get(name) { return this[name] },
     sessionTitle: titles,
     ourfairySessions: { async read() {} },
+    identity: { users: { byShortId() { return undefined } } },
     agentDefaultModel: { currentSelection: () => ({ provider: 'mock', model: 'mock' }) },
     agents: {
       async resume({ resumeSessionId, setup }) {

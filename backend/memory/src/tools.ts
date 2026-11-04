@@ -13,29 +13,6 @@ import { toolRegistrar } from './tool-kit.js'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { MemoryService } from './service.js'
-// The system-prompt seam this module adds the memory policy section to.
-import type {} from '@deepseek-ai/dsh-system-prompt'
-
-/** The scoped system prompt section that tells the Fairy when not to write. */
-export const MEMORY_POLICY_SECTION = 'ourfairy:memory-policy'
-
-/**
- * When the main Fairy does and does not write a long-term memory.
- *
- * The real-model acceptance (#248) found the Fairy writing session summaries
- * and inferred environment/profile facts. The rule is guidance at the model's
- * own seam, not a semantic filter: only what the user explicitly asked for or
- * clearly stated about themselves survives; summaries, profiles, inferences
- * and one-off observations do not. Maintenance has its own policy with the same
- * rule so neither writer can make the other's noise legitimate.
- */
-export const MEMORY_POLICY = '长期记忆只保存用户明确要求记住的内容，或用户自己明确说出的、可长期复用的稳定事实、偏好和共同经历。'
-  + '只有用户明确要求记住，或长期不变的属性、重复习惯和明确说出的共同经历才写；不要记录带有「最近」「今天」「现在」「刚才」等时间限定的状态、动向、计划或待办，即使用户自己提到了也不写。'
-  + '不要写会话摘要、用户画像、性格推测、IP/位置/设备/天气/时间等环境推断、一次性情绪或身体感受，也不要把 Fairy 自己的回复或工具结果当成用户事实。'
-  + '不要把你执行过的记忆增删改、用户对记忆的增删改或切换要求、以及维护过程本身写成新记忆；不要记录待办、未结项提醒、会话任务状态或 Fairy 的建议，这些操作或状态已经存在于记忆或会话本身。'
-  + '可复用的工作流、操作步骤或脚本属于技能，由 skill_manage 保存为技能；记忆只保存稳定事实与偏好。同一内容不要同时写进技能和记忆，也不要为了记住一个流程而写记忆。'
-  + '没有明确、可长期保留的内容时不要写记忆；'
-  + '用户明确要求记住时立即用 memory_add 保存；已有记忆过时时先 memory_search 找到，再用 memory_edit 更新或 memory_delete 删除，不要新增副本。'
 
 /** The calling session, as read-only and layer-changing handlers need it. */
 function callerOf(exec: ToolRunContext): { sessionId: string; ownerShortId: number | undefined } {
@@ -60,7 +37,7 @@ async function writerOf(exec: ToolRunContext, service: MemoryService): Promise<{
 export function registerMemoryTools(agent: Agent, service: MemoryService, registered: Set<string>): void {
   const add = toolRegistrar(agent, registered)
   add('memory_add', {
-    description: 'Remember one durable fact or shared experience as a long-term memory. Store the exact text; the source session and its owner are filled in for you. The memory is normal unless is_private is true. Only store what the user explicitly asked to remember, or a stable long-term fact, preference or shared experience the user stated themselves. Never store session summaries, user profiles, personality guesses, location/IP/device/weather/time inferences, one-off moods or body sensations, or anything inferred from your own replies or tool results. Never store time-bound observations ("recently", "today", "right now") even when the user mentions them. Never store a memory about a memory operation the user requested or you performed, a todo/open task state, or a maintenance result. When nothing clearly qualifies, write nothing. At most 8000 Unicode characters; longer text is refused, never truncated. A successful call answers `{ok:true}`.',
+    description: 'Store the exact text of a long-term memory only when the user explicitly asks to remember it, or personally states a durable fact, preference, repeated habit or shared experience. The source session and owner are derived; the memory is normal unless is_private is true. Keep session summaries, profiles or personality guesses, inferred environment/location/device/weather/time, one-off moods or sensations, time-bound observations, todos, memory/maintenance operations, and claims from Fairy\'s own replies or tool results out of memory. Put reusable workflows in skill_manage instead of double-writing. If nothing qualifies, make no write. At most 8000 Unicode characters; longer text is refused, never truncated. A successful call answers `{ok:true}`.',
     parameters: { content: { type: 'string', required: true }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
       const writer = await writerOf(exec, service)
@@ -103,26 +80,5 @@ export function registerMemoryTools(agent: Agent, service: MemoryService, regist
       return { ok: true }
     },
   })
-}
-
-/**
- * Add the owned-session memory policy to one Agent, once.
- *
- * The section is registered only for a session with a user owner. The
- * maintenance child is ownerless by design and carries its own policy in
- * `maintenance.ts`; an owned prompt policy must not leak into it.
- * @param agent - the agent whose scoped system prompt is written.
- * @param registered - the names already registered on this agent.
- */
-export function registerMemoryPolicy(agent: Agent, registered: Set<string>): void {
-  if (shortIdOf(agent.session.header.owner) === undefined) return
-  if (registered.has(MEMORY_POLICY_SECTION)) return
-  agent.ctx.systemPrompt.section({
-    name: MEMORY_POLICY_SECTION,
-    order: 3,
-    interpolate: false,
-    text: MEMORY_POLICY,
-  })
-  registered.add(MEMORY_POLICY_SECTION)
 }
 
