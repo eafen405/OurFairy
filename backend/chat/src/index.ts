@@ -4,6 +4,7 @@ import { RemoteChat } from './service.js'
 import { SessionRuntime } from './runtime.js'
 import { ChatRuntimeFacade } from './runtime-facade.js'
 import { installJobs } from './jobs.js'
+import { installPromptVoice } from './prompt-voice.js'
 import { registerProjectionUnits } from './units.js'
 import { installSpillRead } from './spill-read.js'
 import { respondToChatObserver } from './observe.js'
@@ -60,6 +61,10 @@ export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions'
   'agentLoop',
   'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'llm', 'sessionPersistence', 'jobs', 'sessionProjections']
 export function apply(ctx: Context): void {
+  // dsh's tool sections speak English in the deployment's own system prompt;
+  // restate them once here so every agent — including the children built
+  // outside this row — reads the deployment's voice (#302).
+  installPromptVoice(ctx)
   // Every registered unit folds on the native event drive, once per session and
   // shared by every observer; `register` installs its own effect on this fiber.
   registerProjectionUnits(ctx)

@@ -168,4 +168,12 @@ test('the write rule lives in the tool description, not in a prompt section', as
   assert.match(childSystem, /你是长期记忆维护子代理/, 'the child carries its own maintenance instruction')
   assert.deepEqual([...child.tools.map(tool => tool.name)].sort(), [...MEMORY_TOOLS].sort(),
     'the child still sees only the five memory tools')
+
+  // #302 restates dsh's tool-usage sections in the deployment's voice, and a
+  // section whose tool is not visible contributes nothing. The child has no
+  // shell and no jobs, so it must not carry their instructions — upstream
+  // registers `tool:bash` and `tool:jobs` unconditionally, which used to cost
+  // this child 474 characters of discipline it could not act on.
+  assert.equal(/exit code|后台任务|job_output/.test(childSystem), false,
+    'the child carries no shell or background-job instructions, because it has neither tool')
 })
