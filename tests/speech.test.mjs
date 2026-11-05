@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createServer } from 'node:http'
-import { describeRun, makeHome, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
+import { once } from 'node:events'
+import { describeRun, httpJson, makeHome, removeHome, runBackendAsync, startArgs, startedPort } from './helpers/backend.mjs'
 
 test('authenticated speech availability stays unavailable without the separate voice key', async () => {
   const home = makeHome('ourfairy-speech-keyless-')
@@ -40,14 +41,14 @@ test('speech proxy uses configured provider, returns editable text, and reports 
   const provider = createServer(async (req, res) => {
     const chunks = []; for await (const c of req) chunks.push(c)
     calls.push({ auth: req.headers.authorization, body: Buffer.concat(chunks).toString('utf8') })
-    if (mode === 'delay') { setTimeout(() => { if (!res.destroyed) res.end('{"text":"late"}') }, 500); return }
+    if (mode === 'hold') { provider.emit('held', res); return }
     res.writeHead(mode === 'busy' ? 429 : mode === 'failed' ? 503 : 200, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ text: mode === 'empty' ? '' : '可编辑转写' }))
   })
   await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve))
   const home = makeHome('ourfairy-speech-provider-')
   try {
-    const started = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: 'speech-password', VOICE_API_KEY: 'voice-only-test', OURFAIRY_ASR_MODEL: 'configured-test-model', OURFAIRY_ASR_ENDPOINT: `http://127.0.0.1:${provider.address().port}/transcribe`, OURFAIRY_ASR_TIMEOUT_MS: '150', OURFAIRY_ASR_MAX_AUDIO_BYTES: '500' })
+    const started = await runBackendAsync(startArgs(), { OURFAIRY_HOME: home, OURFAIRY_PHAETHON_PASSWORD: 'speech-password', VOICE_API_KEY: 'voice-only-test', OURFAIRY_ASR_MODEL: 'configured-test-model', OURFAIRY_ASR_ENDPOINT: `http://127.0.0.1:${provider.address().port}/transcribe`, OURFAIRY_ASR_TIMEOUT_MS: '30000', OURFAIRY_ASR_MAX_AUDIO_BYTES: '500' })
     const base = `http://127.0.0.1:${startedPort(started)}`
     const signed = await fetch(base + '/identity/sign-in', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'phaethon', password: 'speech-password' }) }).then(r => r.json())
     const headers = { authorization: `Bearer ${signed.token}`, 'content-type': 'audio/wav' }
@@ -60,28 +61,46 @@ test('speech proxy uses configured provider, returns editable text, and reports 
     assert.equal(calls[0].auth, 'Bearer voice-only-test'); assert.match(calls[0].body, /configured-test-model/)
     assert.equal((await transcribe(Buffer.from('bad wav'))).status, 400)
     assert.equal((await transcribe(Buffer.alloc(501))).status, 413)
-    for (const [value, status, code] of [['empty',422,'no-match'],['busy',429,'busy'],['failed',502,'failed'],['delay',504,'timeout']]) {
+    for (const [value, status, code] of [['empty',422,'no-match'],['busy',429,'busy'],['failed',502,'failed']]) {
       mode = value; const result = await transcribe(); assert.equal(result.status, status)
       assert.equal((await result.json()).error.code, 'speech/' + code)
     }
-    mode = 'delay'
-    const controller = new AbortController(); const pending = transcribe(wav(), controller.signal)
-    await new Promise(resolve => setTimeout(resolve, 30))
-    assert.equal((await transcribe()).status, 429)
-    controller.abort(); await assert.rejects(pending, { name: 'AbortError' })
-    // The server releases the one-shot budget once it has noticed that the
-    // client went away. A fixed sleep is a guess: on a loaded event loop the
-    // notice and the release can take longer than any fixed delay, and the
-    // request below then still sees the budget held and comes back 429. Wait
-    // for the release instead of guessing how long it takes.
+    mode = 'hold'
+    const received = once(provider, 'held', { signal: AbortSignal.timeout(10_000) })
+    const controller = new AbortController()
+    const pending = transcribe(wav(), controller.signal)
+    const cancelled = assert.rejects(pending, { name: 'AbortError' })
+    try {
+      const [upstream] = await received
+      const disconnected = once(upstream, 'close', { signal: AbortSignal.timeout(10_000) })
+      assert.equal((await transcribe()).status, 429, 'a received request holds the one-shot budget')
+      controller.abort()
+      await cancelled
+      await disconnected
+    } finally {
+      controller.abort()
+      await cancelled
+    }
+    // The upstream disconnect and the backend's finally block run in different
+    // processes. Retry only the observable busy response until that release.
     mode = 'ok'
     const deadline = Date.now() + 5_000
     let status = 429
     while (status === 429 && Date.now() < deadline) {
-      await new Promise(resolve => setTimeout(resolve, 25))
       status = (await transcribe()).status
+      if (status === 429) await new Promise(resolve => setTimeout(resolve, 25))
     }
     assert.equal(status, 200, 'cancel releases this one-shot ASR budget')
+
+    // Only this case uses a short deadline. The provider never answers, so no
+    // provider timer can win against the timeout being tested.
+    await httpJson(startedPort(started), '/gateway/asr', { token: signed.token, body: {
+      model: 'configured-test-model', endpoint: `http://127.0.0.1:${provider.address().port}/transcribe`, timeoutMs: 150,
+    } })
+    mode = 'hold'
+    const timedOut = await transcribe()
+    assert.equal(timedOut.status, 504)
+    assert.equal((await timedOut.json()).error.code, 'speech/timeout')
   } finally {
     await runBackendAsync(['stop', '--json'], { OURFAIRY_HOME: home }); removeHome(home)
     provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve))

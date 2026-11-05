@@ -18,22 +18,7 @@ import { linkTypes } from '../../scripts/link-types.ts'
 /** Absolute path of this ticket worktree (the repository under test). */
 export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
-/**
- * Refuse to run when a product package's build output is missing.
- *
- * `npm test` builds first (`pretest`), but `npm run build` is `tsc.ts --fresh`,
- * which removes every `backend/*\/dist` before compiling again. A test process
- * that starts inside that window sees `ERR_MODULE_NOT_FOUND` for the package
- * under test, or a launcher that exits naming a `files` entry that publishes
- * nothing — hundreds of red failures whose cause is "a build is running", not
- * "the product broke". This turns that whole class into one loud message about
- * the real cause.
- *
- * The maintenance subagent's baseline probe is the package least likely to have
- * been built by hand, so its output is the one that goes missing first; checking
- * every package the bundle declares keeps the message honest about the whole
- * set rather than guessing which file a caller will import next.
- */
+/** Fail early when a direct node --test invocation has no product build. */
 function assertProductBuild(root) {
   const backend = join(root, 'backend')
   if (!existsSync(backend)) return
@@ -51,10 +36,7 @@ function assertProductBuild(root) {
   if (missing.length === 0) return
   throw new Error(
     `the product build output is missing for ${missing.length} package(s): ${missing.join(', ')}.`
-    + ` Either \`npm test\` (which builds first) was interrupted, or a \`npm run build\` is`
-    + ` running right now — that command clears every backend/*/dist before rebuilding, so a`
-    + ` test that starts inside that window fails as if the product broke.`
-    + ` Run \`npm run build\` and let it finish, then run the tests again.`)
+    + ' Run `npm test -- tests/<name>.test.mjs` to build and test under the worktree lock.')
 }
 
 assertProductBuild(repoRoot)

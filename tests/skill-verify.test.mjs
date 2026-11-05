@@ -11,6 +11,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { after, test } from 'node:test'
+import { createServer } from 'node:net'
+import { once } from 'node:events'
 import { runVerification } from '../backend/skill-creator/dist/verify.js'
 
 const cleanup = []
@@ -20,8 +22,9 @@ after(() => {
 
 /** A temporary skill data root with one valid package. */
 function fixture(prefix = 'skill-verify-') {
-  const root = mkdtempSync(join(tmpdir(), prefix))
-  cleanup.push(root)
+  const home = mkdtempSync(join(tmpdir(), prefix))
+  cleanup.push(home)
+  const root = join(home, 'skills')
   const packageDir = join(root, 'source')
   mkdirSync(packageDir, { recursive: true })
   writeFileSync(join(packageDir, 'SKILL.md'), '---\nname: verify-demo\ndescription: Use when verifying.\n---\n\n# Workflow\n\nDo it.\n')
@@ -74,39 +77,41 @@ test('a scenario runs for real inside a disposable bwrap directory and its repor
   assert.ok(report.environment.includes('bwrap'), `the report names the confinement: ${report.environment}`)
 })
 
-test('a scenario past its timeout is stopped and recorded as failed, not executed', async () => {
+test('a scenario past its timeout is stopped and recorded as failed, not executed', { timeout: 15_000 }, async t => {
   const { root, packageDir } = fixture('skill-verify-timeout-')
-  const started = Date.now()
   const report = await runVerification({
     root,
     packageDir,
+    signal: t.signal,
     timeoutMs: TIMEOUT_MS,
-    scenarios: [{ name: 'sleeps', command: 'sleep 5', timeoutMs: 1_000 }],
+    scenarios: [{ name: 'sleeps', command: 'sleep 60', timeoutMs: 1_000 }],
   })
-  const elapsed = Date.now() - started
 
   assert.equal(report.executed.length, 0)
   assert.equal(report.failed.length, 1)
   assert.equal(report.failed[0].timedOut, true)
   assert.equal(report.failed[0].exitCode, null)
-  assert.ok(elapsed < 4_500, `the verifier stopped the child at its bound; took ${elapsed}ms`)
 })
 
-test('an abort stops the running command and leaves the remaining scenarios unexecuted', async () => {
+test('an abort stops the running command and leaves the remaining scenarios unexecuted', { timeout: 15_000 }, async t => {
   const { root, packageDir } = fixture('skill-verify-abort-')
   const controller = new AbortController()
-  const running = runVerification({
+  const ready = createServer(socket => {
+    socket.once('data', () => { socket.destroy(); controller.abort() })
+  })
+  t.after(() => { controller.abort(); ready.close() })
+  ready.listen(0, '127.0.0.1')
+  await once(ready, 'listening')
+  const report = await runVerification({
     root,
     packageDir,
     timeoutMs: TIMEOUT_MS,
     signal: controller.signal,
     scenarios: [
-      { name: 'long', command: 'sleep 5', timeoutMs: 10_000 },
+      { name: 'long', command: `printf ready > /dev/tcp/127.0.0.1/${ready.address().port}; sleep 60` },
       { name: 'never runs', command: 'true' },
     ],
   })
-  setTimeout(() => controller.abort(), 300)
-  const report = await running
 
   assert.equal(report.complete, false, 'an aborted run is incomplete')
   assert.equal(report.executed.length, 0)

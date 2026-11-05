@@ -28,6 +28,7 @@
 | pnpm | 用 corepack 固定：`corepack pnpm@11.28.5` |
 | deepseek-harness 检出 | `combo.json` 的 `repos.dsh.localPath` 只是默认位置提示；检出不在那里时用 `OURFAIRY_DSH_DIR=/path/to/deepseek-harness` 覆盖，命令与测试都认这一条 |
 | Linux 沙箱 | bubblewrap（`bwrap`），并允许创建非特权用户命名空间 |
+| 构建互斥 | util-linux 提供的 `flock` |
 | PDF 页面渲染 | Poppler（`poppler-utils` 提供的 `/usr/bin/pdftoppm`） |
 | JDK / Android SDK | 只在构建客户端时需要，见下文 |
 
@@ -39,7 +40,7 @@
 
 ```sh
 npm run build       # 编译产品包：链接类型、清理产物、tsc -b
-npm test            # 全量：node --test "tests/**/*.test.mjs"
+npm test            # 构建并持锁运行 tests/**/*.test.mjs
 npm run combo:verify   # 组合登记表自洽：本仓库、dsh、客户端来源三条
 npm run backend:doctor # 本机检出可用：工具链、profile 装配、包与行、插件兼容、原生能力
 npm run specs:status   # spec 与小修批次的推送、合并、内容落地与 worktree（--offline 跳过 tracker）
@@ -58,14 +59,19 @@ npm run specs:status   # spec 与小修批次的推送、合并、内容落地�
 变化，以测试输出的 `duration_ms` 为准；本次环境修复的测量见
 [验证记录](work/implementation/evidence/repo-environment-2026-10-22/README.md)。
 
-产品包的源码是 TypeScript，`npm test` 会先经 `pretest` 编译一次（`npm run build`）。编译用的
+产品包的源码是 TypeScript。`npm test` 通过 `scripts/test.ts` 先编译一次，并从构建开始到测试结束
+持有同一把工作树文件锁。另一条 `npm test`、`npm run build`、`npm run typecheck` 或 `npm run clean`
+会等待该锁；测试文件之间仍由 Node 并行执行。锁由操作系统随持有进程退出释放，不按 PID 或文件年龄抢锁。
+回归检查见 `tests/build-lock.test.mjs` 与 `tests/test-runner.test.mjs`。
 TypeScript 取自 `combo.json` 锁定的 dsh 检出，不是本仓库的依赖。
 
-单独跑一个文件：
+单独跑一个文件，也使用同一入口：
 
 ```sh
-node --test tests/chat-read-window.test.mjs
+npm test -- tests/chat-read-window.test.mjs
 ```
+
+`node --test` 可用于已完成构建后的直接调试，但它绕过工作树锁，不应和构建同时运行。
 
 几个常看的入口：`tests/owned-sessions.test.mjs`（会话归属与管理身份不越权）、
 `tests/bundle-packages.test.mjs`（bundle 行与包集合一致）、`tests/native-capabilities.test.mjs`
@@ -80,7 +86,7 @@ npm run hooks:install   # git config core.hooksPath .githooks
 之后每次提交都会过一道门禁，合并提交也不例外：`.githooks/` 同时提供 `pre-commit` 与
 `pre-merge-commit`，两者都执行 `scripts/precommit.ts`（结构由 `tests/precommit.test.mjs` 固定）。
 门禁按改动内容分四种：只改 Markdown 跑
-`tests/docs.test.mjs`；改动面能选出相关测试时跑 `npm run build` 与选中的测试文件；源码改动但选不出
+`tests/docs.test.mjs`；改动面能选出相关测试时通过 `scripts/test.ts` 构建并运行选中的测试文件；源码改动但选不出
 相关测试时跑 `npm run typecheck`；根构建权威、包 manifest、共享 fixture、合并提交或 `--full` 跑全量
 `npm test`。四种门禁都保留 `npm run combo:verify`；`android/` 的非 Markdown 改动还会运行
 `cd android && ./gradlew test lintDebug`。任一失败即阻止提交或合并；检查针对当前工作树，未暂存的
@@ -90,6 +96,7 @@ npm run hooks:install   # git config core.hooksPath .githooks
 
 `.github/workflows/check.yml` 在 push 到 `main` 或 `integration/**`、以及手动触发时跑同一道 Node 全量门禁：
 按 `combo.json` 的锁检出并构建 dsh，再跑 `npm run build`、`npm test` 与 `npm run combo:verify`。
+CI 保留独立构建步骤；`npm test` 自身仍会在工作树锁内重新构建。
 独立的 `android` job 用 JDK 17 在 `android/` 运行 `./gradlew test lintDebug`，Google Services 配置由伪造 fixture 合成。
 PR 同步不再触发——带着改动的那次 integration 推送会跑一遍，触发两次只是把同一套件跑两遍。本地钩子可以
 被 `--no-verify` 跳过，服务器上的这次不会。

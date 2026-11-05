@@ -38,6 +38,7 @@ import {
   stagedPaths,
   testFiles,
 } from '../scripts/precommit.ts'
+import { TEST_GLOB } from '../scripts/test.ts'
 import { repoRoot } from './helpers/backend.mjs'
 
 test('a Markdown-only change gets the docs gate, not the backend suite', () => {
@@ -71,12 +72,9 @@ test('a product package change runs the tests that mention that package', () => 
     `the selected tests must cover the changed package; the gate selected ${decision.tests.join(', ')}`,
   )
   const commands = decision.commands.map(step => step.args.join(' '))
-  assert.ok(commands.includes('run build'), `the related gate must build first: ${commands.join(' | ')}`)
   assert.ok(commands.includes('run combo:verify'), `the related gate must keep the combination check: ${commands.join(' | ')}`)
-  assert.ok(
-    commands.some(command => command.startsWith('--test ')),
-    `the related gate must run the selected tests: ${commands.join(' | ')}`,
-  )
+  assert.deepEqual(decision.commands[0], { command: 'node', args: ['scripts/test.ts', ...decision.tests] },
+    'the related gate must keep the build and selected tests under one lock')
 })
 
 test('a package a suite drives through the launcher is selected by that suite’s declaration', () => {
@@ -240,6 +238,7 @@ test('the authorities that decide what every package installs run the full suite
     ['tests/helpers/dsh-peers.mjs'],
     ['scripts/precommit.ts'],
     ['scripts/tsc.ts'],
+    ['scripts/test.ts'],
     ['scripts/link-types.ts'],
     ['scripts/cli-guard.ts'],
     ['scripts/package-manifest.ts'],
@@ -368,15 +367,14 @@ test('the hooks directory Git uses provides both commit entry points into the sh
   }
 })
 
-test('CI runs the full gate on push and manual dispatch, and builds before it tests', () => {
+test('CI runs the full gate on push and manual dispatch through the shared test entry', () => {
   const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'check.yml'), 'utf8')
   assert.doesNotMatch(workflow, /^ {2}pull_request:/mu, 'a PR sync must not run the full gate')
   assert.match(workflow, /^ {2}workflow_dispatch:/mu, 'the gate must stay manually runnable')
   assert.match(workflow, /- 'integration\/\*\*'/u, 'an integration push must run the gate')
-  assert.ok(
-    workflow.indexOf('npm run build') >= 0 && workflow.indexOf('npm run build') < workflow.indexOf('npm test'),
-    'the build must run before the suite, so a build failure and a test failure stay separate',
-  )
+  assert.match(workflow, /^\s+npm test$/mu, 'CI uses the entry that builds and tests under one lock')
+  assert.ok(workflow.indexOf('npm run build') >= 0 && workflow.indexOf('npm run build') < workflow.indexOf('npm test'),
+    'the existing CI build remains before the shared test entry')
 })
 
 test('CI runs Android checks in an independent job with the project JDK and Gradle wrapper', () => {
@@ -413,10 +411,9 @@ test('CI materializes a synthetic Google Services config for the Android variant
 
 test('the related gate selects exactly the files `npm test` runs', () => {
   const manifest = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
-  const command = manifest.scripts.test
-  const glob = command.match(/^node --test "([^"]+)"$/u)?.[1]
-  assert.ok(glob, `the test script must be one quoted glob; it is ${command}`)
-  const live = globSync(glob, { cwd: repoRoot }).sort()
+  assert.equal(manifest.scripts.test, 'node scripts/test.ts')
+  assert.equal(manifest.scripts.pretest, undefined, 'the build must stay inside the test lock')
+  const live = globSync(TEST_GLOB, { cwd: repoRoot }).sort()
   assert.deepEqual(
     testFiles(repoRoot),
     live,

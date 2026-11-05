@@ -62,11 +62,10 @@ export const DOCS_COMMANDS = Object.freeze([
   Object.freeze({ command: 'npm', args: Object.freeze(['run', 'combo:verify']) }),
 ])
 
-/** Checks a change with related tests runs: the build, those tests, the combination. */
+/** Checks a related change runs: build and test under one lock, then verify the combination. */
 export function relatedCommands(tests: string[]): GateCommand[] {
   return [
-    { command: 'npm', args: ['run', 'build'] },
-    { command: 'node', args: ['--test', ...tests] },
+    { command: 'node', args: ['scripts/test.ts', ...tests] },
     { command: 'npm', args: ['run', 'combo:verify'] },
   ]
 }
@@ -107,7 +106,7 @@ const FULL_AUTHORITY = Object.freeze([
   /^combo\.json$/u,
   /^(?:backend\/[^/]+\/)?tsconfig[^/]*\.json$/u,
   /^backend\/[^/]+\/package\.json$/u,
-  /^scripts\/(?:precommit|tsc|link-types|combo|cli-guard|package-manifest|ourfairy-composition|ourfairy-backend)\.(?:mjs|ts)$/u,
+  /^scripts\/(?:precommit|test|tsc|link-types|combo|cli-guard|package-manifest|ourfairy-composition|ourfairy-backend)\.(?:mjs|ts)$/u,
   /^tests\/helpers\//u,
   /^tests\/fixtures\//u,
   /^\.github\//u,
