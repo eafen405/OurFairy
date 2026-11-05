@@ -37,7 +37,7 @@ jobs:
       - name: Prepare Linux runtime dependencies
         run: |
           sudo apt-get update -q
-          sudo apt-get install -yq bubblewrap poppler-utils
+          sudo apt-get install -yq bubblewrap poppler-utils util-linux
           if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
@@ -77,16 +77,7 @@ jobs:
             echo "::endgroup::"
           done
 
-      # The product packages are built before the suite runs: the profile the
-      # tests install publishes the build output, so a build failure and a test
-      # failure stay separate lines in this log.
-      #
-      # The explicit step stays even though the suite's own `pretest` hook also
-      # builds: it makes the build a distinct, named step, and a failing build
-      # stops the job before the suite starts.
-      - name: Build the product packages
-        run: npm run build
-
+      # npm test builds once and keeps the build lock until the suite exits.
       - name: Full suite and combination
         run: |
           set -euo pipefail

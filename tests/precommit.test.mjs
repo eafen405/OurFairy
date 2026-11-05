@@ -373,8 +373,11 @@ test('CI runs the full gate on push and manual dispatch through the shared test 
   assert.match(workflow, /^ {2}workflow_dispatch:/mu, 'the gate must stay manually runnable')
   assert.match(workflow, /- 'integration\/\*\*'/u, 'an integration push must run the gate')
   assert.match(workflow, /^\s+npm test$/mu, 'CI uses the entry that builds and tests under one lock')
-  assert.ok(workflow.indexOf('npm run build') >= 0 && workflow.indexOf('npm run build') < workflow.indexOf('npm test'),
-    'the existing CI build remains before the shared test entry')
+  assert.doesNotMatch(
+    workflow,
+    /run: npm run build/u,
+    'the shared test entry already builds once',
+  )
 })
 
 test('CI runs Android checks in an independent job with the project JDK and Gradle wrapper', () => {

@@ -95,8 +95,7 @@ npm run hooks:install   # git config core.hooksPath .githooks
 ### CI
 
 `.github/workflows/check.yml` 在 push 到 `main` 或 `integration/**`、以及手动触发时跑同一道 Node 全量门禁：
-按 `combo.json` 的锁检出并构建 dsh，再跑 `npm run build`、`npm test` 与 `npm run combo:verify`。
-CI 保留独立构建步骤；`npm test` 自身仍会在工作树锁内重新构建。
+按组合锁检出并构建 dsh，再跑 `npm test`（含产品构建）与 `npm run combo:verify`。产品构建和测试在同一工作树锁内完成。
 独立的 `android` job 用 JDK 17 在 `android/` 运行 `./gradlew test lintDebug`，Google Services 配置由伪造 fixture 合成。
 PR 同步不再触发——带着改动的那次 integration 推送会跑一遍，触发两次只是把同一套件跑两遍。本地钩子可以
 被 `--no-verify` 跳过，服务器上的这次不会。
