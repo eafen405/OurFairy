@@ -46,7 +46,7 @@ export function registerMemoryTools(agent: Agent, service: MemoryService, regist
     },
   })
   add('memory_search', {
-    description: '按字面关键词检索长期记忆，默认普通层，is_private=true 查私密层。start_at/end_at 为内容更新时间的毫秒闭区间，须同时提供或省略。返回编号、正文、归属用户短号和内容时间；最多 20 条、8000 字符，并报告截断。编辑、删除、切层须先在本会话检索到编号。',
+    description: '按字面关键词检索长期记忆，默认普通层，is_private=true 查私密层。两层都是产品共享记忆；私密层须显式选择，不是仅归属用户可读。start_at/end_at 为内容更新时间的毫秒闭区间，须同时提供或省略。返回编号、正文、归属用户短号和内容时间；最多 20 条、8000 字符，并报告截断。编辑、删除、切层须先在本会话检索到编号。',
     parameters: { query: { type: 'string', required: true }, start_at: { type: 'integer' }, end_at: { type: 'integer' }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
       const { sessionId } = callerOf(exec)
