@@ -280,6 +280,7 @@ before(async () => {
     const blocks = body.messages.flatMap(message => Array.isArray(message.content)
       ? message.content
       : [{ type: 'text', text: message.content }])
+      .filter(block => !(block.type === 'text' && block.text?.startsWith('Current runtime context.')))
     const lastBlock = blocks.at(-1)
     const hasToolResult = lastBlock?.type === 'tool_result'
     const directive = blocks.filter(block => block.type === 'text' && typeof block.text === 'string').at(-1)?.text ?? ''

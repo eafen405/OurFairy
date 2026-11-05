@@ -155,17 +155,17 @@ test('memory policy lives on memory_add while maintenance keeps its own prompt',
   assert.ok(source !== undefined, 'the source session made a model request')
   const sourceSystem = systemOf(source)
   // Every section this deployment owns speaks its own voice, including the
-  // `tool:` rows dsh registers: `prompt-voice` restates them when the tool is
+  // `tool:` rows dsh registers: `prompt-assembly` restates them when the tool is
   // visible. The markers below are the deployment's wording, not dsh's — a
   // marker copied from upstream would pass only while nothing rewrites it.
   const guidance = [
-    ['persona', '你是《绝区零》中的 Fairy'],
-    ['identity', `当前已认证用户短号：${user.user.shortId}`],
     ['bash', '用 bash 时读每条的 exit code'],
     ['read', '看文本文件用 read'],
     ['write', '用 write 覆盖已有文件前先读一遍'],
     ['edit', '改文件前先读一遍'],
-    ['jobs', '后台任务用 job_output 收结果'],
+    ['jobs', '记录后台任务 id'],
+    ['persona', '你是《绝区零》中的 Fairy'],
+    ['identity', `当前已认证用户短号：${user.user.shortId}`],
   ].map(([name, marker]) => [name, sourceSystem.indexOf(marker)])
   for (const [name, index] of guidance) assert.ok(index >= 0, `${name} guidance is present`)
   for (let index = 1; index < guidance.length; index += 1) {
@@ -178,18 +178,17 @@ test('memory policy lives on memory_add while maintenance keeps its own prompt',
 
   const addTool = Array.isArray(source.tools) ? source.tools.find(tool => tool.name === 'memory_add') : undefined
   assert.ok(addTool !== undefined, 'the source request declares memory_add')
-  for (const rule of [/explicitly asks to remember/, /durable fact, preference, repeated habit or shared experience/,
-    /session summaries, profiles or personality guesses/, /time-bound observations/, /memory\/maintenance operations/,
-    /reusable workflows in skill_manage/, /make no write/]) {
+  for (const rule of [/用户明确要求记住/, /长期事实、偏好、重复习惯、共同经历/,
+    /会话摘要、画像或性格推测/, /短期状态和待办/, /记忆维护操作/,
+    /可复用工作流.*skill_manage/, /无合格内容就不写/]) {
     assert.match(addTool.description, rule, `memory_add carries ${rule}`)
   }
 
   const child = await waitFor('the maintenance child request', () => requests.find(body => isChild(body)))
   const childSystem = systemOf(child)
-  assert.match(childSystem, /不要写会话摘要/, 'the maintenance child carries the same no-summary/no-profile rule')
-  assert.match(childSystem, /不要把你执行过的记忆增删改/, 'the child forbids meta-memories about memory operations')
-  assert.match(childSystem, /不要记录带有「最近」「今天」「现在」「刚才」/, 'the child excludes time-bound observations')
-  assert.match(childSystem, /可复用的工作流.*skill_manage.*记忆/u, 'the child carries the same workflow→skill boundary')
+  assert.match(childSystem, /按 memory_add 的记忆选择规则/, 'the child points to the shared write policy')
+  assert.match(childSystem, /已经完成的操作不重复执行/, 'maintenance retains its interval-specific deduplication rule')
+  assert.doesNotMatch(childSystem, /会话摘要|画像或性格推测/, 'the child does not duplicate tool selection rules')
 
   assert.equal(childSystem.includes(MAIN_ONLY_MARKER), false, 'the owned prompt policy is not inherited by the child')
   // The spaces contribution is a prompt context, which the agent loop delivers
@@ -198,7 +197,7 @@ test('memory policy lives on memory_add while maintenance keeps its own prompt',
   assert.equal(JSON.stringify(child).includes(SPACES_PROMPT_MARKER), false,
     'the spaces prompt context contributes nothing to the maintenance preset')
   assert.match(childSystem, /你是长期记忆维护子代理/, 'the child carries its own maintenance instruction')
-  // `prompt-voice` empties a tool section whose tool the agent cannot see, so
+  // `prompt-assembly` empties a tool section whose tool the agent cannot see, so
   // the child pays neither dsh's English nor the deployment's restatement. A
   // marker left over from the English wording would make these pass vacuously.
   assert.equal(childSystem.includes('Check the [exit code: N] marker'), false,

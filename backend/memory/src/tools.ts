@@ -37,7 +37,7 @@ async function writerOf(exec: ToolRunContext, service: MemoryService): Promise<{
 export function registerMemoryTools(agent: Agent, service: MemoryService, registered: Set<string>): void {
   const add = toolRegistrar(agent, registered)
   add('memory_add', {
-    description: 'Store the exact text of a long-term memory only when the user explicitly asks to remember it, or personally states a durable fact, preference, repeated habit or shared experience. The source session and owner are derived; the memory is normal unless is_private is true. Keep session summaries, profiles or personality guesses, inferred environment/location/device/weather/time, one-off moods or sensations, time-bound observations, todos, memory/maintenance operations, and claims from Fairy\'s own replies or tool results out of memory. Put reusable workflows in skill_manage instead of double-writing. If nothing qualifies, make no write. At most 8000 Unicode characters; longer text is refused, never truncated. A successful call answers `{ok:true}`.',
+    description: '保存用户明确要求记住，或用户亲自陈述的长期事实、偏好、重复习惯、共同经历。排除会话摘要、画像或性格推测、环境/位置/设备/天气/时间推断、一次性情绪或感受、短期状态和待办、记忆维护操作，以及 Fairy 回复或工具结果中的自述；无合格内容就不写。可复用工作流交给主会话的 skill_manage，避免重复写入。来源与归属由会话确定；默认普通层，is_private=true 为私密层。正文原样存储，最多 8000 个 Unicode 字符，超长拒绝。',
     parameters: { content: { type: 'string', required: true }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
       const writer = await writerOf(exec, service)
@@ -46,7 +46,7 @@ export function registerMemoryTools(agent: Agent, service: MemoryService, regist
     },
   })
   add('memory_search', {
-    description: 'Search long-term memories by a literal keyword or phrase. start_at and end_at are millisecond timestamps forming one closed interval over the last content change; pass both or neither. Returns memory numbers, content, the owner short number and the content time, capped at 20 memories and 8000 characters with explicit truncation. Only numbers returned here can be edited, deleted or switched in this session.',
+    description: '按字面关键词检索长期记忆，默认普通层，is_private=true 查私密层。start_at/end_at 为内容更新时间的毫秒闭区间，须同时提供或省略。返回编号、正文、归属用户短号和内容时间；最多 20 条、8000 字符，并报告截断。编辑、删除、切层须先在本会话检索到编号。',
     parameters: { query: { type: 'string', required: true }, start_at: { type: 'integer' }, end_at: { type: 'integer' }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
       const { sessionId } = callerOf(exec)
@@ -54,7 +54,7 @@ export function registerMemoryTools(agent: Agent, service: MemoryService, regist
     },
   })
   add('memory_edit', {
-    description: 'Edit one memory you have just found with memory_search in this session. old_string must occur exactly once in its content; pass the complete old content to rewrite the whole memory. The content time moves with the edit; the number and layer stay. The edited content is at most 8000 Unicode characters; longer text is refused, never truncated. A successful call answers `{ok:true}`.',
+    description: '修改本会话经 memory_search 找到的记忆。old_string 须恰好出现一次；整段替换时传完整旧正文。更新内容时间和来源会话，保留编号与层级。新正文最多 8000 个 Unicode 字符，超长拒绝。',
     parameters: { id: { type: 'integer', required: true }, old_string: { type: 'string', required: true }, new_string: { type: 'string', required: true }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
       const writer = await writerOf(exec, service)
@@ -63,7 +63,7 @@ export function registerMemoryTools(agent: Agent, service: MemoryService, regist
     },
   })
   add('memory_delete', {
-    description: 'Delete one memory you have just found with memory_search in this session. The row is removed physically and its number is never reused. A successful call answers `{ok:true}`.',
+    description: '删除本会话经 memory_search 找到的记忆；物理删除，编号永不复用。',
     parameters: { id: { type: 'integer', required: true }, is_private: { type: 'boolean' } },
     execute: async (args, exec) => {
       const { sessionId } = callerOf(exec)
@@ -72,7 +72,7 @@ export function registerMemoryTools(agent: Agent, service: MemoryService, regist
     },
   })
   add('memory_switch', {
-    description: 'Switch one memory you have just found with memory_search in this session between the normal and private layers. The direction follows its current layer; content, source and content time do not change. A successful call answers `{ok:true}`.',
+    description: '将本会话经 memory_search 找到的记忆在普通/私密层之间切换；正文、来源和内容时间保持原值。',
     parameters: { id: { type: 'integer', required: true } },
     execute: async (args, exec) => {
       const { sessionId } = callerOf(exec)

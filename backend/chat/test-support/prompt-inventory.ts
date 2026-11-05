@@ -1,67 +1,52 @@
-/**
- * Test-only fixture: record the exact section inventory of every system-prompt
- * assembly, so a test can assert what the deployment prompt is made of.
- *
- * The assembled prompt reaches the model as one joined string, which loses the
- * section names, their order and their sizes. This fixture listens on the
- * native `system-prompt/assemble` waterfall and writes the inventory the
- * waterfall sees, before `renderPrompt` flattens it (#302).
- *
- * It is a passive observer: it returns the value it was given and never edits
- * the assembly, so a mounted copy cannot change what the product sends.
- *
- * @module @ourfairy/dsh-chat/test-support/prompt-inventory
- */
-import { writeFileSync } from 'node:fs'
+/** Test/acceptance observer of the final native assembly, never a prompt builder. */
+import { writeFileSync, appendFileSync } from 'node:fs'
+import { renderPrompt, renderContextSections } from '@deepseek-ai/dsh-system-prompt'
 import type { Context } from '@deepseek-ai/cordis'
-import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-agent'
 
 export const name = 'ourfairy-prompt-inventory'
-export const inject = ['systemPrompt']
+export const inject = ['systemPrompt', 'ourfairyChat']
 
-/** Where the fixture writes what it observed. */
-export interface PromptInventoryConfig {
-  /** Absolute path of the JSON file the inventory is written to. */
-  readonly outPath: string
-}
-
-/** One section as the waterfall saw it, with the size the model pays for. */
-interface SectionRecord {
-  /** The section's registered name. */
-  readonly name: string
-  /** Characters of resolved text. */
-  readonly characters: number
-}
-
-/** The inventory one assembly produced. */
-export interface PromptInventory {
-  /** Sections in render order, as the waterfall accepted them. */
-  readonly sections: SectionRecord[]
-  /** Characters after the native join, i.e. what the model actually reads. */
-  readonly joinedCharacters: number
-  /** Declared tool names, so a test can pair the prompt with the tool surface. */
-  readonly tools: string[]
-}
-
-/**
- * Record each assembly to the configured path.
- * @param ctx - the row's context; `systemPrompt` is injected.
- * @param config - where to write the inventory.
+/** Package attribution for the shipped composition; unknown plugins stay unknown.
+ * This is a diagnostic catalog, not provenance attested by the native registry.
  */
-export function apply(ctx: Context, config: PromptInventoryConfig): void {
-  ctx.on('system-prompt/assemble', async (_assembly: PromptAssembly, _context, next) => {
-    const transformed = await next()
-    const record: PromptInventory = {
-      sections: transformed.sections.map(section => ({ name: section.name, characters: [...section.text].length })),
-      // `renderPrompt` joins with a blank line and drops empty sections; the
-      // fixture mirrors that so its total can be compared with the wire text.
-      joinedCharacters: [...transformed.sections
-        .filter(section => section.text !== '')
-        .map(section => section.text)
-        .join('\n\n')].length,
-      tools: transformed.tools.map(tool => tool.name),
+const SOURCES: Record<string, string> = {
+  'ourfairy:persona': '@ourfairy/dsh-chat',
+  'ourfairy:identity': '@ourfairy/dsh-chat',
+  'ourfairy:impression': '@ourfairy/dsh-memory',
+  'ourfairy:skill-trust': '@ourfairy/dsh-skill-creator',
+  'ourfairy:spaces': '@ourfairy/dsh-spaces',
+  'deployment:persona-prefix': '@deepseek-ai/dsh-system-prompt',
+  'deployment:persona-suffix': '@deepseek-ai/dsh-system-prompt',
+  'tool:bash': '@deepseek-ai/dsh-tool-bash',
+  'tool:read': '@deepseek-ai/dsh-tool-fs',
+  'tool:write': '@deepseek-ai/dsh-tool-fs',
+  'tool:edit': '@deepseek-ai/dsh-tool-fs',
+  'tool:jobs': '@deepseek-ai/dsh-tool-jobs',
+}
+
+export function apply(ctx: Context, config: { outPath: string; append?: boolean }): void {
+  // Mounted after chat, prepended so post-next observes the deployment pass.
+  ctx.on('system-prompt/assemble', async (_initial, context, next) => {
+    const assembly = await next()
+    const record = {
+      sessionId: context.agent?.session.id,
+      attribution: 'shipped-package-catalog; unknown entries are null',
+      sections: assembly.sections.map((section, order) => ({
+        name: section.name, order, sourcePackage: SOURCES[section.name] ?? null,
+        // Native render preserves interpolation, empty sections and variables.
+        text: renderPrompt({ ...assembly, sections: [section] }),
+        characters: [...renderPrompt({ ...assembly, sections: [section] })].length,
+      })),
+      contexts: renderContextSections(assembly).map((section, order) => ({ ...section,
+        order, sourcePackage: SOURCES[section.name] ?? null, characters: [...section.text].length })),
+      joinedCharacters: [...renderPrompt(assembly)].length,
+      tools: assembly.tools.map(tool => tool.name),
+      toolDescriptionCharacters: assembly.tools.reduce((sum, tool) => sum + [...(tool.description ?? '')].length, 0),
     }
-    writeFileSync(config.outPath, `${JSON.stringify(record, undefined, 2)}\n`)
-    return transformed
-  })
+    const json = JSON.stringify(record)
+    if (config.append) appendFileSync(config.outPath, `${json}\n`)
+    else writeFileSync(config.outPath, `${json}\n`)
+    return assembly
+  }, { global: true, prepend: true })
 }

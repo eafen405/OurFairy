@@ -169,7 +169,7 @@ export function apply(ctx: Context) {
     // cannot be hidden by dsh's tool restriction, so the row enforces it here.
     if (!isUserSession(agent.session.header)) return undefined
     agent.ctx.tools.register(defineTool({ name: 'deliver_message',
-      description: 'Deliver the specified text and optional files selected by readable path or current-session messageId/index to the recipient’s conversation: the caller’s own current session when delivering to themselves, otherwise the recipient’s fixed primary chat. This does not read their history or start their Fairy. The call authorizes delivery; no extra sharing approval is needed.',
+      description: '向指定用户投递 text 及可选文件；文件用可读 path 或当前会话的 messageId/index 二选一。投递给自己落在当前会话，给他人落在其固定主会话；不读取收件人历史、不启动其 Fairy。明确的投递请求即授权，无需额外分享审批。',
       parameters: { recipientShortId: { type: 'integer', required: true }, text: { type: 'string', required: true },
         files: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, messageId: { type: 'string' }, index: { type: 'integer' } } } } },
       output: { schema: { type: 'object', additionalProperties: true }, render: (_args: unknown, value: unknown): ContentBlock[] => [{ type: 'text', text: JSON.stringify(value) }] },

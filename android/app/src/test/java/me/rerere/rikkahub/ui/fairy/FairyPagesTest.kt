@@ -305,8 +305,7 @@ class FairyPagesTest {
             impressionReads += 1
             return Impression(content = "本人印象")
         }
-        override suspend fun edit(token: String, content: String) = Unit
-    }
+        }
 
     /** Show [initial], following its own navigation into this test's state. */
     private fun destination(initial: Screen, onNavigate: (Screen) -> Unit = {}) {
@@ -352,7 +351,7 @@ class FairyPagesTest {
         destination(Screen.Impression)
         compose.waitForIdle()
 
-        compose.onNodeWithTag("impression_field").assertExists()
+        compose.onNodeWithTag("impression_content").assertExists()
         // Same shared bar, same inert mini screen: this page keeps the back arrow only.
         compose.onNodeWithContentDescription("返回").assertIsDisplayed()
         compose.onNodeWithTag("fairy-window-settings").assertDoesNotExist()

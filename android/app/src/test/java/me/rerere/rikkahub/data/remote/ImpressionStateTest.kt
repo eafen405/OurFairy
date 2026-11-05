@@ -10,37 +10,29 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * What the impression page may claim while it reads and writes.
+ * What the impression page may claim while it reads.
  *
  * The fake backend is a scripted [ImpressionBackend]: the assertions are about
  * the page's authority — that no impression exists before a successful read,
- * that a refusal keeps the backend's own code and leaves the last read body
- * visible, and that an accepted write is followed by a fresh read rather than
- * by trusting the sent text.
+ * that a failed or refused read publishes the backend's own failure and no
+ * impression, and that a retry reads again.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 private class ScriptedImpression(
     var read: suspend () -> Impression = { Impression(content = "服务端正文", updatedAt = 7, maxCharacters = 8000) },
-    var edit: suspend (String) -> Unit = {},
 ) : ImpressionBackend {
-    val edits = mutableListOf<String>()
     var reads = 0
 
     override suspend fun read(token: String): Impression {
         reads += 1
         return read()
     }
-
-    override suspend fun edit(token: String, content: String) {
-        edits += content
-        edit(content)
-    }
 }
 
 class ImpressionStateTest {
 
     @Test
-    fun `a read publishes the backend's impression and opens editing`() = runTest {
+    fun `a read publishes the backend's impression`() = runTest {
         val backend = ScriptedImpression(read = { Impression("本人印象", updatedAt = 11, maxCharacters = 8000) })
         val state = ImpressionState(backend, this)
 
@@ -56,55 +48,55 @@ class ImpressionStateTest {
     }
 
     @Test
-    fun `a failed read leaves no impression to edit`() = runTest {
+    fun `a failed read leaves no impression to show`() = runTest {
         val backend = ScriptedImpression(read = { throw IdentityUnreachable(java.io.IOException("down")) })
         val state = ImpressionState(backend, this)
 
         state.load("token-abc")
         advanceUntilIdle()
 
-        assertNull("an unread impression must not become an empty editable one", state.snapshot.value.impression)
+        assertNull("an unread impression must not become an empty one", state.snapshot.value.impression)
         assertTrue(state.snapshot.value.failure?.unreachable == true)
     }
 
     @Test
-    fun `a refused save keeps the read body and the backend's own code`() = runTest {
+    fun `a refused read keeps the backend's own code and shows no impression`() = runTest {
         val backend = ScriptedImpression(
-            edit = { throw IdentityRefused(400, "impression/too-long", "the impression is 8001 Unicode characters; the limit is 8000") },
+            read = { throw IdentityRefused(401, "impression/unauthorized", "present a live session credential") },
         )
         val state = ImpressionState(backend, this)
-        state.load("token-abc")
-        advanceUntilIdle()
 
-        state.save("token-abc", "海".repeat(8001))
+        state.load("token-abc")
         advanceUntilIdle()
 
         val snapshot = state.snapshot.value
-        assertEquals("a refused write never replaces what was read", "服务端正文", snapshot.impression?.content)
-        assertEquals("impression/too-long", snapshot.failure?.code)
-        assertTrue(snapshot.failure?.message.orEmpty().contains("8001"))
-        assertEquals(1, backend.edits.size)
-        assertEquals("the whole draft reached the backend; it was not clipped here", "海".repeat(8001), backend.edits.single())
+        assertEquals("impression/unauthorized", snapshot.failure?.code)
+        assertEquals("present a live session credential", snapshot.failure?.message)
+        assertNull(snapshot.impression)
+        assertFalse(snapshot.loading)
     }
 
     @Test
-    fun `an accepted save is followed by a fresh read`() = runTest {
-        var current = Impression("旧的整份正文", updatedAt = 7, maxCharacters = 8000)
+    fun `a retry reads again`() = runTest {
+        var attempts = 0
         val backend = ScriptedImpression(
-            read = { current },
-            edit = { content -> current = Impression(content, updatedAt = 8, maxCharacters = 8000) },
+            read = {
+                attempts += 1
+                if (attempts == 1) throw IdentityUnreachable(java.io.IOException("down"))
+                Impression("读到的整份印象", updatedAt = 12, maxCharacters = 8000)
+            },
         )
         val state = ImpressionState(backend, this)
+
+        state.load("token-abc")
+        advanceUntilIdle()
+        assertNull(state.snapshot.value.impression)
+
         state.load("token-abc")
         advanceUntilIdle()
 
-        state.save("token-abc", "新的整份正文")
-        advanceUntilIdle()
-
-        assertEquals(listOf("新的整份正文"), backend.edits)
-        assertEquals("the page shows what the backend stored", "新的整份正文", state.snapshot.value.impression?.content)
-        assertEquals(8L, state.snapshot.value.impression?.updatedAt)
-        assertEquals("one initial read plus one read-back", 2, backend.reads)
+        assertEquals(2, backend.reads)
+        assertEquals("读到的整份印象", state.snapshot.value.impression?.content)
         assertNull(state.snapshot.value.failure)
     }
 }

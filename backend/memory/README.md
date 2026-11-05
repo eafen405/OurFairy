@@ -3,7 +3,7 @@
 The memory row owns the product's long-term memories, every user's impression,
 and the per-source-session maintenance engine: one SQLite file, the `memory_*`
 tools the Fairy uses, the query gate those tools enforce, the user's own
-impression endpoints and injected section, and the native child that distills
+read-only impression endpoint and injected section, and the native child that distills
 each session's closed turns. It stores memories and impressions, not session
 logs; session search keeps answering "what was said", this row answers "what
 should be remembered" and "who is this user".
@@ -12,7 +12,7 @@ should be remembered" and "who is this user".
 
 `MemoryService` owns the memory tools and `ImpressionService` owns the
 per-user impression; both share the store. Neither is published on `ctx`: the
-row exposes tools, prompt sections and the two impression routes, and nothing
+row exposes tools, prompt sections and the read-only impression route, and nothing
 else reads the memory domain through the context. Every
 live Agent gets the five memory tools on its own agent context, and an owned
 Agent additionally gets the two impression tools and the impression prompt
@@ -140,28 +140,18 @@ write changes nothing; accepted text is stored exactly, never clipped. A
 session's read authorization is cleared on `agent/disposed`, so a restarted
 Agent must read again.
 
-### The user's own endpoints
+### The user's own read-only endpoint
 
-The ordinary client reads and edits the impression through two authenticated
-POST routes on the same carrier as the identity paths; it never goes through the
-administrator gateway.
+`POST /impression/read` with `{}` and a live Bearer credential returns
+`{ ok, impression: { content, updatedAt, maxCharacters } }`. The credential
+selects the owner; an administrator also reads only their own row. Missing
+credentials return `401 impression/unauthorized`.
 
-| Route | Body | Success |
-| --- | --- | --- |
-| `/impression/read` | `{}` | `{ ok, impression: { content, updatedAt, maxCharacters } }` |
-| `/impression/edit` | `{ content }` | `{ ok }` |
-
-Both derive `short_id` from the presented Bearer credential. The body has no
-owner or short-number field; a value put there is not a selector, so no caller
-can name another user's impression. The administrator is subject to the same
-rule and reads and writes only its own row.
-
-A read opens the edit for that *credential*, and an edit without a successful
-read answers `409 impression/not-read`. A second live credential of the same
-user must read for itself. Over-length answers `400 impression/too-long` with
-both the actual count and the limit in the message. A missing credential answers
-`401 impression/unauthorized`. The routes use the product's JSON envelope:
-`{ ok: true, ... }` or `{ ok: false, error: { code, message } }`.
+There is no `/impression/edit` route. The Android page shows selectable plain
+text and asks the user to request changes in conversation. Only an
+`impression_read` tool call authorizes that session's `impression_edit`; neither
+a page read nor automatic prompt injection opens this gate. The real-tool
+checks are in `tests/memory-impression.test.mjs`.
 
 ## The query gate
 

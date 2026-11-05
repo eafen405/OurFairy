@@ -95,9 +95,8 @@ export function apply(ctx: Context, config: MemoryConfig): void {
     store.close()
   })(), 'ourfairy-memory: store and maintenance engine')
 
-  // The user's own impression endpoints: the authenticated identity names the
-  // row, and the read gate is keyed by the credential that read it. They sit on
-  // the same carrier as the identity paths and never pass through the gateway.
+  // The authenticated read-only route selects the caller's own impression.
+  // Only session tools grant edit authorization.
   const handlers = impressionHandlers({
     service: impressions,
     authenticate: request => ctx.identity.authenticateRequest(request),
