@@ -78,10 +78,15 @@ export interface BillReading {
 /** The previous-interaction clause of one reading. */
 function previousClause(previous: PreviousReading): string {
   switch (previous.kind) {
-    case 'settled':
-      // Whole Denny, and a genuine zero is a measured zero: it is only the
-      // *absent* cases that must never be written as a number.
-      return `上一次互动 ${dennyOfBuckets(previous.tokens)} 丁尼`
+    case 'settled': {
+      const denny = dennyOfBuckets(previous.tokens)
+      // A turn that genuinely spent nothing is a different fact from one that
+      // spent less than a whole Denny, and only the first may read as a number.
+      // A settled turn is always a real interaction, so there is no third case.
+      if (tokenTotal(previous.tokens) === 0) return '上一次互动 无需计费'
+      if (denny === 0) return '上一次互动 不足 1 丁尼'
+      return `上一次互动 ${denny} 丁尼`
+    }
     case 'none':
       return '上一次互动 尚无已结算的互动'
     case 'unavailable':

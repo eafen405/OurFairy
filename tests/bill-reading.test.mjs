@@ -58,6 +58,14 @@ test('the day total is throttled to 10 000-Denny buckets', () => {
   assert.notEqual(near, next, 'the reading moves when the day crosses into the next bucket')
 })
 
+test('a previous interaction below one whole Denny is stated, not rounded to nothing', () => {
+  // 305 tokens is 0.10 Denny: it rounds to 0, and a bare "0 丁尼" would read as
+  // "that interaction was free" when it was merely small.
+  const text = renderBillReading(reading(tokens({ input: 305 }), tokens({ input: 305 })))
+  assert.match(text, /上一次互动 不足 1 丁尼/, `a sub-Denny interaction says so; got ${text}`)
+  assert.equal(/上一次互动 0 丁尼/.test(text), false, `it must not claim a measured zero; got ${text}`)
+})
+
 test('a first turn says so instead of reporting a zero it never measured', () => {
   const text = renderBillReading({
     previous: { kind: 'none' },
