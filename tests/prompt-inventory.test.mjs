@@ -40,6 +40,7 @@ const COMPLETE_FIXTURE = new URL('../backend/chat/test-support/complete-section.
  * voice just as much as deleting one.
  */
 const DEPLOYMENT_SECTIONS = [
+  'ourfairy:work-rules',
   'deployment:persona-prefix',
   'tool:bash',
   'tool:read',

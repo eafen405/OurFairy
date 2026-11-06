@@ -348,8 +348,11 @@ projection` 与 `native job stop outcome vocabulary matches the adapter` 分别�
 自己的 complete 提示。`tests/prompt-guard.test.mjs` 覆盖错乱注册顺序、后续监听器返回
 新装配、隐藏 complete 标记以及 ownerless 预设。
 
-人格只定义角色、风格与材料使用边界；称呼由 `ownerIdentity` 生成。昵称以 JSON 文本表示，
-这有助于区分数据，不构成提示注入不可发生的保证。`session_facts` 工具按需读取当前会话的原生 token 投影与已有任务投影，不另建状态，也不读取其它会话。
+人格定义世界观、性格与九类表达方式，并常驻六条语感参考。检索、依据、真实能力与交付要求由
+独立的 `ourfairy:work-rules` 段承载；两段正文都在 `src/persona.ts`。`tests/remote-chat.test.mjs`
+经真实模型 HTTP 输入检查选定引文、工作规则与认证称呼，`tests/prompt-inventory.test.mjs` 检查最终分段。
+称呼由 `ownerIdentity` 按认证短号和已存昵称生成，昵称使用 JSON 引用，空昵称回退为「用户<短号>」。
+`session_facts` 工具按需读取当前会话的原生 token 投影与已有任务投影，不另建状态，也不读取其它会话。
 工具结果包含已提交位置、提供方已报告累计 token 和任务数量；未报告用量不在其中，不能据此推算费用。
 这些动态数字不注入 system，也不自动追加 user-role 快照，以保留稳定前缀并避免影响压缩保留边界。
 `tests/memory-impression.test.mjs` 经真实工具验证计数与多轮 system 文本不变；

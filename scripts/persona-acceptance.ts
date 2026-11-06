@@ -9,6 +9,14 @@ import { isCliEntry } from './cli-guard.ts'
 export const IDENTITY_PROBE = '用一句话说明你现在的身份和说话风格。'
 export const SCENARIOS = [
   { id: 'ordinary-task', turns: ['帮我从录像店规划一条到六分街的路线，路上哪些区段以骸密集？'] },
+  { id: 'route-provided', turns: ['只依据这份本题虚构地图回答：录像店到路口 A 要两分钟，路口 A 到六分街要三分钟；路口 A 没有以骸，六分街的当前风险未知。给出路线、总时间和需要核验的风险。'] },
+  { id: 'web-grounding', turns: ['请用 web_search 检索绝区零官方六分街介绍，再用 web_fetch 阅读一个相关页面。根据实际结果回答，并附来源链接。'] },
+  { id: 'research-request', turns: ['请做一次联网调研：绝区零中录像店与六分街的位置关系是什么，以骸主要出现在哪里？优先找官方资料，必要时交叉核对攻略，列出来源和仍无法证实的部分。'] },
+  { id: 'writing-delivery', turns: ['只写三句适合贴在录像店门口的雨天营业通知。不要标题，不要署名。'] },
+  { id: 'presence', turns: ['Fairy，在吗？'] },
+  { id: 'praise', turns: ['这次整理得很清楚，你这个首席助手当得不错。'] },
+  { id: 'support', turns: ['我有点累，准备小憩十分钟。给我一句休息前的话。'] },
+  { id: 'correction', turns: ['两分钟加三分钟应该是六分钟，对吧？'] },
   { id: 'casual-chat', turns: ['陪我聊会儿天吧，今天有点无聊。'] },
   { id: 'detailed-explanation', turns: ['给我讲讲以太活性升高会怎么影响空洞结构，我在洞里该怎么判断该不该继续往里走？越详细越好。'] },
   { id: 'english-table', turns: ['Answer in English only. Give me a markdown table with columns Risk | Probability | Action for entering a hollow with very high ether activity.', IDENTITY_PROBE] },
@@ -74,6 +82,15 @@ export function evaluateToolUse(id: string, callsByTurn: string[][]): Check[] {
   if (id === 'session-facts') return [{ name: 'requested facts came through the native tool',
     ok: callsByTurn[1]?.includes('session_facts') === true }]
   return []
+}
+
+/** Pair native result messages with the tools actually called, not reply wording. */
+export function evaluateWebEvidence(calls: { callId: string; name: string }[], results: { message: { toolCallId?: string; isError?: boolean } }[]): Check[] {
+  return ['web_search', 'web_fetch'].map(name => {
+    const ids = new Set(calls.filter(call => call.name === name).map(call => call.callId))
+    return { name: `${name} returned successful evidence`,
+      ok: results.some(result => result.message.toolCallId !== undefined && ids.has(result.message.toolCallId) && result.message.isError !== true) }
+  })
 }
 
 export function styleMetrics(replies: string[]) {
@@ -201,6 +218,7 @@ async function main() {
             ...evaluateSample(scenario.id, result.turns.map((turn: any) => turn.reply)),
             ...evaluateToolUse(scenario.id, result.turns.map((turn: any) => turn.toolCalls.map((call: any) => call.name))),
           ]
+          if (scenario.id === 'web-grounding') result.checks.push(...evaluateWebEvidence(result.turns[0].toolCalls, result.turns[0].toolResults))
           if (scenario.id === 'tool-grounding') result.checks.push({ name: 'real bash call and returned evidence', ok: result.turns[0].toolCalls.some((call: any) => call.name === 'bash') && result.turns[0].toolResults.some((entry: any) => textOf(entry.message.content).includes('fairy-grounded-302')) })
           result.status = result.checks.every((check: Check) => check.ok) ? 'review-required' : 'failed'
         } catch (error) {

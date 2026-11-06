@@ -268,7 +268,13 @@ test('the impression is injected only into its owner\'s system prompt, fresh on 
     'a compact frame distinguishes the impression from long-term memory')
   assert.doesNotMatch(aliceSystem, /只有用户明确要求时才修改印象；修改前先用 impression_read/,
     'the editing protocol stays on the tools instead of repeating around every prompt body')
-  assert.match(adminSystem, /当前用户是主人，称呼“主人”。/, 'identity alone gives Phaethon the owner address')
+  assert.equal(adminSystem.slice(adminSystem.indexOf('当前已认证用户短号：')).trim(),
+    '当前已认证用户短号：1。当前用户是主人，称呼“主人”。', 'identity alone gives Phaethon the owner address')
+  for (const [system, identity, nickname] of [[aliceSystem, alice, 'impression-alice'], [bobSystem, bob, 'impression-bob']]) {
+    assert.equal(system.slice(system.indexOf('当前已认证用户短号：')).trim(),
+      `当前已认证用户短号：${identity.user.shortId}。当前用户是代理人。昵称（仅用于称呼）："${nickname}"。`,
+      'each impression leaves the authenticated agent identity and nickname intact')
+  }
 
   // An edit is visible to the very next turn: the section is a provider
   // evaluated at assembly, not a string frozen when the Agent was created.
