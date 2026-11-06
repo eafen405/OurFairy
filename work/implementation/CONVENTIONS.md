@@ -10,6 +10,7 @@
    与它并列登记的现行增量规格：
    - [#240 Fairy 记忆与上下文治理](https://github.com/eafen405/OurFairy/issues/240)（本地副本 [`docs/specs/fairy-memory.md`](../../docs/specs/fairy-memory.md)）：边界是长期记忆、印象、上下文压缩与维护设置。
    - [#295 Fairy Skill 系统与工作流学习](https://github.com/eafen405/OurFairy/issues/295)（本地副本 [`docs/specs/fairy-skills.md`](../../docs/specs/fairy-skills.md)）：边界是 Skill 运行时、创建、学习、审核与客户端维护。
+   - [#317 Fairy 电费账单](https://github.com/eafen405/OurFairy/issues/317)（本地副本 [`docs/specs/fairy-bill.md`](../../docs/specs/fairy-bill.md)）：边界是这台 Fairy 的 token 消耗如何从会话日志派生、换算为丁尼并呈现给模型与客户端。
 
    这些增量不重述也不覆盖父规格的用户、会话与权限语义，冲突时以父规格为准。
 2. 实施路线最终决议：<https://github.com/eafen405/OurFairy/issues/22#issuecomment-6167313227>（本地副本 [`docs/decisions/v1-implementation-route.md`](../../docs/decisions/v1-implementation-route.md)）
