@@ -67,6 +67,7 @@ test('one real turn reaches the external model double, registers tools, and pers
     'conversation_search',
     'deliver_message',
     'edit',
+    'electricity_bill',
     'group_create',
     'groups',
     'impression_edit',
