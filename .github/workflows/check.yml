@@ -51,12 +51,13 @@ jobs:
       - name: Check out the locked dsh combination
         run: |
           set -euo pipefail
+          branch=$(node -p "require('./combo.json').repos.dsh.integrationBranch")
           locked=$(node -p "require('./combo.json').repos.dsh.productCommit")
-          git clone --quiet --branch product/ourfairy-v1 --single-branch \
+          git clone --quiet --branch "$branch" --single-branch \
             "$(node -p "require('./combo.json').repos.dsh.remoteUrl")" "$RUNNER_TEMP/dsh"
           actual=$(git -C "$RUNNER_TEMP/dsh" rev-parse HEAD)
           if [ "$actual" != "$locked" ]; then
-            echo "::error::dsh product/ourfairy-v1 is $actual but combo.json locks $locked; update combo.json when the combination intentionally moves"
+            echo "::error::dsh $branch is $actual but combo.json locks $locked; update combo.json when the combination intentionally moves"
             exit 1
           fi
           echo "OURFAIRY_DSH_DIR=$RUNNER_TEMP/dsh" >> "$GITHUB_ENV"

@@ -380,6 +380,24 @@ test('CI runs the full gate on push and manual dispatch through the shared test 
   )
 })
 
+test('CI checks out the dsh branch combo.json records, not a literal', () => {
+  // The combination moved the dsh product line onto the fork's main branch
+  // (master). A literal `--branch` in the workflow drifts from combo.json the
+  // moment the line moves, and the failure is a red gate rather than a fix.
+  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'check.yml'), 'utf8')
+  const start = workflow.indexOf('Check out the locked dsh combination')
+  const end = workflow.indexOf('Build the locked dsh combination')
+  assert.ok(start >= 0 && end > start, 'CI must keep a step that checks out the locked dsh combination')
+  const step = workflow.slice(start, end)
+  assert.match(
+    step,
+    /branch=\$\(node -p "require\('\.\/combo\.json'\)\.repos\.dsh\.integrationBranch"\)/u,
+    'the clone branch must be read from combo.json',
+  )
+  assert.match(step, /git clone --quiet --branch "\$branch"/u, 'the clone must use the recorded branch')
+  assert.doesNotMatch(step, /--branch product\//u, 'a literal branch name drifts when the dsh product line moves')
+})
+
 test('CI runs Android checks in an independent job with the project JDK and Gradle wrapper', () => {
   const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'check.yml'), 'utf8')
   const marker = '\n  android:\n'

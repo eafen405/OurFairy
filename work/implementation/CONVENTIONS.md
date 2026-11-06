@@ -40,8 +40,9 @@
 git worktree add .worktrees/<NN>-<slug> -b ticket/<NN>-<slug> main
 
 # dsh 侧（仅当该票要改 dsh）；OURFAIRY_DSH_DIR 指定检出位置，见本节末尾
+# dsh 的产品线就是 fork 的默认分支 master；票分支从它开出，合并回它
 git -C "$OURFAIRY_DSH_DIR" worktree add \
-  "$OURFAIRY_DSH_DIR/.worktrees/<NN>-<slug>" -b ticket/<NN>-<slug> product/ourfairy-v1
+  "$OURFAIRY_DSH_DIR/.worktrees/<NN>-<slug>" -b ticket/<NN>-<slug> master
 ```
 
 `OURFAIRY_DSH_DIR` 覆盖 dsh 检出位置；未设时从 `combo.json` 的 `repos.dsh.localPath` 解析，

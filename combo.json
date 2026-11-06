@@ -13,8 +13,8 @@
       "localPath": "../deepseek-harness",
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/deepseek-harness.git",
-      "integrationBranch": "product/ourfairy-v1",
-      "productCommit": "c41af067cf1d5bb94fa89ca42f4cd4f054db4b17",
+      "integrationBranch": "master",
+      "productCommit": "ae2adffd8d67773e125b8048120cf9ad2ba7edf3",
       "requiredBuild": [
         "corepack pnpm@11.28.5 install",
         "corepack pnpm@11.28.5 run build:lib:host",
