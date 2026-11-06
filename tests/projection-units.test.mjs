@@ -20,7 +20,7 @@ import { test } from 'node:test'
 // module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
 import {
-  SESSION, assistantMessage, attachment, event, job, toolCallMessage, toolStream, transcriptLog, userMessage, workCases, workLog,
+  SESSION, assistantMessage, attachment, event, job, textStream, toolCallMessage, toolStream, transcriptLog, userMessage, workCases, workLog,
 } from './fixtures/projection-logs.mjs'
 
 const units = await import('../backend/chat/dist/units.js')
@@ -47,13 +47,15 @@ function unitProjection(log, { running = false, liveJobs = [] } = {}) {
 }
 
 /**
- * Strip `position` before comparing wire rows with the frozen fixture.
+ * Strip the fields later tickets added before comparing wire rows with the
+ * frozen fixture.
  *
- * The fixture was captured from the folds ticket #90 deleted, before position
- * existed. The tests that follow name positions as explicit literals of their
- * own, so this comparison still pins every other field of the same rows.
+ * The fixture was captured from the folds ticket #90 deleted, before `position`
+ * (#224) and before the row's turn and turn bucket (#321) existed. The tests
+ * that follow name those fields as explicit literals of their own, so this
+ * comparison still pins every other field of the same rows.
  */
-const withoutPositions = messages => messages.map(({ position: _position, ...row }) => row)
+const withoutPositions = messages => messages.map(({ position: _position, turn: _turn, usage: _usage, ...row }) => row)
 
 test('the transcript unit reproduces the frozen transcript, including ignored shapes', () => {
   assert.deepEqual(withoutPositions(unitProjection(transcriptLog()).messages), expected.transcriptLog.messages)
@@ -290,6 +292,7 @@ test('a successful skill call derives exactly one activation row at the result s
     seq: 3,
     requestId: null,
     role: 3,
+    turn: 1,
     status: 2,
     text: '加载了skill:pdf',
     kind: 1,
@@ -412,6 +415,7 @@ test('a successful skill_manage review result derives one kind-2 row with the ba
     seq: 1,
     requestId: null,
     role: 3,
+    turn: 1,
     status: 2,
     text: display,
     kind: 2,
@@ -701,4 +705,47 @@ test('a windowed read touches only its window rows, not the whole transcript', (
   const at = units.transcriptAt(state, 5000, 4990)
   assert.deepEqual(at.map(message => message.seq), Array.from({ length: 10 }, (_, index) => 4990 + index))
   assert.ok(rowReads < 100, `a windowed read must not scan 5000 rows (read ${rowReads})`)
+})
+
+/* ------------------------------------------------- turn number and usage (#321) */
+
+/** One `assistant/message` event carrying provider usage, in the log's own shape. */
+const usageMessage = (seq, turn, id, text, usage, extra = {}) => event(seq, 'assistant/message', {
+  turn, step: 1, message: assistantMessage(id, text), stream: [],
+  ...usage === undefined ? {} : { usage }, ...extra,
+}, { surfaceOp: 'append' })
+
+test('every row names the turn it belongs to', () => {
+  // The row carries its turn so a consumer can group rows into turns without
+  // re-deriving turn boundaries from seq. An event that names a turn supplies
+  // it; an event that names none (a user message, a delivery) takes the turn
+  // that was open when it landed, and 0 when no turn was open at all.
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'user/message', userMessage('u1', 'first', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    usageMessage(2, 1, 'a1', 'one'),
+    // A delivery that lands mid-turn belongs to that turn: it arrived while the
+    // turn was open, and the alternative is a row with no turn at all.
+    event(3, 'delivery/message', { deliveryId: 'd1', origin: { sessionId: 'sender-1' },
+      message: assistantMessage('dmid', 'delivered mid') }, { surfaceOp: 'append' }),
+    event(4, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+    // The same delivery shape outside any open turn has no turn to name.
+    event(5, 'delivery/message', { deliveryId: 'd2', origin: { sessionId: 'sender-1' },
+      message: assistantMessage('didle', 'delivered idle') }, { surfaceOp: 'append' }),
+    event(6, 'turn/start', { turn: 2 }),
+    event(7, 'user/message', userMessage('u2', 'second', { rpcId: 'r2' }), { surfaceOp: 'append' }),
+    event(8, 'assistant/attempt', { turn: 2, step: 1, stream: textStream('half') }),
+    usageMessage(9, 2, 'a2', 'two'),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  assert.deepEqual(messages.map(({ messageId, turn }) => ({ messageId, turn })), [
+    { messageId: 'u1', turn: 1 },
+    { messageId: 'a1', turn: 1 },
+    { messageId: 'dmid', turn: 1 },
+    { messageId: 'didle', turn: 0 },
+    { messageId: 'u2', turn: 2 },
+    { messageId: 'attempt:session-1:8', turn: 2 },
+    { messageId: 'a2', turn: 2 },
+  ])
 })

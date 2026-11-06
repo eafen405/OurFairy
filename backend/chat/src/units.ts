@@ -25,11 +25,13 @@
  *
  * `stateVersion` increments whenever this module's fold semantics or state
  * shape change; the registry then discards persisted rows of an older version
- * and refolds the log from `init`. The transcript is at version 7 (immutable
+ * and refolds the log from `init`. The transcript is at version 8 (immutable
  * first appearance plus ordered transitions, a move index, each row's tool
- * names, the narrow pairing map that derives a `role: 3` activation row, and
- * the `skill_manage` call pairing that derives a `kind: 2` review row);
- * the work unit is at version 2 (the narrow pending id/kind index).
+ * names, the narrow pairing map that derives a `role: 3` activation row, the
+ * `skill_manage` call pairing that derives a `kind: 2` review row, and the
+ * open turn's provider-usage fold that settles each row's turn number and the
+ * turn's token buckets onto its last Fairy row); the work unit is at version 2
+ * (the narrow pending id/kind index).
  *
  * This module is the only fold of a chat session: the read path
  * (`runtime.ts`, `service.ts`) takes durable values from these units and
@@ -152,6 +154,13 @@ const transcriptRowSchema = z.object({
   messageId: z.string(),
   requestId: z.string().nullable(),
   role: z.number().int(),
+  /**
+   * The turn the row belongs to, 0 when it belongs to none yet (a queued
+   * message spliced before its turn opened, or a delivery that landed while the
+   * session was idle). The row takes the turn its own event names; the events
+   * that name none take the open turn.
+   */
+  turn: z.number().int(),
   /** Derived rows only: 1 skill activation, 2 skill review. Ordinary messages carry none. */
   kind: z.number().int().optional(),
   /** The tool call a derived row was paired with; ordinary messages carry none. */
@@ -216,6 +225,13 @@ export const transcriptStateSchema = z.object({
    * first-appearance order.
    */
   moves: z.array(moveSchema),
+  /**
+   * The turn a `turn/start` opened and no `turn/end` closed, 0 while none is
+   * open. Events that carry no turn of their own (a spliced or appended user
+   * message, a delivery) take this value, so a row's turn never has to be
+   * re-derived from seq.
+   */
+  openTurn: z.number().int(),
 })
 
 /** The transcript unit state, as the schema above declares it. */
@@ -253,6 +269,7 @@ function rowAtCut(row: TranscriptRow, cut: number, position: number) {
     seq: transition !== null && transition.repositions ? transition.seq : row.first.seq,
     requestId: row.requestId,
     role: row.role,
+    turn: row.turn,
     status: transition === null ? row.first.status : transition.status,
     text: row.text,
     ...(row.attachments === null ? {} : { attachments: row.attachments }),
@@ -311,7 +328,8 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
   key: 'ourfairyTranscript',
   stateVersion: 7,
   stateSchema: transcriptStateSchema,
-  init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [], skillCalls: {}, manageCalls: {}, moves: [] }),
+  init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [],
+    skillCalls: {}, manageCalls: {}, moves: [], openTurn: 0 }),
   apply(state, event) {
     if (event.type === 'agent/inbox/spliced') {
       const inserted = event.data.inserted.filter(message => {
@@ -333,7 +351,7 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
         const existing = index[message.id]
         if (existing === undefined) {
           index[message.id] = rows.length
-          rows.push({ messageId: message.id, requestId, role: 1, text, attachments, tools: [],
+          rows.push({ messageId: message.id, requestId, role: 1, turn: state.openTurn, text, attachments, tools: [],
             first: { seq: event.seq, status: 1 }, transitions: [] })
         } else {
           // `index` only holds positions of rows that exist.
@@ -354,7 +372,11 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
     if (event.type === 'user/message' && isAppendSurfaceEvent(event) && event.data.source?.kind === 'user') {
       const message = event.data
       const view = productMessage(message)
-      const fields = { requestId: view.source.rpcId ?? null, role: 1,
+      // A user message names no turn of its own; it belongs to the turn that is
+      // open when it lands. `openTurn` is 0 before any turn opens, which is the
+      // queued/spliced case: a later append of the same row carries the real turn
+      // and replaces this value through the same `index` entry.
+      const fields = { requestId: view.source.rpcId ?? null, role: 1, turn: state.openTurn,
         text: messageText(view), attachments: attachmentsOf(view), tools: [] }
       const existing = state.index[message.id]
       if (existing === undefined) {
@@ -369,6 +391,9 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
       // Only an assistant step names tools: a delivered message is another
       // session's report, and the delivery's presentation does not change.
       const fields = { requestId: null, role: 2,
+        // An assistant step names its turn; a delivery comes from another
+        // session and names none, so it takes the open turn like a user message.
+        turn: event.type === 'assistant/message' ? event.data.turn : state.openTurn,
         text: messageText(view), attachments: attachmentsOf(view),
         tools: event.type === 'assistant/message' ? toolNamesOf(view) : [] }
       // `interrupted` is the assistant event's own field; a delivered message
@@ -388,7 +413,8 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
       const attempts = state.attemptsByTurn[turn] ?? []
       return { ...state,
         rows: [...state.rows, {
-          messageId, requestId: null, role: 2, text: attemptText(event.data.stream), attachments: null,
+          messageId, requestId: null, role: 2, turn: event.data.turn,
+          text: attemptText(event.data.stream), attachments: null,
           tools: attemptTools(event.data.stream),
           // A turn end that already exists in the prefix settles the attempt at
           // its own seq (the old fold looked up the whole log's turn ends).
@@ -397,12 +423,18 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
         index: { ...state.index, [messageId]: state.rows.length },
         attemptsByTurn: { ...state.attemptsByTurn, [turn]: [...attempts, state.rows.length] } }
     }
+    if (event.type === 'turn/start') {
+      // The open turn is the fallback every turn-less event takes, so it is the
+      // only piece of turn history the fold has to keep.
+      if (state.openTurn === event.data.turn) return state
+      return { ...state, openTurn: event.data.turn }
+    }
     if (event.type === 'turn/end') {
       const turn = String(event.data.turn)
       const interrupted = interruptedKind(event.data.reason.kind)
       const turnEnds = { ...state.turnEnds, [turn]: { seq: event.seq, interrupted } }
       const indices = state.attemptsByTurn[turn]
-      if (indices === undefined || indices.length === 0) return { ...state, turnEnds }
+      if (indices === undefined || indices.length === 0) return { ...state, turnEnds, openTurn: 0 }
       // Backfill every attempt of this turn with a status-only transition; the
       // attempt keeps its own seq.
       const rows = [...state.rows]
@@ -412,7 +444,7 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
         rows[index] = { ...row, transitions: [...row.transitions,
           { seq: event.seq, status: interrupted ? 3 : 4, repositions: false }] }
       }
-      return { ...state, rows, turnEnds }
+      return { ...state, rows, turnEnds, openTurn: 0 }
     }
     if (event.type === 'tool/call' && event.data.name === 'skill') {
       // The name comes from the call's own arguments, not from the result text:
@@ -447,6 +479,8 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
           messageId,
           requestId: null,
           role: 3,
+          // The result event names the turn the activation happened in.
+          turn: event.data.turn,
           kind: 1,
           toolCallId: callId,
           text: `加载了skill:${call.name}`,
@@ -474,6 +508,7 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
         messageId,
         requestId: null,
         role: 3,
+        turn: event.data.turn,
         kind: 2,
         toolCallId: callId,
         text: display,
