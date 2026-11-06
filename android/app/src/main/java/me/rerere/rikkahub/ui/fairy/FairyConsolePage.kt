@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.fairy
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -204,6 +205,8 @@ fun FairyConsolePage(
                         sessionCount = owned.sessions.size,
                     )
                     Spacer(Modifier.height(20.dp))
+                    ConsoleBillCard(onOpen = { onOpen(Screen.Bill) })
+                    Spacer(Modifier.height(12.dp))
                     SignalButton(
                         text = "进入会话",
                         tag = "SESSIONS",
@@ -291,6 +294,43 @@ private fun ConsoleInfoCard(user: IdentityUser?, currentSessionTitle: String?, s
                 Spacer(Modifier.height(5.dp))
                 ConsoleValue(sessionCount.toString())
             }
+        }
+    }
+}
+
+/**
+ * The console's way into the bill: a card in the page's existing instrument
+ * vocabulary, not a new navigation layer.
+ *
+ * The whole plate is the tap target — one clickable on the panel itself, the shape
+ * the console's other cards take — and the card carries no figure of its own. The
+ * console never reads the bill, so the two surfaces cannot disagree about a total
+ * and opening the card cannot fail on a number the console already fetched.
+ */
+@Composable
+private fun ConsoleBillCard(onOpen: () -> Unit) {
+    val tokens = LocalFairyTokens.current
+    InstrumentPanel(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+            .testTag("console-bill"),
+        level = InstrumentLevel.NORMAL,
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                ConsoleLabel("ELECTRICITY BILL")
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    text = "电费账单",
+                    color = tokens.textPrimary,
+                    fontFamily = tokens.functionFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            StatusChip(text = "BILL", tone = StatusTone.NEUTRAL)
         }
     }
 }

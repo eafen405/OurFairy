@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.destination
 import androidx.compose.runtime.Composable
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.remote.AccountSession
+import me.rerere.rikkahub.data.remote.BillBackend
 import me.rerere.rikkahub.data.remote.GatewayBackend
 import me.rerere.rikkahub.data.remote.IdentityBackend
 import me.rerere.rikkahub.data.remote.ImpressionBackend
@@ -109,5 +110,7 @@ class DestinationPageScope(
     val gatewayBackend: GatewayBackend,
     val impressionBackend: ImpressionBackend,
     val skillsBackend: SkillsBackend,
+    /** The bill read; a page test hands its own, production injects the container's. */
+    val billBackend: BillBackend,
     val fairy: FairyInteraction,
 )
