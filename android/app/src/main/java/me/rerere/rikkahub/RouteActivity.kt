@@ -50,6 +50,7 @@ import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.data.datastore.DisplayPreferencesStore
 import me.rerere.rikkahub.data.datastore.LocalDisplayPreferences
 import me.rerere.rikkahub.data.remote.AccountSession
+import me.rerere.rikkahub.data.remote.BillBackend
 import me.rerere.rikkahub.data.remote.GatewayBackend
 import me.rerere.rikkahub.data.remote.IdentityBackend
 import me.rerere.rikkahub.data.remote.ImpressionBackend
@@ -81,6 +82,7 @@ class RouteActivity : ComponentActivity() {
     private val gatewayBackend by inject<GatewayBackend>()
     private val impressionBackend by inject<ImpressionBackend>()
     private val skillsBackend by inject<SkillsBackend>()
+    private val billBackend by inject<BillBackend>()
     private val fairy by inject<FairyInteraction>()
     private var navStack: MutableList<NavKey>? = null
     private var identityReady = false
@@ -218,6 +220,7 @@ class RouteActivity : ComponentActivity() {
                             gatewayBackend = gatewayBackend,
                             impressionBackend = impressionBackend,
                             skillsBackend = skillsBackend,
+                            billBackend = billBackend,
                             fairy = fairy,
                         )
                         NavDisplay(
@@ -258,4 +261,5 @@ sealed interface Screen : NavKey {
     @Serializable data object Gateway : Screen
     @Serializable data object Impression : Screen
     @Serializable data object Skills : Screen
+    @Serializable data object Bill : Screen
 }

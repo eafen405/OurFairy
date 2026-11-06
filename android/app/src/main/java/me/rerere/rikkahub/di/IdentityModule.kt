@@ -3,7 +3,9 @@ package me.rerere.rikkahub.di
 import android.content.Context
 import android.os.SystemClock
 import androidx.lifecycle.ProcessLifecycleOwner
+import me.rerere.rikkahub.data.remote.BillBackend
 import me.rerere.rikkahub.data.remote.RemoteAttachmentApi
+import me.rerere.rikkahub.data.remote.RemoteBillApi
 import me.rerere.rikkahub.data.remote.RemoteSpeechApi
 import me.rerere.rikkahub.data.remote.RemoteSpeechBackend
 import me.rerere.rikkahub.data.remote.RemoteAttachmentBackend
@@ -74,6 +76,8 @@ val identityModule = module {
     single<SkillsBackend> {
         SkillsApi(baseUrl = identityEndpoint, client = get<OkHttpClient>())
     }
+
+    single<BillBackend> { RemoteBillApi(baseUrl = identityEndpoint, client = get<OkHttpClient>()) }
 
     single<RemoteAttachmentBackend> { RemoteAttachmentApi(identityEndpoint, get<OkHttpClient>()) }
 
