@@ -73,10 +73,8 @@ const FORBIDDEN_ROW_IDS = [
   'tool-subagent-fork',
   'otel',
   'session-telemetry-otel',
-  'web',
+  // The product selects the direct DeepSeek Search API, not its auxiliary-model adapter.
   'web-search-deepseek',
-  'web-fetch-http',
-  'tool-web',
   'mcp-resources',
   'plan-mode',
   'workflow-ptc',

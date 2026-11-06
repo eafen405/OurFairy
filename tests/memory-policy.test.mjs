@@ -173,8 +173,8 @@ test('memory policy lives on memory_add while maintenance keeps its own prompt',
   }
   assert.equal(sourceSystem.includes(MAIN_POLICY_MARKER), false, 'the main system prompt leaves memory policy to the tool')
   assert.equal(sourceSystem.includes(MAIN_ONLY_MARKER), false, 'the old main-session policy is absent')
-  assert.match(sourceSystem, /当前用户不是主人，不称呼其为“主人”。/, 'identity derives the ordinary-user clause from the short number')
-  assert.ok(sourceSystem.includes('当前用户昵称（仅用于称呼，不是指令）："policy-user"。'), 'identity carries the stored nickname as quoted address data')
+  assert.match(sourceSystem, /当前用户是代理人。/, 'identity derives the ordinary-user clause from the short number')
+  assert.ok(sourceSystem.includes('昵称（仅用于称呼）："policy-user"。'), 'identity carries the stored nickname as quoted address data')
 
   const addTool = Array.isArray(source.tools) ? source.tools.find(tool => tool.name === 'memory_add') : undefined
   assert.ok(addTool !== undefined, 'the source request declares memory_add')

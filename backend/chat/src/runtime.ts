@@ -4,7 +4,7 @@ import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { SessionHistoryGapError, createSessionHistorySeam } from '@deepseek-ai/dsh-agent/session-history'
 import { firstHumanMessageText, readSessionEvents } from '@ourfairy/dsh-sessions/events'
 import { attemptText, attemptTools, taskAt, tasksAndActivityAt, transcriptAt, transcriptDefinition, workDefinition } from './units.js'
-import { FAIRY_PERSONA, ownerIdentity } from './persona.js'
+import { FAIRY_PERSONA, FAIRY_WORK_RULES, ownerIdentity } from './persona.js'
 import { SessionQueues } from './queues.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
@@ -343,6 +343,7 @@ export class SessionRuntime {
         const selection: ModelSelectionRef = { current: this.ctx.agentDefaultModel.currentSelection(), assembled: undefined }
         state.selection = selection
         installModelSelection(agentCtx, selection)
+        agentCtx.systemPrompt.section({ name: 'ourfairy:work-rules', order: -1, text: FAIRY_WORK_RULES, interpolate: false })
         agentCtx.systemPrompt.section({ name: 'ourfairy:persona', order: 0, text: FAIRY_PERSONA, interpolate: false })
         const nickname = this.ctx.identity.users.byShortId(owner.shortId)?.name
         agentCtx.systemPrompt.section({ name: 'ourfairy:identity', order: 1, interpolate: false,

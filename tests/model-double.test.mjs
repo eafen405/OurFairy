@@ -88,6 +88,8 @@ test('one real turn reaches the external model double, registers tools, and pers
     'skill',
     'skill_manage',
     'todo_write',
+    'web_fetch',
+    'web_search',
     'working_directory',
     'write',
   ], `the model receives only the adapted v1 tool catalog: ${JSON.stringify(toolNames)}`)
