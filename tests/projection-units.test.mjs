@@ -127,7 +127,7 @@ test('the stateVersion constants bind the README contract', () => {
   // The README is read, not restated: the numbers below are this suite's
   // expectation, and the documented sentence must name the same ones, so a
   // version bump that forgets the prose fails here instead of shipping drift.
-  const versions = { ourfairyTranscript: 7, ourfairyWork: 2 }
+  const versions = { ourfairyTranscript: 8, ourfairyWork: 2 }
   const documented = { ourfairyTranscript: /transcript `(\d+)`/u, ourfairyWork: /\bwork `(\d+)`/u }
   const readme = readFileSync(new URL('../backend/chat/README.md', import.meta.url), 'utf8')
   for (const definition of [units.transcriptDefinition, units.workDefinition]) {
@@ -710,8 +710,8 @@ test('a windowed read touches only its window rows, not the whole transcript', (
 /* ------------------------------------------------- turn number and usage (#321) */
 
 /** One `assistant/message` event carrying provider usage, in the log's own shape. */
-const usageMessage = (seq, turn, id, text, usage, extra = {}) => event(seq, 'assistant/message', {
-  turn, step: 1, message: assistantMessage(id, text), stream: [],
+const usageMessage = (seq, turn, id, text, usage, { step = 1, ...extra } = {}) => event(seq, 'assistant/message', {
+  turn, step, message: assistantMessage(id, text), stream: [],
   ...usage === undefined ? {} : { usage }, ...extra,
 }, { surfaceOp: 'append' })
 
@@ -747,5 +747,164 @@ test('every row names the turn it belongs to', () => {
     { messageId: 'u2', turn: 2 },
     { messageId: 'attempt:session-1:8', turn: 2 },
     { messageId: 'a2', turn: 2 },
+  ])
+})
+
+/** A compact assistant stream that reports one usage sample, as an adapter leaves it. */
+const usageStream = (text, usage) => [...textStream(text), { type: 'chunk', time: 5, index: 1, chunk: { type: 'usage', usage } }]
+
+/** The bucket one row reports, or undefined when the row reports none. */
+const bucketsOf = (messages, messageId) => messages.find(row => row.messageId === messageId)?.usage
+
+test('a turn reports its settled spend on its own last Fairy row only', () => {
+  // Two steps, each with provider usage. The turn's spend is one number and it
+  // rides the reply the reader is left with, so the earlier step's row stays
+  // unadorned rather than each step reporting its own share.
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'user/message', userMessage('u1', 'go', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    event(2, 'step/start', { turn: 1, step: 1 }),
+    usageMessage(3, 1, 'a1', 'first', { inputTokens: 10, outputTokens: 2, cacheReadTokens: 4 }, { step: 1 }),
+    event(4, 'step/end', { turn: 1, step: 1 }),
+    event(5, 'step/start', { turn: 1, step: 2 }),
+    usageMessage(6, 1, 'a2', 'second', { inputTokens: 20, outputTokens: 3, cacheReadTokens: 6 }, { step: 2 }),
+    event(7, 'step/end', { turn: 1, step: 2 }),
+    event(8, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  assert.equal(bucketsOf(messages, 'a1'), undefined, 'the earlier Fairy row of the turn reports no bucket')
+  assert.deepEqual(bucketsOf(messages, 'a2'), { input: 30, cache: 10, output: 5 })
+})
+
+test('a turn that runs across several steps counts every attempt once', () => {
+  // A retried step costs tokens twice: the failed attempt leaves its usage in
+  // its own stream, and the successful message reports its own.
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'user/message', userMessage('u1', 'go', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    event(2, 'step/start', { turn: 1, step: 1 }),
+    event(3, 'assistant/attempt', { turn: 1, step: 1, stream: usageStream('half', { inputTokens: 7, outputTokens: 1 }) }),
+    event(4, 'llm/retry', { retryId: 'r-1', turn: 1, step: 1, provider: 'p', mode: 'normal', policyKey: 'k', retry: 1, maxRetries: 2, delayMs: 1, failure: { code: 'X', message: 'x' } }),
+    event(5, 'llm/retry-started', { retryId: 'r-1', turn: 1, step: 1, retry: 1 }),
+    usageMessage(6, 1, 'a1', 'done', { inputTokens: 9, outputTokens: 2 }),
+    event(7, 'step/end', { turn: 1, step: 1 }),
+    event(8, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  // Neither attempt reported a cache figure, so the bucket names none: a zero
+  // would claim the prompt was uncached.
+  assert.deepEqual(bucketsOf(messages, 'a1'), { input: 16, output: 3 })
+})
+
+test('an interrupted turn reports the spend it already settled', () => {
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'user/message', userMessage('u1', 'go', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    event(2, 'step/start', { turn: 1, step: 1 }),
+    usageMessage(3, 1, 'a1', 'cut off', { inputTokens: 5, outputTokens: 4 }, { interrupted: true }),
+    event(4, 'turn/end', { turn: 1, reason: { kind: 'aborted' } }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  const row = messages.find(message => message.messageId === 'a1')
+  assert.equal(row?.status, 3, 'the reply is still the interrupted one')
+  assert.deepEqual(row?.usage, { input: 5, output: 4 })
+})
+
+test('a turn whose attempts all failed reports its spend on the attempt row', () => {
+  // The turn produced no reply at all, so the last Fairy row of the turn is the
+  // settled attempt; the spend it already cost is still reportable.
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'user/message', userMessage('u1', 'go', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    event(2, 'step/start', { turn: 1, step: 1 }),
+    event(3, 'assistant/attempt', { turn: 1, step: 1, stream: usageStream('half', { inputTokens: 4, outputTokens: 1 }) }),
+    event(4, 'step/end', { turn: 1, step: 1 }),
+    event(5, 'turn/end', { turn: 1, reason: { kind: 'error' } }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  assert.deepEqual(bucketsOf(messages, 'attempt:session-1:3'), { input: 4, output: 1 })
+})
+
+test('a provider that reported no usage leaves the bucket off the row', () => {
+  // The frozen fixtures are this case: their streams carry text only. Absence,
+  // not zeros — nothing was reported, so nothing may be claimed.
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'user/message', userMessage('u1', 'go', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    event(2, 'step/start', { turn: 1, step: 1 }),
+    event(3, 'assistant/message', { turn: 1, step: 1, message: assistantMessage('a1', 'hi'), stream: textStream('hi') }, { surfaceOp: 'append' }),
+    event(4, 'step/end', { turn: 1, step: 1 }),
+    event(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  assert.deepEqual(messages.map(({ messageId, usage }) => ({ messageId, ...usage === undefined ? {} : { usage } })), [
+    { messageId: 'u1' },
+    { messageId: 'a1' },
+  ])
+})
+
+test('the bucket appears only once the turn has ended', () => {
+  // The value is a settlement: a read that stops inside the turn must not
+  // report it, because the turn is still spending.
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'user/message', userMessage('u1', 'go', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    event(2, 'step/start', { turn: 1, step: 1 }),
+    usageMessage(3, 1, 'a1', 'reply', { inputTokens: 5, outputTokens: 2 }),
+    event(4, 'step/end', { turn: 1, step: 1 }),
+    event(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+  ]
+  const state = fold(units.transcriptDefinition, log)
+
+  assert.equal(bucketsOf(units.transcriptAt(state, 4), 'a1'), undefined, 'inside the turn the reply reports no bucket')
+  assert.deepEqual(bucketsOf(units.transcriptAt(state, 5), 'a1'), { input: 5, output: 2 })
+})
+
+test('one attempt without a cache figure keeps the bucket from claiming a cache total', () => {
+  // Both figures are part of the same settlement, so an unknown one drops that
+  // field instead of reporting the attempt that did answer as if it were all.
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'user/message', userMessage('u1', 'go', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    event(2, 'step/start', { turn: 1, step: 1 }),
+    usageMessage(3, 1, 'a1', 'first', { inputTokens: 10, outputTokens: 2, cacheReadTokens: 4 }, { step: 1 }),
+    event(4, 'step/end', { turn: 1, step: 1 }),
+    event(5, 'step/start', { turn: 1, step: 2 }),
+    usageMessage(6, 1, 'a2', 'second', { inputTokens: 20, outputTokens: 3 }, { step: 2 }),
+    event(7, 'step/end', { turn: 1, step: 2 }),
+    event(8, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  assert.deepEqual(bucketsOf(messages, 'a2'), { input: 30, output: 5 })
+})
+
+test('a delivery that lands mid-turn does not carry that turn bill', () => {
+  // The delivery names the open turn so it can be grouped with the turn it
+  // arrived in, but it is another session's report: the spend stays on the row
+  // this turn's own reply produced.
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'user/message', userMessage('u1', 'go', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    event(2, 'step/start', { turn: 1, step: 1 }),
+    usageMessage(3, 1, 'a1', 'reply', { inputTokens: 5, outputTokens: 2 }),
+    event(4, 'delivery/message', { deliveryId: 'd1', origin: { sessionId: 'sender-1' },
+      message: assistantMessage('dmsg', 'delivered') }, { surfaceOp: 'append' }),
+    event(5, 'step/end', { turn: 1, step: 1 }),
+    event(6, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  assert.equal(bucketsOf(messages, 'dmsg'), undefined, 'a delivered message never carries this session bill')
+  assert.deepEqual(bucketsOf(messages, 'a1'), { input: 5, output: 2 })
+  assert.deepEqual(messages.map(({ messageId, turn }) => ({ messageId, turn })), [
+    { messageId: 'u1', turn: 1 },
+    { messageId: 'a1', turn: 1 },
+    { messageId: 'dmsg', turn: 1 },
   ])
 })

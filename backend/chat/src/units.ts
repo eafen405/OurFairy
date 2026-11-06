@@ -43,13 +43,15 @@
  */
 
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
-import { assembleAssistantStream } from '@deepseek-ai/dsh-llm/assistant-stream'
+import { assembleAssistantStream, lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm/assistant-stream'
 import { z } from 'zod'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { AssistantMessage, SessionEvent, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import type { JobView } from '@deepseek-ai/dsh-jobs'
-import type { AssistantStreamRecord, ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { AssistantStreamRecord, ContentBlock, TokenUsage } from '@deepseek-ai/dsh-llm'
+// Type-only: adds the retry lifecycle events to the session event union below.
+import type {} from '@deepseek-ai/dsh-llm-retry/types'
 // Type-only: the dsh context's own seams and the event and message-source
 // vocabularies other rows declare. The imports add no runtime dependency.
 import type {} from '@deepseek-ai/dsh-session-projection'
@@ -112,6 +114,56 @@ export function taskStatusOf(status: string): number {
 
 const terminal = (status: number) => status >= 3
 const interruptedKind = (kind: string) => ['aborted', 'interrupted', 'forked'].includes(kind)
+
+/**
+ * The usage one Assistant settlement reports, or undefined when it reported none.
+ *
+ * An `assistant/message` carries the adapter's sample on the event itself and a
+ * failed attempt carries it in its stream; a message may also keep the sample in
+ * its stream, so the event's own field wins and the stream is the fallback. Both
+ * are the same provider report, never a second one.
+ */
+function settlementUsage(event: { readonly data: { readonly usage?: TokenUsage; readonly stream: readonly AssistantStreamRecord[] } }): TokenUsage | undefined {
+  return event.data.usage ?? lastAssistantStreamChunk(event.data.stream, 'usage')?.usage
+}
+
+/** One reported sample's cache figure, or undefined when the sample named no cache bucket. */
+const cacheOf = (usage: TokenUsage): number | undefined => usage.cacheReadTokens === undefined && usage.cacheWriteTokens === undefined
+  ? undefined
+  : (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+
+/** Start folding a turn's spend; nothing is claimed until a sample is reported. */
+const emptySpend = (turn: number): z.infer<typeof turnSpendSchema> => ({
+  turn, input: 0, output: 0, cache: 0, samples: 0, cacheSamples: 0, last: null, row: null,
+})
+
+/**
+ * Count one reported sample into the turn's spend.
+ *
+ * The numbers only ever come from the provider report; the fold adds them and
+ * remembers which row the turn's settled value will ride on. `row` is the last
+ * Fairy row this turn itself produced, so a delivery from another session never
+ * carries this turn's bill.
+ */
+function recordSpend(
+  spend: z.infer<typeof turnSpendSchema>,
+  step: number,
+  usage: TokenUsage,
+  row: number,
+): z.infer<typeof turnSpendSchema> {
+  const cache = cacheOf(usage)
+  const replaced = spend.last !== null && spend.last.step === step ? spend.last : null
+  return {
+    turn: spend.turn,
+    input: spend.input - (replaced?.input ?? 0) + usage.inputTokens,
+    output: spend.output - (replaced?.output ?? 0) + usage.outputTokens,
+    cache: spend.cache - (replaced?.cache ?? 0) + (cache ?? 0),
+    samples: spend.samples + (replaced === null ? 1 : 0),
+    cacheSamples: spend.cacheSamples - (replaced?.hasCache === true ? 1 : 0) + (cache === undefined ? 0 : 1),
+    last: { step, input: usage.inputTokens, output: usage.outputTokens, cache: cache ?? 0, hasCache: cache !== undefined },
+    row,
+  }
+}
 const taskKey = (generation: string, id: string) => `${generation}/${id}`
 
 const messageText = (message: ProductMessage) => (message.content ?? []).filter(block => block.type === 'text').map(block => block.text).join('')
@@ -150,6 +202,56 @@ export const attemptTools = (stream: readonly AssistantStreamRecord[]) => {
 const cutPointSchema = z.object({ seq: z.number().int(), status: z.number().int() })
 const attachmentSchema = z.object({ index: z.number().int(), type: z.number().int(), name: z.string(), mime: z.string(), bytes: z.number().int() })
 const transitionSchema = cutPointSchema.extend({ repositions: z.boolean() })
+/**
+ * The turn's settled spend, as a row reports it. `seq` is the `turn/end` that
+ * settled it: the value is a settlement, so a cut inside the turn must not
+ * report it. `cache` is absent unless every attempt of the turn reported a cache
+ * bucket — the log's cache read and cache write are one figure here, and a zero
+ * would claim the prompt was uncached rather than unreported.
+ */
+const rowUsageSchema = z.object({
+  seq: z.number().int(),
+  input: z.number().int().nonnegative(),
+  cache: z.number().int().nonnegative().optional(),
+  output: z.number().int().nonnegative(),
+})
+/**
+ * The turn being folded, as numbers only.
+ *
+ * The fold mirrors the rules the bill's own aggregation uses on the same log —
+ * every attempt counts once, and a bucket no attempt reported stays unknown —
+ * but it keeps no events: storing the turn's events would put a second copy of
+ * the conversation into checkpointed state. `row` is the position of the turn's
+ * last settleable Fairy row, which is the row the settled value rides on;
+ * `null` means the turn produced no such row and has nowhere to report.
+ * `complete` and `hasCache` are what keep an unreported figure absent instead of
+ * zero: `input + cache + output` must add up to the spend actually claimed.
+ */
+const turnSpendSchema = z.object({
+  turn: z.number().int(),
+  input: z.number().int().nonnegative(),
+  output: z.number().int().nonnegative(),
+  cache: z.number().int().nonnegative(),
+  /** Reported samples counted into the totals; a turn with none reports no bucket. */
+  samples: z.number().int().nonnegative(),
+  /** Samples that named a cache bucket: the cache total is reportable only when this equals `samples`. */
+  cacheSamples: z.number().int().nonnegative(),
+  /**
+   * The step and numbers of the most recent sample. A later sample in the same
+   * step subtracts this one, because it is the same request reporting again
+   * rather than a second request; `llm/retry-started` clears it, because a
+   * retried attempt is billed on top of the attempt it replaced.
+   */
+  last: z.object({
+    step: z.number().int(),
+    input: z.number().int().nonnegative(),
+    output: z.number().int().nonnegative(),
+    cache: z.number().int().nonnegative(),
+    hasCache: z.boolean(),
+  }).nullable(),
+  /** The row the settled value rides on: the turn's last Fairy row that this turn produced. */
+  row: z.number().int().nullable(),
+})
 const transcriptRowSchema = z.object({
   messageId: z.string(),
   requestId: z.string().nullable(),
@@ -178,6 +280,8 @@ const transcriptRowSchema = z.object({
    * first-appearance order and the anchor for a cut before any transition.
    */
   first: cutPointSchema,
+  /** The turn's settled spend, on the turn's last Fairy row only. */
+  usage: rowUsageSchema.optional(),
   /**
    * Every later event that changed the row's seq/status, in event order.
    * `repositions` separates the two cases a cut must tell apart: a surface
@@ -232,6 +336,8 @@ export const transcriptStateSchema = z.object({
    * re-derived from seq.
    */
   openTurn: z.number().int(),
+  /** The spend accumulated so far for the turn being folded; `null` between turns. */
+  spend: turnSpendSchema.nullable(),
 })
 
 /** The transcript unit state, as the schema above declares it. */
@@ -274,6 +380,11 @@ function rowAtCut(row: TranscriptRow, cut: number, position: number) {
     text: row.text,
     ...(row.attachments === null ? {} : { attachments: row.attachments }),
     ...(row.tools.length === 0 ? {} : { tools: row.tools }),
+    ...(row.usage === undefined || row.usage.seq > cut ? {} : { usage: {
+      input: row.usage.input,
+      ...row.usage.cache === undefined ? {} : { cache: row.usage.cache },
+      output: row.usage.output,
+    } }),
     ...(row.kind === undefined ? {} : { kind: row.kind }),
     ...(row.toolCallId === undefined ? {} : { toolCallId: row.toolCallId }),
   }
@@ -326,10 +437,10 @@ function reviewDisplayOf(message: { readonly content?: readonly ContentBlock[] }
  */
 export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', TranscriptState> = {
   key: 'ourfairyTranscript',
-  stateVersion: 7,
+  stateVersion: 8,
   stateSchema: transcriptStateSchema,
   init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [],
-    skillCalls: {}, manageCalls: {}, moves: [], openTurn: 0 }),
+    skillCalls: {}, manageCalls: {}, moves: [], openTurn: 0, spend: null }),
   apply(state, event) {
     if (event.type === 'agent/inbox/spliced') {
       const inserted = event.data.inserted.filter(message => {
@@ -400,11 +511,20 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
       // carries none, so it reads as not interrupted.
       const status = (event.data as { interrupted?: true }).interrupted ? 3 : 2
       const existing = state.index[message.id]
-      if (existing === undefined) {
-        return appendRow(state, { messageId: message.id, ...fields,
+      const next = existing === undefined
+        ? appendRow(state, { messageId: message.id, ...fields,
           first: { seq: event.seq, status }, transitions: [] })
-      }
-      return recordTransition(state, existing, fields, { seq: event.seq, status, repositions: true })
+        : recordTransition(state, existing, fields, { seq: event.seq, status, repositions: true })
+      // A delivery is another session's report: it contributes no spend and does
+      // not become the row this turn's bill rides on.
+      if (event.type !== 'assistant/message') return next
+      const position = next.index[message.id]
+      const usage = settlementUsage(event)
+      if (position === undefined) return next
+      const spend = state.spend !== null && state.spend.turn === event.data.turn ? state.spend : emptySpend(event.data.turn)
+      return { ...next, spend: {
+        ...usage === undefined ? { ...spend, row: position } : recordSpend(spend, event.data.step, usage, position),
+      } }
     }
     if (event.type === 'assistant/attempt') {
       const messageId = `attempt:${state.sessionId}:${event.seq}`
@@ -421,30 +541,50 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
           first: { seq: event.seq, status: ended !== undefined && ended.interrupted ? 3 : 4 }, transitions: [],
         }],
         index: { ...state.index, [messageId]: state.rows.length },
-        attemptsByTurn: { ...state.attemptsByTurn, [turn]: [...attempts, state.rows.length] } }
+        attemptsByTurn: { ...state.attemptsByTurn, [turn]: [...attempts, state.rows.length] },
+        // An attempt that reported usage contributes to its turn; the attempt row
+        // is a candidate to carry the settled value when no reply follows.
+        spend: spendOfAttempt(state, event, state.rows.length) }
+    }
+    if (event.type === 'llm/retry-started') {
+      // The retried attempt is billed on top of the one it replaced, so the
+      // replacement slot closes here: a sample after this point is a new request,
+      // not the same one reporting again.
+      if (state.spend === null || state.spend.turn !== event.data.turn || state.spend.last === null) return state
+      return { ...state, spend: { ...state.spend, last: null } }
     }
     if (event.type === 'turn/start') {
       // The open turn is the fallback every turn-less event takes, so it is the
-      // only piece of turn history the fold has to keep.
-      if (state.openTurn === event.data.turn) return state
-      return { ...state, openTurn: event.data.turn }
+      // only piece of turn history the fold has to keep. A turn/start for a turn
+      // already being folded keeps its numbers: the same turn may be reopened.
+      const spend = state.spend !== null && state.spend.turn === event.data.turn
+        ? state.spend
+        : emptySpend(event.data.turn)
+      if (state.openTurn === event.data.turn && state.spend === spend) return state
+      return { ...state, openTurn: event.data.turn, spend }
     }
     if (event.type === 'turn/end') {
       const turn = String(event.data.turn)
       const interrupted = interruptedKind(event.data.reason.kind)
       const turnEnds = { ...state.turnEnds, [turn]: { seq: event.seq, interrupted } }
       const indices = state.attemptsByTurn[turn]
-      if (indices === undefined || indices.length === 0) return { ...state, turnEnds, openTurn: 0 }
+      // The turn has ended, so its spend is settled: it rides the last Fairy row
+      // the turn produced, and only there. Settling at the turn's own end is what
+      // makes the field a settlement — a read inside the turn reports nothing.
+      const spend = settleSpend(state, event.seq)
+      if (indices === undefined || indices.length === 0) {
+        return { ...state, ...spend, turnEnds, openTurn: 0, spend: null }
+      }
       // Backfill every attempt of this turn with a status-only transition; the
       // attempt keeps its own seq.
-      const rows = [...state.rows]
+      const rows = spend.rows ?? [...state.rows]
       for (const index of indices) {
         // The index came from `attemptsByTurn`, which only holds row positions.
         const row = rows[index] as TranscriptRow
         rows[index] = { ...row, transitions: [...row.transitions,
           { seq: event.seq, status: interrupted ? 3 : 4, repositions: false }] }
       }
-      return { ...state, rows, turnEnds, openTurn: 0 }
+      return { ...state, rows, turnEnds, openTurn: 0, spend: null }
     }
     if (event.type === 'tool/call' && event.data.name === 'skill') {
       // The name comes from the call's own arguments, not from the result text:
@@ -520,6 +660,44 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
     }
     return state
   },
+}
+
+/**
+ * Settle the finished turn's spend onto the row it rides.
+ *
+ * The bucket is absent rather than zero when the turn reported none of the
+ * figures it would have to claim: a turn whose attempts never reported usage has
+ * no spend to disclose, and a turn where only some attempts reported a cache
+ * bucket has no cache total. `input` and `output` are required of every reported
+ * sample, so they are present whenever any sample is.
+ */
+function settleSpend(
+  state: TranscriptState,
+  seq: number,
+): { rows?: TranscriptRow[]; spend?: null } {
+  const spend = state.spend
+  if (spend === null || spend.row === null || spend.samples === 0) return {}
+  const rows = [...state.rows]
+  const row = rows[spend.row]
+  if (row === undefined) return {}
+  rows[spend.row] = { ...row, usage: {
+    seq,
+    input: spend.input,
+    output: spend.output,
+    ...spend.cacheSamples === spend.samples ? { cache: spend.cache } : {},
+  } }
+  return { rows, spend: null }
+}
+
+/** Fold one attempt's reported usage into the turn it belongs to. */
+function spendOfAttempt(
+  state: TranscriptState,
+  event: { readonly data: { readonly turn: number; readonly step: number; readonly stream: readonly AssistantStreamRecord[] } },
+  row: number,
+): z.infer<typeof turnSpendSchema> | null {
+  const spend = state.spend !== null && state.spend.turn === event.data.turn ? state.spend : emptySpend(event.data.turn)
+  const usage = settlementUsage(event)
+  return usage === undefined ? spend : recordSpend(spend, event.data.step, usage, row)
 }
 
 /** Append a brand-new row; its first appearance anchors the order. */
