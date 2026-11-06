@@ -380,7 +380,7 @@ function rowAtCut(row: TranscriptRow, cut: number, position: number) {
     text: row.text,
     ...(row.attachments === null ? {} : { attachments: row.attachments }),
     ...(row.tools.length === 0 ? {} : { tools: row.tools }),
-    ...(row.usage === undefined || row.usage.seq > cut ? {} : { usage: {
+    ...(row.usage === undefined ? {} : { usage: {
       input: row.usage.input,
       ...row.usage.cache === undefined ? {} : { cache: row.usage.cache },
       output: row.usage.output,

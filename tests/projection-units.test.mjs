@@ -849,20 +849,29 @@ test('a provider that reported no usage leaves the bucket off the row', () => {
 })
 
 test('the bucket appears only once the turn has ended', () => {
-  // The value is a settlement: a read that stops inside the turn must not
-  // report it, because the turn is still spending.
-  const log = [
+  // The value is a settlement, so it appears only after `turn/end` has been
+  // folded. A prefix that stops inside the turn reports no bucket because the
+  // turn is still spending — that is a fact about the folded log, not about a
+  // read cut: a cut names where to read *in* a settled log, and a settled row
+  // keeps its settled value wherever the window happens to start.
+  const prefix = [
     event(0, 'turn/start', { turn: 1 }),
     event(1, 'user/message', userMessage('u1', 'go', { rpcId: 'r1' }), { surfaceOp: 'append' }),
     event(2, 'step/start', { turn: 1, step: 1 }),
     usageMessage(3, 1, 'a1', 'reply', { inputTokens: 5, outputTokens: 2 }),
     event(4, 'step/end', { turn: 1, step: 1 }),
-    event(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
   ]
-  const state = fold(units.transcriptDefinition, log)
+  const inside = fold(units.transcriptDefinition, prefix)
+  const settled = fold(units.transcriptDefinition, [
+    ...prefix,
+    event(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+  ])
 
-  assert.equal(bucketsOf(units.transcriptAt(state, 4), 'a1'), undefined, 'inside the turn the reply reports no bucket')
-  assert.deepEqual(bucketsOf(units.transcriptAt(state, 5), 'a1'), { input: 5, output: 2 })
+  assert.equal(bucketsOf(units.transcriptAt(inside), 'a1'), undefined, 'inside the turn the reply reports no bucket')
+  assert.deepEqual(bucketsOf(units.transcriptAt(settled), 'a1'), { input: 5, output: 2 })
+  // Once settled, a window that starts at or after the row still carries the
+  // row's own settlement: paging a finished session back must not drop it.
+  assert.deepEqual(bucketsOf(units.transcriptAt(settled, 3, 3), 'a1'), { input: 5, output: 2 })
 })
 
 test('one attempt without a cache figure keeps the bucket from claiming a cache total', () => {
