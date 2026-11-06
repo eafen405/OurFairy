@@ -435,6 +435,7 @@
 | [review-24-26](review-24-26/README.md) · [review-24-26-backend](review-24-26-backend/evidence.md) | #24–#26 阶段评审 |
 | [review-arch-map69](review-arch-map69/README.md) · [review-arch-map69-fixes](review-arch-map69-fixes/README.md) | 地图 #69 最终两轴 code-review（四份逐字报告）与逐条评审项的修复/记录不修 |
 | [fixes-290-291-292](fixes-290-291-292/README.md) | #290/#291/#292 小修批次：三票 octopus 合入 `e59587b62b`；#291 选本地 slot 版并关闭重复 PR #294；合并提交走全量门禁（474 npm tests、628 Android tests、combo verified） |
+| [315-325-merge-review](315-325-merge-review/README.md) | #315/#325 合入审查：Team 两轴互证、用户确认模型效果不作硬阻塞、最新 main 与 dsh 组合的工程门禁 |
 | [retro-guardrails](retro-guardrails/README.md) | 复盘修复验证 |
 
 ## 阅读顺序
