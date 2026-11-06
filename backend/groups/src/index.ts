@@ -77,13 +77,13 @@ export function apply(ctx: Context) {
       agent.ctx.tools.register(defineTool({ name, output, ...definition }))
       names.add(name)
     }
-    add('groups', { description: 'List your current shared file groups, members and root directories. Groups are file spaces, not group chats.', parameters: {},
+    add('groups', { description: '列出当前用户所属共享文件群组、成员和根目录；群组只共享文件空间。', parameters: {},
       // The native tool contract is asynchronous; the registry awaits what the
       // builder returns, so the value this tool resolves to is the same one the
       // synchronous body produced.
       execute: async (_args, exec) => ({ groups: groups.forMember(userOf(exec.agent).shortId).map(expose) }) })
     if (user.shortId === 1 && user.isAdmin) add('group_create', {
-      description: 'Create a shared file group and designate an existing owner by short number. Only the designated owner is joined automatically.',
+      description: '创建共享文件群组，以现有用户短号指定群主；仅群主自动入群。',
       parameters: { name: { type: 'string', required: true }, ownerShortId: { type: 'integer', required: true } },
       execute: async (args, exec) => {
         const group = groups.create(userOf(exec.agent).shortId, args)
@@ -92,7 +92,7 @@ export function apply(ctx: Context) {
       },
     })
     if (groups.owns(user.shortId)) add('group_members', {
-      description: 'Add (action 1) or remove (action 2) a user from a group you currently own. The designated owner must remain a member.',
+      description: '管理当前用户任群主的群组：action=1 加入成员，action=2 移除成员；群主必须留在群内。',
       parameters: { groupId: { type: 'integer', required: true }, userShortId: { type: 'integer', required: true }, action: { type: 'integer', required: true, enum: [1, 2] } },
       execute: async (args, exec) => expose(groups.changeMember(userOf(exec.agent).shortId, args)),
     })

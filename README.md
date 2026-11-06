@@ -130,6 +130,16 @@ npm run acceptance:memory -- --only supersede,maintenance-skip
 不伪造 15 轮噪声。stdout 是完整 JSON 报告，`--plan` 只列出案例；未执行的案例不会算作通过。
 证据与逐条结果见 [`work/implementation/evidence/248-memory-integration-acceptance/`](work/implementation/evidence/248-memory-integration-acceptance/README.md)。
 
+```sh
+npm run acceptance:persona -- --plan
+npm run acceptance:persona -- --samples 3 --out /tmp/persona.json
+```
+
+`acceptance:persona` 经真实产品启动器和聊天入口采样，包含当前工具、运行时事实与印象。
+模型路由来自运行中网关，报告保留回复、工具结果、用量和装配清单；注入场景检查被攻击的
+首轮。自动检查通过的样本标为 `review-required`，仍需逐条复核人格、称呼及来源声称；
+失败和未执行不会记为通过。它需要真实模型凭据，不属于 `npm test` 或 CI。
+
 ## 跑后端
 
 ```sh

@@ -6,6 +6,8 @@
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { before, after, test } from 'node:test'
 import { describeRun, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort, toolResultBlocks, writeOverlay } from './helpers/backend.mjs'
 import { answerIfTitle } from './helpers/title-aware.mjs'
@@ -259,7 +261,11 @@ test('two sessions stay independent and real job settlement never publishes an i
   const first = (await request('/sessions/create', alice.token)).session.id
   // The job's user message makes the first session non-empty, so the second
   // create is a genuinely different session rather than the reusable empty one.
-  await startJob(alice, first, 'sleep .8; printf done')
+  // Hold the real job until the second session has finished. A fixed 800 ms
+  // sleep made the test depend on machine load rather than session isolation.
+  const releasePath = join(home, 'dsh-home', 'spaces', 'private', String(alice.user.shortId), 'independent-release')
+  const release = () => writeFileSync(releasePath, 'ready')
+  await startJob(alice, first, 'while [ ! -f independent-release ]; do sleep .02; done; printf done')
   const second = (await request('/sessions/create', alice.token)).session.id
   assert.notEqual(second, first, 'a session with content is not reused as the second session')
   const observation = await activityObserver(alice, first)
@@ -271,6 +277,7 @@ test('two sessions stay independent and real job settlement never publishes an i
     assert.equal(quietSecond.activity.status, 1)
     assert.notEqual(quietSecond.activity.episodeId, episodeId)
     assert.equal((await projection(alice, first)).activity.status, 2)
+    release()
     await until(() => projection(alice, first), p => p.tasks[0].report.status === 3 && p.activity.status === 1, 'first session finished')
     await until(async () => observation.frames, frames => frames.at(-1)?.activity.status === 1, 'final activity frame')
     const states = observation.frames.map(p => p.activity)
@@ -283,7 +290,7 @@ test('two sessions stay independent and real job settlement never publishes an i
       const { writeFileSync } = await import('node:fs')
       writeFileSync(process.env.T14_WIRE_SAMPLE, JSON.stringify(states.at(-1), null, 2) + '\n')
     }
-  } finally { await observation.close() }
+  } finally { release(); await observation.close() }
 })
 
 test('an awaited result and a failed report both settle without holding terminal tasks active', async () => {

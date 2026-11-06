@@ -24,6 +24,7 @@
     "backend:status": "node scripts/ourfairy-backend.ts status",
     "backend:doctor": "node scripts/ourfairy-backend.ts doctor",
     "acceptance:real": "node scripts/real-acceptance.ts",
+    "acceptance:persona": "node scripts/persona-acceptance.ts",
     "acceptance:memory": "node scripts/memory-acceptance.ts",
     "acceptance:skill": "node scripts/skill-acceptance.ts",
     "hooks:install": "git config core.hooksPath .githooks"

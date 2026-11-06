@@ -6,8 +6,8 @@ import { ChatRuntimeFacade } from './runtime-facade.js'
 import { installJobs } from './jobs.js'
 import { registerProjectionUnits } from './units.js'
 import { installSpillRead } from './spill-read.js'
-import { installPromptGuard } from './prompt-guard.js'
-import { installPromptVoice } from './prompt-voice.js'
+import { installSessionFacts } from './session-facts.js'
+import { installPromptAssembly } from './prompt-assembly.js'
 import { respondToChatObserver } from './observe.js'
 import { SESSION_RENAME_PATH, SessionScopeError } from '@ourfairy/dsh-sessions'
 import type { Context } from '@deepseek-ai/cordis'
@@ -62,16 +62,11 @@ export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions'
   'agentLoop',
   'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'llm', 'sessionPersistence', 'jobs', 'sessionProjections']
 export function apply(ctx: Context): void {
-  // dsh's tool sections speak English in the same system prompt the Fairy
-  // speaks through; restate them once here so every agent — including the
-  // maintenance and skill-learning children built outside this row — reads the
-  // deployment's voice (#302). The guard runs after it so the guard sees the
-  // rewritten text, and a foreign section still fails assembly.
-  installPromptVoice(ctx)
-  installPromptGuard(ctx)
+  installPromptAssembly(ctx)
   // Every registered unit folds on the native event drive, once per session and
   // shared by every observer; `register` installs its own effect on this fiber.
   registerProjectionUnits(ctx)
+  installSessionFacts(ctx)
   const runtime = new SessionRuntime(ctx)
   new ChatRuntimeFacade(ctx, runtime)
   const chat = new RemoteChat(ctx, runtime)

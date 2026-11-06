@@ -2,7 +2,7 @@
  * Per-user impressions through the login credential (ticket #245).
  *
  * The backend boots the real v1 profile and Loader against an external model
- * double. The two user-facing endpoints and the Fairy's own `impression_*`
+ * double. The read-only user endpoint and the Fairy's own `impression_*`
  * tools are driven exactly as the client and the model do; where the contract
  * is about the stored row rather than the interface, the memory SQLite file is
  * read directly.
@@ -146,11 +146,11 @@ function storedImpression(shortId) {
   }
 }
 
-/** Set one user's impression through the user endpoint after a successful read. */
+/** Set an impression through the only writer: the owner's Fairy tools. */
 async function setImpression(identity, content) {
-  await request('/impression/read', identity.token)
-  const saved = await request('/impression/edit', identity.token, { content })
-  assert.deepEqual(saved, { ok: true })
+  const session = await newSession(identity)
+  valueOf(await tool(identity, session, 'impression_read', {}))
+  assert.deepEqual(valueOf(await tool(identity, session, 'impression_edit', { content })), { ok: true })
 }
 
 before(async () => {
@@ -165,7 +165,7 @@ before(async () => {
     const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
     modelRequests.push(body)
     const blocks = body.messages.flatMap(message => Array.isArray(message.content) ? message.content : [{ type: 'text', text: message.content }])
-    const commandIndex = blocks.findLastIndex(block => block.type === 'text' && typeof block.text === 'string' && block.text.startsWith('{"name":'))
+    const commandIndex = !latestUserText(body).startsWith('{"name":') ? -1 : blocks.findLastIndex(block => block.type === 'text' && typeof block.text === 'string' && block.text.startsWith('{"name":'))
     const command = blocks[commandIndex]
     const result = commandIndex < 0 ? undefined : blocks.slice(commandIndex + 1).findLast(block => block.type === 'tool_result')
     response.writeHead(200, { 'content-type': 'text/event-stream' })
@@ -205,61 +205,40 @@ after(async () => {
   removeHome(home)
 })
 
-test('each user reads and edits only their own impression, and must read before editing', async () => {
-  const blocked = await request('/impression/edit', alice.token, { content: 'ALICE-FIRST' }, 409)
-  assert.equal(blocked.error.code, 'impression/not-read', 'a write without a successful read is refused')
-
-  const empty = await request('/impression/read', alice.token)
-  assert.deepEqual(empty.impression, { content: '', updatedAt: null, maxCharacters: 8000 })
-  assert.deepEqual(await request('/impression/edit', alice.token, { content: 'ALICE-IMPRESSION' }), { ok: true })
-  const read = await request('/impression/read', alice.token)
-  assert.equal(read.impression.content, 'ALICE-IMPRESSION')
-  assert.equal(typeof read.impression.updatedAt, 'number')
-
-  // Bob's credential never reaches Alice's row, even when the body names her.
-  assert.equal((await request('/impression/read', bob.token)).impression.content, '')
-  await request('/impression/read', bob.token)
-  await request('/impression/edit', bob.token, { content: 'BOB-IMPRESSION', shortId: alice.user.shortId })
-  assert.equal((await request('/impression/read', alice.token)).impression.content, 'ALICE-IMPRESSION',
-    'another user cannot overwrite this impression')
-  assert.equal((await request('/impression/read', bob.token)).impression.content, 'BOB-IMPRESSION',
-    'the short number in the body is not a selector')
-
-  // The administrator is an ordinary impression owner here, never a reader of
-  // someone else's row, with or without a foreign short number in the body.
-  const adminRead = await request('/impression/read', admin.token, { shortId: alice.user.shortId })
-  assert.equal(adminRead.impression.content, '', 'the administrator reads only their own impression')
-  await request('/impression/edit', admin.token, { content: 'ADMIN-IMPRESSION', shortId: alice.user.shortId })
-  assert.equal((await request('/impression/read', alice.token)).impression.content, 'ALICE-IMPRESSION',
-    'the administrator cannot write another user\'s impression')
-
-  // The gate follows the login credential: a second live credential of the same
-  // user must read for itself before it may write.
-  const second = await request('/identity/sign-in', undefined, { name: 'impression-alice', password })
-  const refused = await request('/impression/edit', second.token, { content: 'ALICE-FROM-SECOND' }, 409)
-  assert.equal(refused.error.code, 'impression/not-read')
-  await request('/impression/read', second.token)
-  await request('/impression/edit', second.token, { content: 'ALICE-FROM-SECOND' })
-  assert.equal((await request('/impression/read', alice.token)).impression.content, 'ALICE-FROM-SECOND')
+test('the user route is read-only for every credential, including the administrator', async () => {
+  assert.deepEqual((await request('/impression/read', alice.token)).impression,
+    { content: '', updatedAt: null, maxCharacters: 8000 })
+  await setImpression(alice, 'ALICE-IMPRESSION')
+  await setImpression(bob, 'BOB-IMPRESSION')
+  for (const identity of [alice, bob, admin]) {
+    const response = await fetch(`http://127.0.0.1:${port}/impression/edit`, {
+      method: 'POST', headers: { authorization: `Bearer ${identity.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'FORBIDDEN', shortId: alice.user.shortId }),
+    })
+    assert.equal(response.status, 404, 'there is no HTTP write route')
+  }
+  assert.equal((await request('/impression/read', bob.token, { shortId: alice.user.shortId })).impression.content, 'BOB-IMPRESSION')
+  assert.equal((await request('/impression/read', admin.token, { shortId: alice.user.shortId })).impression.content, '')
+  assert.equal((await request('/impression/read', alice.token)).impression.content, 'ALICE-IMPRESSION')
 })
 
-test('an over-length impression is refused loudly and never truncated', async () => {
-  const carol = await user('impression-carol')
-  await request('/impression/read', carol.token)
-  const tooLong = '海'.repeat(8001)
-  const refused = await request('/impression/edit', carol.token, { content: tooLong }, 400)
-  assert.equal(refused.error.code, 'impression/too-long')
-  assert.match(refused.error.message, /8001/)
-  assert.match(refused.error.message, /8000/)
-  assert.equal((await request('/impression/read', carol.token)).impression.content, '',
-    'a refused over-length write changes nothing')
+test('page reads and automatic prompt injection never authorize Fairy edits', async () => {
+  const session = await newSession(alice)
+  await request('/impression/read', alice.token)
+  await note(alice, session, 'read-only-page-does-not-authorize')
+  assert.match(errorOf(await tool(alice, session, 'impression_edit', { content: 'FORBIDDEN' })), /impression\/not-read/)
+  assert.equal(storedImpression(alice.user.shortId).content, 'ALICE-IMPRESSION')
+})
 
-  // The limit counts Unicode characters, not UTF-16 code units: 8000 emoji fit.
+test('the Fairy refuses over-length impressions and counts Unicode code points', async () => {
+  const carol = await user('impression-carol')
+  const session = await newSession(carol)
+  valueOf(await tool(carol, session, 'impression_read', {}))
+  assert.match(errorOf(await tool(carol, session, 'impression_edit', { content: '海'.repeat(8001) })), /impression\/too-long/)
+  assert.equal((await request('/impression/read', carol.token)).impression.content, '')
   const exact = '😀'.repeat(8000)
-  await request('/impression/edit', carol.token, { content: exact })
-  const read = await request('/impression/read', carol.token)
-  assert.equal([...read.impression.content].length, 8000)
-  assert.equal(read.impression.content, exact, 'the accepted text is stored exactly, never clipped')
+  valueOf(await tool(carol, session, 'impression_edit', { content: exact }))
+  assert.equal((await request('/impression/read', carol.token)).impression.content, exact)
   assert.equal(storedImpression(carol.user.shortId).content, exact)
 })
 
@@ -368,4 +347,20 @@ test('the impression persists with its old timestamps and never expires', async 
   const read = await request('/impression/read', alice.token)
   assert.equal(read.impression.content, 'ALICE-FAIRY-EDITED', 'an old impression is still the current impression')
   assert.equal(read.impression.updatedAt, 1)
+})
+
+
+test('session facts are real tool results and leave the cacheable system prefix stable', async () => {
+  const session = await newSession(alice)
+  const first = valueOf(await tool(alice, session, 'session_facts', {}, 'facts-first'))
+  const firstSystem = systemOf(requestWith('facts-first'))
+  assert.equal(first.sessionId, session)
+  assert.deepEqual(first.reportedTokens, { uncachedInputTokens: 3, outputTokens: 3, cacheReadTokens: 0, cacheWriteTokens: 0 })
+  assert.deepEqual(first.tasks, { total: 0, running: 0 })
+  const second = valueOf(await tool(alice, session, 'session_facts', {}, 'facts-second'))
+  assert.deepEqual(second.reportedTokens, { uncachedInputTokens: 9, outputTokens: 9, cacheReadTokens: 0, cacheWriteTokens: 0 })
+  assert.ok(second.throughSeq > first.throughSeq)
+  assert.equal(systemOf(requestWith('facts-second')), firstSystem, 'usage changes do not rewrite the system prompt')
+  assert.doesNotMatch(firstSystem, /reportedTokens/)
+  assert.equal('cost' in second, false, 'reported tokens are not a monetary estimate')
 })

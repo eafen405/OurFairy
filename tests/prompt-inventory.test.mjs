@@ -18,7 +18,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import { once } from 'node:events'
 import { join } from 'node:path'
-import { after, before, test } from 'node:test'
+import { test } from 'node:test'
 import {
   describeRun, makeHome, removeHome, runBackendAsync, startArgs, startedPort, writeOverlay,
 } from './helpers/backend.mjs'
@@ -41,19 +41,18 @@ const COMPLETE_FIXTURE = new URL('../backend/chat/test-support/complete-section.
  */
 const DEPLOYMENT_SECTIONS = [
   'deployment:persona-prefix',
-  'ourfairy:persona',
-  'ourfairy:identity',
-  'ourfairy:impression',
-  'ourfairy:skill-trust',
   'tool:bash',
   'tool:read',
   'tool:write',
   'tool:edit',
   'tool:jobs',
   'deployment:persona-suffix',
+  'ourfairy:skill-trust',
+  'ourfairy:impression',
+  'ourfairy:persona',
+  'ourfairy:identity',
 ]
 
-let model, modelPort
 let requestNo = 0
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -155,7 +154,7 @@ async function assembleOnePrompt(extraRows = []) {
     return {
       inventory: existsSync(inventoryPath) ? JSON.parse(readFileSync(inventoryPath, 'utf8')) : undefined,
       requests,
-      request: requests[0],
+      request: requests.at(-1),
       projectionError,
     }
   } finally {
@@ -164,16 +163,6 @@ async function assembleOnePrompt(extraRows = []) {
     removeHome(home)
   }
 }
-
-before(async () => {
-  // The double is per-boot inside `assembleOnePrompt`; nothing to start here.
-  model = undefined
-  modelPort = undefined
-})
-
-after(async () => {
-  /* Every double is closed by the boot that started it. */
-})
 
 test('one owner turn lists every deployment prompt section with its size', async () => {
   const { inventory, request } = await assembleOnePrompt()
@@ -186,8 +175,8 @@ test('one owner turn lists every deployment prompt section with its size', async
   assert.ok(names.includes('tool:bash'), 'the bash usage section survives assembly')
   assert.ok(names.includes('tool:jobs'), 'the jobs usage section survives assembly')
 
-  // The deployment prompt is exactly the product sections, then the dsh
-  // tool-usage lines. Order is part of the voice: the persona opens the prompt.
+  // The deployment prompt is the dsh tool guidance and plugin material,
+  // then the product voice and authenticated identity. Order is part of the voice: the persona and current identity close the prompt.
   //
   // This list is deliberately a second, independent source rather than derived
   // from the product's registration sites: its job is to be the witness that
@@ -202,7 +191,7 @@ test('one owner turn lists every deployment prompt section with its size', async
     'the removed memory-policy section does not come back as a second authority')
   const addTool = (request.tools ?? []).find(tool => tool.name === 'memory_add')
   assert.ok(addTool !== undefined, 'memory_add is declared in the same request')
-  assert.match(addTool.description, /session summaries/, 'memory_add carries the write rule instead')
+  assert.match(addTool.description, /会话摘要/, 'memory_add carries the write rule instead')
 
   // Sizes are recorded so a future change to the prompt's balance is visible.
   // Three sections are legitimately empty in this turn: the two dsh persona
@@ -226,8 +215,12 @@ test('one owner turn lists every deployment prompt section with its size', async
   // than at one frozen length: a pinned number would fail every time the text is
   // legitimately revised, which is what this assertion used to do (#302).
   const persona = inventory.sections.find(section => section.name === 'ourfairy:persona')
-  assert.equal(persona.characters, [...FAIRY_PERSONA].length,
+  assert.equal(persona.text, FAIRY_PERSONA,
     'the assembled persona section is exactly the deployment constant')
+
+  assert.ok(inventory.tools.includes('session_facts'))
+  assert.doesNotMatch(systemOf(request), /reportedTokens/, 'volatile facts do not invalidate the system prefix')
+  console.log(JSON.stringify({ sections: inventory.sections.map(({ text, ...section }) => section), contexts: inventory.contexts.map(({ text, ...context }) => context), tools: inventory.tools }, null, 2))
 
   // The joined total is what the model actually reads; it must match the wire.
   assert.equal(inventory.joinedCharacters, [...systemOf(request)].length,
