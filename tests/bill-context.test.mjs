@@ -426,10 +426,13 @@ test('the bill tool answers the monthly and historical question with the bill pa
     const daySteps = Math.round(value.today.denny / value.contextReadingGranularityDenny)
     assert.ok(reading.includes(daySteps === 0 ? '不足 1 万丁尼' : `本日累计约 ${daySteps} 万丁尼`),
       `the reading must be this snapshot's own bucket; reading=${reading} today=${JSON.stringify(value.today)}`)
-    // A real turn's settled total and the bill's own all-time fold must agree
-    // about that turn: the reading is the series' arithmetic, not a second one.
-    assert.ok(value.allTime.tokens.inputTokens >= 300 * 2,
-      `both turns' input is counted; got ${JSON.stringify(value.allTime)}`)
+    // The tool reads the same fold the context reading does, so it prices only
+    // *completed* turns: the turn this tool call belongs to is still open, and
+    // its settled step-1 attempt is deliberately not billed yet. Turn 1 is, at
+    // the double's 300 input / 5 output per request.
+    assert.deepEqual(value.allTime.tokens,
+      { inputTokens: 300, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 5 },
+      `all time counts the one completed turn and not the open one; got ${JSON.stringify(value.allTime)}`)
   } finally {
     await stop(home)
   }
