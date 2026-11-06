@@ -71,8 +71,9 @@ class FairyBillPageTest {
         },
     )
 
-    /** The narrative rate the backend states: 1 Denny = 3000 tokens, reported to a tenth. */
-    private fun dennyOf(tokens: Long): Double = Math.round(tokens / 3000.0 * 10) / 10.0
+    /** The Denny the backend sends for each token figure this file uses, fixed by hand. */
+    private fun dennyOf(tokens: Long): Double = DENNY_BY_TOKENS[tokens.toInt()]
+        ?: error("no fixture Denny for $tokens tokens")
 
     /** A gate a test holds closed to observe the page while its read is in flight. */
     private var gate: CompletableDeferred<Unit>? = null
@@ -266,3 +267,9 @@ class FairyBillPageTest {
         compose.onNodeWithContentDescription("最近 30 天走势，共 0 根柱子", useUnmergedTree = true).assertExists()
     }
 }
+
+/** The Denny the backend sends for each token figure this file uses, fixed by hand. */
+private val DENNY_BY_TOKENS: Map<Int, Double> = mapOf(
+    0 to 0.0, 750 to 0.3, 900 to 0.3, 1_200 to 0.4, 1_500 to 0.5,
+    2_000 to 0.7, 3_000 to 1.0, 60_000 to 20.0, 600_000 to 200.0,
+)

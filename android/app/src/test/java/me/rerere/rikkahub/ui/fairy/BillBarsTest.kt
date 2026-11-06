@@ -17,10 +17,18 @@ import org.junit.Test
  */
 class BillBarsTest {
 
+    /**
+     * One wire day.
+     *
+     * The chart's only input is the token buckets: bar heights are relative to the
+     * series' own peak, so the Denny figure — a displayed total — plays no part in
+     * the layout and the fixtures state zero for it rather than re-deriving a rate
+     * the client must never apply.
+     */
     private fun day(day: String, tokens: Long) = BillDay(
         day = day,
         tokens = BillTokens(inputTokens = tokens),
-        denny = tokens / 3000.0,
+        denny = 0.0,
     )
 
     @Test

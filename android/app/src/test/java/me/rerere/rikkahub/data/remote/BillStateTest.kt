@@ -31,14 +31,14 @@ private class ScriptedBill(
     companion object {
         /** A bill whose whole spend is [today] tokens, with a matching 30-day series. */
         fun bill(today: Long, allTime: Long = today, days: Int = 30): Bill = Bill(
-            today = BillTotal(BillTokens(inputTokens = today), denny = today / 3000.0),
-            month = BillTotal(BillTokens(inputTokens = allTime), denny = allTime / 3000.0),
-            allTime = BillTotal(BillTokens(inputTokens = allTime), denny = allTime / 3000.0),
+            today = BillTotal(BillTokens(inputTokens = today), denny = dennyFixture(today)),
+            month = BillTotal(BillTokens(inputTokens = allTime), denny = dennyFixture(allTime)),
+            allTime = BillTotal(BillTokens(inputTokens = allTime), denny = dennyFixture(allTime)),
             days = (0 until days).map { index ->
                 BillDay(
                     day = "2026-10-${(index + 1).toString().padStart(2, '0')}",
                     tokens = BillTokens(inputTokens = if (index == days - 1) today else 0),
-                    denny = if (index == days - 1) today / 3000.0 else 0.0,
+                    denny = if (index == days - 1) dennyFixture(today) else 0.0,
                 )
             },
         )
@@ -143,3 +143,28 @@ class BillStateTest {
         assertEquals(2, backend.reads)
     }
 }
+
+/**
+ * The Denny the backend sends for each token figure the tests in this package use.
+ *
+ * A literal table, deliberately: the wire carries both units, the client decodes
+ * both, and it must never derive one from the other. A test that divided by the
+ * rate would be exercising a conversion the product does not have, and would put
+ * a second copy of the rate in the repository — which `tests/bill-denny.test.mjs`
+ * refuses.
+ */
+internal fun dennyFixture(tokens: Long): Double = DENNY_BY_TOKENS[tokens]
+    ?: error("no fixture Denny for $tokens tokens")
+
+internal val DENNY_BY_TOKENS: Map<Long, Double> = mapOf(
+    0L to 0.0,
+    750L to 0.3,
+    900L to 0.3,
+    1_200L to 0.4,
+    1_500L to 0.5,
+    2_000L to 0.7,
+    3_000L to 1.0,
+    6_000L to 2.0,
+    60_000L to 20.0,
+    600_000L to 200.0,
+)

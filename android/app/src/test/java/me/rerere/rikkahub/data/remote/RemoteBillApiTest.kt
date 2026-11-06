@@ -58,7 +58,13 @@ class RemoteBillApiTest {
         server.stop(0)
     }
 
-    /** One day on the wire, in both units, with a hand-checked Denny at the narrative rate. */
+    /** The wire's own Denny for each token figure this file uses, fixed by hand. */
+    private val DENNY_BY_TOKENS = mapOf(
+        0 to 0.0, 1_500 to 0.5, 2_000 to 0.7, 3_000 to 1.0,
+        60_000 to 20.0, 600_000 to 200.0,
+    )
+
+    /** One day on the wire, in both units, with the Denny the backend would send. */
     private fun day(index: Int, tokens: Int): String {
         val buckets = if (tokens == 0) {
             """{"inputTokens":0,"cacheReadTokens":0,"cacheWriteTokens":0,"outputTokens":0}"""
@@ -67,7 +73,10 @@ class RemoteBillApiTest {
             // not about how a provider split it.
             """{"inputTokens":$tokens,"cacheReadTokens":0,"cacheWriteTokens":0,"outputTokens":0}"""
         }
-        val denny = Math.round(tokens / 3000.0 * 10) / 10.0
+        // The Denny figure is a literal, like every other wire figure here: the
+        // client decodes it and must never derive it, so a test that derived it
+        // would be testing a conversion the product does not have.
+        val denny = DENNY_BY_TOKENS[tokens] ?: error("no fixture Denny for $tokens tokens")
         return """{"day":"2026-10-${(index + 1).toString().padStart(2, '0')}","tokens":$buckets,"denny":$denny}"""
     }
 
