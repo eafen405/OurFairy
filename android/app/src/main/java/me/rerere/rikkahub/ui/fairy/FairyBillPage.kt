@@ -296,24 +296,14 @@ private fun BillChartPanel(days: List<BillDay>) {
         chamfered = true,
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = "最近 30 天",
-                    fontFamily = tokens.functionFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = tokens.textPrimary,
-                )
-                Text(
-                    text = "每天一根柱子",
-                    fontFamily = tokens.telemetryFontFamily,
-                    fontSize = 10.sp,
-                    letterSpacing = 0.6.sp,
-                    color = tokens.textMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text(
+                text = "最近 30 天",
+                fontFamily = tokens.functionFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = tokens.textPrimary,
+                modifier = Modifier.weight(1f),
+            )
             Text(
                 text = "${bars.size} DAYS",
                 fontFamily = tokens.telemetryFontFamily,

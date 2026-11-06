@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -232,6 +233,19 @@ class ImpressionColdStartTest {
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class BillColdStartTest {
     @get:Rule val compose = createAndroidComposeRule<RouteActivity>()
+
+    /**
+     * Stop the container this class's application started.
+     *
+     * Koin's registry is process-wide and Robolectric runs every class of a module
+     * in one process. A class that boots the real [RikkaHubApp] — as
+     * `ClientStartupTest` does — cannot start its own container while this one is
+     * still up, so the seeded application's container is torn down here rather than
+     * left for whichever class runs next.
+     */
+    @After fun stopContainer() {
+        stopKoin()
+    }
 
     @Test
     fun `a stored bill location reopens the bill over the console`() {
