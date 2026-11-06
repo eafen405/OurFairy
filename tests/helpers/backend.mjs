@@ -159,6 +159,16 @@ export function copyProductRepo(prefix = 'ourfairy-repo-') {
       filter: source => !source.endsWith('.tsbuildinfo'),
     })
   }
+  // A copy is not a git checkout, so a relative recorded checkout would resolve
+  // beside the temporary directory instead of beside the real checkout. Record
+  // the absolute checkout the copy was made from: the copy is a fixture, and
+  // the launchers and compilers it spawns must read the same companion.
+  const manifest = join(root, 'combo.json')
+  const combo = JSON.parse(readFileSync(manifest, 'utf8'))
+  if (combo.repos?.dsh !== undefined) {
+    combo.repos.dsh.localPath = dshDir
+    writeFileSync(manifest, `${JSON.stringify(combo, null, 2)}\n`)
+  }
   const pnpmCache = join(repoRoot, '.corepack', 'v1', 'pnpm')
   if (existsSync(pnpmCache)) {
     mkdirSync(join(root, '.corepack', 'v1'), { recursive: true })

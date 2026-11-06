@@ -23,10 +23,9 @@ import { test } from 'node:test'
 // Registers Node resolution for the pinned dsh checkout before any product
 // module below is loaded; it must stay the first import of this file.
 import './helpers/dsh-peers.mjs'
-import { repoRoot } from './helpers/backend.mjs'
+import { dshDir } from './helpers/backend.mjs'
 
-const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const dshRoot = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
+const dshRoot = dshDir
 const { installJobs, STOP_OUTCOME } = await import('../backend/chat/dist/jobs.js')
 
 /** The string-literal members of the pinned dsh `JobRegistry.kill` return type. */

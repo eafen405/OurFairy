@@ -37,11 +37,16 @@ export const PROFILE_IMPORT_METHOD = 'copy'
  * repository that holds combo.json itself, whose lock is the integration
  * branch. The remaining fields are read where they are used, so an entry that
  * does not carry them is not refused here.
+ *
+ * `localPath` is the default checkout location hint: absolute, or relative to
+ * the primary checkout (the main checkout when read from a ticket worktree).
+ * It is absent for the repository that holds combo.json, which resolves to the
+ * checkout being read.
  */
 export interface ComboRepo {
   readonly role: string
   readonly lock?: string
-  readonly localPath: string
+  readonly localPath?: string
   readonly integrationBranch: string
   readonly productCommit?: string
   readonly remoteName?: string

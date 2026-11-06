@@ -781,7 +781,9 @@ function commandDoctor(layout: Layout, options: LauncherOptions, combination: Co
   check('combo combination', () => {
     const result = verifyCombination({ allowDrift: options.allowDrift })
     must(result.failures.length === 0, result.failures.join('; '))
-    return result.rows.map(row => `${row.key}@${String(row.actual).slice(0, 12)}`).join(', ')
+    return result.rows.map(row => row.skipped === undefined
+      ? `${row.key}@${String(row.actual).slice(0, 12)}`
+      : `${row.key}@skipped`).join(', ')
   })
   check('dsh CLI build', () => {
     const dsh = resolveDsh(options, combination)

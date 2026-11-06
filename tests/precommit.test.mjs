@@ -373,8 +373,29 @@ test('CI runs the full gate on push and manual dispatch through the shared test 
   assert.match(workflow, /^ {2}workflow_dispatch:/mu, 'the gate must stay manually runnable')
   assert.match(workflow, /- 'integration\/\*\*'/u, 'an integration push must run the gate')
   assert.match(workflow, /^\s+npm test$/mu, 'CI uses the entry that builds and tests under one lock')
-  assert.ok(workflow.indexOf('npm run build') >= 0 && workflow.indexOf('npm run build') < workflow.indexOf('npm test'),
-    'the existing CI build remains before the shared test entry')
+  assert.doesNotMatch(
+    workflow,
+    /run: npm run build/u,
+    'the shared test entry already builds once',
+  )
+})
+
+test('CI checks out the dsh branch combo.json records, not a literal', () => {
+  // The combination moved the dsh product line onto the fork's main branch
+  // (master). A literal `--branch` in the workflow drifts from combo.json the
+  // moment the line moves, and the failure is a red gate rather than a fix.
+  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'check.yml'), 'utf8')
+  const start = workflow.indexOf('Check out the locked dsh combination')
+  const end = workflow.indexOf('Build the locked dsh combination')
+  assert.ok(start >= 0 && end > start, 'CI must keep a step that checks out the locked dsh combination')
+  const step = workflow.slice(start, end)
+  assert.match(
+    step,
+    /branch=\$\(node -p "require\('\.\/combo\.json'\)\.repos\.dsh\.integrationBranch"\)/u,
+    'the clone branch must be read from combo.json',
+  )
+  assert.match(step, /git clone --quiet --branch "\$branch"/u, 'the clone must use the recorded branch')
+  assert.doesNotMatch(step, /--branch product\//u, 'a literal branch name drifts when the dsh product line moves')
 })
 
 test('CI runs Android checks in an independent job with the project JDK and Gradle wrapper', () => {
