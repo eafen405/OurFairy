@@ -394,11 +394,12 @@
 | --- | --- |
 | [225-page-read](225-page-read/README.md) · [225-task-lookup](225-task-lookup/README.md) · [225-closeout](225-closeout/README.md) | #225 T1/T2/T3：页读取收进 runtime.page，任务访问收进 work 单元窄查找并返回原生 JobId；收口修复两轴 Standards 发现，在最终 tip 跑全量门禁 |
 
-## 上下文工程与印象只读（#302 / #249）
+## 上下文工程与印象只读（#302 / #249 / #311）
 
 | 目录 | 内容 |
 | --- | --- |
 | [302-249-integration](302-249-integration/README.md) | 整合主线与遗留分支：统一原生装配、按需会话事实工具与稳定 system 前缀、HTTP/Android 印象只读；包含两轴审查、真实模型成功与失败证据。语义未通过部分明确保留，不以替身门禁代替验收。 |
+| [311-impression-channel](311-impression-channel/README.md) | #311 印象从 system 段迁到原生运行时上下文，dsh `compaction-basic` 不再压缩未回答的本轮提问（含反向对照）；真实 9 个独立样本通道 9/9 通过，模型层对改名仍 0/3 通过，失败原文保留。 |
 
 ## 界面微调（#215/#217/#218/#239/#255/#290/#291/#292）
 

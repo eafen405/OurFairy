@@ -4,8 +4,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-agent'
 
-/** Materials and tool guidance precede the voice; the authenticated identity closes it. */
-const PRODUCT_ORDER = ['ourfairy:skill-trust', 'ourfairy:impression', 'ourfairy:persona', 'ourfairy:identity']
+/**
+ * Materials and tool guidance precede the voice; the authenticated identity
+ * closes it. The impression is not here: it is user material carried by the
+ * runtime-context channel, so it never enters the stable prompt at all.
+ */
+const PRODUCT_ORDER = ['ourfairy:skill-trust', 'ourfairy:persona', 'ourfairy:identity']
 
 /** Only cross-call rules belong here; argument contracts stay on each tool. */
 const TOOL_GUIDANCE = new Map([

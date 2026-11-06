@@ -48,7 +48,6 @@ const DEPLOYMENT_SECTIONS = [
   'tool:jobs',
   'deployment:persona-suffix',
   'ourfairy:skill-trust',
-  'ourfairy:impression',
   'ourfairy:persona',
   'ourfairy:identity',
 ]
@@ -194,13 +193,16 @@ test('one owner turn lists every deployment prompt section with its size', async
   assert.match(addTool.description, /会话摘要/, 'memory_add carries the write rule instead')
 
   // Sizes are recorded so a future change to the prompt's balance is visible.
-  // Three sections are legitimately empty in this turn: the two dsh persona
-  // slots are unconfigured, and the impression has no content until the owner
-  // asks to write one. Everything else must carry text.
+  // Two sections are legitimately empty in this turn: the two dsh persona slots
+  // are unconfigured. Everything else must carry text.
+  //
+  // The impression is not in this list at all (#311): it is user material, and
+  // it travels in the runtime-context channel, so a body change cannot rewrite
+  // the stable prompt. Its absence here is the assertion that the placement
+  // did not silently drift back into the system prompt.
   const EMPTY_IS_EXPECTED = [
     'deployment:persona-prefix',
     'deployment:persona-suffix',
-    'ourfairy:impression',
   ]
   for (const section of inventory.sections) {
     if (EMPTY_IS_EXPECTED.includes(section.name)) {
@@ -209,6 +211,14 @@ test('one owner turn lists every deployment prompt section with its size', async
       assert.ok(section.characters > 0, `${section.name} contributes text`)
     }
   }
+  assert.equal(names.includes('ourfairy:impression'), false,
+    'the impression is carried by the runtime-context channel, not the system prompt')
+  // An empty body contributes no rendered entry, so this fresh-owner turn shows
+  // only the always-present contexts. The positive half of the channel claim is
+  // asserted where a body exists: `tests/memory-impression.test.mjs`.
+  assert.deepEqual(inventory.contexts.map(context => context.name).sort(),
+    ['ourfairy:spaces', 'sandbox:policy', 'working-directory:current'],
+    'a fresh owner turn carries the always-present runtime context and nothing from the impression')
   // The persona section must be the deployment's own constant, whatever its
   // current text is. Deriving the expected size from `FAIRY_PERSONA` keeps this
   // check aimed at "the persona that shipped is the persona assembled" rather
