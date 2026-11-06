@@ -43,7 +43,7 @@ export type {
 } from './aggregate.js'
 export { addBuckets, foldDailyTokens, localDay, TIME_ZONE, zeroBuckets } from './fold.js'
 export type { DailyTokens, TokenBuckets, TurnSpan } from './fold.js'
-export { dennyOf, dennyOfTokens, TOKENS_PER_DENNY } from './denny.js'
+export { dennyOf, dennyOfTokens, TOKENS_PER_DENNY, tokensOf } from './denny.js'
 export { BILL_PATHS, BillError, billHandlers, billView, SURFACE } from './http.js'
 export type { BillDayView, BillHandler, BillTotalView, BillView } from './http.js'
 
