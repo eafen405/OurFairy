@@ -30,6 +30,7 @@ export const inject = ['sessions', 'sessionPersistence', 'sessionQuery']
 
 export { SERIES_DAYS } from './aggregate.js'
 export { DENNY_DAY_BUCKET, TOKENS_PER_DENNY, dennyOfBuckets, renderBillReading, UNAVAILABLE_READING } from './reading.js'
+export { previousInteraction } from './previous.js'
 export type { BillReading, DayReading, PreviousReading } from './reading.js'
 export type {
   BillDay, BillService, BillSnapshot, BillSource, BillTotals, BillSessionHeader, BillSessionRevision,

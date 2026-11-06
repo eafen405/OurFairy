@@ -24,6 +24,10 @@
       "types": "./dist/reading.d.ts",
       "default": "./dist/reading.js"
     },
+    "./previous": {
+      "types": "./dist/previous.d.ts",
+      "default": "./dist/previous.js"
+    },
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
