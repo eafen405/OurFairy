@@ -10,6 +10,13 @@
  * belongs to the one rate module, and the context reading (#320) reads the same
  * service rather than re-deriving a number.
  *
+ * It contributes two things to the model, and both consume that one face:
+ *
+ * - the reading appended to a user session's runtime context (`context.ts`),
+ *   throttled and pinned so it costs at most one snapshot per turn; and
+ * - one read-only tool for the monthly and historical questions the throttled
+ *   context reading deliberately does not answer (`tools.ts`).
+ *
  * The row is in the bundle's `plugins` group. Stopping the segment still leaves
  * a backend that establishes sessions and runs model turns; only the bill
  * reading goes away with it.
@@ -18,26 +25,43 @@
  */
 import { Service } from '@deepseek-ai/cordis'
 import { mountRoutes } from '@ourfairy/dsh-http/http'
+import { isUserSession } from '@ourfairy/dsh-identity/session'
 import { createBillService, type BillService, type BillSnapshot } from './aggregate.js'
+import { installBillContext } from './context.js'
 import { billHandlers, SURFACE } from './http.js'
 import { sessionSource } from './source.js'
+import { registerBillTool } from './tools.js'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
 // The dsh seams this row reads: the live session store, the durable session
-// store that answers a log's revision, and the validating replay read; then the
-// carrier's route registry, the trust fence, and the identity service the one
-// address derives its caller from. The imports are type-only, so they add no
-// runtime dependency.
+// store that answers a log's revision, and the validating replay read; the agent
+// registry whose sessions receive the reading, the prompt registry it is written
+// to, the turn-boundary projection that locates a turn, and the per-agent tool
+// registry; then the carrier's route registry, the trust fence, and the identity
+// service the one address derives its caller from. The imports are type-only, so
+// they add no runtime dependency.
+import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
+import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-session-query'
+import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@ourfairy/dsh-identity'
 
 export const name = 'ourfairy-bill'
-export const inject = ['sessions', 'sessionPersistence', 'sessionQuery', 'webServer', 'connection', 'identity']
+export const inject = ['sessions', 'sessionPersistence', 'sessionQuery',
+  'agents', 'systemPrompt', 'sessionProjections', 'tools',
+  'webServer', 'connection', 'identity']
 
 export { SERIES_DAYS } from './aggregate.js'
+export { DENNY_DAY_BUCKET, dennyOfBuckets, renderBillReading, UNAVAILABLE_READING } from './reading.js'
+export { previousInteraction } from './previous.js'
+export { BILL_CONTEXT_NAME, BILL_CONTEXT_ORDER, installBillContext, isReadingAudience } from './context.js'
+export { BILL_TOOL_NAME, billToolValue, registerBillTool } from './tools.js'
+export type { BillReading, DayReading, PreviousReading } from './reading.js'
 export type {
   BillDay, BillService, BillSnapshot, BillSource, BillTotals, BillSessionHeader, BillSessionRevision,
 } from './aggregate.js'
@@ -80,13 +104,16 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /**
- * Mount the row.
+ * Mount the row: the service, the one address that serves it, and the two
+ * model-visible faces that consume it.
  *
  * The service is constructed here rather than in a child plugin, the way the
  * identity and sessions rows do it: `ctx.ourfairyBill` is then readable from
  * this same context, so the one address can serve the very instance the rest of
  * the product reads. A child plugin's service lives one fiber deeper and is not
- * reachable from a parent that does not inject it.
+ * reachable from a parent that does not inject it — which is also why the
+ * context reading and the tool take `bill` as an argument instead of reaching
+ * for the service through a child scope.
  * @param ctx - the owning plugin context.
  */
 export function apply(ctx: Context): void {
@@ -100,4 +127,18 @@ export function apply(ctx: Context): void {
       fence: request => ctx.connection.fence(request),
     }),
   })
+  installBillContext(ctx, bill)
+  // The tool is registered per agent, on the same audience the reading uses: a
+  // maintenance or learning child has no bill to read.
+  const registrations = new Map<Agent, Set<string>>()
+  const register = (agent: Agent): undefined => {
+    if (!isUserSession(agent.session.header)) return undefined
+    const names = registrations.get(agent) ?? new Set<string>()
+    registrations.set(agent, names)
+    registerBillTool(agent, bill, names)
+    return undefined
+  }
+  ctx.on('agent/created', ({ agent }) => register(agent), { global: true })
+  ctx.on('agent/disposed', ({ agent }) => { registrations.delete(agent) }, { global: true })
+  for (const agent of ctx.agents.list()) register(agent)
 }
