@@ -107,21 +107,30 @@ on every attempt inside a step. This deployment's turns have a median of 12
 steps and a p90 of 136, so a value that drifted per attempt would leave dozens of
 permanent messages in a single turn.
 
-So the reading is computed at two cheap moments (an agent's arrival, and each
-`turn/end`) and then **pinned once per turn** at the loop's pre-step boundary;
-the registered provider is synchronous and only formats the pin, never awaiting
-a read. A turn therefore appends at most one reading, by construction.
+The first `agent/pre-step` of each new turn awaits a fresh reading and pins it
+by the hook's turn number. This includes other sessions' settled spend while the
+agent was idle and uses the current `Asia/Shanghai` day after midnight. Later
+steps and attempts keep that reading, even if another session settles or the
+day changes during the turn. The registered text provider is synchronous and
+only returns the pin; it performs no I/O. Agent creation and `turn/end` do not
+compute a reading.
 
-What it reports, and why neither figure can drift inside a turn:
+`tests/bill-context.test.mjs` covers an idle session returning after another
+session spends, through captured requests from a real backend and a model
+double. `tests/bill-context-refresh.test.mjs` drives the public context installer
+with `createBillService`'s injectable clock to cover local midnight and a fixed
+reading across later steps.
+
+What it reports:
 
 - **上一次互动** — the last turn that *closed* before the open one, priced by
   this package's own fold (`src/previous.ts`), rounded to a whole Denny. dsh's
-  `turnBoundary` projection locates it: the Agent interface exposes no turn or
-  step, and that projection carries both the open turn's start seq and the
-  latest turn number.
+  `turnBoundary` projection supplies the open turn's start seq, which excludes
+  the current turn from the search for the previous completed interaction.
 - **本日累计** — today's deployment-wide total in 10 000-Denny steps
-  (`DENNY_DAY_BUCKET`). It is a running total, so it does move; a step about four
-  times a day costs about four snapshots a day.
+  (`DENNY_DAY_BUCKET`), sampled at the first pre-step and fixed for that turn.
+  A later page or tool request observes its own snapshot and can include spend
+  that settled after the context reading.
 
 Two absences are worded apart and **neither is ever written as `0`**: no
 completed interaction yet, and usage the provider never reported. The day total

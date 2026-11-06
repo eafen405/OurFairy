@@ -35,6 +35,7 @@ import { performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 import http from 'node:http'
 import { HISTORY_TURN_COUNTS, OBSERVER_COUNTS } from './bench-workload.ts'
+import { readCombo, repoPath } from './combo.ts'
 import type { Combo } from './ourfairy-composition.ts'
 
 /**
@@ -542,9 +543,11 @@ function sessionLogBytes(home: string, sessionId: string): number | null {
 }
 
 async function main(): Promise<void> {
-  // combo.json is the authority for the combination the benchmark runs on.
-  const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8')) as Combo
-  const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh!.localPath
+  // combo.json is the authority for the combination the benchmark runs on; the
+  // checkout comes from the same resolver the launcher uses, so a relative
+  // recorded path is not read as a path from this process's cwd.
+  const combo = readCombo(repoRoot).combo
+  const dshDir = repoPath(combo, 'dsh', repoRoot)
   const { startMockLlmServer } = await import(join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'lib', 'index.js'))
 
   const text = benchText(PARAMS.replyChars)

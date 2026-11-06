@@ -26,7 +26,7 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
@@ -45,7 +45,7 @@ export const repoRoot = resolve(scriptDir, '..')
  */
 export { readCombo }
 
-/** Environment override per repository key; the default is combo.json's localPath. */
+/** Environment override per repository key; the default is combo.json's localPath resolved by {@link repoPath}. */
 const PATH_OVERRIDES: Record<string, string> = {
   ourfairy: 'OURFAIRY_REPO_DIR',
   dsh: 'OURFAIRY_DSH_DIR',
@@ -68,6 +68,8 @@ export interface ComboRow {
   readonly actual: unknown
   readonly ok: boolean
   failure?: string
+  /** Why this row was not checked on this machine; a skip is not a failure. */
+  skipped?: string
   readonly integrationTip?: string
   readonly headIsTip?: boolean
 }
@@ -102,7 +104,40 @@ function isSelfEntry(entry: ComboRepo): boolean {
   return entry.lock === 'integration-branch'
 }
 
-/** Resolve one repo's checkout path, honoring the environment override. */
+/**
+ * The primary checkout that holds this repository's Git directory.
+ *
+ * A ticket worktree is a separate directory whose `.git` is a file naming the
+ * primary checkout's git directory (`<primary>/.git/worktrees/<name>`). A
+ * recorded relative path must read the same from every worktree, so it is
+ * anchored at the primary checkout — the directory a developer clones and the
+ * one a sibling companion checkout sits beside. A plain checkout holds a `.git`
+ * directory and is its own primary.
+ * @param root
+ * @returns
+ */
+function primaryCheckout(root: string): string {
+  let pointer: string
+  try {
+    pointer = readFileSync(join(root, '.git'), 'utf8')
+  } catch {
+    return root
+  }
+  const linked = /^gitdir:\s*(.+)$/mu.exec(pointer)
+  if (linked === null) return root
+  const worktrees = dirname(resolve(root, linked[1]!.trim()))
+  return basename(worktrees) === 'worktrees' && basename(dirname(worktrees)) === '.git'
+    ? dirname(dirname(worktrees))
+    : root
+}
+
+/**
+ * Resolve one repo's checkout path, honoring the environment override.
+ *
+ * A recorded relative path is anchored at the primary checkout, so the same
+ * checkout is found from a ticket worktree. An absolute recorded path is kept
+ * as written: it is what combo.json recorded, not a value to reinterpret.
+ */
 export function repoPath(combo: Combo, key: string, root = repoRoot): string {
   const override = PATH_OVERRIDES[key]
   const fromEnv = override === undefined ? undefined : process.env[override]
@@ -111,7 +146,11 @@ export function repoPath(combo: Combo, key: string, root = repoRoot): string {
   // that the caller asks for a repository the combination declares.
   const entry = combo.repos[key]!
   if (isSelfEntry(entry)) return root
-  return resolve(entry.localPath)
+  const recorded = entry.localPath
+  if (recorded === undefined || recorded === '') {
+    throw new Error(`combo.json repos.${key}.localPath is missing; set ${override ?? 'its environment override'}`)
+  }
+  return isAbsolute(recorded) ? resolve(recorded) : resolve(primaryCheckout(root), recorded)
 }
 
 function git(args: string[], cwd: string): string {
@@ -161,6 +200,8 @@ export function verifyCombination({ root = repoRoot, allowDrift = false }: { roo
   for (const [key, entry] of Object.entries(combo.repos)) {
     const path = repoPath(combo, key, root)
     const envName = PATH_OVERRIDES[key]
+    const fromEnv = envName === undefined ? undefined : process.env[envName]
+    const overridden = fromEnv !== undefined && fromEnv !== ''
     const base = {
       key,
       role: entry.role,
@@ -169,6 +210,18 @@ export function verifyCombination({ root = repoRoot, allowDrift = false }: { roo
       lock: entry.lock ?? 'commit',
     }
     if (!existsSync(join(path, '.git'))) {
+      // An absent companion checkout is an environment fact, not a combination
+      // drift: combo.json still names the commit, and a machine that does not
+      // carry the checkout cannot contradict it. This check runs in every
+      // commit gate, so failing here blocked every commit on a machine whose
+      // checkout lives elsewhere. An explicit override is different: the
+      // caller named a path, and a missing checkout there is a mistaken path.
+      if (!overridden) {
+        const expected = entry.productCommit ?? entry.integrationBranch
+        const skipped = `${key}: no checkout at ${path}; set ${envName ?? `${key}'s environment override`} to check this row`
+        rows.push({ ...base, expected, actual: null, ok: true, skipped })
+        continue
+      }
       const failure = `${key}: checkout missing at ${path}${envName === undefined ? '' : ` (override ${envName})`}`
       failures.push(failure)
       rows.push({ ...base, expected: entry.productCommit ?? entry.integrationBranch, actual: null, ok: false, failure })
@@ -292,6 +345,7 @@ function androidSourceRow(root: string, source: ComboAndroidSource | undefined):
 
 /** What the table's result column says for one row. */
 function resultLabel(row: ComboRow): string {
+  if (row.skipped !== undefined) return 'skipped (checkout absent)'
   if (!row.ok) return 'MISMATCH'
   if (row.lock === 'declaration') return 'ok (declaration matches)'
   if (row.lock === 'integration-branch') {
@@ -721,7 +775,8 @@ function printTable(rows: ComboRow[]): string {
     row.key,
     row.branch === null || row.branch === undefined ? '-' : String(row.branch),
     row.expected === null || row.expected === undefined ? '-' : String(row.expected).slice(0, 16),
-    row.actual === null || row.actual === undefined ? 'MISSING' : String(row.actual).slice(0, 16),
+    row.actual === null || row.actual === undefined
+      ? (row.skipped === undefined ? 'MISSING' : '-') : String(row.actual).slice(0, 16),
     resultLabel(row),
   ])
   // Every row has one cell per column, so the widths and the cells line up.
@@ -778,8 +833,10 @@ function main(argv: string[]): number {
   } else {
     process.stdout.write(`${printTable(result.rows)}\n`)
     for (const failure of result.failures) process.stderr.write(`combo: ${failure}\n`)
+    const skipped = result.rows.filter(row => row.skipped !== undefined)
+    for (const row of skipped) process.stdout.write(`combo: ${row.skipped}\n`)
     process.stdout.write(result.failures.length === 0
-      ? 'combo: combination verified\n'
+      ? `combo: combination verified${skipped.length === 0 ? '' : ` (${skipped.length} row${skipped.length === 1 ? '' : 's'} skipped)`}\n`
       : `combo: ${result.failures.length} drift/missing entr${result.failures.length === 1 ? 'y' : 'ies'}${allowDrift ? ' (tolerated by --allow-drift)' : ''}\n`)
   }
   return result.failures.length === 0 || allowDrift ? 0 : 1
