@@ -68,6 +68,31 @@ test('the bundle declares the bill package it mounts, as a linked product packag
   )
 })
 
+test('the service answers through the context proxy every consumer actually receives', async () => {
+  // A boot caught this: Cordis publishes a service through a proxy, and an
+  // instance `#private` field is unreadable through it, so the row would have
+  // looked mounted and active while every read threw. This mounts the real
+  // service in a real context and reads it the way the address and context
+  // tickets will — `ctx.get('ourfairyBill').snapshot()`. The numbers themselves
+  // are covered by tests/bill-aggregate.test.mjs; what is pinned here is that
+  // the published object can answer at all.
+  const { Context } = await import('@deepseek-ai/cordis')
+  const exported = await import('../backend/bill/dist/index.js')
+  const ctx = new Context()
+  ctx.sessions = { get: () => undefined }
+  ctx.sessionPersistence = { list: async () => [], stat: async () => undefined }
+  ctx.sessionQuery = { readSession: async () => ({ events: [] }) }
+
+  const registered = new exported.Bill(ctx)
+  assert.equal(typeof registered.snapshot, 'function', 'the instance itself answers')
+  const mounted = ctx.get('ourfairyBill')
+  assert.ok(mounted !== undefined, 'the service must be registered under the name consumers read')
+  const snapshot = await mounted.snapshot()
+  assert.equal(snapshot.days.length, 30, 'a consumer gets the full series from the published object')
+  assert.deepEqual(snapshot.allTime, { inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 })
+  assert.equal(registered.constructor, exported.Bill, 'the registered service is this package\'s class')
+})
+
 test('the package publishes the reading face the later tickets consume', async () => {
   const exported = await import('../backend/bill/dist/index.js')
 
@@ -77,7 +102,14 @@ test('the package publishes the reading face the later tickets consume', async (
   }
   assert.equal(typeof exported.apply, 'function', 'the row must mount through apply()')
   assert.equal(typeof exported.Bill, 'function', 'the service must be the composed reading face')
-  assert.equal(typeof exported.Bill.prototype.snapshot, 'function',
+  // `snapshot` is an instance field, not a prototype method: it closes over the
+  // aggregate so a Cordis proxy can call it (see the case above).
+  const { Context } = await import('@deepseek-ai/cordis')
+  const ctx = new Context()
+  ctx.sessions = { get: () => undefined }
+  ctx.sessionPersistence = { list: async () => [], stat: async () => undefined }
+  ctx.sessionQuery = { readSession: async () => ({ events: [] }) }
+  assert.equal(typeof new exported.Bill(ctx).snapshot, 'function',
     'ctx.ourfairyBill.snapshot() is what the reading address and the context reading call')
 
   const fold = await import('../backend/bill/dist/fold.js')

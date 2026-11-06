@@ -35,15 +35,14 @@ export type {
 export { addBuckets, foldDailyTokens, localDay, TIME_ZONE, zeroBuckets } from './fold.js'
 export type { DailyTokens, TokenBuckets, TurnSpan } from './fold.js'
 
-/** The row's reading face as the rest of the product sees it. */
+/**
+ * The row's reading face as the rest of the product sees it.
+ *
+ * The reading is a closure over the aggregate rather than a private field:
+ * Cordis hands consumers a proxy of this service, and a `#private` field is
+ * unreadable through it. Nothing else about the instance is exposed.
+ */
 export class Bill extends Service implements BillService {
-  readonly #service: BillService
-
-  constructor(ctx: Context) {
-    super(ctx, 'ourfairyBill')
-    this.#service = createBillService(sessionSource(ctx), () => Date.now())
-  }
-
   /**
    * One observation of the bill.
    *
@@ -52,8 +51,12 @@ export class Bill extends Service implements BillService {
    * that session's revision moved.
    * @returns today, this month, all time and the trailing 30-day series.
    */
-  snapshot(): Promise<BillSnapshot> {
-    return this.#service.snapshot()
+  readonly snapshot: () => Promise<BillSnapshot>
+
+  constructor(ctx: Context) {
+    super(ctx, 'ourfairyBill')
+    const service = createBillService(sessionSource(ctx), () => Date.now())
+    this.snapshot = () => service.snapshot()
   }
 }
 
