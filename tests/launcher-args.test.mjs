@@ -105,9 +105,12 @@ test('a drifted checkout is refused by the launcher itself and accepted through 
 
   if (head === lockedCommit) {
     // The pinned combination: there is no drift for the launcher to refuse, so
-    // the gate itself is what the case above pins. Nothing to assert here.
-    assert.equal(deliberateDshExperiment(), false,
-      'a pinned checkout reached without an explicit override is not an experiment')
+    // the gate itself is what the case above pins. The decision still follows
+    // its one authority — an explicit override — rather than the checkout's
+    // state, so a machine that pins the same commit through an override is not
+    // mistaken for an experiment-free run.
+    assert.equal(deliberateDshExperiment(), (process.env.OURFAIRY_DSH_DIR ?? '') !== '',
+      'the drift decision follows the explicit override, not whether the checkout happens to be pinned')
     return
   }
 
