@@ -26,7 +26,7 @@
 | --- | --- |
 | Node | `^22.19.0 \|\| >=24.2.0`（`import.meta.main` 自 22.18.0 与 24.2.0 起提供） |
 | pnpm | 用 corepack 固定：`corepack pnpm@11.28.5` |
-| deepseek-harness 检出 | `combo.json` 的 `repos.dsh.localPath` 只是默认位置提示；检出不在那里时用 `OURFAIRY_DSH_DIR=/path/to/deepseek-harness` 覆盖，命令与测试都认这一条 |
+| deepseek-harness 检出 | `combo.json` 的 `repos.dsh.localPath` 只是默认位置提示：相对路径按主检出解析（从 worktree 里读也一样）；检出不在那里时用 `OURFAIRY_DSH_DIR=/path/to/deepseek-harness` 覆盖，命令与测试都认这一条 |
 | Linux 沙箱 | bubblewrap（`bwrap`），并允许创建非特权用户命名空间 |
 | 构建互斥 | util-linux 提供的 `flock` |
 | PDF 页面渲染 | Poppler（`poppler-utils` 提供的 `/usr/bin/pdftoppm`） |
@@ -47,10 +47,12 @@ npm run specs:status   # spec 与小修批次的推送、合并、内容落地�
 ```
 
 `combo:verify` 回答的是「登记表对不对」，`backend:doctor` 回答的是「这台机器能不能跑」。
+本机没有 dsh 检出、也没有设置 `OURFAIRY_DSH_DIR` 时，`combo:verify` 把 dsh 行记成 skipped 而不算组合失败
+（提交门禁因此不会因环境缺检出而拒绝）；显式覆盖指向不存在的路径仍是失败，`backend:doctor` 也仍要求检出存在。
 
 | 命令 | 它检查的事实 |
 | --- | --- |
-| `combo:verify` | 组合登记表自洽：本仓库基于集成分支、dsh 的分支 tip 等于锁定提交、客户端来源与声明一致 |
+| `combo:verify` | 组合登记表自洽：本仓库基于集成分支、dsh 的分支 tip 等于锁定提交（本机没有检出时该行记 skipped）、客户端来源与声明一致 |
 | `backend:doctor` | 本机检出可用：dsh 检出存在、处在锁定提交上、四条构建产物齐全、profile 装配与插件兼容 |
 
 两者各管一段：dsh 的分支 tip 对得上、工作树却停在别的提交时，`combo:verify` 通过，`backend:doctor` 失败——它先查检出存在、再查 `apps/cli/lib/bin.js` 已构建，最后比对工作树 HEAD 与锁定提交。

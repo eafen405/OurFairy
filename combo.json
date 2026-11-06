@@ -5,13 +5,12 @@
     "ourfairy": {
       "role": "product",
       "lock": "integration-branch",
-      "localPath": "/home/eafen405/projects/OurFairy",
       "integrationBranch": "main"
     },
     "dsh": {
       "role": "backend-harness",
       "lock": "commit",
-      "localPath": "/home/eafen405/projects/deepseek-harness",
+      "localPath": "../deepseek-harness",
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/deepseek-harness.git",
       "integrationBranch": "product/ourfairy-v1",

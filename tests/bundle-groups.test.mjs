@@ -10,10 +10,9 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { describeRun, makeHome, readReport, removeHome, repoRoot, runBackend, writeOverlay } from './helpers/backend.mjs'
+import { describeRun, dshDir, makeHome, readReport, removeHome, repoRoot, runBackend, writeOverlay } from './helpers/backend.mjs'
 
 const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
-const dshDir = process.env.OURFAIRY_DSH_DIR ?? combo.repos.dsh.localPath
 const dshRequire = createRequire(join(dshDir, 'apps', 'cli', 'package.json'))
 const boot = dshRequire('@deepseek-ai/dsh-app-boot')
 const bundlePatch = join(repoRoot, combo.backend.bundlePathInRepo, 'cordis.patch.yml')
