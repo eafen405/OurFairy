@@ -13,34 +13,26 @@
  * only ever appends and never replaces, so a value that moved per attempt would
  * leave dozens of permanent user messages in one turn.
  *
- * So the reading is computed at the only two moments that are cheap and
- * meaningful, and the provider only formats:
- *
- * - when a user session's agent appears (a resumed session needs a first
- *   reading), and
- * - when a turn ends — the turn that just closed is exactly what the *next*
- *   turn reports as "the previous interaction".
- *
- * It is then **pinned once per turn** at the loop's own pre-step boundary. The
- * provider returns that pin for every attempt of the turn, so the appended
- * snapshot is at most one per turn by construction rather than by luck.
+ * The first pre-step of each turn awaits a fresh reading and pins it for the
+ * whole turn. Refreshing on admission includes spend from other sessions and
+ * moves the day's window after local midnight, even while this agent was idle.
+ * Later steps and attempts only read that pin.
  *
  * ### Why the pin is set at pre-step and not while assembling
  *
  * One step assembles its prompt more than once: `assemble()` renders the
- * contexts, then every attempt calls `refreshContext()` again. Only the second
- * pass reaches the session — the loop replaces the pre-step projection's
- * runtime-context message with the freshly projected one — so pinning at
- * pre-step is what makes both passes agree, and what lets the pin wait for the
- * refresh to land.
+ * contexts before pre-step, then every attempt calls `refreshContext()` again.
+ * The loop replaces the pre-step projection's runtime-context message with the
+ * freshly projected one, so awaiting the reading at pre-step makes it available
+ * before the model request is admitted.
  *
  * ### What "the previous interaction" means
  *
  * The last turn that closed before the current one, located from the log's own
  * `turn/start`…`turn/end` pairs. dsh's `turnBoundary` projection supplies the
- * turn number and the open turn's start (the Agent interface exposes no turn or
- * step); the per-turn total is the bill's existing fold, so the reading and the
- * bill page share one arithmetic.
+ * open turn's start, and the pre-step payload identifies the turn to pin. The
+ * per-turn total is the bill's existing fold, so the reading and the bill page
+ * share one arithmetic.
  *
  * ### Scope
  *
@@ -77,29 +69,10 @@ export const BILL_CONTEXT_NAME = 'bill:reading'
 
 /** One user session's reading state. */
 interface ReadingState {
-  /** The text pinned for the current turn; stable from pre-step to step end. */
+  /** The text pinned for the whole current turn. */
   pinned?: string
-  /** The text the next turn will pin, produced by the last refresh. */
-  pending?: string
-  /** Serializes refreshes, so a turn end cannot interleave with an agent's arrival. */
-  queue: Promise<void>
-}
-
-/**
- * The reading pinned when no refresh has produced one.
- *
- * A session on its first turn genuinely has no previous interaction — known
- * without any I/O — so it says so. Every other case reports the data as
- * unavailable: a limitation she can repeat is better than a number nobody
- * measured, and neither is ever rendered as `0`.
- * @param turn - the turn being opened.
- * @returns the reading to pin.
- */
-function placeholderReading(turn: number): BillReading {
-  return {
-    previous: turn <= 1 ? { kind: 'none' } : { kind: 'unavailable' },
-    day: { kind: 'unavailable' },
-  }
+  /** The pre-step turn number whose reading has been computed. */
+  turn?: number
 }
 
 /** The slice of the composition this module reads. */
@@ -127,8 +100,8 @@ export interface BillContextServices {
  * Register the bill's runtime-context contribution and its refresh triggers.
  * @param ctx - the composition: the prompt registry, the agent registry, the
  *   turn-boundary projection and the live-preferred log reader.
- * @param bill - the row's own reading face. The day total reported here is the
- *   same call the bill page serves, so the two cannot disagree.
+ * @param bill - the row's reading service. The day total uses the same aggregate
+ *   as the bill page; each call observes its own snapshot.
  */
 export function installBillContext(ctx: BillContextServices, bill: BillService): void {
   const states = new Map<Agent, ReadingState>()
@@ -136,10 +109,7 @@ export function installBillContext(ctx: BillContextServices, bill: BillService):
   /**
    * One refresh: the previous interaction's settled total, then the day's total.
    * @param agent - the session whose reading is recomputed.
-   * @param openTurnStartSeq - the open turn's start when there is one. A
-   *   refresh triggered by `turn/end` passes `null`, because the turn that just
-   *   closed is a completed interaction and a boundary state read a moment
-   *   early must not hide it.
+   * @param openTurnStartSeq - the open turn's start from the pre-step boundary.
    */
   const compute = async (agent: Agent, openTurnStartSeq: number | null): Promise<string> => {
     let previous: BillReading['previous']
@@ -159,16 +129,6 @@ export function installBillContext(ctx: BillContextServices, bill: BillService):
     return renderBillReading({ previous, day })
   }
 
-  /** Queue one refresh behind whatever this session is already doing. */
-  const refresh = (agent: Agent, state: ReadingState, openTurnStartSeq: number | null): Promise<void> => {
-    state.queue = state.queue.then(async () => {
-      // A disposed agent has no reading to keep: the refresh writes nothing.
-      if (states.get(agent) !== state) return
-      state.pending = await compute(agent, openTurnStartSeq)
-    }, () => undefined)
-    return state.queue
-  }
-
   ctx.systemPrompt.context({
     name: BILL_CONTEXT_NAME,
     order: BILL_CONTEXT_ORDER,
@@ -184,28 +144,19 @@ export function installBillContext(ctx: BillContextServices, bill: BillService):
 
   const watch = (agent: Agent): void => {
     if (!isUserSession(agent.session.header)) return
-    const state: ReadingState = { queue: Promise.resolve() }
-    states.set(agent, state)
-    agent.ctx.on('session/event', (session, event) => {
-      // The turn that just closed is what the next turn reports, so this is the
-      // one event that makes a pinned reading stale.
-      if (session === agent.session && event.type === 'turn/end') void refresh(agent, state, null)
-    })
-    // A resumed session runs its first turn with no `turn/end` to learn from.
-    const boundary = ctx.sessionProjections.stateOf(agent.session, 'turnBoundary')
-    void refresh(agent, state, boundary?.openTurnStartSeq ?? null)
+    states.set(agent, {})
   }
 
-  // Ahead of the loop's own pre-step continuation, so this turn's first
-  // materialized snapshot already sees a landed refresh.
+  // Await the latest aggregate before this turn's first model request. Later
+  // pre-steps in the same turn keep the pin, even if the day or other logs move.
   ctx.on('agent/pre-step', async (payload, next) => {
     const state = states.get(payload.agent)
-    if (state !== undefined) {
-      await state.queue
+    if (state !== undefined && state.turn !== payload.turn) {
+      const boundary = ctx.sessionProjections.stateOf(payload.agent.session, 'turnBoundary')
+      const reading = await compute(payload.agent, boundary?.openTurnStartSeq ?? null)
       payload.signal.throwIfAborted()
-      // The pin is set here, once, and every attempt in this turn re-reads it.
-      state.pinned = state.pending
-        ?? renderBillReading(placeholderReading(payload.turn))
+      state.pinned = reading
+      state.turn = payload.turn
     }
     return next()
   }, { global: true, prepend: true })

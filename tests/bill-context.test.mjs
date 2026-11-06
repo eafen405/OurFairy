@@ -58,8 +58,8 @@ function textOf(message) {
  * on the next request; once a tool result is present the double echoes it as
  * `RESULT:…`. Anything else is acknowledged as text.
  *
- * @param options - `inputTokens` is the `message_start` usage every conversation
- *   response reports.
+ * @param options - `inputTokens` selects the input usage; `outputTokens` may
+ *   select output usage from the captured request to script a settled spend.
  * @returns the double's base URL, its captured conversation request bodies, and
  *   a close.
  */
@@ -80,6 +80,7 @@ async function startModel(options = {}) {
 
     response.writeHead(200, { 'content-type': 'text/event-stream' })
     const emit = event => response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+    const outputTokens = typeof options.outputTokens === 'function' ? options.outputTokens(body) : (options.outputTokens ?? 5)
     emit({ type: 'message_start', message: { id: 'bill-double', type: 'message', role: 'assistant', model: 'test',
       content: [], usage: { input_tokens: options.inputTokens ?? 300, output_tokens: 0 } } })
     if (command !== undefined && result === undefined) {
@@ -88,13 +89,13 @@ async function startModel(options = {}) {
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: command.callId ?? 'bill-call', name: command.tool, input: {} } })
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(command.args ?? {}) } })
       emit({ type: 'content_block_stop', index: 0 })
-      emit({ type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: 5 } })
+      emit({ type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: outputTokens } })
     } else {
       const text = result === undefined ? 'ACK' : `RESULT:${JSON.stringify(toolResultBlocks(result))}`
       emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
       emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } })
       emit({ type: 'content_block_stop', index: 0 })
-      emit({ type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 5 } })
+      emit({ type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: outputTokens } })
     }
     emit({ type: 'message_stop' })
     response.end()
@@ -320,6 +321,39 @@ test('the reading is constant across every attempt of one turn', async () => {
   }
 })
 
+test('an idle session refreshes today after another session spends and pins its multi-step turn', async () => {
+  const home = freshHome()
+  const otherSpend = 'bill spend in the other session'
+  const model = await startModel({
+    // A synthetic output count crosses the 10 000-Denny bucket in one settled
+    // call. Inflating input would trigger pi-ai's context-overflow guard before
+    // the bill could observe a completed turn. This session is not used again.
+    outputTokens: body => body.messages.some(message => textOf(message).includes(otherSpend)) ? 30_000_000 : 5,
+  })
+  const port = await boot(home, model)
+  const admin = await httpJson(port, '/identity/sign-in', { body: { name: 'phaethon', password: PASSWORD } })
+  try {
+    const original = await newSession(port, admin.token)
+    await turn(port, admin.token, original, 'bill-idle-first', 'warm the original session')
+    const other = await newSession(port, admin.token)
+    assert.notEqual(other, original, 'the spend must come from another session')
+    await turn(port, admin.token, other, 'bill-other-spend', otherSpend)
+
+    const firstRequest = model.requests.length
+    const command = JSON.stringify({ tool: 'todo_write', args: { todos: [{ content: 'bill refreshed step', status: 'pending' }] }, callId: 'bill-refresh-call' })
+    await turn(port, admin.token, original, 'bill-idle-return', command)
+    const requests = model.requests.slice(firstRequest)
+    assert.ok(requests.length >= 2, 'the returning session runs a real multi-step turn')
+    const expected = '电费读数：上一次互动 不足 1 丁尼；本日累计约 1 万丁尼。'
+    for (const request of requests) {
+      assert.equal(billLineOf(request), expected,
+        'the next turn includes the other session\'s settled spend and keeps that reading through every step')
+    }
+  } finally {
+    await stop(home)
+  }
+})
+
 test('a first turn carries a reading that says there is no previous interaction', async () => {
   const home = freshHome()
   const model = await startModel({ inputTokens: 300 })
@@ -425,8 +459,8 @@ test('the bill tool answers the monthly and historical question with the bill pa
       `the warmed bill has spend; got ${JSON.stringify(value.allTime)}`)
     assert.ok(value.month.tokens.outputTokens > 0, 'the month total includes the conversation just run')
 
-    // The reading and the tool cannot disagree: the tool is the exact number,
-    // the reading is that number in the day bucket it states.
+    // No other session settles and the day is unchanged here, so the tool's
+    // exact total still falls in the bucket pinned for this turn.
     const reading = billLineOf(body)
     const daySteps = Math.round(value.today.denny / value.contextReadingGranularityDenny)
     assert.ok(reading.includes(daySteps === 0 ? '不足 1 万丁尼' : `本日累计约 ${daySteps} 万丁尼`),
