@@ -46,6 +46,8 @@ const DEPLOYMENT_SECTIONS = [
   'tool:write',
   'tool:edit',
   'tool:jobs',
+  'tool:web_search',
+  'tool:web_fetch',
   'deployment:persona-suffix',
   'ourfairy:skill-trust',
   'ourfairy:impression',

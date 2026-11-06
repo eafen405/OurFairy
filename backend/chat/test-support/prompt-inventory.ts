@@ -13,6 +13,8 @@ export const inject = ['systemPrompt', 'ourfairyChat']
 const SOURCES: Record<string, string> = {
   'ourfairy:persona': '@ourfairy/dsh-chat',
   'ourfairy:identity': '@ourfairy/dsh-chat',
+  'tool:web_search': '@deepseek-ai/dsh-tool-web',
+  'tool:web_fetch': '@deepseek-ai/dsh-tool-web',
   'ourfairy:impression': '@ourfairy/dsh-memory',
   'ourfairy:skill-trust': '@ourfairy/dsh-skill-creator',
   'ourfairy:spaces': '@ourfairy/dsh-spaces',
