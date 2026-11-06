@@ -50,8 +50,9 @@ function session(id, { events = [], revision = 'r1', materialized = true, live =
  * A fake session-fact port that records every durable read it serves.
  *
  * `list` is the cheap header observation, `stat` is the per-session revision,
- * `live` is the snapshot path, and `read` is the one expensive call: loading a
- * whole log.
+ * and `read` is the one expensive call: loading and validating a whole log. A
+ * live session answers that same call from memory; this fake records it either
+ * way, which is how the live case proves it costs no revision observation.
  */
 function port(sessions) {
   const reads = []
@@ -73,10 +74,6 @@ function port(sessions) {
       const entry = byId().get(id)
       if (entry === undefined) return undefined
       return { revision: entry.revision, materialized: entry.materialized }
-    },
-    live(id) {
-      const entry = byId().get(id)
-      return entry?.live === true ? entry.events : undefined
     },
     async read(id) {
       reads.push(id)
@@ -216,13 +213,14 @@ test('a session that has not materialized is never cached', async () => {
   assert.deepEqual(source.reads, ['a', 'a'])
 })
 
-test('a live session is read from its snapshot, never from persistence', async () => {
+test('a live session is read through the snapshot path and never revision-guarded', async () => {
   const source = port([session('a', { live: true, events: logOf(turnOn([2026, 1, 20], 60)) })])
+  const service = createBillService(source, clock())
 
-  const bill = await createBillService(source, clock()).snapshot()
-  assert.equal(bill.today.inputTokens, 60)
-  assert.deepEqual(source.reads, [], 'a live session never costs a durable read')
-  assert.deepEqual(source.stats, [], 'a live session is not revision-guarded either')
+  assert.equal((await service.snapshot()).today.inputTokens, 60)
+  assert.deepEqual(source.stats, [], 'a live session is observed from memory, so its revision is never compared')
+  await service.snapshot()
+  assert.deepEqual(source.reads, ['a', 'a'], 'a still-appending session is never served from the cold cache')
 })
 
 test('a session read failure fails the snapshot instead of reporting zero', async () => {

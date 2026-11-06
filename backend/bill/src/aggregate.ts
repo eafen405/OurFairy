@@ -52,9 +52,10 @@ export interface BillSource {
   list(): Promise<readonly BillSessionHeader[]>
   /** One session's revision, or `undefined` when it is gone. */
   stat(id: string): Promise<BillSessionRevision | undefined>
-  /** The live snapshot of a session's log, when it is live in this process. */
-  live(id: string): readonly SessionEvent[] | undefined
-  /** Load and validate one cold session's complete log. */
+  /**
+   * Load and replay-validate one session's complete log. A live session is
+   * answered from its in-memory snapshot; a cold one from storage.
+   */
   read(id: string): Promise<readonly SessionEvent[]>
 }
 
@@ -131,9 +132,9 @@ export async function aggregateBill(
   for (const { id, live } of sessions) {
     let days: readonly DailyTokens[]
     if (live) {
-      // A live session is observed from memory and never cached: its log is
-      // still being appended, and the revision guard does not apply to it.
-      days = foldDailyTokens(source.live(id) ?? [])
+      // A live session is still being appended, so the revision guard does not
+      // apply to it: it is read from its snapshot every time and never cached.
+      days = foldDailyTokens(await source.read(id))
     } else {
       const known = cache.get(id)
       const observed = await source.stat(id)
