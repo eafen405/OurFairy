@@ -4,9 +4,8 @@
  * The reading at the end of her context is throttled and limited to the
  * previous interaction plus today, so it cannot answer "how much this month" or
  * "since the beginning". Those questions get a tool instead of a second,
- * differently-computed number: it returns exactly the snapshot the bill page
- * serves, from the same `ctx.ourfairyBill.snapshot()` call, so the two cannot
- * disagree.
+ * differently-computed number: it uses the same bill service and presentation
+ * units as the bill page. Each request observes its own aggregate snapshot.
  *
  * It writes nothing — no ownership gate is needed for that reason — but its
  * registration scope is the reading's: a maintenance or learning child gets no

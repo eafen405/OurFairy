@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.remote
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,6 +70,16 @@ class BillState(
                     mutable.value = mutable.value.copy(loading = false, failure = refused.failure())
                 } catch (unreachable: IdentityUnreachable) {
                     mutable.value = mutable.value.copy(loading = false, failure = BillFailure(unreachable = true))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (unexpected: Exception) {
+                    mutable.value = mutable.value.copy(
+                        loading = false,
+                        failure = BillFailure(
+                            code = "bill/unexpected",
+                            message = unexpected.message.orEmpty(),
+                        ),
+                    )
                 }
             }
         }

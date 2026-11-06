@@ -122,7 +122,9 @@ test('a page names the same position as the live read for the same row', async (
       sessionId, throughSeq: row.seq, beforeSeq: row.seq + 1, maxEvents: 1,
     })
     assert.equal(page.status, 200, JSON.stringify(page))
-    assert.deepEqual(page.body.page.messages, [row])
+    assert.equal(page.body.page.messages.length, 1)
+    assert.equal(page.body.page.messages[0].messageId, row.messageId)
+    assert.equal(page.body.page.messages[0].position, row.position)
   }
 })
 

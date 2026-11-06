@@ -168,6 +168,14 @@ fun FairyBillPage(
                         BillFailureBanner(snapshot.failure)
                     }
                     Spacer(Modifier.height(16.dp))
+                    if (bill.isEmpty) {
+                        Text(
+                            text = "这台 Fairy 目前没有电费消耗记录。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = tokens.textMuted,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                    }
                     BillTotals(bill)
                     Spacer(Modifier.height(16.dp))
                     BillChartPanel(bill.days)
@@ -204,9 +212,7 @@ fun FairyBillPage(
  * The three totals in one instrument cluster.
  *
  * Each column prints the backend's Denny and the raw count it stands for. Neither is
- * derived here — no rate is applied on this page — so the page and the Fairy's own
- * reading cannot disagree. A bill of zeroes is stated by the figures themselves:
- * there is no separate sentence for it, because zero is a value, not an absence.
+ * derived here — no rate is applied on this page.
  */
 @Composable
 private fun BillTotals(bill: Bill) {

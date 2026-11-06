@@ -157,13 +157,13 @@ class FairyBillPageTest {
     }
 
     @Test
-    fun `an all-zero bill is a readable zero, not a failure and not prose`() {
+    fun `an all-zero bill shows an explicit empty state`() {
         backend.answer = { bill(today = 0, month = 0, allTime = 0) }
         open()
 
-        // The zeroes are the state: three totals at zero Denny and zero count, with the
-        // flat series still drawn. The page adds no sentence about it.
+        // The totals remain readable, with a separate sentence that names the empty state.
         compose.onNodeWithTag("bill-totals", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("这台 Fairy 目前没有电费消耗记录。", useUnmergedTree = true).assertExists()
         compose.onAllNodesWithText("0.0 丁尼", useUnmergedTree = true).fetchSemanticsNodes().let {
             assertEquals("all three totals read zero Denny", 3, it.size)
         }

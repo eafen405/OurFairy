@@ -155,7 +155,7 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 每个单元声明 `key`、`stateVersion`、zod `stateSchema`、`init(header)` 与 `apply(state,event)`：
 `apply` 必须同步且纯，未解释的事件返回同一引用；state 必须能被 registry 做 JSON checkpoint。
 每个单元的 `stateVersion` 在折叠语义或 state 形状变化时递增，旧版本的持久化行会被丢弃并从
-`init` 重折。当前版本：transcript `8`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
+`init` 重折。当前版本：transcript `9`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
 工具名 + 未完成 `skill` / `skill_manage` 调用的窄配对表 + 与 `skill_manage` 调用配对的审核结果
 派生行 + 每行的回合编号与回合结算分桶：行取自己事件所报回合，回合结算时把分桶写到该回合最后
 一条 Fairy 行上），work `2`（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读

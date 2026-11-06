@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.remote
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -91,6 +92,42 @@ class BillStateTest {
 
         assertNull(state.snapshot.value.bill)
         assertTrue(state.snapshot.value.failure?.unreachable == true)
+    }
+
+    @Test
+    fun `an unexpected read failure clears loading and can be retried`() = runTest {
+        val backend = ScriptedBill(read = { throw IllegalStateException("unexpected failure") })
+        val state = BillState(backend, this)
+
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        val failed = state.snapshot.value
+        assertNull(failed.bill)
+        assertFalse("an unexpected failure must not leave the page loading", failed.loading)
+        assertEquals("bill/unexpected", failed.failure?.code)
+        assertEquals("unexpected failure", failed.failure?.message)
+
+        backend.read = { ScriptedBill.bill(today = 6000, allTime = 6000) }
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        assertEquals(2, backend.reads)
+        assertEquals(6000L, state.snapshot.value.bill?.today?.tokens?.total)
+        assertNull(state.snapshot.value.failure)
+    }
+
+    @Test
+    fun `cancellation is not converted to a recoverable bill failure`() = runTest {
+        val backend = ScriptedBill(read = { throw CancellationException("cancelled") })
+        val state = BillState(backend, this)
+
+        state.load("token-abc")
+        advanceUntilIdle()
+
+        assertNull(state.snapshot.value.bill)
+        assertNull("cancellation must propagate instead of becoming a failure", state.snapshot.value.failure)
+        assertTrue("the cancelled read does not report completion", state.snapshot.value.loading)
     }
 
     @Test

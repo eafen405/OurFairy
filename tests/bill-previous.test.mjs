@@ -16,6 +16,12 @@ import { closedTurn, event, hangingTurn, silentTurn, usage } from './fixtures/bi
 const { foldDailyTokens } = await import('../backend/bill/dist/fold.js')
 const { previousInteraction } = await import('../backend/bill/dist/previous.js')
 
+function noModelTurn(startSeq, turn) {
+  return [
+    event(startSeq, 'turn/start', { turn }),
+    event(startSeq + 1, 'turn/end', { turn, reason: { kind: 'completed' } }),
+  ]
+}
 /** The seq a log's first open turn starts at, given the turns that precede it. */
 function openAt(startSeq, turn) {
   return event(startSeq, 'turn/start', { turn })
@@ -35,7 +41,7 @@ test('the reading reports the last turn that closed, not the one that is running
 
 test('a silent turn is stepped over for the last total that can be proven', () => {
   const first = closedTurn(0, { turn: 1, samples: [usage({ inputTokens: 3_000 })] })
-  const silent = silentTurn(first.length, { turn: 2 })
+  const silent = noModelTurn(first.length, 2)
   const open = openAt(first.length + silent.length, 3)
 
   const previous = previousInteraction([...first, ...silent, open], open.seq)
@@ -51,6 +57,17 @@ test('a session whose only completed turn reported nothing is unavailable, not z
   const previous = previousInteraction([...silent, open], open.seq)
   assert.equal(previous.kind, 'unavailable',
     'there was a completed interaction but its usage cannot be priced; reporting 0 would invent a measurement')
+})
+
+test('the latest model call without usage is unavailable, not an older turn\'s spend', () => {
+  const first = closedTurn(0, { turn: 1, samples: [usage({ inputTokens: 3_000 })] })
+  // This turn contains a real assistant call, but the provider reported no usage.
+  const unreported = silentTurn(first.length, { turn: 2 })
+  const open = openAt(first.length + unreported.length, 3)
+
+  const previous = previousInteraction([...first, ...unreported, open], open.seq)
+  assert.deepEqual(previous, { kind: 'unavailable' },
+    'an older measured turn must not stand in for the latest interaction whose usage is unknown')
 })
 
 test('a first turn has no previous interaction at all', () => {

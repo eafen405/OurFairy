@@ -148,10 +148,10 @@ request body, not from a rebuilt assembly.
 `electricity_bill`, no parameters, read-only. It returns
 `{today, month, allTime, days, contextReadingGranularityDenny}` where each total
 carries both `denny` and the raw `tokens`, and `days` is the trailing 30 local
-days. That is the same snapshot `GET /bill` serves — the tool calls
-`ctx.ourfairyBill.snapshot()` — so the two cannot disagree, and the field naming
-the reading's bucket exists so a reader can reconcile the exact figure with the
-throttled line instead of suspecting one of them.
+days. That is the same aggregate shape and presentation policy `GET /bill` serves —
+the tool calls `ctx.ourfairyBill.snapshot()` — while each request observes its own
+snapshot. The field naming the reading's bucket exists so a reader can reconcile
+the exact figure with the throttled line instead of suspecting one of them.
 
 ## Units
 

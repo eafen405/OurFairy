@@ -25,7 +25,7 @@
  *
  * `stateVersion` increments whenever this module's fold semantics or state
  * shape change; the registry then discards persisted rows of an older version
- * and refolds the log from `init`. The transcript is at version 8 (immutable
+ * and refolds the log from `init`. The transcript is at version 9 (immutable
  * first appearance plus ordered transitions, a move index, each row's tool
  * names, the narrow pairing map that derives a `role: 3` activation row, the
  * `skill_manage` call pairing that derives a `kind: 2` review row, and the
@@ -134,7 +134,7 @@ const cacheOf = (usage: TokenUsage): number | undefined => usage.cacheReadTokens
 
 /** Start folding a turn's spend; nothing is claimed until a sample is reported. */
 const emptySpend = (turn: number): z.infer<typeof turnSpendSchema> => ({
-  turn, input: 0, output: 0, cache: 0, samples: 0, cacheSamples: 0, last: null, row: null,
+  turn, input: 0, output: 0, cache: 0, samples: 0, missing: false, cacheSamples: 0, last: null, row: null,
 })
 
 /**
@@ -169,6 +169,7 @@ function recordSpend(
     output: spend.output - (replaced?.output ?? 0) + usage.outputTokens,
     cache: spend.cache - (replaced?.cache ?? 0) + (cache ?? 0),
     samples: spend.samples + (replaced === null ? 1 : 0),
+    missing: spend.missing,
     cacheSamples: spend.cacheSamples - (replaced?.hasCache === true ? 1 : 0) + (cache === undefined ? 0 : 1),
     last: { step, input: usage.inputTokens, output: usage.outputTokens, cache: cache ?? 0, hasCache: cache !== undefined },
     row,
@@ -234,8 +235,9 @@ const rowUsageSchema = z.object({
  * the conversation into checkpointed state. `row` is the position of the turn's
  * last settleable Fairy row, which is the row the settled value rides on;
  * `null` means the turn produced no such row and has nowhere to report.
- * `complete` and `hasCache` are what keep an unreported figure absent instead of
- * zero: `input + cache + output` must add up to the spend actually claimed.
+ * `missing` and `cacheSamples` keep an unreported figure absent instead of
+ * zero: `input + cache + output` must add up to the spend actually claimed, and
+ * any attempt without a usage sample makes the whole turn undisclosable.
  */
 const turnSpendSchema = z.object({
   turn: z.number().int(),
@@ -244,6 +246,8 @@ const turnSpendSchema = z.object({
   cache: z.number().int().nonnegative(),
   /** Reported samples counted into the totals; a turn with none reports no bucket. */
   samples: z.number().int().nonnegative(),
+  /** Whether any billed attempt lacked a provider usage sample. */
+  missing: z.boolean(),
   /** Samples that named a cache bucket: the cache total is reportable only when this equals `samples`. */
   cacheSamples: z.number().int().nonnegative(),
   /**
@@ -379,6 +383,11 @@ function rowAtCut(row: TranscriptRow, cut: number, position: number) {
     const candidate = row.transitions[offset] as z.infer<typeof transitionSchema>
     if (candidate.seq <= cut) { transition = candidate; break }
   }
+  const usage = row.usage !== undefined && row.usage.seq <= cut
+    ? { input: row.usage.input,
+      ...row.usage.cache === undefined ? {} : { cache: row.usage.cache },
+      output: row.usage.output }
+    : undefined
   return {
     messageId: row.messageId,
     position,
@@ -390,11 +399,7 @@ function rowAtCut(row: TranscriptRow, cut: number, position: number) {
     text: row.text,
     ...(row.attachments === null ? {} : { attachments: row.attachments }),
     ...(row.tools.length === 0 ? {} : { tools: row.tools }),
-    ...(row.usage === undefined ? {} : { usage: {
-      input: row.usage.input,
-      ...row.usage.cache === undefined ? {} : { cache: row.usage.cache },
-      output: row.usage.output,
-    } }),
+    ...(usage === undefined ? {} : { usage }),
     ...(row.kind === undefined ? {} : { kind: row.kind }),
     ...(row.toolCallId === undefined ? {} : { toolCallId: row.toolCallId }),
   }
@@ -447,7 +452,7 @@ function reviewDisplayOf(message: { readonly content?: readonly ContentBlock[] }
  */
 export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', TranscriptState> = {
   key: 'ourfairyTranscript',
-  stateVersion: 8,
+  stateVersion: 9,
   stateSchema: transcriptStateSchema,
   init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [],
     skillCalls: {}, manageCalls: {}, moves: [], openTurn: 0, spend: null }),
@@ -533,7 +538,7 @@ export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', Tr
       if (position === undefined) return next
       const spend = state.spend !== null && state.spend.turn === event.data.turn ? state.spend : emptySpend(event.data.turn)
       return { ...next, spend: {
-        ...usage === undefined ? { ...spend, row: position } : recordSpend(spend, event.data.step, usage, position),
+        ...usage === undefined ? { ...spend, missing: true, row: position } : recordSpend(spend, event.data.step, usage, position),
       } }
     }
     if (event.type === 'assistant/attempt') {
@@ -686,7 +691,7 @@ function settleSpend(
   seq: number,
 ): { rows?: TranscriptRow[]; spend?: null } {
   const spend = state.spend
-  if (spend === null || spend.row === null || spend.samples === 0) return {}
+  if (spend === null || spend.missing || spend.row === null || spend.samples === 0) return {}
   const rows = [...state.rows]
   const row = rows[spend.row]
   if (row === undefined) return {}
@@ -707,7 +712,7 @@ function spendOfAttempt(
 ): z.infer<typeof turnSpendSchema> | null {
   const spend = state.spend !== null && state.spend.turn === event.data.turn ? state.spend : emptySpend(event.data.turn)
   const usage = settlementUsage(event)
-  return usage === undefined ? spend : recordSpend(spend, event.data.step, usage, row)
+  return usage === undefined ? { ...spend, missing: true, row } : recordSpend(spend, event.data.step, usage, row)
 }
 
 /** Append a brand-new row; its first appearance anchors the order. */

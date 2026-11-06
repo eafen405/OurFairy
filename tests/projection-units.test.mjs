@@ -127,7 +127,7 @@ test('the stateVersion constants bind the README contract', () => {
   // The README is read, not restated: the numbers below are this suite's
   // expectation, and the documented sentence must name the same ones, so a
   // version bump that forgets the prose fails here instead of shipping drift.
-  const versions = { ourfairyTranscript: 8, ourfairyWork: 2 }
+  const versions = { ourfairyTranscript: 9, ourfairyWork: 2 }
   const documented = { ourfairyTranscript: /transcript `(\d+)`/u, ourfairyWork: /\bwork `(\d+)`/u }
   const readme = readFileSync(new URL('../backend/chat/README.md', import.meta.url), 'utf8')
   for (const definition of [units.transcriptDefinition, units.workDefinition]) {
@@ -869,9 +869,29 @@ test('the bucket appears only once the turn has ended', () => {
 
   assert.equal(bucketsOf(units.transcriptAt(inside), 'a1'), undefined, 'inside the turn the reply reports no bucket')
   assert.deepEqual(bucketsOf(units.transcriptAt(settled), 'a1'), { input: 5, output: 2 })
-  // Once settled, a window that starts at or after the row still carries the
-  // row's own settlement: paging a finished session back must not drop it.
-  assert.deepEqual(bucketsOf(units.transcriptAt(settled, 3, 3), 'a1'), { input: 5, output: 2 })
+  // A cut before turn/end must not expose a future settlement, while a cut at the end does.
+  assert.equal(bucketsOf(units.transcriptAt(settled, 3, 3), 'a1'), undefined,
+    'a cut before turn/end does not report a future bucket')
+  assert.deepEqual(bucketsOf(units.transcriptAt(settled, 5, 3), 'a1'), { input: 5, output: 2 },
+    'a cut at turn/end reports the settled bucket')
+})
+
+test('a missing usage attempt makes the whole turn undisclosable', () => {
+  const log = [
+    event(0, 'turn/start', { turn: 1 }),
+    event(1, 'user/message', userMessage('u1', 'go', { rpcId: 'r1' }), { surfaceOp: 'append' }),
+    event(2, 'step/start', { turn: 1, step: 1 }),
+    usageMessage(3, 1, 'a1', 'first', { inputTokens: 10, outputTokens: 2 }, { step: 1 }),
+    event(4, 'step/end', { turn: 1, step: 1 }),
+    event(5, 'step/start', { turn: 1, step: 2 }),
+    usageMessage(6, 1, 'a2', 'second', undefined, { step: 2 }),
+    event(7, 'step/end', { turn: 1, step: 2 }),
+    event(8, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+  ]
+  const messages = units.transcriptAt(fold(units.transcriptDefinition, log))
+
+  assert.equal(bucketsOf(messages, 'a1'), undefined, 'the earlier row does not carry a partial turn')
+  assert.equal(bucketsOf(messages, 'a2'), undefined, 'the last row does not claim incomplete usage')
 })
 
 test('one attempt without a cache figure keeps the bucket from claiming a cache total', () => {

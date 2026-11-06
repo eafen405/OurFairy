@@ -33,6 +33,11 @@ function settledBuckets(events: readonly SessionEvent[]): TokenBuckets | undefin
   }
 }
 
+/** Whether a completed span contains a real model response attempt. */
+function hasModelEvent(events: readonly SessionEvent[]): boolean {
+  return events.some(event => event.type === 'assistant/message' || event.type === 'assistant/attempt')
+}
+
 /**
  * Price the last completed interaction before the open turn.
  *
@@ -53,8 +58,10 @@ export function previousInteraction(
     // filter also keeps a resumed log's inherited prefix from outranking it.
     .filter(span => openTurnStartSeq === null || (span.events[0]?.seq ?? 0) < openTurnStartSeq)
   for (let index = completed.length - 1; index >= 0; index -= 1) {
-    const tokens = settledBuckets((completed[index] as { events: readonly SessionEvent[] }).events)
+    const span = completed[index] as { events: readonly SessionEvent[] }
+    const tokens = settledBuckets(span.events)
     if (tokens !== undefined) return { kind: 'settled', tokens }
+    if (hasModelEvent(span.events)) return { kind: 'unavailable' }
   }
   // No closed turn at all is the first-turn case; closed turns that all refuse
   // to price are the "usage was never reported" case, and they read differently.
