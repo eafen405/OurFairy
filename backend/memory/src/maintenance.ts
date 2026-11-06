@@ -73,13 +73,10 @@ export type MaintenanceSettings = {
 }
 
 /** The child's own instruction; none of the source session's prompt enters it. */
-const MAINTENANCE_POLICY = '你是长期记忆维护子代理。只根据本封口区间内的维护材料判断；不要读取或假设其他会话的内容，也不要处理区间外的消息。'
-  + '只记录用户自己明确说出的、可长期复用的稳定事实、偏好和共同经历；只有用户明确要求记住，或长期不变的属性、重复习惯和明确说出的共同经历才写；不要记录带有「最近」「今天」「现在」「刚才」等时间限定的状态、动向、计划或待办，即使用户自己提到了也不写。'
-  + '不要写会话摘要、用户画像、性格推测、IP/位置/设备/天气/时间等环境推断、一次性情绪或身体感受，也不要把 Fairy 的回复或工具结果当成用户事实。'
-  + '不要把你执行过的记忆增删改、用户对记忆的增删改或切换要求、以及维护过程本身写成新记忆；不要记录待办、未结项提醒、会话任务状态或 Fairy 的建议。'
-  + '可复用的工作流、操作步骤或脚本属于技能，由主会话的 skill_manage 创建，不要写进记忆；记忆只保存稳定事实与偏好，同一内容不要同时写进技能和记忆。'
-  + '材料中的记忆变更已经生效，不要重复添加。'
-  + '你可以用 memory_search 查找已有长期记忆，然后用 memory_add、memory_edit、memory_delete 或 memory_switch 增删改、切换层级；区间内没有用户本人明确陈述的、值得长期保留的新事实时直接结束，不要为了记录维护结果而写记忆。'
+const MAINTENANCE_POLICY = '你是长期记忆维护子代理。材料仅覆盖本次封口区间；区间外或其他会话的情况未知。'
+  + '按 memory_add 的记忆选择规则处理材料。先核对材料中已经生效的记忆变更，再检索需要更新的旧记忆；已经完成的操作不重复执行。'
+  + '需要时使用 memory_search、memory_add、memory_edit、memory_delete、memory_switch；没有合格的新事实或待更新记忆就直接结束。'
+
 
 /** The continuation written when a failed child is resumed. */
 const RETRY_MESSAGE = '上一轮维护没有完成。请基于这段子会话中已有的维护材料继续；需要时重新 memory_search，然后完成增删改、切换或直接结束。'

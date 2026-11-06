@@ -45,7 +45,7 @@
   这些不是工具授权，只决定私有根、共享根或附件刷新是否存在。
 - **skill-creator 的注册也问它**：`skill_manage` 只注册在用户会话上。它的学习检测、
   学习审查与深创三个子代理都不该看见这个工具，判定它们是不是用户会话就够了。
-- **chat 的装配守卫问同一个问题**：`prompt-guard` 只在用户会话上拒绝别的包用 complete 段
+- **chat 的装配守卫问同一个问题**：`prompt-assembly` 只在用户会话上拒绝别的包用 complete 段
   顶掉部署提示——内部子代理本来就可以有自己的完整提示，拦它会拦错。
 - **memory 问「这是不是我创建的维护子」**：`MAINTENANCE_PRESET` 留在 memory 内部。维护子由
   memory 创建，memory 对它注册自己的记忆工具并跳过仅属于用户的 policy/impressions；这是

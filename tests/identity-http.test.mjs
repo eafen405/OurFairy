@@ -279,7 +279,7 @@ describe('OurFairy identity over real HTTP', () => {
     // route's own admission would answer 401/403 for the missing credential,
     // 405 for a wrong method or 400 for the body. `/speech` is no exception —
     // its error class adds the `speech/` prefix, like every other row.
-    assert.equal(PRODUCT_SURFACE.length, 44, 'the rows publish 44 product addresses')
+    assert.equal(PRODUCT_SURFACE.length, 43, 'the rows publish 43 product addresses')
     const fenced = new Set()
     for (const entry of PRODUCT_SURFACE) {
       fenced.add(entry.path)
@@ -293,7 +293,7 @@ describe('OurFairy identity over real HTTP', () => {
       assert.equal(refused.json?.error?.code, `${entry.prefix}/forbidden-authority`,
         `${entry.method} ${entry.path} must report ${entry.prefix}/forbidden-authority: ${refused.text}`)
     }
-    assert.equal(fenced.size, 44, 'the fence case must reach every published address exactly once')
+    assert.equal(fenced.size, 43, 'the fence case must reach every published address exactly once')
 
     // A malformed body pins the order: a fence that ran after JSON parsing would
     // answer 400 before judging the authority. 403 with the forbidden-authority

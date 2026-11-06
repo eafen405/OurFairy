@@ -394,6 +394,13 @@
 | --- | --- |
 | [225-page-read](225-page-read/README.md) · [225-task-lookup](225-task-lookup/README.md) · [225-closeout](225-closeout/README.md) | #225 T1/T2/T3：页读取收进 runtime.page，任务访问收进 work 单元窄查找并返回原生 JobId；收口修复两轴 Standards 发现，在最终 tip 跑全量门禁 |
 
+## 上下文工程与印象只读（#302 / #249）
+
+| 目录 | 内容 |
+| --- | --- |
+| [302-249-integration](302-249-integration/README.md) | 整合主线与遗留分支：统一原生装配、按需会话事实工具与稳定 system 前缀、HTTP/Android 印象只读；包含两轴审查、真实模型成功与失败证据。语义未通过部分明确保留，不以替身门禁代替验收。 |
+| [312-network-persona](312-network-persona/README.md) | #312 原生 DeepSeek 搜索与 HTTP 抓取、人格／身份／工作规则分段、六条常驻语料；记录真实产品 A／重组稿对照与尚未通过的检索收束、人格语义样本。 |
+
 ## 界面微调（#215/#217/#218/#239/#255/#290/#291/#292）
 
 | 目录 | 内容 |
@@ -428,6 +435,7 @@
 | [review-24-26](review-24-26/README.md) · [review-24-26-backend](review-24-26-backend/evidence.md) | #24–#26 阶段评审 |
 | [review-arch-map69](review-arch-map69/README.md) · [review-arch-map69-fixes](review-arch-map69-fixes/README.md) | 地图 #69 最终两轴 code-review（四份逐字报告）与逐条评审项的修复/记录不修 |
 | [fixes-290-291-292](fixes-290-291-292/README.md) | #290/#291/#292 小修批次：三票 octopus 合入 `e59587b62b`；#291 选本地 slot 版并关闭重复 PR #294；合并提交走全量门禁（474 npm tests、628 Android tests、combo verified） |
+| [315-325-merge-review](315-325-merge-review/README.md) | #315/#325 合入审查：Team 两轴互证、用户确认模型效果不作硬阻塞、最新 main 与 dsh 组合的工程门禁 |
 | [retro-guardrails](retro-guardrails/README.md) | 复盘修复验证 |
 
 ## 阅读顺序
