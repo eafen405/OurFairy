@@ -59,9 +59,15 @@ chat 的职责。响应的会话行与 `/sessions/list` 的同一行由同一份
   快照序号，客户端用它丢弃过时快照。
 - `cursor`：最近观察到的原生事件 seq，空会话为 -1。`durableThroughSeq`：writer 屏障已确认
   的前缀，未知为 -1；它不表示客户端已应用该前缀。
-- `messages`：`{messageId,position,seq,requestId,role,status,text,attachments,tools?,kind?,toolCallId?}`。
+- `messages`：`{messageId,position,seq,requestId,role,turn,status,text,attachments,tools?,usage?,kind?,toolCallId?}`。
   `role` 1 用户、2 Fairy、3 派生展示行；`status` 1 待定、2 完成、3 中断、4 失败。文本是原始文本，
-  含空白与 Markdown。`kind` 只在派生行出现：1 技能激活（`加载了skill:<name>`），2 技能审核
+  含空白与 Markdown。`turn` 是该行所属的回合编号，0 表示它不属于任何回合（回合开始前排队的消息、
+  会话空闲时到达的投递）。行取自己事件所报的回合；不报回合的事件（用户消息、投递）取它落地时
+  开着的回合。`usage`：`{input,cache?,output}`，该回合结算后的 token 分桶，**只出现在该回合最后
+  一条 Fairy 行上**，其余行缺省。它是结算值：`turn/end` 之后才出现，读在回合内则不报。`input`
+  与 `output` 是各次尝试供应商上报之和（重试的每次尝试分别计入，同一步内后到的样本替换先前的）；
+  `cache` 是缓存读与缓存写之和，只有该回合每次上报了用量的尝试都给了缓存桶时才出现——否则该桶
+  未知，缺省而不是 0。供应商未上报用量的回合不出现 `usage`。被中断的回合报已结算的部分值。`kind` 只在派生行出现：1 技能激活（`加载了skill:<name>`），2 技能审核
   （后端 `skill_manage inspect` 结果里的 `display` 四块材料）；`toolCallId` 是该派生行配对的
   工具调用标识。技能激活行由成功的原生 `skill` 工具结果确定性派生；技能审核行由成功且 JSON
   含 `{kind:'skill-review',display}` 的 `skill_manage` 工具结果确定性派生。两者都只存在于投影，
@@ -149,10 +155,11 @@ ACK 失败不改变已确认位置。缺少缓存正文时不能跳过历史，�
 每个单元声明 `key`、`stateVersion`、zod `stateSchema`、`init(header)` 与 `apply(state,event)`：
 `apply` 必须同步且纯，未解释的事件返回同一引用；state 必须能被 registry 做 JSON checkpoint。
 每个单元的 `stateVersion` 在折叠语义或 state 形状变化时递增，旧版本的持久化行会被丢弃并从
-`init` 重折。当前版本：transcript `7`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
+`init` 重折。当前版本：transcript `8`（不可变首次出现 + 有序 transitions + move 索引 + 每行的
 工具名 + 未完成 `skill` / `skill_manage` 调用的窄配对表 + 与 `skill_manage` 调用配对的审核结果
-派生行），work `2`（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读这几行，
-与本文件一起漂移即失败。
+派生行 + 每行的回合编号与回合结算分桶：行取自己事件所报回合，回合结算时把分桶写到该回合最后
+一条 Fairy 行上），work `2`（窄的 pending id/来源索引）。`tests/projection-units.test.mjs` 会读
+这几行，与本文件一起漂移即失败。
 
 - 任务与活动是同一次 fold：activity 依赖每个事件后的任务/report 快照，拆开会形成第二套
   report 状态机。

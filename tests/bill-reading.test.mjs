@@ -12,7 +12,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import './helpers/dsh-peers.mjs'
 
-const { DENNY_DAY_BUCKET, TOKENS_PER_DENNY, renderBillReading } = await import('../backend/bill/dist/index.js')
+const { DENNY_DAY_BUCKET, renderBillReading } = await import('../backend/bill/dist/index.js')
 
 /** One usage record with the four disjoint buckets. */
 function tokens({ input = 0, cacheRead = 0, cacheWrite = 0, output = 0 } = {}) {
@@ -27,24 +27,26 @@ function reading(previousTokens, dayTokens) {
   }
 }
 
-test('the Denny rate is one named constant with the narrative source beside it', () => {
-  assert.equal(TOKENS_PER_DENNY, 3000, '1 Denny = 3000 tokens: 1.8e9 tokens folded to 600000 Denny')
+test('the day bucket is one named constant the reading and the tool share', () => {
+  // The rate itself has its own single-authority case in `tests/bill-denny.test.mjs`;
+  // repeating the literal here would be the second copy that case forbids.
   assert.equal(DENNY_DAY_BUCKET, 10000, 'the day total is reported in 10 000-Denny steps')
 })
 
 test('the previous interaction is reported to the whole Denny', () => {
-  // 1 431 000 tokens / 3000 = 477 Denny exactly; the four buckets are summed first.
+  // 1 431 000 tokens is 477 Denny exactly at the one rate; the four buckets are
+  // summed before converting, which is what makes the split irrelevant.
   const text = renderBillReading(reading(tokens({ input: 1_000_000, cacheRead: 400_000, output: 31_000 }), tokens()))
   assert.match(text, /上一次互动 477 丁尼/, `the settled previous interaction reads as a whole Denny count; got ${text}`)
 
-  // 1 500 000 / 3000 = 500; a fraction of a Denny rounds to the nearest one
-  // rather than being truncated, so the number she quotes is the closer one.
+  // A fraction of a Denny rounds to the nearest whole one rather than being
+  // truncated, so the number she quotes is the closer of the two.
   const rounded = renderBillReading(reading(tokens({ input: 1_499_000 }), tokens()))
   assert.match(rounded, /上一次互动 500 丁尼/, `a fractional Denny rounds to the nearest whole one; got ${rounded}`)
 })
 
 test('the day total is throttled to 10 000-Denny buckets', () => {
-  // 120 000 000 tokens / 3000 = 40 000 Denny = four buckets.
+  // 40 000 Denny is four whole buckets at the one rate.
   const text = renderBillReading(reading(tokens({ input: 1 }), tokens({ input: 120_000_000 })))
   assert.match(text, /本日累计约 4 万丁尼/, `the day reads as a coarse bucket; got ${text}`)
 

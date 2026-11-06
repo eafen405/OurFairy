@@ -409,7 +409,12 @@ test('the bill tool answers the monthly and historical question with the bill pa
       'allTime', 'contextReadingGranularityDenny', 'days', 'month', 'today',
     ], `the tool answers the three totals and the series; got ${JSON.stringify(Object.keys(value))}`)
     for (const key of ['today', 'month', 'allTime']) {
-      assert.equal(Number.isSafeInteger(value[key].denny), true, `${key} carries whole Denny`)
+      // The tool quotes the one conversion the bill page uses, so its value is
+      // rounded to a tenth of a Denny — not to the whole Dennies the throttled
+      // context line speaks in.
+      assert.equal(typeof value[key].denny, 'number', `${key} carries a Denny figure`)
+      assert.equal(value[key].denny, Math.round(value[key].denny * 10) / 10,
+        `${key}'s Denny is rounded to a tenth, the page's precision; got ${value[key].denny}`)
       assert.deepEqual(Object.keys(value[key].tokens).sort(),
         ['cacheReadTokens', 'cacheWriteTokens', 'inputTokens', 'outputTokens'], `${key} carries the raw buckets`)
     }

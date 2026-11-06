@@ -97,7 +97,11 @@ async function readLog(token, sessionId) {
  * ids and the position #224 added after the capture.
  */
 function assertSameProjection(events, sessionId, running = false) {
-  const stable = messages => messages.map(({ messageId, position: _position, ...row }) => row)
+  // The capture predates #321's row fields, so the frozen comparison strips them
+  // the same way it already strips the generated message id and `position`: every
+  // field the capture does carry is still compared exactly. The fields themselves
+  // are asserted below, on this same real log.
+  const stable = messages => messages.map(({ messageId, position: _position, turn: _turn, usage: _usage, ...row }) => row)
   const ctx = { jobs: { generation: 'no-live-registry', list: () => [] } }
   const transcriptState = events.reduce(units.transcriptDefinition.apply, units.transcriptDefinition.init({ id: sessionId }, 0))
   const workState = events.reduce(units.workDefinition.apply, units.workDefinition.init({ id: sessionId }, 0))
@@ -156,7 +160,7 @@ test('the units reproduce the frozen values over a real session log', async () =
   assert.ok(failed.every(message => message.requestId === null), 'an attempt row has no request id')
 
   // The same frozen value must hold at every cut the transcript claims to answer.
-  const stable = messages => messages.map(({ messageId, position: _position, ...row }) => row)
+  const stable = messages => messages.map(({ messageId, position: _position, turn: _turn, usage: _usage, ...row }) => row)
   for (const [cut, rows] of Object.entries(expected.cuts)) {
     const at = units.transcriptAt(folded, Number(cut))
     assert.deepEqual(stable(at), rows, `transcript at cut ${cut} must match the frozen prefix`)
@@ -164,6 +168,33 @@ test('the units reproduce the frozen values over a real session log', async () =
     assert.deepEqual(at.map(message => message.position), rows.map((_, index) => index),
       `positions at cut ${cut} must name the frozen prefix places`)
   }
+
+  // #321: the real log reports provider usage, so each settled turn names its
+  // spend on exactly one row — its last Fairy row — and every row names its turn.
+  const rows321 = units.transcriptAt(folded)
+  const withUsage = rows321.filter(row => row.usage !== undefined)
+  assert.ok(withUsage.length > 0, `the real log must report turn spend; rows: ${JSON.stringify(rows321)}`)
+  const turns = [...new Set(rows321.map(row => row.turn))]
+  // The scenario drives three turns: a tool call, a plain reply, and a failed
+  // stream. Each settled turn carries its own spend on one row only.
+  assert.deepEqual(turns, [1, 2, 3], `the log must span three turns; rows: ${JSON.stringify(rows321)}`)
+  assert.equal(withUsage.length, turns.length,
+    `each settled turn reports its spend once; rows: ${JSON.stringify(withUsage)}`)
+  for (const turn of turns) {
+    const fairy = rows321.filter(row => row.turn === turn && row.role === 2)
+    const carrier = withUsage.filter(row => row.turn === turn)
+    assert.equal(carrier.length, 1, `turn ${turn} must name its spend on exactly one row`)
+    assert.equal(carrier[0].messageId, fairy.at(-1)?.messageId,
+      `turn ${turn} must name its spend on its last Fairy row`)
+    // The provider's buckets are per-attempt sums: it reports no cache for this
+    // mock, so the bucket names none rather than claiming a zero cache.
+    assert.deepEqual(Object.keys(carrier[0].usage).sort(), ['input', 'output'])
+  }
+  // Every row names the turn whose events produced it; the log starts at turn 1
+  // and the delivery-free flow leaves no row outside a turn.
+  assert.ok(rows321.every(row => row.turn > 0), `every row must name a turn; rows: ${JSON.stringify(rows321)}`)
+  assert.deepEqual(rows321.map(row => row.turn), [...rows321.map(row => row.turn)].sort((left, right) => left - right),
+    'the first-appearance order keeps turns in order in this log')
 
   // The read face serves the same folded facts; the frozen fixture is the
   // independent expectation, and this asserts the endpoint is on that path.

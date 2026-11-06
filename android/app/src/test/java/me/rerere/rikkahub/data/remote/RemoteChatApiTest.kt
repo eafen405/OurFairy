@@ -318,6 +318,46 @@ class RemoteChatApiTest {
     }
 
     @Test
+    fun `a settled turn's spend decodes on the row that carries it`() = runTest {
+        reply(200, """{"ok":true,"projection":$SETTLED_TURN_SNAPSHOT}""")
+
+        val projection = api.read(TOKEN, "s-1")
+
+        val question = projection.messages[0]
+        val reply = projection.messages[1]
+        // The turn number is on every row; the spend is a settlement, so it rides
+        // only the row the backend put it on.
+        assertEquals(1, question.turn)
+        assertEquals(1, reply.turn)
+        assertNull(question.usage)
+        val usage = reply.usage!!
+        assertEquals(10, usage.input)
+        assertEquals(4, usage.cache)
+        assertEquals(2, usage.output)
+    }
+
+    @Test
+    fun `a cache figure the provider never reported stays absent instead of zero`() = runTest {
+        reply(200, """{"ok":true,"projection":$UNCACHED_TURN_SNAPSHOT}""")
+
+        val usage = api.read(TOKEN, "s-1").messages.single { it.usage != null }.usage!!
+
+        assertEquals(10, usage.input)
+        assertNull("an unreported cache figure is not a zero", usage.cache)
+        assertEquals(2, usage.output)
+    }
+
+    @Test
+    fun `a snapshot written before turns and spend were named still decodes`() = runTest {
+        reply(200, """{"ok":true,"projection":$FIRST_SNAPSHOT}""")
+
+        val message = api.read(TOKEN, "s-1").messages.single()
+
+        assertEquals("a row that names no turn belongs to none", 0, message.turn)
+        assertNull(message.usage)
+    }
+
+    @Test
     fun `a tool-call step decodes its tool names and an older message decodes none`() = runTest {
         reply(200, """{"ok":true,"projection":$TOOL_SNAPSHOT}""")
 
@@ -582,6 +622,25 @@ class RemoteChatApiTest {
             """{"sessionId":"s-1","generation":"gen-1","version":2,"cursor":2,"durableThroughSeq":2,""" +
                 """"messages":[{"messageId":"a-1","position":0,"seq":2,"role":2,"status":2,"text":"","attachments":[],"tools":["bash","read"]},""" +
                 """{"messageId":"u-1","position":1,"seq":3,"role":1,"status":2,"text":"next"}],""" +
+                """"attempt":null,"replyStatus":0,"error":null}"""
+
+        /**
+         * A finished turn: the question, then the reply the backend settled the turn's spend on.
+         * The usage numbers are the ones in the sample row of `backend/chat/README.md`.
+         */
+        const val SETTLED_TURN_SNAPSHOT =
+            """{"sessionId":"s-1","generation":"gen-1","version":1,"cursor":2,"durableThroughSeq":2,""" +
+                """"messages":[{"messageId":"u-1","position":0,"seq":1,"requestId":"r-1","role":1,"turn":1,""" +
+                """"status":2,"text":"帮我算一下","attachments":[]},""" +
+                """{"messageId":"a1","position":1,"seq":2,"requestId":null,"role":2,"turn":1,""" +
+                """"status":2,"text":"ok","attachments":[],"usage":{"input":10,"cache":4,"output":2}}],""" +
+                """"attempt":null,"replyStatus":0,"error":null}"""
+
+        /** The same settlement with the cache bucket absent, as a provider that reported none. */
+        const val UNCACHED_TURN_SNAPSHOT =
+            """{"sessionId":"s-1","generation":"gen-1","version":1,"cursor":2,"durableThroughSeq":2,""" +
+                """"messages":[{"messageId":"a1","position":1,"seq":2,"requestId":null,"role":2,"turn":7,""" +
+                """"status":3,"text":"ok","attachments":[],"usage":{"input":10,"output":2}}],""" +
                 """"attempt":null,"replyStatus":0,"error":null}"""
 
         /** A derived skill activation row beside the user turn that caused it. */

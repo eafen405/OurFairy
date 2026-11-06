@@ -18,37 +18,25 @@
  *
  * @module @ourfairy/dsh-bill/reading
  */
+import { dennyOfTokens, tokensOf } from './denny.js'
 import type { TokenBuckets } from './fold.js'
-
-/**
- * Tokens per Denny.
- *
- * A narrative constant, not a price: "four-card server, 1.8e9 tokens a month,
- * about 6000 yuan of electricity" folds to 600000 Denny, hence 1 Denny = 3000
- * tokens. The bill itself is derived and stored in tokens so that changing this
- * number re-presents history instead of re-deriving it.
- */
-export const TOKENS_PER_DENNY = 3000
 
 /** The step the day total is reported in: 10 000 Denny. */
 export const DENNY_DAY_BUCKET = 10_000
 
-/** The total of the four disjoint provider buckets, in tokens. */
-function tokenTotal(tokens: TokenBuckets): number {
-  return tokens.inputTokens + tokens.cacheReadTokens + tokens.cacheWriteTokens + tokens.outputTokens
-}
-
 /**
  * Convert token buckets to whole Denny.
  *
- * The conversion happens at the presenting layer only. A fraction is rounded to
- * the nearest Denny rather than truncated, so the figure she quotes is the
- * closer of the two.
+ * The rate itself lives in `denny.ts`, the one module allowed to write it; this
+ * only chooses this reading's *precision*. A fraction is rounded to the nearest
+ * whole Denny rather than truncated, so the figure she quotes is the closer of
+ * the two. The bill page rounds to a tenth instead, because a page has room for
+ * the fraction a spoken line does not.
  * @param tokens - one total's four disjoint buckets.
  * @returns that total in whole Denny.
  */
 export function dennyOfBuckets(tokens: TokenBuckets): number {
-  return Math.round(tokenTotal(tokens) / TOKENS_PER_DENNY)
+  return Math.round(dennyOfTokens(tokensOf(tokens)))
 }
 
 /** What the reading knows about the previous completed interaction. */
@@ -83,7 +71,7 @@ function previousClause(previous: PreviousReading): string {
       // A turn that genuinely spent nothing is a different fact from one that
       // spent less than a whole Denny, and only the first may read as a number.
       // A settled turn is always a real interaction, so there is no third case.
-      if (tokenTotal(previous.tokens) === 0) return '上一次互动 无需计费'
+      if (tokensOf(previous.tokens) === 0) return '上一次互动 无需计费'
       if (denny === 0) return '上一次互动 不足 1 丁尼'
       return `上一次互动 ${denny} 丁尼`
     }
@@ -98,11 +86,11 @@ function previousClause(previous: PreviousReading): string {
 function dayClause(day: DayReading): string {
   switch (day.kind) {
     case 'settled': {
-      const total = tokenTotal(day.tokens)
+      const total = tokensOf(day.tokens)
       // A quiet day and a day too small to round up to one step are different
       // facts, and neither is the same as "could not compute".
       if (total === 0) return '本日累计 尚无消耗'
-      const steps = Math.round((total / TOKENS_PER_DENNY) / DENNY_DAY_BUCKET)
+      const steps = Math.round(dennyOfTokens(total) / DENNY_DAY_BUCKET)
       if (steps === 0) return `本日累计 不足 ${DENNY_DAY_BUCKET / 10_000} 万丁尼`
       return `本日累计约 ${steps} 万丁尼`
     }

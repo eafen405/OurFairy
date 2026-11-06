@@ -15,7 +15,8 @@
  * @module @ourfairy/dsh-bill/tools
  */
 import { defineTool, type InferValue } from '@deepseek-ai/dsh-tools'
-import { DENNY_DAY_BUCKET, TOKENS_PER_DENNY } from './reading.js'
+import { dennyOfTokens, tokensOf } from './denny.js'
+import { DENNY_DAY_BUCKET } from './reading.js'
 import type { BillService, BillSnapshot } from './aggregate.js'
 import type { TokenBuckets } from './fold.js'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -33,16 +34,9 @@ const OUTPUT = {
 /** The snapshot's value, as the output schema declares it. */
 type ToolValue = InferValue<typeof OUTPUT.schema>
 
-/** The four buckets as whole Denny, for the model-facing answer. */
-function dennyOf(tokens: TokenBuckets): number {
-  return Math.round(
-    (tokens.inputTokens + tokens.cacheReadTokens + tokens.cacheWriteTokens + tokens.outputTokens) / TOKENS_PER_DENNY,
-  )
-}
-
 /** One total as the tool reports it: Denny for the voice, tokens for the check. */
 function total(tokens: TokenBuckets): { denny: number, tokens: TokenBuckets } {
-  return { denny: dennyOf(tokens), tokens }
+  return { denny: dennyOfTokens(tokensOf(tokens)), tokens }
 }
 
 /**
@@ -60,7 +54,7 @@ export function billToolValue(snapshot: BillSnapshot): ToolValue {
     today: total(snapshot.today),
     month: total(snapshot.month),
     allTime: total(snapshot.allTime),
-    days: snapshot.days.map(day => ({ day: day.day, denny: dennyOf(day.tokens), tokens: day.tokens })),
+    days: snapshot.days.map(day => ({ day: day.day, denny: dennyOfTokens(tokensOf(day.tokens)), tokens: day.tokens })),
     // The reading's own throttle, stated so a mismatch with the context line is
     // explained by the tool rather than blamed on the aggregate.
     contextReadingGranularityDenny: DENNY_DAY_BUCKET,

@@ -100,6 +100,11 @@ test('the package publishes the reading face the later tickets consume', async (
   for (const service of ['sessions', 'sessionPersistence', 'sessionQuery']) {
     assert.ok(exported.inject.includes(service), `the row must inject "${service}" to read session logs`)
   }
+  // The one address (#319) is served by this row, from the seams every other
+  // product row uses: the carrier, its fence, and the identity service.
+  for (const service of ['webServer', 'connection', 'identity']) {
+    assert.ok(exported.inject.includes(service), `the row must inject "${service}" to serve its one address`)
+  }
   assert.equal(typeof exported.apply, 'function', 'the row must mount through apply()')
   assert.equal(typeof exported.Bill, 'function', 'the service must be the composed reading face')
   // `snapshot` is an instance field, not a prototype method: it closes over the
@@ -118,4 +123,12 @@ test('the package publishes the reading face the later tickets consume', async (
 
   const aggregate = await import('../backend/bill/dist/aggregate.js')
   assert.equal(aggregate.SERIES_DAYS, 30, 'the series is the product decision, not a caller parameter')
+
+  // The package now publishes the address and the rate as subpaths, so the page
+  // (#322) and the context reading (#320) import them rather than reimplement.
+  const http = await import('../backend/bill/dist/http.js')
+  assert.deepEqual(exported.SURFACE, http.SURFACE, 'the row re-exports the surface the carrier mounts')
+  assert.deepEqual([...http.BILL_PATHS], ['/bill'], 'one address, and only one')
+  const denny = await import('../backend/bill/dist/denny.js')
+  assert.equal(exported.TOKENS_PER_DENNY, denny.TOKENS_PER_DENNY, 'the row re-exports the one rate')
 })

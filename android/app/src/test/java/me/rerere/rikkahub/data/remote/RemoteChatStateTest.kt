@@ -274,6 +274,37 @@ class RemoteChatStateTest {
         assertEquals(-1L, state.snapshot.value.consumedThrough)
     }
 
+    /**
+     * #323: the token readout is a property of the row the backend settled it on, so a row that
+     * gains one later must keep its place; otherwise the reader sees the line jump to a different
+     * reply after a reconnect or a page backfill.
+     */
+    @Test fun `a row that gains its settled spend keeps its position`() = runTest {
+        val backend = Backend().apply { ack = 7 }
+        val state = RemoteChatState(backend, backgroundScope, MemoryChatSyncStore(), "https://fairy")
+        state.bind("alice", "s1", 1)
+        runCurrent()
+        runCurrent()
+        val flow = backend.events.getValue("alice/s1")
+        val question = RemoteChatMessage("u1", 0, 2, "r1", 1, 2, "算一下", turn = 1)
+        val reply = RemoteChatMessage("a1", 1, 3, null, 2, 2, "ok", turn = 1)
+        flow.emit(projection("s1", 1).copy(messages = listOf(question, reply)))
+        runCurrent()
+        assertNull("a turn still running reports no settled spend", reply.usage)
+
+        // The turn ends: the same row now carries the settlement, at the same place.
+        val settled = reply.copy(usage = RemoteChatUsage(input = 10, cache = 4, output = 2))
+        flow.emit(projection("s1", 2).copy(messages = listOf(question, settled)))
+        runCurrent()
+
+        val view = state.snapshot.value.projection!!
+        assertEquals(listOf("u1", "a1"), view.messages.map { it.messageId })
+        assertEquals(listOf(0L, 1L), view.messages.map { it.position })
+        assertEquals(RemoteChatUsage(input = 10, cache = 4, output = 2), view.messages[1].usage)
+        assertEquals(1, view.messages[1].turn)
+        assertNull(state.snapshot.value.failure)
+    }
+
     @Test fun `a skill activation row keeps its place, merges once and is not Fairy output`() = runTest {
         val backend = Backend().apply { ack = 7 }
         val state = RemoteChatState(backend, backgroundScope, MemoryChatSyncStore(), "https://fairy")
