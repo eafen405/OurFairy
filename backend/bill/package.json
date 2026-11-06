@@ -20,6 +20,10 @@
       "types": "./dist/aggregate.d.ts",
       "default": "./dist/aggregate.js"
     },
+    "./reading": {
+      "types": "./dist/reading.d.ts",
+      "default": "./dist/reading.js"
+    },
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
