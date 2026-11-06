@@ -144,6 +144,16 @@ const emptySpend = (turn: number): z.infer<typeof turnSpendSchema> => ({
  * remembers which row the turn's settled value will ride on. `row` is the last
  * Fairy row this turn itself produced, so a delivery from another session never
  * carries this turn's bill.
+ *
+ * This is deliberately NOT `deriveTurnTokenUsage` from the token meter, which is
+ * the upstream authority for the same question and which the bill package uses
+ * for whole turns. That function reads the complete turn's events — message
+ * content and stream records included — and this fold's state is plain JSON that
+ * the projection registry checkpoints after every event. Calling it here would
+ * copy the conversation into checkpoint state, a second authority over content
+ * for the sake of a handful of integers. The rules are therefore mirrored
+ * numerically: a bucket every answering attempt reported is summed, and a bucket
+ * any attempt left unknown is dropped rather than reported as a partial total.
  */
 function recordSpend(
   spend: z.infer<typeof turnSpendSchema>,

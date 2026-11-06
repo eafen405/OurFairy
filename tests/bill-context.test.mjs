@@ -17,10 +17,13 @@
  */
 import assert from 'node:assert/strict'
 import http from 'node:http'
+import { readFileSync } from 'node:fs'
 import { once } from 'node:events'
+import { join } from 'node:path'
 import { after, test } from 'node:test'
+import { readCombo, repoPath } from '../scripts/combo.ts'
 import {
-  describeRun, httpJson, makeHome, registerUser, removeHome, runBackendAsync, startArgs, startedPort,
+  describeRun, httpJson, makeHome, registerUser, removeHome, repoRoot, runBackendAsync, startArgs, startedPort,
 } from './helpers/backend.mjs'
 import { answerIfTitle } from './helpers/title-aware.mjs'
 
@@ -441,4 +444,22 @@ test('the bill tool answers the monthly and historical question with the bill pa
   } finally {
     await stop(home)
   }
+})
+
+test('the reading stays last even if the harness allocates a later context', async () => {
+  // `BILL_CONTEXT_ORDER` is a literal above the harness's whole allocated range,
+  // which is what makes the reading last by construction. That reasoning breaks
+  // silently if a future dsh version allocates above it, so the assumption is
+  // asserted against the harness the deployment actually runs, not against the
+  // number this repository happened to read once.
+  const { BILL_CONTEXT_ORDER } = await import('../backend/bill/dist/context.js')
+  const dsh = repoPath(readCombo(repoRoot).combo, 'dsh', repoRoot)
+  const source = readFileSync(join(dsh, 'packages', 'core', 'system-prompt', 'src', 'index.ts'), 'utf8')
+  const block = /const CONTEXT_ORDERS = \{([\s\S]*?)\} as const/u.exec(source)
+  assert.ok(block !== null, 'the harness must still declare its context order allocation')
+  const allocated = [...(block[1] ?? '').matchAll(/:\s*(-?\d+)/gu)].map(match => Number(match[1]))
+  assert.ok(allocated.length > 0, `the allocation must carry numbers; got ${JSON.stringify(block[1])}`)
+  assert.ok(BILL_CONTEXT_ORDER > Math.max(...allocated),
+    `the bill reading's order ${BILL_CONTEXT_ORDER} must exceed every order the harness allocates `
+    + `(max ${Math.max(...allocated)}); a later allocation would otherwise overtake the reading`)
 })

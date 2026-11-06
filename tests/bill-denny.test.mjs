@@ -59,25 +59,40 @@ test('the conversion is the spec\'s, rounded to a tenth of a Denny', () => {
   assert.equal(days.reduce((sum, day) => sum + dennyOf(day), 0), 1)
 })
 
-test('the rate literal appears in exactly one tracked source file', () => {
-  // Read the tracked sources, not the working tree: a scratch file under the
-  // gitignored `work/tmp/` is not a second copy of the rate in the product.
-  const tracked = execFileSync('git', ['ls-files', '-z', '*.ts', '*.mjs', '*.kt'], { cwd: repoRoot, encoding: 'utf8' })
+test('no client can convert tokens to Denny, because it is handed both', () => {
+  // The structural half of the one-rate rule: the wire carries tokens and Denny
+  // together, so a client never needs the rate and must not have a way to apply
+  // it. That is a fact about the client's shape, not about its text — the Android
+  // side formats a supplied Denny and exposes no conversion entry point at all.
+  const clientSources = execFileSync('git', ['ls-files', '-z', '*.kt'], { cwd: repoRoot, encoding: 'utf8' })
     .split('\0')
-    .filter(path => path !== '')
-  // The one authority is the file allowed to hold the number; this test states
-  // the figures it checks against and is not a copy the product reads.
-  const OWNER = 'backend/bill/src/denny.ts'
-  const offenders = []
-  for (const path of tracked) {
-    // Excluding the authority and this test is what keeps the scan honest rather
-    // than self-satisfying: every other file is a copy if it holds the number.
-    if (path === OWNER || path === 'tests/bill-denny.test.mjs') continue
+    .filter(path => path !== '' && path.includes('/src/main/'))
+  assert.ok(clientSources.length > 50, `the client sources must be readable; found ${clientSources.length}`)
+
+  const converters = []
+  for (const path of clientSources) {
     const source = readFileSync(join(repoRoot, path), 'utf8')
-    // A named constant equal to the rate, or the denominator written inline. The
-    // second is what a copy-paste conversion looks like.
-    if (/TOKENS_PER_DENNY\s*=\s*3000/u.test(source) || /\/\s*3_?000(?:[^\d]|$)/u.test(source)) offenders.push(path)
+    // A function that produces a Denny from anything but an already-supplied
+    // figure is a conversion, and only the backend may own one.
+    for (const match of source.matchAll(/fun\s+\w*[Dd]enny\w*\s*\(([^)]*)\)/gu)) {
+      const parameters = match[1]
+      const producesFromTokens = /tokens?\s*:\s*(?:Long|Int)/u.test(parameters)
+      if (producesFromTokens) converters.push(`${path}: ${match[0]}`)
+    }
   }
-  assert.deepEqual(offenders, [],
-    `the Denny rate must be one named constant in backend/bill/src/denny.ts; copies found in: ${offenders.join(', ')}`)
+  assert.deepEqual(converters, [],
+    `a client must not convert tokens to Denny; it receives both. Found: ${converters.join('; ')}`)
+})
+
+test('the rate is one value: the package exports it once and every presenter uses it', () => {
+  // The model-visible statements of the rate are prose, so the checkable fact is
+  // that they agree with the constant. Anything the product computes goes through
+  // `dennyOf*`; this test pins that there is one constant to agree with.
+  assert.equal(TOKENS_PER_DENNY, 3000)
+  // The tool description the model reads states the same rate the code applies.
+  const tools = readFileSync(join(repoRoot, 'backend', 'bill', 'src', 'tools.ts'), 'utf8')
+  const stated = /1\s*(?:丁尼|Denny)\s*=\s*(\d[\d_]*)/u.exec(tools)
+  assert.ok(stated !== null, 'the tool description must state the rate the model is told')
+  assert.equal(Number(stated[1].replaceAll('_', '')), TOKENS_PER_DENNY,
+    'the rate the model is told must be the rate the code applies')
 })

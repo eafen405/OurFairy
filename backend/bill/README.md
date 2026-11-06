@@ -49,6 +49,13 @@ admission instead of going through `postHandler`.
 
 ## Where the numbers come from
 
+- The aggregate reads a **port**, not a store: `BillSource` lists sessions, and
+  for each one reports whether it is materialized, what revision it is at, and
+  its events. The real adapter is a few lines over the session services; the
+  aggregate and its tests never touch a backend. That is the one seam in this
+  package, and it exists because the alternative — driving every cache and
+  boundary case through a booted backend — costs minutes per case instead of
+  milliseconds. It is not a reuse seam: nothing else is expected to implement it.
 - Usage is read from both places it is recorded: a settled message's
   `data.usage` and a retried attempt's own stream. A retried attempt leaves no
   message of its own, so reading only messages would lose those tokens.
