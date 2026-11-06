@@ -50,6 +50,9 @@
 - **memory 问「这是不是我创建的维护子」**：`MAINTENANCE_PRESET` 留在 memory 内部。维护子由
   memory 创建，memory 对它注册自己的记忆工具并跳过仅属于用户的 policy/impressions；这是
   创建者给自己的子授权，不是产品通用标记。其它产品包不再导入这个常量。
+- **bill 问同一个问题两次**：电费读数作为运行时上下文只挂用户会话，`electricity_bill` 工具
+  也只注册在用户会话上。维护子与学习子的消耗照常计入这台 Fairy 的总账，但它们看不见一项与
+  自己无关的账目——计费对象与呈现对象是两件事，前者按全部会话，后者只按用户会话。
 
 ## per-agent 注册与 global layer
 

@@ -40,6 +40,9 @@ class FairyDestinationsTest {
         Admission(Screen.Gateway, visitor = false, agent = false, phaethon = true, staleAdmin = false),
         Admission(Screen.Impression, visitor = false, agent = true, phaethon = true, staleAdmin = false),
         Admission(Screen.Skills, visitor = false, agent = true, phaethon = true, staleAdmin = false),
+        // The bill is the Fairy's public total: any live credential reads it, and it
+        // is not an administrator's page.
+        Admission(Screen.Bill, visitor = false, agent = true, phaethon = true, staleAdmin = false),
     )
 
     @Test
@@ -103,6 +106,9 @@ class FairyDestinationsTest {
         Restore(Screen.Gateway, stack = listOf(Screen.Home, Screen.Settings, Screen.Gateway)),
         Restore(Screen.Impression, stack = listOf(Screen.Home, Screen.Settings, Screen.Impression)),
         Restore(Screen.Skills, stack = listOf(Screen.Home, Screen.Settings, Screen.Skills)),
+        // The bill's entry card is on the console, not in settings, so a cold start
+        // reopens it straight over home.
+        Restore(Screen.Bill, stack = listOf(Screen.Home, Screen.Bill)),
     )
 
     @Test
@@ -207,7 +213,7 @@ class FairyDestinationsTest {
             routes.toSet(),
             screens.map(FairyDestinations::routeOf).toSet(),
         )
-        assertEquals("the product has eight destinations", 8, routes.size)
+        assertEquals("the product has nine destinations", 9, routes.size)
     }
 
     /**
@@ -226,6 +232,7 @@ class FairyDestinationsTest {
         Screen.Gateway,
         Screen.Impression,
         Screen.Skills,
+        Screen.Bill,
     )
 
     @Test

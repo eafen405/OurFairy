@@ -1,0 +1,13 @@
+{
+  "parent": 317,
+  "title": "Fairy 电费账单规格",
+  "children": [
+    { "file": "01.md", "issue": 318, "title": "电费快照与聚合：从会话日志派生日/月/累计" },
+    { "file": "02.md", "issue": 319, "title": "电费账单读取地址：一条快照返回日/月/累计与 30 天序列" },
+    { "file": "03.md", "issue": 320, "title": "电费上下文注入与只读工具" },
+    { "file": "04.md", "issue": 321, "title": "消息行回合号与结算分桶" },
+    { "file": "05.md", "issue": 322, "title": "Android 电费账单页与 30 天柱状图" },
+    { "file": "06.md", "issue": 323, "title": "Android 每条回复的 token 小字" },
+    { "file": "07.md", "issue": 324, "title": "spec 317 收口：全量门禁与可执行声称复核" }
+  ]
+}

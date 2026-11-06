@@ -17,6 +17,7 @@
     "@ourfairy/dsh-chat": "file:../chat",
     "@ourfairy/dsh-gateway": "file:../gateway",
     "@ourfairy/dsh-speech": "file:../speech",
+    "@ourfairy/dsh-bill": "file:../bill",
     "@ourfairy/dsh-search": "file:../search",
     "@ourfairy/dsh-attachments": "file:../attachments",
     "@ourfairy/dsh-spaces": "file:../spaces",

@@ -442,3 +442,12 @@
             # The address install's download/package bound. The test suite lowers
             # it to keep an oversized-download case small; production keeps 10 MiB.
             installMaxBytes: !!js Number(process.env.OURFAIRY_SKILL_INSTALL_MAX_BYTES ?? 10485760)
+        # The electricity bill (#318, #319): this Fairy's token consumption,
+        # folded from the session logs the rows above already write. It owns no
+        # store — the log is the only authority — and it caches each cold
+        # session's per-day buckets by that log's persistence revision. The one
+        # reading address is `GET /bill`, admitted on a live credential alone
+        # because the bill is this Fairy's public total; the context reading
+        # (#320) reads the same service, so neither re-derives a number.
+        - id: bill
+          name: '@ourfairy/dsh-bill'

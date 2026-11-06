@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.fairy.FairyBillPage
 import me.rerere.rikkahub.ui.fairy.FairyConsolePage
 import me.rerere.rikkahub.ui.fairy.FairyConversationPage
 import me.rerere.rikkahub.ui.fairy.FairySettingsPage
@@ -38,6 +39,7 @@ object FairyDestinations {
     /** The route a conversation is stored under; its id is the second coordinate. */
     const val CONVERSATION_ROUTE = "conversation"
     const val SKILLS_ROUTE = "skills"
+    const val BILL_ROUTE = "bill"
 
     private val signIn = FairyDestination(
         route = "sign_in",
@@ -134,9 +136,24 @@ object FairyDestinations {
         )
     }
 
+    /**
+     * The bill: the Fairy's public total, open to any live credential.
+     *
+     * Its entry card is on the console, so a cold start returns it over home rather
+     * than through settings. Signed-in and not admin mirrors `/bill`'s own admission
+     * (#319): the address requires a credential and no more.
+     */
+    private val bill = FairyDestination(
+        route = BILL_ROUTE,
+        access = DestinationAccess.SignedIn,
+        restore = DestinationRestore.Resume(listOf(Screen.Home, Screen.Bill)),
+    ) {
+        FairyBillPage(onBack = actions.pop, session = session, backend = billBackend)
+    }
+
     /** Every destination the product has, in the order the table declares them. */
     val entries: List<FairyDestination> = listOf(
-        signIn, register, home, conversation, settings, gateway, impression, skills,
+        signIn, register, home, conversation, settings, gateway, impression, skills, bill,
     )
 
     /**
@@ -157,6 +174,7 @@ object FairyDestinations {
         Screen.Gateway -> gateway
         Screen.Impression -> impression
         Screen.Skills -> skills
+        Screen.Bill -> bill
     }
 
     /** The destination the top of the stack is, or null for an empty stack. */

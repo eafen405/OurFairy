@@ -5,9 +5,15 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.AgentSummary
+import me.rerere.rikkahub.data.remote.Bill
+import me.rerere.rikkahub.data.remote.BillBackend
+import me.rerere.rikkahub.data.remote.BillTotal
+import me.rerere.rikkahub.data.remote.BillTokens
 import me.rerere.rikkahub.data.remote.ChatHistoryPage
 import me.rerere.rikkahub.data.remote.ChatReceipt
 import me.rerere.rikkahub.data.remote.CredentialStore
@@ -30,6 +36,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -117,6 +124,16 @@ private class ColdStartSkills : SkillsBackend {
     override suspend fun restore(token: String, skillId: Long): SkillPoolItem = error("not used")
 }
 
+/** The bill the page reads when a cold start lands on it. */
+private class ColdStartBill : BillBackend {
+    override suspend fun read(token: String) = Bill(
+        today = BillTotal(BillTokens(inputTokens = 3000), denny = 1.0),
+        month = BillTotal(BillTokens(inputTokens = 3000), denny = 1.0),
+        allTime = BillTotal(BillTokens(inputTokens = 3000), denny = 1.0),
+        days = emptyList(),
+    )
+}
+
 private class OwnImpression : ImpressionBackend {
     override suspend fun read(token: String) = Impression(content = "a remembered impression")
     override suspend fun edit(token: String, content: String) = Unit
@@ -153,6 +170,7 @@ open class SeededColdStartApplication(
                     single<SessionBackend> { SessionsBackend() }
                     single<RemoteChatBackend> { UnopenedChatBackend() }
                     single<ImpressionBackend> { OwnImpression() }
+                    single<BillBackend> { ColdStartBill() }
                     // The reminder observation now consults the bounded skills
                     // list on every cold start; its fake keeps the no-network
                     // invariant of this suite.
@@ -168,6 +186,9 @@ class SettingsColdStartApplication : SeededColdStartApplication("settings")
 
 /** A returning user who was standing on their own impression page. */
 class ImpressionColdStartApplication : SeededColdStartApplication("impression")
+
+/** A returning user who was standing on the bill. */
+class BillColdStartApplication : SeededColdStartApplication("bill")
 
 /**
  * A returning user whose previous version left the session-list destination in
@@ -203,6 +224,41 @@ class ImpressionColdStartTest {
         compose.mainClock.autoAdvance = false
         repeat(8) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
         compose.onNodeWithText(compose.activity.getString(R.string.impression_explain)).assertIsDisplayed()
+        assertEquals("a cold start must not reach the network", emptyList<String>(), CountingHttp.hosts)
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = BillColdStartApplication::class, sdk = [35], qualifiers = "zh-rCN-w411dp-h891dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class BillColdStartTest {
+    @get:Rule val compose = createAndroidComposeRule<RouteActivity>()
+
+    /**
+     * Stop the container this class's application started.
+     *
+     * Koin's registry is process-wide and Robolectric runs every class of a module
+     * in one process. A class that boots the real [RikkaHubApp] — as
+     * `ClientStartupTest` does — cannot start its own container while this one is
+     * still up, so the seeded application's container is torn down here rather than
+     * left for whichever class runs next.
+     */
+    @After fun stopContainer() {
+        stopKoin()
+    }
+
+    @Test
+    fun `a stored bill location reopens the bill over the console`() {
+        compose.mainClock.autoAdvance = false
+        repeat(8) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
+
+        // The page is the bill, read through the production module the Activity wired.
+        compose.onNodeWithTag("bill-totals", useUnmergedTree = true).assertExists()
+        // All three totals are the same figure in this fixture, which is the point:
+        // the page printed the aggregate the module read, not one column of it.
+        compose.onAllNodesWithText("1.0 丁尼", useUnmergedTree = true).fetchSemanticsNodes().let {
+            assertEquals("three totals, each in Denny", 3, it.size)
+        }
         assertEquals("a cold start must not reach the network", emptyList<String>(), CountingHttp.hosts)
     }
 }

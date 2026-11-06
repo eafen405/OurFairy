@@ -178,11 +178,43 @@ export function copyProductRepo(prefix = 'ourfairy-repo-') {
  *   selects a repository copied by {@link copyProductRepo}.
  * @returns {{code: number, stdout: string, stderr: string, error?: Error}}
  */
+/**
+ * Whether this run is a deliberate experiment against a harness checkout that
+ * is not the combination's pinned commit.
+ *
+ * An explicit non-empty `OURFAIRY_DSH_DIR` is the one signal: the operator
+ * chose a checkout other than `combo.json`'s `localPath`, so the launcher must
+ * tolerate the commit that checkout happens to be at. Without it the launcher
+ * enforces the lock, which is the whole point of pinning one.
+ * @returns true when the launcher is to be told `--allow-drift`.
+ */
+export function deliberateDshExperiment(env = process.env) {
+  return env.OURFAIRY_DSH_DIR !== undefined && env.OURFAIRY_DSH_DIR !== ''
+}
+
+/**
+ * The launcher arguments for one test command, adding `--allow-drift` when this
+ * run is a deliberate harness experiment.
+ *
+ * Every command goes through here — `start`, `probe`, `doctor`, `stop` — so the
+ * drift decision cannot depend on which command a suite happens to call. A
+ * helper that granted it only to `start` made `doctor` fail on the same checkout
+ * for a reason that had nothing to do with what the suite under test asserted.
+ * @param {string[]} args - the command and its own flags.
+ * @param {Record<string, string|undefined>} [env] - the environment the child
+ *   will actually see; defaults to this process's.
+ * @returns {string[]} the arguments the launcher receives.
+ */
+export function launcherArgs(args, env = process.env) {
+  return deliberateDshExperiment(env) ? [...args, '--allow-drift'] : args
+}
+
 export function runBackend(args, env = {}, options = {}) {
   const root = options.root ?? repoRoot
-  const result = spawnSync(process.execPath, [join(root, 'scripts', 'ourfairy-backend.ts'), ...args], {
+  const childEnv = launchEnv(env)
+  const result = spawnSync(process.execPath, [join(root, 'scripts', 'ourfairy-backend.ts'), ...launcherArgs(args, childEnv)], {
     cwd: options.cwd ?? root,
-    env: launchEnv(env),
+    env: childEnv,
     encoding: 'utf8',
     timeout: options.timeoutMs ?? 300_000,
     maxBuffer: 32 * 1024 * 1024,
@@ -213,8 +245,10 @@ export function readReport(path) {
  * @returns {string[]}
  */
 export function startArgs(overlays = []) {
-  const args = ['start', '--json']
-  if (process.env.OURFAIRY_DSH_DIR !== undefined && process.env.OURFAIRY_DSH_DIR !== '') args.push('--allow-drift')
+  // `launcherArgs` owns the drift decision; this only names the command and its
+  // overlays. `runBackendAsync` applies the same wrapper, so a suite that builds
+  // `startArgs()` and one that calls `runBackend(['start', ...])` agree.
+  const args = launcherArgs(['start', '--json'])
   for (const overlay of overlays) args.push('--patch', overlay)
   return args
 }
@@ -266,10 +300,11 @@ export function writeOverlay(home, rows, name = 'overlay.patch.yml') {
  * @returns {Promise<{code: number, stdout: string, stderr: string, error?: Error}>}
  */
 export function runBackendAsync(args, env = {}, options = {}) {
+  const childEnv = launchEnv(env)
   return new Promise(resolve => {
-    const child = spawn(process.execPath, [backendScript, ...args], {
+    const child = spawn(process.execPath, [backendScript, ...launcherArgs(args, childEnv)], {
       cwd: options.cwd ?? repoRoot,
-      env: launchEnv(env),
+      env: childEnv,
     })
     let stdout = ''
     let stderr = ''

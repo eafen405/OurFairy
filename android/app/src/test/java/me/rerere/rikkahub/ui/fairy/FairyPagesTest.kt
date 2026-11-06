@@ -240,6 +240,7 @@ class FairyPagesTest {
             gatewayBackend = gatewayBackend,
             impressionBackend = impressionBackend,
             skillsBackend = skillsBackend,
+            billBackend = billBackend,
             fairy = fairy,
         )
         FairyDestinations.destinationOf(destination).Content(destination, scope)
@@ -297,6 +298,28 @@ class FairyPagesTest {
         override suspend fun reviewOpen(token: String, versionId: Long): String = "ourfairy-user-2-primary"
         override suspend fun archive(token: String, skillId: Long): SkillPoolItem = error("not used")
         override suspend fun restore(token: String, skillId: Long): SkillPoolItem = error("not used")
+    }
+
+    /** How many times the bill page asked its backend. */
+    private var billReads = 0
+
+    /** The bill the page reads: the wire's own shape, at the narrative rate. */
+    private val billBackend = object : BillBackend {
+        override suspend fun read(token: String): Bill {
+            billReads += 1
+            return Bill(
+                today = BillTotal(BillTokens(inputTokens = 2000), denny = 0.7),
+                month = BillTotal(BillTokens(inputTokens = 60000), denny = 20.0),
+                allTime = BillTotal(BillTokens(inputTokens = 600000), denny = 200.0),
+                days = (0 until 30).map { index ->
+                    BillDay(
+                        day = "2026-10-${(index + 1).toString().padStart(2, '0')}",
+                        tokens = BillTokens(inputTokens = if (index == 29) 2000 else 0),
+                        denny = if (index == 29) 0.7 else 0.0,
+                    )
+                },
+            )
+        }
     }
 
     /** The account's own impression, already written. */
@@ -1104,6 +1127,43 @@ class FairyPagesTest {
         compose.onNodeWithText("账号").assertIsDisplayed()
         compose.onNodeWithText("退出登录").assertIsDisplayed()
         screenshot("settings")
+    }
+
+    @Test fun `the console's bill card opens the bill and its back arrow returns home`() {
+        var destination by mutableStateOf<Screen>(Screen.Home)
+        show {
+            DestinationHost(destination) { destination = it }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        // The entry is a card in the console's existing instrument vocabulary, not a
+        // new navigation layer, and it names the page without quoting a figure the
+        // console never read.
+        compose.onNodeWithText("电费账单", useUnmergedTree = true).performScrollTo().assertExists()
+        compose.onNodeWithTag("console-bill", useUnmergedTree = true).performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.runOnIdle { assertEquals("the card pushes the bill destination", Screen.Bill, destination) }
+        compose.onNodeWithText("0.7 丁尼", useUnmergedTree = true).assertExists()
+        // The bill hangs off home, so its back path is the console, not settings.
+        compose.onNodeWithContentDescription("返回", useUnmergedTree = true).performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(Screen.Home, destination) }
+    }
+
+    @Test fun `the bill composes through the catalog with no container`() {
+        destination(Screen.Bill)
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("bill-totals", useUnmergedTree = true).assertExists()
+        // Same shared bar, and the same inert mini screen the gateway and impression keep.
+        compose.onNodeWithContentDescription("返回").assertIsDisplayed()
+        compose.onNodeWithTag("fairy-window-settings").assertDoesNotExist()
+        compose.runOnIdle { assertEquals("the bill page read the scope's backend", 1, billReads) }
     }
 
     @Test fun `settings exposes the current version and app update entry`() {

@@ -52,6 +52,15 @@ data class RemoteChatAttachment(
  * `tools` names the tools one message requested, in the order it requested them. The backend
  * sends it only when the message requested something, so an older snapshot or an ordinary
  * message decodes as "no tools". Arguments and tool output are not part of the wire shape.
+ *
+ * `turn` names the turn a row belongs to; 0 means it belongs to none — a message queued before its
+ * turn opened, or a delivery that landed while the session was idle. The backend requires it, but
+ * this client defaults it so a snapshot written before the field existed still decodes.
+ *
+ * `usage` is the turn's settled token spend. The backend sends it only on the turn's last Fairy row,
+ * only after that turn ended, so a read inside the turn reports nothing and a turn whose attempts
+ * reported no usage carries none at all. Its `cache` bucket is absent when the provider never
+ * reported one: that figure is unknown, not zero, so nothing here may turn it into 0.
  */
 @Serializable
 data class RemoteChatMessage(
@@ -68,6 +77,21 @@ data class RemoteChatMessage(
     val kind: Int? = null,
     /** The tool call a derived row was paired with; ordinary messages carry none. */
     val toolCallId: String? = null,
+    /** The turn this row belongs to; 0 when it belongs to none. */
+    val turn: Int = 0,
+    /** The turn's settled spend, on the turn's last Fairy row only. */
+    val usage: RemoteChatUsage? = null,
+)
+
+/** One settled turn's token buckets, as the provider reported them. */
+@Serializable
+data class RemoteChatUsage(
+    /** Uncached prompt input, summed over the turn's attempts. */
+    val input: Int,
+    /** Cache read plus cache write; absent when no attempt reported a cache figure. */
+    val cache: Int? = null,
+    /** Generated output, summed over the turn's attempts. */
+    val output: Int,
 )
 
 /**

@@ -37,6 +37,7 @@ const anchors = {
   '@deepseek-ai/dsh-session-projection': join(dshDir, 'packages', 'session', 'session-projection', 'package.json'),
   '@deepseek-ai/dsh-llm': join(dshDir, 'packages', 'llm', 'llm', 'package.json'),
   '@deepseek-ai/dsh-llm-pi-ai': join(dshDir, 'packages', 'llm', 'llm-pi-ai', 'package.json'),
+  '@deepseek-ai/dsh-llm-retry': join(dshDir, 'packages', 'llm', 'llm-retry', 'package.json'),
   '@deepseek-ai/dsh-llm-mock-server': join(dshDir, 'packages', 'test-support', 'llm-mock-server', 'package.json'),
   '@deepseek-ai/dsh-agent': join(dshDir, 'packages', 'core', 'agent', 'package.json'),
   '@deepseek-ai/dsh-system-prompt': join(dshDir, 'packages', 'core', 'system-prompt', 'package.json'),

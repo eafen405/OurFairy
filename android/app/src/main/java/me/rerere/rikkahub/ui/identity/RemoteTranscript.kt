@@ -71,6 +71,7 @@ import me.rerere.rikkahub.data.remote.RemoteChatAttachment
 import me.rerere.rikkahub.data.remote.RemoteChatAttempt
 import me.rerere.rikkahub.data.remote.RemoteChatMessage
 import me.rerere.rikkahub.data.remote.RemoteChatSettlement
+import me.rerere.rikkahub.data.remote.RemoteChatUsage
 import me.rerere.rikkahub.data.remote.RemoteMessageFormat
 import me.rerere.rikkahub.data.remote.remoteAttemptFormat
 import me.rerere.rikkahub.data.remote.remoteMessageFormat
@@ -247,6 +248,22 @@ internal fun RemoteTranscript(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                        // The turn's settled spend, in the status line's own slot and type scale.
+                        // Presence alone decides whether it shows: the backend attaches it only to
+                        // the turn's last Fairy row, after that turn ended, and only when a provider
+                        // reported one. Deriving or zero-filling it here would claim a figure nobody
+                        // reported. Only a reply reads it out, so [fairy] guards the user's own row
+                        // and the early-returned derived rows never reach this block.
+                        if (fairy) {
+                            message.usage?.let { usage ->
+                                Text(
+                                    text = usage.readout(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.testTag("token-usage"),
+                                )
+                            }
                         }
                     }
                     DropdownMenu(
@@ -735,4 +752,19 @@ internal fun MessageBody(
     } else {
         Text(text = text, style = style, color = if (format == RemoteMessageFormat.MARKDOWN) LocalFairyTokens.current.textPrimary else foreground)
     }
+}
+
+/**
+ * The turn's settled spend as one instrument readout.
+ *
+ * The three buckets are named rather than reduced to a total, because the difference between prompt
+ * input, cache and output is what tells a reader where the spend went. `cache` is left out entirely
+ * when the provider never reported one: printing 0 or a dash would present an unknown figure as a
+ * measured zero, which is the one thing this line must not do.
+ */
+private fun RemoteChatUsage.readout(): String = buildString {
+    append("输入 ").append(input)
+    cache?.let { append(" · 缓存 ").append(it) }
+    append(" · 输出 ").append(output)
+    append(" token")
 }
