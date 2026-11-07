@@ -146,8 +146,8 @@ test('each row serves the method/body/response matrix it publishes', () => {
 
   assert.deepEqual(countsOf(ALL.map(entry => entry.method)), { POST: 42, GET: 2 },
     'every address is POST except the speech availability read and the bill read')
-  assert.deepEqual(countsOf(ALL.map(entry => entry.body)), { json: 41, binary: 2, none: 2 },
-    '41 addresses read a JSON object; chunk and transcriptions read raw bytes; the two GETs read none')
+  assert.deepEqual(countsOf(ALL.map(entry => entry.body)), { json: 40, binary: 2, none: 2 },
+    '40 addresses read a JSON object; chunk and transcriptions read raw bytes; the two GETs read none')
   assert.deepEqual(countsOf(ALL.map(entry => entry.response)), { json: 42, sse: 1, binary: 1 },
     'every address answers JSON except the SSE and download responses')
 })

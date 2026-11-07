@@ -42,6 +42,7 @@ import { SURFACE as IMPRESSION_SURFACE } from '../backend/memory/dist/index.js'
 import { SURFACE as ATTACHMENTS_SURFACE } from '../backend/attachments/dist/index.js'
 import { SURFACE as SPEECH_SURFACE } from '../backend/speech/dist/index.js'
 import { SURFACE as SKILL_SURFACE } from '../backend/skill-creator/dist/index.js'
+import { SURFACE as BILL_SURFACE } from '../backend/bill/dist/index.js'
 
 /**
  * Every address the product rows publish, read from their own `SURFACE`
@@ -57,6 +58,7 @@ const PRODUCT_SURFACE = [
   ...ATTACHMENTS_SURFACE,
   ...SPEECH_SURFACE,
   ...SKILL_SURFACE,
+  ...BILL_SURFACE,
 ]
 
 const PHAETHON_PASSWORD = 'test-phaethon-password'
