@@ -400,6 +400,12 @@
 | --- | --- |
 | [317-bill](317-bill/README.md) | #318–#324 新增产品行 `@ourfairy/dsh-bill`（`plugins` 组）：从全部会话日志（含无归属的维护/学习子会话、归档会话）派生 token 四桶的日/月/累计与 30 天序列，按 `Asia/Shanghai` 切分，按持久化修订号做进程内缓存且未落盘会话一律不缓存，悬挂回合不计入；`GET /bill` 只要求认证、一次返回同一次聚合的全部数字（丁尼与 token 各一份）；请求尾部追加一段电费读数（上一回合结算值 + 本日万丁尼档位），每个新回合的首个 pre-step 重读聚合并按回合固定，因此闲置期间其他会话的消耗与上海零点都进入下一回合、同一回合内不变，仅挂用户会话，并附只读工具 `electricity_bill`；聊天投影消息行新增 `turn` 与 `usage`（输入/缓存/输出），只在回合最后一条 Fairy 行、且回合结束后出现，分页与重连后仍在；Android 账单页（三档总量 + 手绘 30 柱 + 空/失败状态）与每条回复的 token 小字。汇率 1 丁尼 = 3000 token 是单一命名常量，客户端只解码不换算。最重的声称由行为测试固定：相邻请求的消息前缀、读数在一回合内恒定、新轮刷新日累计与跨上海零点；类型检查、组合校验与后端全量 753 项、Android `test lintDebug`（742 单测 0 失败）在锁定组合 dsh `ae2adffd8d67` 上通过；真实模型与真机未执行，详见该目录 README。 |
 
+## 上下文工程与印象只读（#302 / #249）
+
+| 目录 | 内容 |
+| --- | --- |
+| [302-249-integration](302-249-integration/README.md) | 整合主线与遗留分支：统一原生装配、按需会话事实工具与稳定 system 前缀、HTTP/Android 印象只读；包含两轴审查、真实模型成功与失败证据。语义未通过部分明确保留，不以替身门禁代替验收。 |
+
 ## 界面微调（#215/#217/#218/#239/#255/#290/#291/#292）
 
 | 目录 | 内容 |
@@ -434,6 +440,7 @@
 | [review-24-26](review-24-26/README.md) · [review-24-26-backend](review-24-26-backend/evidence.md) | #24–#26 阶段评审 |
 | [review-arch-map69](review-arch-map69/README.md) · [review-arch-map69-fixes](review-arch-map69-fixes/README.md) | 地图 #69 最终两轴 code-review（四份逐字报告）与逐条评审项的修复/记录不修 |
 | [fixes-290-291-292](fixes-290-291-292/README.md) | #290/#291/#292 小修批次：三票 octopus 合入 `e59587b62b`；#291 选本地 slot 版并关闭重复 PR #294；合并提交走全量门禁（474 npm tests、628 Android tests、combo verified） |
+| [315-325-merge-review](315-325-merge-review/README.md) | #315/#325 合入审查：Team 两轴互证、用户确认模型效果不作硬阻塞、最新 main 与 dsh 组合的工程门禁 |
 | [retro-guardrails](retro-guardrails/README.md) | 复盘修复验证 |
 
 ## 阅读顺序

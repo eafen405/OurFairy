@@ -6,7 +6,7 @@ The OurFairy v1 backend composition: one dsh profile bundle whose
 ## Why this bundle is explicit
 
 The bundle lists its rows instead of inheriting `@deepseek-ai/dsh-base`: base
-mounts capabilities v1 excludes (skill, goal, subagent, telemetry, web tools) and
+mounts capabilities v1 excludes (goal, subagent, telemetry) and
 default file/shell/sandbox rows with host-wide access. The scoped
 `@ourfairy/dsh-spaces` adapters replace those defaults.
 
@@ -44,6 +44,16 @@ not publish.
 [`tests/baseline-boot.test.mjs`](../../tests/baseline-boot.test.mjs) is the list of
 row ids the boot test asserts absent from the live composition. The comments
 beside that list give the reason for each group; read them there.
+
+## Public web access
+
+The `web` rows in the patch select direct DeepSeek search and anonymous HTTP
+fetch. All user sessions receive the tools, including users working in a group
+space. The search credential is `DEEPSEEK_API_KEY`; MiniMax remains the chat
+model. Missing search credentials return a tool error naming the variable,
+while HTTP fetch remains available. Search sends the tool's queries without
+adding the triggering user message. `tests/web-tools.test.mjs` exercises these
+choices through product chat requests and external HTTP doubles.
 
 ## Consuming it
 

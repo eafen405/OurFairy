@@ -136,7 +136,6 @@ private class ColdStartBill : BillBackend {
 
 private class OwnImpression : ImpressionBackend {
     override suspend fun read(token: String) = Impression(content = "a remembered impression")
-    override suspend fun edit(token: String, content: String) = Unit
 }
 
 /**

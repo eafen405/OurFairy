@@ -347,3 +347,25 @@ projection` 与 `native job stop outcome vocabulary matches the adapter` 分别�
 任务状态声明与停止返回类型，与产品的映射逐项比较；上游增删状态或返回值时它们先失败并点名成员，
 而不是让 `undefined` 或「已结束」静默进入投影（运行期对未知值分别显式记为未知与 5xx 响亮失败）。
 行为测试与基准通过只证明当前组合兼容，不能当作长期兼容承诺。
+
+## 提示与当前会话事实
+
+`src/prompt-assembly.ts` 在原生 `system-prompt/assemble` waterfall 返回阶段排列产品段，
+第三方仍注册原生 section，保留其文本和相对顺序；工具与材料在前，人格和当前身份收尾。该策略仅用于用户主会话；内部预设保留
+自己的 complete 提示。`tests/prompt-guard.test.mjs` 覆盖错乱注册顺序、后续监听器返回
+新装配、隐藏 complete 标记以及 ownerless 预设。
+
+人格定义世界观、性格与九类表达方式，并常驻六条语感参考。检索、依据、真实能力与交付要求由
+独立的 `ourfairy:work-rules` 段承载；两段正文都在 `src/persona.ts`。`tests/remote-chat.test.mjs`
+经真实模型 HTTP 输入检查选定引文、工作规则与认证称呼，`tests/prompt-inventory.test.mjs` 检查最终分段。
+称呼由 `ownerIdentity` 按认证短号和已存昵称生成，昵称使用 JSON 引用，空昵称回退为「用户<短号>」。
+`session_facts` 工具按需读取当前会话的原生 token 投影与已有任务投影，不另建状态，也不读取其它会话。
+工具结果包含已提交位置、提供方已报告累计 token 和任务数量；未报告用量不在其中，不能据此推算费用。
+这些动态数字不注入 system，也不自动追加 user-role 快照，以保留稳定前缀并避免影响压缩保留边界。
+`tests/memory-impression.test.mjs` 经真实工具验证计数与多轮 system 文本不变；
+`tests/native-compaction.test.mjs` 验证工具配对与溢出恢复仍保留用户问题。
+`tests/prompt-inventory.test.mjs` 对照真实请求的段文本与运行时 context；清单 order 是最终呈现位置，
+来源包来自标注的部署目录，未知来源留空。
+
+`npm run acceptance:persona -- --plan` 预览真实验收；执行时通过启动器、身份和聊天路由驱动
+完整产品上下文与工具。脚本只给出必要模式检查及待复核结果，不把正则命中当作人格保证。

@@ -1,8 +1,8 @@
 # OurFairy v1 backend bundle — the explicit first-version rows.
 #
 # This bundle deliberately does NOT inherit @deepseek-ai/dsh-base. The base
-# bundle also mounts excluded capabilities (goal, subagent, telemetry, the web
-# tools) and default file/shell/sandbox rows with host-wide reads.
+# bundle also mounts excluded capabilities (goal, subagent, telemetry) and
+# default file/shell/sandbox rows with host-wide reads.
 # The scoped T7 providers replace those defaults; every live product row is
 # listed here and the absent rows are asserted absent by tests/baseline-boot.
 #
@@ -48,7 +48,7 @@
           name: '@deepseek-ai/dsh-session-projection'
         # The tool registry. Only tools whose own adaptation landed are inserted
         # below. T7 mounts the scoped filesystem, shell and directory adapters;
-        # subagent, goal, web, and workflow remain absent.
+        # subagent, goal, and workflow remain absent.
         - id: tools
           name: '@deepseek-ai/dsh-tools'
         # The loop mechanism only: `agents: []` mounts the factory and the session
@@ -226,6 +226,22 @@
             allowParallelInProgress: true
         - id: conversation-search
           name: '@ourfairy/dsh-search'
+        # Public web access is shared by all user sessions (#312). Search uses
+        # the direct API; HTTP remains the selected keyless fetch provider.
+        - id: web
+          name: '@deepseek-ai/dsh-web'
+          config:
+            searchProvider: deepseek-search-api
+            fetchProvider: http
+        - id: web-deepseek-api
+          name: '@deepseek-ai/dsh-web-deepseek-api'
+          config:
+            apiKeyEnv: DEEPSEEK_API_KEY
+            sendOriginalQuestion: false
+        - id: web-fetch-http
+          name: '@deepseek-ai/dsh-web-fetch-http'
+        - id: tool-web
+          name: '@deepseek-ai/dsh-tool-web'
         # ── process-local support services ───────────────────────────────────────
         # Native process-local job registry; durable lifecycle facts stay in Session logs.
         - id: jobs-local

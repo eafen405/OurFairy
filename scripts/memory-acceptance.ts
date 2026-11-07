@@ -272,10 +272,6 @@ function searchReport(call: ToolCall | undefined): JsonObject | undefined {
   }
 }
 
-function errorCode(answer: Answer): string | undefined {
-  return string(record(answer.json.error)?.code)
-}
-
 function request(port: number, path: string, { token, body }: { token?: string; body?: unknown } = {}): Promise<Answer> {
   const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body))
   const headers: Record<string, string> = { host: `127.0.0.1:${port}` }
@@ -1103,60 +1099,40 @@ async function caseMaintenanceNoRewrite(runtime: Runtime, shared: Shared): Promi
 
 async function caseImpression(runtime: Runtime): Promise<CaseOutcome> {
   const checks: Check[] = []
-  const marker = IMPRESSION_MARKER
-  const body = `${marker}：主人喜欢简明扼要的回答，这是 Alice 本人的印象。`
+  const body = `${IMPRESSION_MARKER}：喜欢简明扼要的回答，这是 Alice 本人的印象。`
   const aliceBefore = impressionContent(await impressionRead(runtime, runtime.alice.token))
-  const edited = await request(runtime.port, '/impression/edit', { token: runtime.alice.token, body: { content: body } })
+  const aliceSession = await newSession(runtime, runtime.alice)
+  const writeTurn = await sendTurn(runtime, runtime.alice, aliceSession,
+    `请先用 impression_read 读取我的印象，再用 impression_edit 将整份正文原样替换为：${body}`)
+  const readIndex = writeTurn.toolCalls.findIndex(call => call.name === 'impression_read')
+  const editIndex = writeTurn.toolCalls.findIndex(call => call.name === 'impression_edit')
   const aliceAfter = impressionContent(await impressionRead(runtime, runtime.alice.token))
-  mark(checks, 'the owner can read before editing', edited.status === 200, `${String(edited.status)} ${edited.text.slice(0, 300)}`)
-  mark(checks, 'the whole body is stored exactly', aliceAfter === body, aliceAfter)
-  mark(checks, 'the owner initially had no impression in this fresh home', aliceBefore === '' || aliceBefore === body, aliceBefore.slice(0, 200))
+  mark(checks, 'Fairy reads before editing in the same session', readIndex >= 0 && editIndex > readIndex, JSON.stringify(callSummary(writeTurn.toolCalls)))
+  mark(checks, 'the whole impression is stored exactly', aliceAfter === body, aliceAfter)
   const stored = impressionRow(runtime, runtime.alice.shortId)
   mark(checks, 'the stored row belongs to the owner', stored?.short_id === runtime.alice.shortId, JSON.stringify(stored))
-
-  // Bob has not read yet, so his first edit must be refused; the read that
-  // follows is the one that proves isolation, not the edit gate.
-  const bobEditBeforeRead = await request(runtime.port, '/impression/edit', { token: runtime.bob.token, body: { content: 'BOB-IMPRESSION' } })
-  mark(checks, 'an edit before a successful read is refused', bobEditBeforeRead.status === 409 && errorCode(bobEditBeforeRead) === 'impression/not-read', `${String(bobEditBeforeRead.status)} ${String(errorCode(bobEditBeforeRead))}`)
+  const routeRefusals = []
+  for (const identity of [runtime.alice, runtime.bob, runtime.admin]) {
+    const refused = await request(runtime.port, '/impression/edit', { token: identity.token, body: { content: 'FORBIDDEN' } })
+    routeRefusals.push({ shortId: identity.shortId, status: refused.status })
+    mark(checks, `HTTP writes are absent for user ${identity.shortId}`, refused.status === 404, String(refused.status))
+  }
+  mark(checks, 'HTTP probes did not overwrite the impression', impressionContent(await impressionRead(runtime, runtime.alice.token)) === body, body)
   const bobRead = impressionContent(await impressionRead(runtime, runtime.bob.token))
-  mark(checks, 'another user reads their own impression, not the owner\'s', !bobRead.includes(marker), bobRead.slice(0, 300))
-
-  const tooLong = '长'.repeat(8001)
-  const overLength = await request(runtime.port, '/impression/edit', { token: runtime.alice.token, body: { content: tooLong } })
-  mark(checks, 'over-length content is refused', overLength.status === 400 && errorCode(overLength) === 'impression/too-long', `${String(overLength.status)} ${String(errorCode(overLength))}`)
-  const afterTooLong = impressionContent(await impressionRead(runtime, runtime.alice.token))
-  mark(checks, 'over-length content is not truncated into storage', afterTooLong === body && afterTooLong.length !== 8001, `${String(afterTooLong.length)} chars`)
-
   const adminRead = impressionContent(await impressionRead(runtime, runtime.admin.token))
-  mark(checks, 'the administrator reads their own row, never another user\'s', !adminRead.includes(marker), adminRead.slice(0, 300))
-
-  const aliceSession = await newSession(runtime, runtime.alice)
+  mark(checks, 'other credentials read only their own impressions', !bobRead.includes(IMPRESSION_MARKER) && !adminRead.includes(IMPRESSION_MARKER), JSON.stringify({ bobRead, adminRead }))
   const aliceTurn = await sendTurn(runtime, runtime.alice, aliceSession, '你好，随便说一句。')
   const alicePrompt = await systemPromptOf(runtime, aliceSession)
-  mark(checks, 'the owner\'s assembled system prompt carries the impression', alicePrompt.includes(marker), `${String(alicePrompt.length)} chars`)
+  mark(checks, 'next assembly carries the owner impression', alicePrompt.includes(IMPRESSION_MARKER), String(alicePrompt.length))
   const bobSession = await newSession(runtime, runtime.bob)
   const bobTurn = await sendTurn(runtime, runtime.bob, bobSession, '你好，随便说一句。')
   const bobPrompt = await systemPromptOf(runtime, bobSession)
-  mark(checks, 'another user\'s assembled system prompt does not carry it', !bobPrompt.includes(marker), `${String(bobPrompt.length)} chars`)
-  return {
-    checks,
-    evidence: {
-      body,
-      aliceBefore,
-      aliceAfter,
-      stored: stored ?? null,
-      bobRead,
-      bobEditBeforeRead: { status: bobEditBeforeRead.status, code: errorCode(bobEditBeforeRead) },
-      overLength: { status: overLength.status, code: errorCode(overLength), contentLengthAfter: afterTooLong.length },
-      adminRead,
-      aliceSession,
-      aliceReply: aliceTurn.reply,
-      alicePromptExcerpt: excerpt(alicePrompt, 1500),
-      bobSession,
-      bobReply: bobTurn.reply,
-      bobPromptExcerpt: excerpt(bobPrompt, 1500),
-    },
-  }
+  mark(checks, 'other users do not receive the impression', !bobPrompt.includes(IMPRESSION_MARKER), String(bobPrompt.length))
+  return { checks, evidence: { body, aliceBefore, aliceAfter, stored, routeRefusals,
+    writePrompt: writeTurn.text, writeReply: writeTurn.reply, calls: callSummary(writeTurn.toolCalls),
+    aliceSession, aliceReply: aliceTurn.reply, bobSession, bobReply: bobTurn.reply,
+    alicePromptExcerpt: excerpt(alicePrompt, 1800), bobPromptExcerpt: excerpt(bobPrompt, 1800),
+    deterministicBoundary: 'tests/memory-impression.test.mjs checks read-before-edit refusal, cross-session reads and 8000/8001 Unicode limits through real tools' } }
 }
 
 async function caseCrossUserDiscretion(runtime: Runtime): Promise<CaseOutcome> {
