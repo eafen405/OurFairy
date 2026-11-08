@@ -409,4 +409,17 @@ test('the read-only hot path derives directories without reading descriptions', 
     fs.readFileSync = original
     syncBuiltinESMExports()
   }
+
+  // The one stored-path rule behind every read: an unsafe row is a 500
+  // integrity failure, not a directory outside the data root.
+  const refuses = package_path => assert.throws(
+    () => service.versionDirectory({ id: 9, package_path }),
+    error => error.status === 500 && error.code === 'skills/integrity',
+  )
+  refuses('candidates/../pkg')
+  refuses('candidates\\pkg')
+  refuses('/versions/1/pkg')
+  refuses('versions')
+  assert.equal(service.versionDirectory({ id: 10, package_path: 'versions/1/pkg' }),
+    join(root, 'versions', '1', 'pkg'), 'a committed version resolves under the data root')
 })

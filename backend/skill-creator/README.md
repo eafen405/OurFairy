@@ -50,8 +50,16 @@ skill/
 ```
 
 A version's `package_path` is stored relative to that root, so the root can move.
-The row creates the single connection with WAL, versioned migrations and
-`BEGIN IMMEDIATE` transactions, following `backend/memory/src/store.ts`.
+`paths.ts` is the one vocabulary and safety check for that stored path: it names
+the four areas, refuses a path that is absolute, escapes with `.`/`..`, or uses
+bytes whose meaning differs between platforms (`\`, control characters, a
+drive-letter first segment), resolves a checked path to a directory under the
+root, and owns the candidate crash re-home below. The store's draft validation,
+the service's read path, the seed import, publish and the boot reconciliation all
+call it; every stored path is written through it, so the stricter check cannot
+make an existing row unreadable. The row creates the single connection with WAL,
+versioned migrations and `BEGIN IMMEDIATE` transactions, following
+`backend/memory/src/store.ts`.
 
 Schema v3 adds `skill_version.approval_message_id`, the partial unique index on
 `skill_version.growth_confirm_message`, `skill_learning_state.attempts` and the
@@ -64,11 +72,15 @@ approval renames `candidates/<uuid>/` into `versions/<skillId>/<uuid>/` before
 its transaction, so a process killed in between leaves a pending row whose bytes
 sit under `versions/`. The boot scan moves such a directory back, removes every
 interrupted `tmp/<uuid>/` staging entry, and settles a pending row whose bytes
-are gone as rejected with a system note. Committed version directories are never
-deleted. The same recovery runs inline when a pending candidate's directory is
-missing at inspect/approve time. Create and rollback share the private
-`#stageCandidate` / `#verifyAndRecord` helpers so there is one staging path and
-one recorded-verification path.
+are gone as rejected with a system note; a pending row whose stored path is
+unsafe is left pending, because a build that cannot interpret a row must not make
+its terminal decision (the read path refuses the same row with a 500 integrity
+error). Committed version directories are never deleted. The same re-home rule
+(`paths.rehomeCandidatePackage`) runs inline when a pending candidate's directory
+is missing at inspect/approve time. Publish and seed keep their own transaction,
+rename and rollback order; `paths.ts` only supplies names and directories.
+Create and rollback share the private `#stageCandidate` / `#verifyAndRecord`
+helpers so there is one staging path and one recorded-verification path.
 
 ## Winner and pool rules
 
