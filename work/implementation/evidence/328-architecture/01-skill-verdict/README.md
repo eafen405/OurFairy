@@ -201,3 +201,13 @@ learning 失败 6 条（全部是检测/claim 启动时序或 mock 回复超时�
 切换回票分支后已用 `npm test -- tests/skill-verification-report.test.mjs
 tests/skill-evolution-display.test.mjs` 重新构建并复跑（30/30，30 passed / 0 failed），确认工作树
 是票分支源码的构建产物。
+
+## 8. 交接时的集成分支状态
+
+功能提交之后，集成分支又合入 #333/#335（tip `75cae52`）。交接前再次
+`git merge --no-verify integration/spec-328`（合并提交 `f4e737e`；git auto-merge 无冲突；#333 的
+route-admission 删除只改 `backend/skill-creator/src/http.ts`，与本票文件不重叠；跳过合并钩子原因同上，
+全量留收口）。合并后复跑：`npm run typecheck` → EXIT:0；`npm test -- tests/skill-verification-report.test.mjs
+tests/skill-evolution-display.test.mjs tests/skill-paths.test.mjs tests/skill-creation-store.test.mjs
+tests/skill-package.test.mjs` → 71/71 pass。若集成分支在此之后继续前进，由 Lead/merger 在合入本票时
+按同样方式处理。
