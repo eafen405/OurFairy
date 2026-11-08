@@ -5,8 +5,12 @@
 范围：让技能批准、后台技能候选结算与审核展示共用同一验证报告解析与 verdict，删除同一判据的多份实现，
 同时不削弱事务内复核、增长确认、批准证据与错误码。
 
-分支 `ticket/329-skill-verdict`；基线 `integration/spec-328`，合并前已把集成分支 tip
-`012abdc`（#334 合并后的 docs-gate 提交，与本票文件无交集）合入票分支（fast-forward）。
+分支 `ticket/329-skill-verdict`；基线 `integration/spec-328`。提交前把当时的集成分支 tip `012abdc`
+合入（fast-forward）；功能提交 `a8cfce3` 后集成分支又推进到 `9e4a3a3`（#331、#332 已合入，其中 #332
+也改 `creation.ts`/README），再按 Lead 口径 `git merge --no-verify integration/spec-328` 合入
+（合并提交 `a155113`；git auto-merge 无冲突；跳过合并钩子的原因：合并钩子会跑全量 `npm test`，全量
+权威结果留给集成分支收口，且本机有并行重型套件）。合入后复跑纯测试 71/71（含 #332 的 `skill-paths`/
+`skill-package`/`skill-creation-store`）与 `npm run typecheck`，见 §6。
 
 ## 改了什么
 
@@ -137,3 +141,23 @@ $ node --test --test-name-pattern="two independent sessions reach the threshold|
   本票只跑相关面（上列命令）。
 - 未 push、未自行合入 `integration/spec-328`、未触碰其他 worktree 或主检出。
 - 未改 `store.importReviewed`/seed 的验证来源；`#332` 的路径词汇与本票无关。
+
+## 6. 合入 #332 后的跨票复跑
+
+集成分支 tip `9e4a3a3` 含 #332 的 `creation.ts`/README 改动后，与票分支 auto-merge 无冲突；随后在
+merge tip 上用 `OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2`：
+
+```console
+$ OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm run typecheck
+EXIT:0
+$ OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test -- \
+    tests/skill-verification-report.test.mjs tests/skill-evolution-display.test.mjs \
+    tests/skill-paths.test.mjs tests/skill-creation-store.test.mjs tests/skill-package.test.mjs
+ℹ tests 71
+ℹ pass 71
+ℹ fail 0
+```
+
+两票在 `creation.ts` 的改动共存：本票的 `readVerificationReport`/`verificationVerdict`/
+`freshExecutionMissing` 与 #332 的 `candidatePackagePath`/`versionPackagePath`/
+`rehomeCandidatePackage` 均在同一文件中，typecheck 与上述测试通过。
