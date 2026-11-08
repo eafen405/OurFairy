@@ -26,7 +26,6 @@
  * @module @ourfairy/dsh-skill-creator
  */
 import z from '@deepseek-ai/schemastery'
-import { sep } from 'node:path'
 import { shortIdOf } from '@ourfairy/dsh-identity/owner'
 import { mountRoutes } from '@ourfairy/dsh-http/http'
 import { SkillCreation } from './creation.js'
@@ -35,6 +34,7 @@ import { SURFACE, skillHandlers } from './http.js'
 import { SkillInstall } from './install.js'
 import { LearningEngine, readLearningSettings, type LearningField } from './learning.js'
 import { SkillNotifications } from './notify.js'
+import { insideRoot } from './paths.js'
 import { SkillProviders } from './provider.js'
 import { appendReviewEntry } from './review-open.js'
 import { SkillService } from './service.js'
@@ -107,11 +107,6 @@ export type SkillCreatorConfig = {
   readonly learningMaxTurns?: LearningField
   readonly learningCreationAttempts?: number
   readonly installMaxBytes?: number
-}
-
-/** Whether one absolute path is `root` or under it; the database belongs inside the data root. */
-function insideRoot(root: string, path: string): boolean {
-  return path === root || path.startsWith(root.endsWith(sep) ? root : root + sep)
 }
 
 export function apply(ctx: Context, config: SkillCreatorConfig): void {

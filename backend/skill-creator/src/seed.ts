@@ -17,8 +17,9 @@
  */
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, renameSync, rmSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename } from 'node:path'
 import { PackageError, canonicalManifest, copySkillPackage, readSkillPackage } from './package.js'
+import { SKILL_DIR, packageDirectory, versionPackagePath } from './paths.js'
 import type { ImportedVersion, SkillStore } from './store.js'
 
 /** What one seed import produced. */
@@ -55,11 +56,11 @@ export interface ImportReviewedPackageOptions {
 export function importReviewedPackage(options: ImportReviewedPackageOptions): SeededSkill {
   const { root, store, packageDir, scope, ownerShortId, createdBy, sourceType, sourceLocation, preference } = options
   const parsed = readSkillPackage(packageDir)
-  const tmpRoot = join(root, 'tmp')
-  const versionsRoot = join(root, 'versions')
+  const tmpRoot = packageDirectory(root, [SKILL_DIR.tmp])
+  const versionsRoot = packageDirectory(root, [SKILL_DIR.versions])
   mkdirSync(tmpRoot, { recursive: true })
   mkdirSync(versionsRoot, { recursive: true })
-  const staging = join(tmpRoot, randomUUID())
+  const staging = packageDirectory(root, [SKILL_DIR.tmp, randomUUID()])
   let moved: string | undefined
   try {
     copySkillPackage(packageDir, staging)
@@ -86,9 +87,10 @@ export function importReviewedPackage(options: ImportReviewedPackageOptions): Se
       reviewedAt: Date.now(),
       ...(preference === undefined ? {} : { preference }),
     }, (skillId) => {
-      const relative = `versions/${String(skillId)}/${basename(staging)}`
-      const final = join(root, ...relative.split('/'))
-      mkdirSync(join(versionsRoot, String(skillId)), { recursive: true })
+      const packageId = basename(staging)
+      const relative = versionPackagePath(skillId, packageId)
+      const final = packageDirectory(root, [SKILL_DIR.versions, String(skillId), packageId])
+      mkdirSync(packageDirectory(root, [SKILL_DIR.versions, String(skillId)]), { recursive: true })
       renameSync(staging, final)
       moved = final
       return relative

@@ -787,7 +787,10 @@ function commandDoctor(layout: Layout, options: LauncherOptions, combination: Co
   })
   check('dsh CLI build', () => {
     const dsh = resolveDsh(options, combination)
-    return `${dsh.bin} (${dsh.head!.slice(0, 12)})`
+    // The launcher needs only the CLI entry: build:lib:client and
+    // build:native-system have no pre-flight check, so the detail says what this
+    // check actually proves instead of implying every build output is present.
+    return `${dsh.bin} (${dsh.head!.slice(0, 12)}); build:lib:host only`
   })
   check('product build', () => {
     // The install copies the build output, so the output has to exist before the

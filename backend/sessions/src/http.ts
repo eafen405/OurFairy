@@ -18,13 +18,13 @@ import { SessionScopeError, type OwnedSessionService, type SessionOwner } from '
  * unless the caller owns it.
  */
 export const SURFACE = freezeSurface([
-  { path: '/sessions/create', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'sessions' },
-  { path: '/sessions/list', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'sessions' },
-  { path: '/sessions/select', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
-  { path: '/sessions/primary', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'sessions' },
-  { path: '/sessions/read', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
-  { path: '/sessions/archive', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
-  { path: '/sessions/restore', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/create', method: 'POST', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/list', method: 'POST', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/select', method: 'POST', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/primary', method: 'POST', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/read', method: 'POST', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/archive', method: 'POST', body: 'json', response: 'json', prefix: 'sessions' },
+  { path: '/sessions/restore', method: 'POST', body: 'json', response: 'json', prefix: 'sessions' },
 ])
 
 /** Paths this module owns, in the order the carrier registers them. */

@@ -101,6 +101,25 @@ test('a name conflict with an approved identity is refused, while personal and c
   }
 })
 
+test('a draft package path must be a safe relative path under candidates/', async () => {
+  const { store } = await open('invalid-path')
+  try {
+    for (const packagePath of [
+      '', 'candidates', 'candidates/', 'candidates//uuid', 'candidates/./uuid', 'candidates/../uuid',
+      './candidates/uuid', '/candidates/uuid', 'versions/1/uuid', 'candidates\\uuid',
+    ]) {
+      assert.throws(
+        () => store.createDraft(draft({ packagePath })),
+        error => error.code === 'skills/invalid-path',
+        `createDraft must refuse ${JSON.stringify(packagePath)}`,
+      )
+    }
+    assert.deepEqual(store.pendingDrafts(7), [], 'a refused path writes no row')
+  } finally {
+    store.close()
+  }
+})
+
 test('a pending version settles once; request-changes and reject are terminal for that row', async () => {
   const { store } = await open('settle')
   try {
