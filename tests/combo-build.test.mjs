@@ -1,5 +1,5 @@
 /**
- * combo.json is the only copy of the companion build commands (#335).
+ * combo.json is the authority for the companion build commands (#335).
  *
  * The CI workflow used to spell the four `repos.dsh.requiredBuild` commands out
  * a second time in a bash `for step in` loop. Nothing read the recorded list, so
@@ -9,6 +9,10 @@
  * both halves of that seam: the behavior (the recorded steps, in order, are what
  * runs) and the workflow shape (CI calls the executor instead of keeping a
  * copy).
+ *
+ * Editing or deleting a recorded step is an authoritative edit: it changes the
+ * next build by design. The drift checks only refuse a second copy of the
+ * commands in the workflow and an executor that stops following the record.
  *
  * This file imports only `scripts/combo.ts`, so it runs without a product build
  * or a dsh checkout — the plain `node --test tests/combo-build.test.mjs` entry
@@ -226,7 +230,7 @@ test('an empty or malformed build record is a configuration error naming the rep
   }
 })
 
-test('CI calls the executor instead of keeping its own copy of the commands', () => {
+test('CI calls the executor and keeps no copy of the commands anywhere in the workflow', () => {
   const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'check.yml'), 'utf8')
   const buildStart = workflow.indexOf('Build the locked dsh combination')
   const buildEnd = workflow.indexOf('Full suite and combination')
@@ -243,18 +247,64 @@ test('CI calls the executor instead of keeping its own copy of the commands', ()
   const step = workflow.slice(buildStart, buildEnd)
   assert.match(step, /run: \|/u, 'the build step must still be a run step')
   assert.match(step, /node scripts\/combo\.ts build/u, 'CI must execute the recorded build through the executor')
-  assert.doesNotMatch(step, /corepack pnpm@/u, 'CI must not spell the recorded pnpm commands out a second time')
-  assert.doesNotMatch(step, /for step in/u, 'the bash loop is the duplicate command list this ticket removes')
-  // Whatever combo.json records must not reappear as a literal in our CI file:
-  // that copy is exactly the drift the executor exists to prevent.
+
+  // The no-copy rule covers the whole workflow, not just the build step: a copy
+  // parked in a comment, another step, or the Android job would still drift
+  // from combo.json. Editing or deleting a recorded step is the authoritative
+  // edit and changes the next build by design; what these assertions refuse is
+  // a second copy of the list, not a changed record.
+  for (const copied of [
+    'build:lib:host',
+    'build:lib:client',
+    'build:native-system',
+    'corepack pnpm@11.28.5 run build',
+    'for step in',
+  ]) {
+    assert.ok(
+      !workflow.includes(copied),
+      `CI must not spell the recorded build out a second time; found ${JSON.stringify(copied)} anywhere in check.yml`,
+    )
+  }
+  // The fixed literals above would go stale if combo.json renamed a command, so
+  // read the record too: whatever combo.json currently records must not appear
+  // anywhere in the workflow either.
   const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
   for (const [key, entry] of Object.entries(combo.repos)) {
     for (const recorded of entry.requiredBuild ?? []) {
       assert.ok(
-        !step.includes(recorded),
+        !workflow.includes(recorded),
         `CI copies repos.${key}.requiredBuild step ${JSON.stringify(recorded)} instead of running the executor`,
       )
     }
+  }
+})
+
+test('the real combination record is executed step by step, in order', () => {
+  // Not a hand-written fixture record: copy the combo.json this checkout ships,
+  // then give each recording repository a placeholder checkout so the executor
+  // can resolve it. The injected runner records argv, so no pnpm command runs.
+  // Deleting or editing a step in combo.json is an authoritative edit and
+  // changes the next build by design; this test only refuses an executor that
+  // drops a recorded step, reorders it, or stops calling the record.
+  const parent = mkdtempSync(join(tmpdir(), 'ourfairy-combo-real-'))
+  const root = join(parent, 'repo')
+  mkdirSync(root, { recursive: true })
+  writeFileSync(join(root, 'combo.json'), readFileSync(join(repoRoot, 'combo.json')))
+  try {
+    const recorded = withRecordedPaths(() => requiredBuildSteps({ root }))
+    assert.ok(recorded.length > 0, 'the real combination must record at least one build chain')
+    for (const build of recorded) mkdirSync(join(build.dir, '.git'), { recursive: true })
+    const { calls, run } = recordingRunner()
+    const executed = withRecordedPaths(() => runRequiredBuild({ root, run }))
+    const expected = recorded.flatMap(build => build.steps.map(step => ({ step, cwd: build.dir })))
+    assert.equal(executed, expected.length, 'every step in the real record must run')
+    assert.deepEqual(
+      calls.map(call => ({ step: call.args[1], cwd: call.cwd })),
+      expected,
+      'the real combo.json record must run verbatim, in the recorded order',
+    )
+  } finally {
+    rmSync(parent, { recursive: true, force: true })
   }
 })
 

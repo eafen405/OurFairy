@@ -100,6 +100,17 @@ test('doctor reports its checks on a clean isolated home', () => {
   // Companion checkouts are pinned by `npm run combo:verify`, the hook's other
   // step. A worktree sits on moveable integration tips, so doctor's answer about
   // the other repositories is a fact to report, not a regression of this code.
+  //
+  // README promises this check confirms only `build:lib:host`'s CLI artifact,
+  // not every build output. Pin that narrowed coverage in the detail the check
+  // itself reports, so broadening the claim has to edit this string too instead
+  // of passing silently.
+  const cliBuild = checks.get('dsh CLI build')
+  assert.match(
+    cliBuild.detail,
+    /build:lib:host only/u,
+    `doctor's dsh CLI build check must name its narrowed coverage; it reported ${JSON.stringify(cliBuild.detail)}`,
+  )
   const local = ['node version', 'corepack pnpm pin available', 'product packages', 'isolated home',
     'profile project linked', 'model double']
   const failed = local.filter(name => checks.get(name)?.ok !== true)
