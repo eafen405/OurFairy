@@ -237,6 +237,52 @@ class RemoteResourceTest {
     }
 
     @Test
+    fun `a load queued behind a write reads only after the write and publishes the newer snapshot`() = runTest {
+        val held = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        var reads = 0
+        val resource = RemoteResource(this, TestSnapshot(), read = {
+            reads += 1
+            events += "read $reads"
+            TestSnapshot(payload = "read $reads")
+        })
+        resource.load("token-abc")
+        advanceUntilIdle()
+        events.clear()
+
+        resource.write("token-abc") {
+            events += "write"
+            held.await()
+        }
+        resource.load("token-abc")
+        advanceUntilIdle()
+
+        assertEquals(
+            "the queued read has not started while the write is landing",
+            listOf("write"),
+            events,
+        )
+        assertTrue("the queued read shows its mark before it owns the lane", resource.snapshot.value.loading)
+        assertTrue("the landing write keeps its own mark", resource.snapshot.value.working)
+
+        held.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(
+            "the write's fresh read runs first, then the queued read",
+            listOf("write", "read 2", "read 3"),
+            events,
+        )
+        assertEquals(
+            "the queued read's snapshot is what the page shows, never a pre-write one",
+            "read 3",
+            resource.snapshot.value.payload,
+        )
+        assertFalse(resource.snapshot.value.loading)
+        assertFalse(resource.snapshot.value.working)
+    }
+
+    @Test
     fun `a cancelled read is not reported as a failure`() = runTest {
         var attempts = 0
         val resource = RemoteResource(this, TestSnapshot(), read = {

@@ -3,11 +3,17 @@
  *
  * A version's `package_path` is a POSIX path relative to the skill data root:
  * `candidates/<uuid>` while the row is a draft, `versions/<skillId>/<uuid>` once
- * it is approved (README, "The data root"). This module is the one place that
- * knows those names and the validation they share. It also owns the crash
- * re-home a candidate needs when a process dies between the approval's rename
- * into `versions/` and its database transaction, so the read path and the boot
- * reconciliation run one algorithm instead of two.
+ * it is approved (README, "The data root"). This module is the one place the
+ * stored row values and their shared safety rule are written: `createDraft`,
+ * `publishDraft` and `importReviewed` calls take their `package_path` from
+ * `candidatePackagePath` / `versionPackagePath`, and creation and seed stage
+ * under `candidates/`, `versions/` and `tmp/` through these names. The one-shot
+ * directories `install.ts` fetches into (`tmp/install-<uuid>`) and `verify.ts`
+ * creates (`verify/<uuid>`) are not stored row values, so those modules keep
+ * their own names. It also owns the crash re-home a candidate needs when a
+ * process dies between the approval's rename into `versions/` and its database
+ * transaction, so the read path and the boot reconciliation run one algorithm
+ * instead of two.
  *
  * It is deliberately pure: `node:fs`/`node:path` only, no store, service or
  * transaction. Publish and seed keep their own transaction + rename + rollback
@@ -19,12 +25,11 @@
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import { join, sep } from 'node:path'
 
-/** The data root's area names; the only place the candidate/version vocabulary is written. */
+/** The data-root areas whose names creation, seed and their readers share. */
 export const SKILL_DIR = Object.freeze({
   candidates: 'candidates',
   versions: 'versions',
   tmp: 'tmp',
-  verify: 'verify',
 } as const)
 
 /** One validated relative package path, as its segments. */
@@ -86,8 +91,15 @@ export function versionPackagePath(skillId: number, packageId: string): string {
   return `${SKILL_DIR.versions}/${String(skillId)}/${packageId}`
 }
 
-/** What one candidate directory check found. */
-export type CandidatePackageState = 'present' | 'rehomed' | 'missing'
+/**
+ * What one candidate directory check found.
+ *
+ * `unsafe` is separate from `missing` on purpose: both leave the caller without
+ * usable bytes, but only `missing` says the row's path itself was trustworthy.
+ * The boot reconciliation names the reason in its system note, so the two
+ * cannot be folded together without losing the row's own diagnosis.
+ */
+export type CandidatePackageState = 'present' | 'rehomed' | 'missing' | 'unsafe'
 
 /** One recorded candidate and the identity whose `versions/` area may hold it. */
 export interface RehomeCandidatePackageInput {
@@ -109,12 +121,12 @@ export interface RehomeCandidatePackageInput {
  * the boot reconciliation share this one rule.
  *
  * @returns `present` when the recorded directory already holds the bytes,
- * `rehomed` when it was moved back, `missing` when neither location has them
- * (an unsafe stored path is `missing`: it can never be re-homed).
+ * `rehomed` when it was moved back, `missing` when neither location has them,
+ * and `unsafe` when the stored path itself is refused (nothing is joined).
  */
 export function rehomeCandidatePackage(input: RehomeCandidatePackageInput): CandidatePackageState {
   const checked = checkPackagePath(input.packagePath)
-  if (checked === undefined) return 'missing'
+  if (checked === undefined) return 'unsafe'
   const directory = packageDirectory(input.root, checked.segments)
   // The recorded path is the row's fact: whatever shape it has, an existing
   // directory means there is nothing to repair. Only a candidate row is moved.

@@ -420,6 +420,39 @@ describe('the origin resolver names one source or refuses the conflict', () => {
     })
   }
 
+  test('several conflicts report the first refusal in the fixed order', () => {
+    // Four conflicts at once: a background claim with an install address, a
+    // named focus and deferred verification. The fixed order must report the
+    // background/install refusal before the focus or deferral ones.
+    assert.throws(
+      () => candidateOrigin(facts({
+        background: BACKGROUND,
+        install: INSTALL,
+        packageDir: true,
+        deferredVerification: true,
+        focusNamed: true,
+      })),
+      error => {
+        assert.equal(error.code, 'skills/invalid-source')
+        assert.equal(error.status, 400)
+        assert.equal(error.message,
+          'a background candidate cannot also record an install source; its origin is the cross-session claim, not an address')
+        return true
+      },
+    )
+    // A revision with an install source is refused before the independent
+    // "deferred without a background claim" rule, which also applies here.
+    assert.throws(
+      () => candidateOrigin(facts({ revision: true, install: INSTALL, deferredVerification: true })),
+      error => {
+        assert.equal(error.code, 'skills/invalid-source')
+        assert.equal(error.status, 400)
+        assert.match(error.message, /a revision is written from package files/u)
+        return true
+      },
+    )
+  })
+
   test('names the four legal origins', () => {
     assert.equal(candidateOrigin(facts()), 'explicit')
     assert.equal(candidateOrigin(facts({ install: INSTALL, packageDir: true })), 'install')

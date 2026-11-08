@@ -10,6 +10,8 @@ data class ImpressionSnapshot(
     val impression: Impression? = null,
     override val failure: RemoteFailure? = null,
 ) : RemotePageState<ImpressionSnapshot> {
+    // The page is read-only, so it has no write mark: the shared machine's `writing` hint has no
+    // field to land in and is deliberately ignored rather than materialised as a fake mark.
     override fun settled(failure: RemoteFailure?, reading: Boolean?, writing: Boolean?) =
         copy(loading = reading ?: loading, failure = failure)
 }

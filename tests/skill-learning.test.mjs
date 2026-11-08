@@ -836,6 +836,74 @@ describe('background detection', () => {
     assert.equal(list.skills.some(entry => entry.name === 'background-checklist'), false, 'a pending candidate is not in the selection pool')
   })
 
+  test('a changed candidate that only reuses the parent report is never settled', async () => {
+    // A background revision of a real approved row: the child must be able to
+    // name a current parent, so the row is seeded directly (the review path has
+    // its own tests). Its package bytes are absent on purpose: a parent package
+    // that cannot be read makes the reuse plan rerun every scenario, which is
+    // exactly the report this case then overwrites with the pre-fix shape.
+    const owner = alice.user.shortId
+    const now = Date.now()
+    const parentName = 'settle-reuse-parent'
+    exec(`INSERT INTO skill (name, scope, owner_short_id, created_by, updated_by, created_at, updated_at)
+      VALUES (?, 1, ?, ?, ?, ?, ?)`, parentName, owner, owner, owner, now, now)
+    const parentSkillId = rows('SELECT id FROM skill WHERE name = ?', parentName)[0].id
+    exec(`INSERT INTO skill_version
+      (skill_id, package_path, manifest, manifest_hash, core_characters, source_type, status,
+       created_by, created_at, updated_at)
+      VALUES (?, ?, '[]', ?, 1000, 5, 3, ?, ?, ?)`,
+    parentSkillId, `versions/${parentSkillId}/seed-parent`, 'seed-parent-hash', owner, now, now)
+    const parentVersionId = rows('SELECT id FROM skill_version WHERE skill_id = ? AND status = 3', parentSkillId)[0].id
+    exec('UPDATE skill SET current_version_id = ? WHERE id = ?', parentVersionId, parentSkillId)
+
+    resetScript({
+      detection: submissions([{ taskKey: 'settle:reuse', status: 0 }]),
+      creation: [
+        ['submit_candidate', {
+          files: [{ path: 'SKILL.md', content: `---\nname: ${parentName}\ndescription: Use when settling a changed candidate.\n---\n\n# Changed body\n\nThe parent body is different, so this content changed.\n` }],
+          scenarios: [{ name: 'reuse', command: 'true' }],
+          parentVersionId,
+          targetBenefit: 'keep the reusable command',
+          evidence: [{ kind: 'session', ref: 'two background sessions succeeded' }],
+        }],
+        ['run_verification', {}],
+        () => {
+          // The real verification recorded a complete report; rewrite it to the
+          // pre-fix shape a previous build could have stored: changed bytes whose
+          // report only carries the parent's run and no execution of its own.
+          const job = creationJobs().find(row => row.task_key === 'settle:reuse')
+          assert.ok(job?.candidate_version_id, 'the child submitted a candidate before verifying it')
+          const stored = JSON.parse(rows('SELECT verification FROM skill_version WHERE id = ?', job.candidate_version_id)[0].verification)
+          assert.equal(stored.executed.length, 1, 'the real verification ran the declared scenario')
+          exec('UPDATE skill_version SET verification = ? WHERE id = ?', JSON.stringify({
+            ...stored,
+            executed: [],
+            reused: stored.executed.map(record => ({ ...record, reusedFrom: parentVersionId })),
+          }), job.candidate_version_id)
+          return undefined
+        },
+      ],
+    })
+    const first = await newSession(alice)
+    await sendPlain(alice, first, '结算复用：第一个会话')
+    const second = await newSession(alice)
+    await sendPlain(alice, second, '结算复用：第二个会话')
+
+    const failed = await waitFor('the claim refused by its reuse-only report', () =>
+      creationJobs().find(row => row.task_key === 'settle:reuse' && row.state === 4), 40_000)
+    assert.equal(failed.attempts, 1)
+    assert.ok(failed.candidate_version_id, 'the child submitted a draft before verification')
+    const draft = rows('SELECT * FROM skill_version WHERE id = ?', failed.candidate_version_id)[0]
+    assert.equal(draft.status, 0, 'the claim never settles a candidate the approval gate would refuse')
+    assert.equal(draft.parent_version_id, parentVersionId, 'the candidate really revises the parent')
+    const report = JSON.parse(draft.verification)
+    assert.deepEqual([report.executed.length, report.reused.length], [0, 1],
+      'the stored report is the reuse-only shape the settle decision must refuse')
+
+    // Spend the retry budget so this claim does not relaunch into later cases.
+    exec('UPDATE skill_creation_job SET attempts = ? WHERE id = ?', CREATION_ATTEMPT_CAP, failed.id)
+  })
+
   test('a failed creation retries only its claim, never the detection watermarks', async () => {
     resetScript({
       detection: submissions([{ taskKey: 'incident:retry', status: 0 }]),

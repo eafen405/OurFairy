@@ -35,6 +35,11 @@ interface RemotePageState<S : RemotePageState<S>> {
     /**
      * The same page with its [failure] replaced, plus either busy mark replaced when given.
      * A `null` mark leaves that mark as it is. The payload is never touched.
+     *
+     * The marks are [RemoteResource]'s shared vocabulary, not a claim that every page has both:
+     * a read-only page has no write mark, so it ignores [writing] instead of materialising a mark
+     * it never renders ([ImpressionSnapshot.settled] is that shape). An implementation answers
+     * with the marks it actually owns and leaves the rest alone.
      */
     fun settled(failure: RemoteFailure?, reading: Boolean? = null, writing: Boolean? = null): S
 }
