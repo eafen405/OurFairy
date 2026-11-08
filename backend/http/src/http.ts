@@ -111,14 +111,6 @@ export function sendJson(response: ServerResponse, status: number, payload: unkn
   response.end(body)
 }
 
-/**
- * The admission one product address performs after the shared Host/Origin
- * fence: nothing more (`fence`), a live credential (`authentication`), a
- * credential that owns the named resource (`ownership`), or the administrator
- * role (`role`).
- */
-export type SurfaceAuth = 'fence' | 'authentication' | 'ownership' | 'role'
-
 /** The request body one product address reads: a JSON object, raw bytes, or none. */
 export type SurfaceBody = 'json' | 'binary' | 'none'
 
@@ -133,11 +125,15 @@ export type SurfaceResponse = 'json' | 'sse' | 'binary'
  * `prefix` is the error-code prefix the address answers with; it is usually the
  * row's own name, but `/sessions/rename` is registered by the chat row and
  * answers in the session family's vocabulary.
+ *
+ * Admission is deliberately not a field: it is the handler's, and the real rule
+ * depends on the resource (a skill's scope, an attachment's upload and its
+ * session), so one published word would misstate it. The addresses prove their
+ * admission over real HTTP in the suites `tests/route-inventory.test.mjs` names.
  */
 export interface SurfaceEntry {
   readonly path: string
   readonly method: 'GET' | 'POST'
-  readonly auth: SurfaceAuth
   readonly body: SurfaceBody
   readonly response: SurfaceResponse
   readonly prefix: string

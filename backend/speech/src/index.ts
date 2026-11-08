@@ -68,8 +68,8 @@ export type SpeechConfig = Record<string, SpeechField>
  * is read as JSON here.
  */
 export const SURFACE = freezeSurface([
-  { path: '/speech', method: 'GET', auth: 'authentication', body: 'none', response: 'json', prefix: 'speech' },
-  { path: '/speech/transcriptions', method: 'POST', auth: 'authentication', body: 'binary', response: 'json', prefix: 'speech' },
+  { path: '/speech', method: 'GET', body: 'none', response: 'json', prefix: 'speech' },
+  { path: '/speech/transcriptions', method: 'POST', body: 'binary', response: 'json', prefix: 'speech' },
 ])
 
 export function apply(ctx: Context, config: SpeechConfig) {

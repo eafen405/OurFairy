@@ -27,12 +27,12 @@ import type { SkillLifecycle } from './sharing.js'
 
 /** The addresses this row publishes, in the order the carrier registers them. */
 export const SURFACE = freezeSurface([
-  { path: '/skills/list', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'skills' },
-  { path: '/skills/detail', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'skills' },
-  { path: '/skills/preference', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'skills' },
-  { path: '/skills/review-open', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'skills' },
-  { path: '/skills/archive', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'skills' },
-  { path: '/skills/restore', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'skills' },
+  { path: '/skills/list', method: 'POST', body: 'json', response: 'json', prefix: 'skills' },
+  { path: '/skills/detail', method: 'POST', body: 'json', response: 'json', prefix: 'skills' },
+  { path: '/skills/preference', method: 'POST', body: 'json', response: 'json', prefix: 'skills' },
+  { path: '/skills/review-open', method: 'POST', body: 'json', response: 'json', prefix: 'skills' },
+  { path: '/skills/archive', method: 'POST', body: 'json', response: 'json', prefix: 'skills' },
+  { path: '/skills/restore', method: 'POST', body: 'json', response: 'json', prefix: 'skills' },
 ])
 
 /** Paths this row owns, in the order the carrier registers them. */

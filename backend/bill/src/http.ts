@@ -50,12 +50,13 @@ export interface BillView extends Record<keyof BillTotals, BillTotalView> {
 /**
  * The single address this row publishes, and the only one `mountRoutes` mounts.
  *
- * `auth: 'authentication'` is the spec's decision, not a default: the bill is
- * the Fairy's public total, so an ordinary agent reads it. `body: 'none'` is
- * why the method is GET — the request names no subject and carries no payload.
+ * The handler requires a live credential and nothing more: the bill is the
+ * Fairy's public total, so an ordinary agent reads it. `body: 'none'` is why the
+ * method is GET — the request names no subject and carries no payload, and the
+ * caller comes from the credential.
  */
 export const SURFACE = freezeSurface([
-  { path: '/bill', method: 'GET', auth: 'authentication', body: 'none', response: 'json', prefix: 'bill' },
+  { path: '/bill', method: 'GET', body: 'none', response: 'json', prefix: 'bill' },
 ])
 
 /** Paths this module owns, in the order the carrier registers them. */

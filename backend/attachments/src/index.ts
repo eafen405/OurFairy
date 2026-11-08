@@ -32,10 +32,10 @@ export { createDownloadResponder } from './download.js'
  * reads a JSON object and answers the original bytes.
  */
 export const SURFACE = freezeSurface([
-  { path: '/attachments/propose', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'attachments' },
-  { path: '/attachments/complete', method: 'POST', auth: 'ownership', body: 'json', response: 'json', prefix: 'attachments' },
-  { path: '/attachments/chunk', method: 'POST', auth: 'ownership', body: 'binary', response: 'json', prefix: 'attachments' },
-  { path: '/attachments/download', method: 'POST', auth: 'ownership', body: 'json', response: 'binary', prefix: 'attachments' },
+  { path: '/attachments/propose', method: 'POST', body: 'json', response: 'json', prefix: 'attachments' },
+  { path: '/attachments/complete', method: 'POST', body: 'json', response: 'json', prefix: 'attachments' },
+  { path: '/attachments/chunk', method: 'POST', body: 'binary', response: 'json', prefix: 'attachments' },
+  { path: '/attachments/download', method: 'POST', body: 'json', response: 'binary', prefix: 'attachments' },
 ])
 
 export const name = 'ourfairy-attachments'
