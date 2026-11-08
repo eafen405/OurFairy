@@ -18,9 +18,12 @@
  *
  * `build` executes the commands combo.json records under
  * `repos.<key>.requiredBuild`, each chain in that repository's checkout. It is
- * what CI runs after checking out the locked combination, so the recorded list
- * is the only copy: adding, changing, or deleting a step changes what the next
- * CI run builds. `--print` resolves the checkouts and prints the commands
+ * what CI runs after checking out the locked combination. The recorded list is
+ * the authority for the build: editing or deleting a step is an authoritative
+ * edit that changes what the next CI run builds by design. The drift test
+ * (`tests/combo-build.test.mjs`) refuses a second copy of the commands in the
+ * workflow and an executor that stops calling the record; it does not refuse a
+ * changed record. `--print` resolves the checkouts and prints the commands
  * without running them.
  *
  * The research upstream baselines are not part of the combination; they live in
