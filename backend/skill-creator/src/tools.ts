@@ -251,6 +251,10 @@ async function execute(args: SkillManageArgs, exec: ToolRunContext, deps: SkillT
         }) as unknown as SkillToolValue
       }
       case 'create': {
+        // This adapter owns the model's input vocabulary (which arguments mean
+        // what); whether one source may be combined with another is the
+        // domain's contract in `creation.create` / `./origin`, kept as the
+        // authority rather than duplicated here.
         const parentVersionId = positiveInteger(args.parentVersionId, 'parentVersionId')
         // A revision derives its scope from the parent identity; a new skill
         // must still state its scope explicitly.

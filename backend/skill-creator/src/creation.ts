@@ -57,6 +57,7 @@ import {
   rehomeCandidatePackage,
   versionPackagePath,
 } from './paths.js'
+import { candidateOrigin, type BackgroundProvenance, type CandidateOrigin } from './origin.js'
 import { canInspect, canReview, requireSharingConsent, type SharingConsent } from './sharing.js'
 import type { InstallSource } from './install.js'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -112,17 +113,14 @@ export interface CandidateEvidence {
   readonly note?: string
 }
 
-/** Where one background candidate came from: the cross-session claim's evidence. */
-export interface BackgroundProvenance {
-  /** The canonical task key shared by the contributing signals. */
-  readonly taskKey: string
-  /** The contributing reuse-signal ids the creation claim froze. */
-  readonly signalIds: readonly number[]
-  /** The distinct source sessions those signals came from. */
-  readonly sourceSessions: readonly string[]
-  /** The creation job that produced this candidate. */
-  readonly creationJobId: number
-}
+/**
+ * The cross-session provenance of a background candidate.
+ *
+ * The shape lives in `./origin`, the module that resolves which origin a
+ * create call belongs to; it is re-exported here because
+ * {@link CreateCandidateInput} exposes it.
+ */
+export type { BackgroundProvenance } from './origin.js'
 
 /** The facts one `create` call hands the backend. */
 export interface CreateCandidateInput {
@@ -326,6 +324,21 @@ export const DISPLAY_MAX_CHARACTERS = 4_000
 
 /** The one instruction a growth-exceeded display must never lose. */
 export const GROWTH_INSTRUCTION = '篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」'
+
+/**
+ * The one mapping from a resolved origin to the stored source vocabulary.
+ *
+ * Every value is read from `SOURCE_TYPE`; the mapping writes no number itself.
+ * A create call's stored code follows the origin `./origin` resolved instead of
+ * a second look at the overlapping input fields, which is what keeps the old
+ * priority chain from growing back.
+ */
+const SOURCE_TYPE_OF_ORIGIN: Readonly<Record<CandidateOrigin, number>> = Object.freeze({
+  explicit: SOURCE_TYPE.explicit,
+  install: SOURCE_TYPE.install,
+  background: SOURCE_TYPE.background,
+  evolution: SOURCE_TYPE.evolution,
+})
 
 /**
  * Whether one candidate's approval needs the reviewing user's own decision
@@ -613,12 +626,7 @@ interface SourceProvenance {
   readonly consent?: SharingConsent
   readonly benefit?: string
   /** The cross-session claim a background candidate came from (#300). */
-  readonly background?: {
-    readonly taskKey: string
-    readonly signalIds: readonly number[]
-    readonly sourceSessions: readonly string[]
-    readonly creationJobId: number
-  }
+  readonly background?: BackgroundProvenance
   /** The scenarios a deferred background candidate still has to verify with. */
   readonly scenarios?: readonly CandidateScenario[]
   readonly comparisons?: readonly CandidateComparison[]
@@ -1050,7 +1058,13 @@ export class SkillCreation {
   }
 
   /**
-   * Validate, stage, record and verify one explicit candidate or revision.
+   * Validate, stage, record and verify one candidate.
+   *
+   * One call has exactly one origin (`./origin`): an explicit package, an
+   * address install, a background claim or a revision. The two producers hand
+   * overlapping optional fields; a combination in which one origin would
+   * override another is refused here, before any byte is staged, so no adapter
+   * pre-check is what keeps it out.
    *
    * The file set is written to `tmp/<uuid>/`, re-read by the one package
    * algorithm, moved into `candidates/<uuid>/` and only then inserted. A name
@@ -1082,13 +1096,24 @@ export class SkillCreation {
       if (input.packageDir !== undefined && input.install === undefined) {
         throw new SkillError(400, 'skills/invalid-package', 'a fetched package needs the install source it was fetched from')
       }
+      // One candidate has exactly one origin. `tools.ts` owns the model's input
+      // vocabulary; this call is the domain authority over which sources may be
+      // combined, and it refuses a conflict before any byte is staged.
+      const origin = candidateOrigin({
+        install: input.install,
+        background: input.background,
+        revision: revision !== undefined,
+        deferredVerification: input.deferVerification === true,
+        focusNamed: input.focus !== undefined,
+        packageDir: input.packageDir !== undefined,
+      })
       // A background candidate has no calling turn to name: its provenance is
-      // the cross-session claim, and the review package shows that instead.
-      const background = input.background
+      // the cross-session claim, and the review package shows that instead. An
+      // address install has no calling turn either, so it needs no focus.
       let focus: FocusProvenance | undefined
-      if (background === undefined) {
+      if (origin !== 'background') {
         focus = input.focus === undefined ? undefined : resolveFocus(input.events, input.focus)
-        if (focus === undefined && input.install === undefined) {
+        if (focus === undefined && origin !== 'install') {
           throw new SkillError(400, 'skills/invalid-focus', 'create needs focus: {"kind":"turn"} or {"kind":"task","text":"..."}')
         }
       }
@@ -1142,54 +1167,63 @@ export class SkillCreation {
         const candidateDir = staged.candidateDir
         const growth = growthOf(parsed.coreCharacters, revision?.parent.core_characters ?? null)
         const install = input.install
-        const location: SourceProvenance = background !== undefined
-          ? {
-              ...(evidence.length === 0 ? {} : { evidence }),
-              ...(revision === undefined ? {} : { benefit: revision.benefit }),
+        const background = input.background
+        // The provenance pieces each origin may carry. A field is named once
+        // here, and the switch below picks only the block the resolved origin
+        // owns; a field the origin does not own was refused above, so no branch
+        // can silently drop one.
+        const personalProvenance: SourceProvenance = {
+          sessionId: input.sessionId,
+          ...(focus === undefined ? {} : { focus }),
+          ...(evidence.length === 0 ? {} : { evidence }),
+        }
+        const consentProvenance: SourceProvenance = consent === undefined ? {} : { consent }
+        const benefitProvenance: SourceProvenance = revision === undefined ? {} : { benefit: revision.benefit }
+        const installProvenance: SourceProvenance = install === undefined
+          ? {}
+          : {
+              address: install.address,
+              resolvedVersion: install.resolvedVersion,
+              digest: install.digest,
+              fetchedAt: install.fetchedAt,
+              ...(install.etag === undefined ? {} : { etag: install.etag }),
+              ...(install.lastModified === undefined ? {} : { lastModified: install.lastModified }),
+            }
+        const backgroundProvenance: SourceProvenance = background === undefined
+          ? {}
+          : {
               background: {
                 taskKey: background.taskKey,
                 signalIds: [...background.signalIds],
                 sourceSessions: [...background.sourceSessions],
                 creationJobId: background.creationJobId,
               },
-              // A deferred candidate keeps the scenarios it must still run:
-              // run_verification reads them back from this provenance.
-              ...(input.deferVerification
-                ? { scenarios, comparisons }
-                : {}),
             }
-          : {
-              ...(common
-                ? { ...(consent === undefined ? {} : { consent }) }
-                : {
-                    // A common revision is Phaethon's private session too: only
-                    // the revision's own evidence/benefit become review
-                    // material the proposer may read.
-                    ...(commonRevision
-                      ? { ...(evidence.length === 0 ? {} : { evidence }), ...(revision === undefined ? {} : { benefit: revision.benefit }) }
-                      : {
-                          sessionId: input.sessionId,
-                          ...(focus === undefined ? {} : { focus }),
-                          ...(evidence.length === 0 ? {} : { evidence }),
-                          ...(revision === undefined ? {} : { benefit: revision.benefit }),
-                        }),
-                  }),
-              ...(install === undefined
-                ? {}
-                : {
-                    address: install.address,
-                    resolvedVersion: install.resolvedVersion,
-                    digest: install.digest,
-                    fetchedAt: install.fetchedAt,
-                    ...(install.etag === undefined ? {} : { etag: install.etag }),
-                    ...(install.lastModified === undefined ? {} : { lastModified: install.lastModified }),
-                  }),
-            }
-        const sourceType = background !== undefined
-          ? SOURCE_TYPE.background
-          : install !== undefined
-            ? SOURCE_TYPE.install
-            : revision === undefined ? SOURCE_TYPE.explicit : SOURCE_TYPE.evolution
+        const location: SourceProvenance = (() => {
+          switch (origin) {
+            case 'background':
+              return {
+                ...benefitProvenance,
+                ...(evidence.length === 0 ? {} : { evidence }),
+                ...backgroundProvenance,
+                // A deferred candidate keeps the scenarios it must still run:
+                // run_verification reads them back from this provenance.
+                ...(input.deferVerification ? { scenarios, comparisons } : {}),
+              }
+            case 'install':
+              return { ...(common ? consentProvenance : personalProvenance), ...installProvenance }
+            case 'evolution':
+              // A common revision is Phaethon's private session too: only the
+              // revision's own evidence/benefit become review material the
+              // proposer may read.
+              return commonRevision
+                ? { ...(evidence.length === 0 ? {} : { evidence }), ...benefitProvenance }
+                : { ...personalProvenance, ...benefitProvenance }
+            case 'explicit':
+              return common ? consentProvenance : personalProvenance
+          }
+        })()
+        const sourceType = SOURCE_TYPE_OF_ORIGIN[origin]
         const draft = this.#store.createDraft({
           name: parsed.name,
           scope,
