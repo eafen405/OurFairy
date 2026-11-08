@@ -188,6 +188,16 @@ failed call and the chat projection shows no activation row.
 - A personal skill is revised by its owner; a common skill only by Phaethon,
   through the same `canReview` rule its candidates use. A common revision keeps
   the common identity (NULL owner) and its proposer can still read it.
+- One `create` has exactly one origin: an explicit package, an address install,
+  a background claim or a revision. `src/origin.ts` resolves it from the call
+  facts and refuses a conflict with 400 `skills/invalid-source`, before any
+  byte is staged: a background claim or a revision that also carries an install
+  source, a background claim that also names a calling focus, deferred
+  verification without a background claim, and an install source without the
+  fetched package directory. The recorded `source_type` and the provenance
+  block follow that one origin; `src/tools.ts` still owns the model's argument
+  vocabulary, while the domain stays the authority over which sources may be
+  combined.
 - The model never submits a `license`: the package's own frontmatter, or the
   root `LICENSE*` file an install fetched, is the only licence recorded.
 - At least one representative scenario is required. `src/verify.ts` copies the
