@@ -44,7 +44,7 @@ function fakeContext() {
 }
 
 /** One published address, with exactly the fields `SURFACE` carries. */
-const entry = path => ({ path, method: 'POST', auth: 'fence', body: 'json', response: 'json', prefix: 'ticket' })
+const entry = path => ({ path, method: 'POST', body: 'json', response: 'json', prefix: 'ticket' })
 
 /** A handler table for the given paths; the handler bodies never run here. */
 function handlersFor(...paths) {
