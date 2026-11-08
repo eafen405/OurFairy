@@ -32,8 +32,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.ImpressionBackend
-import me.rerere.rikkahub.data.remote.ImpressionFailure
 import me.rerere.rikkahub.data.remote.ImpressionState
+import me.rerere.rikkahub.data.remote.RemoteFailure
 import me.rerere.rikkahub.ui.fairy.FairyBackground
 import me.rerere.rikkahub.ui.fairy.FairyPresence
 import me.rerere.rikkahub.ui.fairy.FairyWindowBarHeight
@@ -140,7 +140,7 @@ fun ImpressionPage(
 
 /** The backend's own words, or the localized "unreachable" for a lost connection. */
 @Composable
-private fun ImpressionFailureBanner(failure: ImpressionFailure?) {
+private fun ImpressionFailureBanner(failure: RemoteFailure?) {
     if (failure == null) return
     Spacer(Modifier.height(12.dp))
     Text(

@@ -1212,4 +1212,60 @@ describe('publish crash reconciliation', () => {
     const gone = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: lost.value.versionId })
     assert.equal(gone.isError, true, 'a settled broken candidate cannot be inspected')
   })
+
+  test('the read path re-homes a displaced candidate without a restart', async () => {
+    const created = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' },
+      files: packageFiles('read-time-recover', { bodyLength: 1000 }),
+      scenarios: [{ name: 'ok', command: 'true' }],
+    })
+    assert.equal(created.isError, false, created.text)
+    const candidateDir = packageDirectory(created.value.versionId)
+    const versionsRoot = join(skillRoot, 'versions', String(created.value.skillId))
+    mkdirSync(versionsRoot, { recursive: true })
+    const displaced = join(versionsRoot, basename(candidateDir))
+    renameSync(candidateDir, displaced)
+    assert.ok(!existsSync(candidateDir))
+
+    // No reboot: inspect runs while the row still points at candidates/.
+    const inspected = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'inspect', versionId: created.value.versionId,
+    })
+    assert.equal(inspected.isError, false, `the read path must re-home the displaced candidate: ${inspected.text}`)
+    assert.equal(versionOf(created.value.versionId).package_path, `candidates/${basename(candidateDir)}`,
+      'the row keeps its candidate path')
+    assert.ok(existsSync(candidateDir), 'the read path moved the bytes back before reading them')
+    assert.ok(!existsSync(displaced), 'the version area no longer holds the draft')
+  })
+
+  test('a pending row with an unsafe stored path is left pending at boot', async () => {
+    const created = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' },
+      files: packageFiles('unsafe-package-path', { bodyLength: 1000 }),
+      scenarios: [{ name: 'ok', command: 'true' }],
+    })
+    assert.equal(created.isError, false, created.text)
+    // Only a direct write can produce a row this build refuses to interpret:
+    // every product writer records a path from `paths.checkPackagePath`.
+    const database = new DatabaseSync(databasePath)
+    try {
+      database.prepare('UPDATE skill_version SET package_path = ? WHERE id = ?')
+        .run('candidates/../outside', created.value.versionId)
+    } finally {
+      database.close()
+    }
+
+    const refused = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'inspect', versionId: created.value.versionId,
+    })
+    assert.equal(refused.isError, true, 'the read path refuses an unsafe stored path')
+    assert.match(refused.text, /skills\/integrity/u, refused.text)
+
+    await stop()
+    await start()
+
+    const row = versionOf(created.value.versionId)
+    assert.equal(row.status, 0, 'boot leaves an unreadable row pending: it cannot make the terminal decision')
+    assert.equal(row.review_note, null, 'no review decision is recorded for an unsafe path')
+  })
 })

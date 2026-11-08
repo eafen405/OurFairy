@@ -20,7 +20,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, join } from 'node:path'
 import {
   PackageError,
   assertPackagePath,
@@ -50,6 +50,14 @@ import {
 import { runVerification, type ScenarioRecord, type VerificationReport } from './verify.js'
 import { emptyVerificationReport, readVerificationReport, verificationVerdict } from './verification-report.js'
 import { SkillError } from './service.js'
+import {
+  SKILL_DIR,
+  candidatePackagePath,
+  checkPackagePath,
+  packageDirectory,
+  rehomeCandidatePackage,
+  versionPackagePath,
+} from './paths.js'
 import { canInspect, canReview, requireSharingConsent, type SharingConsent } from './sharing.js'
 import type { InstallSource } from './install.js'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -1148,7 +1156,7 @@ export class SkillCreation {
           ...(common || commonRevision ? {} : { ownerShortId: input.ownerShortId }),
           ...(common ? { proposedBy: input.ownerShortId } : {}),
           createdBy: input.ownerShortId,
-          packagePath: `candidates/${staged.candidateId}`,
+          packagePath: candidatePackagePath(staged.candidateId),
           manifest: canonicalManifest(parsed.manifest),
           manifestHash: parsed.manifestHash,
           coreCharacters: parsed.coreCharacters,
@@ -1279,7 +1287,7 @@ export class SkillCreation {
           // Phaethon rollback only creates a candidate for the same identity.
           ...(skill.scope === SKILL_SCOPE.common ? {} : { ownerShortId: shortId }),
           createdBy: shortId,
-          packagePath: `candidates/${staged.candidateId}`,
+          packagePath: candidatePackagePath(staged.candidateId),
           manifest: canonicalManifest(parsed.manifest),
           manifestHash: parsed.manifestHash,
           coreCharacters: parsed.coreCharacters,
@@ -1395,14 +1403,14 @@ export class SkillCreation {
    * return must remove both directories (see the create/rollback catch blocks).
    */
   #stageCandidate(source: { readonly files?: readonly CandidateFile[]; readonly packageDir?: string }): StagedCandidate {
-    const staging = join(this.#root, 'tmp', randomUUID())
+    const staging = packageDirectory(this.#root, [SKILL_DIR.tmp, randomUUID()])
     const candidateId = randomUUID()
     try {
       if (source.packageDir === undefined) writeSkillPackage(staging, source.files as readonly CandidateFile[])
       else copySkillPackage(source.packageDir, staging)
       const parsed = readSkillPackage(staging)
-      mkdirSync(join(this.#root, 'candidates'), { recursive: true })
-      const candidateDir = join(this.#root, 'candidates', candidateId)
+      mkdirSync(packageDirectory(this.#root, [SKILL_DIR.candidates]), { recursive: true })
+      const candidateDir = packageDirectory(this.#root, [SKILL_DIR.candidates, candidateId])
       renameSync(staging, candidateDir)
       return { staging, candidateId, candidateDir, parsed }
     } catch (error) {
@@ -1446,24 +1454,14 @@ export class SkillCreation {
    * pending row still pointing at `candidates/<uuid>/` while the bytes sit under
    * `versions/<skillId>/<uuid>/`; moving them back here makes the candidate
    * inspectable and approvable again instead of a permanent integrity failure.
-   * A boot reconciliation repeats this scan for rows nobody touched yet.
+   * A boot reconciliation repeats this scan for rows nobody touched yet; both
+   * run the one rule in `paths.rehomeCandidatePackage`.
    */
   #packageDirectory(version: SkillVersionRow, skill: SkillRow): string {
     const directory = this.#service.versionDirectory(version)
-    if (existsSync(directory)) return directory
-    const parts = version.package_path.split('/')
-    if (parts.length === 2 && parts[0] === 'candidates') {
-      const versionDirectory = join(this.#root, 'versions', String(skill.id), String(parts[1]))
-      if (existsSync(versionDirectory)) {
-        mkdirSync(dirname(directory), { recursive: true })
-        try {
-          renameSync(versionDirectory, directory)
-          return directory
-        } catch {
-          return directory
-        }
-      }
-    }
+    // 'missing' answers the service directory: the caller's package read then
+    // reports the integrity failure, exactly as before the repair was tried.
+    rehomeCandidatePackage({ root: this.#root, packagePath: version.package_path, skillId: skill.id })
     return directory
   }
 
@@ -1750,15 +1748,16 @@ export class SkillCreation {
       }
 
       const candidateDir = directory
-      const versionDir = join(this.#root, 'versions', String(skill.id), basename(candidateDir))
-      mkdirSync(join(this.#root, 'versions', String(skill.id)), { recursive: true })
+      const packageId = basename(candidateDir)
+      const versionDir = packageDirectory(this.#root, [SKILL_DIR.versions, String(skill.id), packageId])
+      mkdirSync(packageDirectory(this.#root, [SKILL_DIR.versions, String(skill.id)]), { recursive: true })
       let moved = false
       try {
         renameSync(candidateDir, versionDir)
         moved = true
         const published = this.#store.publishDraft({
           versionId,
-          packagePath: `versions/${String(skill.id)}/${basename(versionDir)}`,
+          packagePath: versionPackagePath(skill.id, packageId),
           reviewer: shortId,
           reviewedAt: now,
           ...(skill.owner_short_id === null ? {} : { ownerShortId: skill.owner_short_id }),
@@ -1889,13 +1888,16 @@ export class SkillCreation {
    *   candidate is inspectable and approvable again;
    * - a pending row with no bytes anywhere is settled as rejected with a system
    *   note, so it cannot block the pending list forever;
+   * - a pending row whose stored path is unsafe is left pending: this build
+   *   cannot interpret it, so it must not make the terminal decision for it
+   *   (the read path refuses the same row with a 500 integrity error);
    * - committed version directories are never touched.
    *
    * @returns the counts, so the row's boot log says what it repaired.
    */
   reconcile(): ReconciliationReport {
     let tmpRemoved = 0
-    const tmpRoot = join(this.#root, 'tmp')
+    const tmpRoot = packageDirectory(this.#root, [SKILL_DIR.tmp])
     if (existsSync(tmpRoot)) {
       for (const entry of readdirSync(tmpRoot)) {
         rmSync(join(tmpRoot, entry), { recursive: true, force: true })
@@ -1906,23 +1908,13 @@ export class SkillCreation {
     let pendingSettled = 0
     const now = Date.now()
     for (const row of this.#store.allPendingDrafts()) {
-      const parts = row.package_path.split('/')
-      if (parts.some(part => part === '' || part === '.' || part === '..')) continue
-      const candidateDir = join(this.#root, ...parts)
-      if (existsSync(candidateDir)) continue
-      if (parts.length === 2 && parts[0] === 'candidates') {
-        const versionDir = join(this.#root, 'versions', String(row.skill_id), String(parts[1]))
-        if (existsSync(versionDir)) {
-          try {
-            mkdirSync(dirname(candidateDir), { recursive: true })
-            renameSync(versionDir, candidateDir)
-            pendingRecovered += 1
-            continue
-          } catch {
-            // Fall through: without the bytes the row cannot be reviewed.
-          }
-        }
+      if (checkPackagePath(row.package_path) === undefined) continue
+      const rehomed = rehomeCandidatePackage({ root: this.#root, packagePath: row.package_path, skillId: row.skill_id })
+      if (rehomed === 'rehomed') {
+        pendingRecovered += 1
+        continue
       }
+      if (rehomed === 'present') continue
       if (this.#store.recordReviewDecision({
         versionId: row.id,
         status: VERSION_STATUS.rejected,
