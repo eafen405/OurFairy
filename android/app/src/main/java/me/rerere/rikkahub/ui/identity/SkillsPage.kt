@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.remote.AccountSession
 import me.rerere.rikkahub.data.remote.PendingSkill
+import me.rerere.rikkahub.data.remote.RemoteFailure
 import me.rerere.rikkahub.data.remote.SkillActionTarget
 import me.rerere.rikkahub.data.remote.SkillPoolItem
 import me.rerere.rikkahub.data.remote.SkillPoolState
@@ -47,7 +48,6 @@ import me.rerere.rikkahub.data.remote.SkillReviewResult
 import me.rerere.rikkahub.data.remote.SkillScope
 import me.rerere.rikkahub.data.remote.SkillVersionStatus
 import me.rerere.rikkahub.data.remote.SkillsBackend
-import me.rerere.rikkahub.data.remote.SkillsFailure
 import me.rerere.rikkahub.data.remote.SkillsSnapshot
 import me.rerere.rikkahub.data.remote.SkillsState
 import me.rerere.rikkahub.ui.fairy.FairyBackground
@@ -616,7 +616,7 @@ private fun PendingSkillRow(candidate: PendingSkill, enabled: Boolean, onOpen: (
  * stays diagnosable rather than becoming a generic failure.
  */
 @Composable
-private fun SkillsFailureBanner(failure: SkillsFailure?) {
+private fun SkillsFailureBanner(failure: RemoteFailure?) {
     if (failure == null) return
     Spacer(Modifier.height(12.dp))
     Text(
