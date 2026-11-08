@@ -34,7 +34,10 @@
 
 后端测试驱动的是**真实的** dsh 启动链路，所以那个检出必须先按 `combo.json` 的 `repos.dsh.requiredBuild`
 四条命令构建过（`build:lib:host`、`build:lib:client`、`build:native-system` 各管一段，少跑一条会在
-运行期以缺模块的形式失败）。`npm run backend:doctor` 的 `dsh CLI build` 一项会先替你确认。
+运行期以缺模块的形式失败）。CI 的构建步骤就是 `node scripts/combo.ts build`：直接执行这份记录，不再另抄一份命令清单。
+`npm run backend:doctor` 的 `dsh CLI build` 一项只确认 `build:lib:host` 的 CLI 产物（`apps/cli/lib/bin.js`）
+与锁定提交：`build:lib:client` 与 `build:native-system` 没有前置检查，缺了会在加载客户端入口或打开
+JSONL 会话日志时失败。
 
 ## 跑测试
 
@@ -53,7 +56,7 @@ npm run specs:status   # spec 与小修批次的推送、合并、内容落地�
 | 命令 | 它检查的事实 |
 | --- | --- |
 | `combo:verify` | 组合登记表自洽：本仓库基于集成分支、dsh 的分支 tip 等于锁定提交（本机没有检出时该行记 skipped）、客户端来源与声明一致 |
-| `backend:doctor` | 本机检出可用：dsh 检出存在、处在锁定提交上、四条构建产物齐全、profile 装配与插件兼容 |
+| `backend:doctor` | 本机检出可用：dsh 检出存在、处在锁定提交上、`build:lib:host` 的 CLI 产物（`apps/cli/lib/bin.js`）存在、profile 装配与插件兼容 |
 
 两者各管一段：dsh 的分支 tip 对得上、工作树却停在别的提交时，`combo:verify` 通过，`backend:doctor` 失败——它先查检出存在、再查 `apps/cli/lib/bin.js` 已构建，最后比对工作树 HEAD 与锁定提交。
 
