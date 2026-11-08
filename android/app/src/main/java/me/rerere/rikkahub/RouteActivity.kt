@@ -68,6 +68,7 @@ import me.rerere.rikkahub.ui.fairy.FairyLastLocation
 import me.rerere.rikkahub.ui.identity.IdentityNotReadyPage
 import me.rerere.rikkahub.ui.identity.IdentityScope
 import me.rerere.rikkahub.ui.identity.openRemoteNotification
+import me.rerere.rikkahub.ui.identity.openSkillsNotification
 import me.rerere.rikkahub.ui.identity.restoreIdentitySession
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
@@ -130,11 +131,9 @@ class RouteActivity : ComponentActivity() {
                 return
             }
             val target = AndroidRemoteNotifications.skillsTarget(intent) ?: return
-            val identity = accountSession.identity.value ?: return
-            // The endpoint and account are the admission rule: a reminder for another deployment
-            // or another account must not open this device's skills page.
-            if (target.endpoint.trimEnd('/') != BuildConfig.IDENTITY_ENDPOINT.trimEnd('/')
-                || target.userShortId != identity.user.shortId) return
+            // A reminder for another deployment or another account must not open
+            // this device's skills page.
+            if (!openSkillsNotification(target, BuildConfig.IDENTITY_ENDPOINT, accountSession)) return
             backStack.clear()
             backStack.addAll(FairyDestinations.resumedStack(FairyDestinations.SKILLS_ROUTE, null))
             return
