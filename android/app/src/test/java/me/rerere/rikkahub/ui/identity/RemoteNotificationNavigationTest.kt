@@ -69,6 +69,31 @@ class RemoteNotificationNavigationTest {
         )
     }
 
+    @Test fun `a skills reminder for another account or deployment never lands`() = runTest {
+        val account = AccountSession(Identity(), Credentials()); account.restore()
+        // The skills target carries no session, so its whole answer is the shared
+        // admission rule: rejection and acceptance are both observable here,
+        // without an Activity.
+        assertFalse(openSkillsNotification(SkillsNotificationTarget("https://other", 2), "https://fairy", account))
+        assertFalse(openSkillsNotification(SkillsNotificationTarget("https://fairy", 3), "https://fairy", account))
+        assertTrue(openSkillsNotification(SkillsNotificationTarget("https://fairy", 2), "https://fairy", account))
+    }
+
+    @Test fun `the admission rule ignores a trailing slash before deciding`() = runTest {
+        val account = AccountSession(Identity(), Credentials()); account.restore()
+        // Publishers normalise the endpoint, but the Activity is exported and can
+        // be handed extras from outside the app; one spelling of the deployment's
+        // endpoint must not be admitted while another is refused.
+        assertTrue(openSkillsNotification(SkillsNotificationTarget("https://fairy/", 2), "https://fairy", account))
+        assertTrue(openRemoteNotification(RemoteNotificationTarget("https://fairy/", 2, "s"), "https://fairy", account) { true })
+    }
+
+    @Test fun `a signed-out account admits neither kind of reminder`() = runTest {
+        val account = AccountSession(Identity(), Credentials())
+        assertFalse(openSkillsNotification(SkillsNotificationTarget("https://fairy", 2), "https://fairy", account))
+        assertFalse(openRemoteNotification(RemoteNotificationTarget("https://fairy", 2, "s"), "https://fairy", account) { true })
+    }
+
     @Test fun `another account or deployment never initiates a session query`() = runTest {
         val account = AccountSession(Identity(), Credentials()); account.restore()
         var queried = false
