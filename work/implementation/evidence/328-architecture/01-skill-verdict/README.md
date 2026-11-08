@@ -211,3 +211,33 @@ route-admission 删除只改 `backend/skill-creator/src/http.ts`，与本票文�
 tests/skill-evolution-display.test.mjs tests/skill-paths.test.mjs tests/skill-creation-store.test.mjs
 tests/skill-package.test.mjs` → 71/71 pass。若集成分支在此之后继续前进，由 Lead/merger 在合入本票时
 按同样方式处理。
+
+## 9. AC4 最终证据：`skill-learning` 的失败是本机既有 flake，不是 #329 回归
+
+AC4 要求「判据有直接的 interface 测试，现有技能进化与后台学习端到端测试继续通过」。`skill-learning`
+整文件在本机会偶发失败，因此用**同一份测试文件、两个提交**的对照来证明它与本票无关（review 修复批次补录）：
+
+```console
+$ OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test -- tests/skill-learning.test.mjs   # main @ 25a2b34
+ℹ tests 22
+ℹ pass 19
+ℹ fail 3
+✖ a failure signal never counts toward the two-session creation threshold
+✖ an uncertain review is stored as uncertain and never triggers creation
+✖ a failed creation retries only its claim, never the detection watermarks
+MAIN_EXIT=1
+
+$ OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test -- tests/skill-learning.test.mjs   # integration @ 7e3c0d1
+ℹ tests 22
+ℹ pass 19
+ℹ fail 3
+✖ a failure signal never counts toward the two-session creation threshold
+✖ an uncertain review is stored as uncertain and never triggers creation
+✖ a failed creation retries only its claim, never the detection watermarks
+TIP_EXIT=1
+```
+
+两次的失败集合完全相同：基线 `main@25a2b34`（**不含本 spec**）同样失败这 3 条，说明是该机负载下的
+既有检测/claim 时序 flake，而非 #329 的判据或结算回归。原始日志保留在 `/tmp/skill-learning-main.log`
+与 `/tmp/skill-learning-tip.log`（`ℹ tests 22 / pass 19 / fail 3`，失败名为上列三条）。同提交
+`integration@7e3c0d1` 的 CI full-gate 通过，权威全量结果以 CI 与收口的集成分支门禁为准。
