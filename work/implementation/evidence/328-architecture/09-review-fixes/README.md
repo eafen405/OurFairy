@@ -92,7 +92,7 @@ Spec #328 的 code-review 修复批次 A。基线 `integration/spec-328` @ `7e3c
 
 ## 7. #330 provenance 数据形状 — 最小清理（语义逐字节不变）
 
-- `creation.ts:1127-1190`：删除 switch 之前预计算的 5 个 provenance 块，改为每个 case 内构造（只
+- `creation.ts:1127-1186`：删除 switch 之前预计算的 5 个 provenance 块，改为每个 case 内构造（只
   保留 `personalProvenance` / `consentProvenance` 两个被两个分支共用的基础块）。键序与字段集保持原
   `JSON.stringify(source_location)` 的行为不变。
 - 覆盖：`tests/skill-creation-domain.test.mjs` 的 legal-origin 用例断言 `source_type` 与精确
@@ -164,3 +164,19 @@ $ OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 node --test tests/skill-learning.t
 全量 `npm test`、`npm run combo:verify` 与 `./gradlew test lintDebug` 属集成分支收口门禁，由
 Lead/merger 在合入后运行；本批只跑上述相关面。未 push、未自行合入 `integration/spec-328`、未触碰
 主检出或其他 worktree。
+
+## 11. 合入集成分支后的复跑
+
+集成分支在交付前推进到 `0231e60`（修复 B 的 `merge(#328-review-b)`）；按 Lead 口径
+`git merge --no-verify integration/spec-328` 合入（合并提交 `7ecd115`，无冲突；B 的改动只涉及
+`backend/http/src/http.ts`、`scripts/combo.ts`、Android 词汇表与 route/lifecycle/combo 测试，与本批
+文件不重叠）。B 已在同一次合入里把 `work/tickets/328/README.md` 的 #330 行补上 `origin.ts`，本批
+不需要再改票面。合并后在 merge tip 上复跑：
+
+```console
+$ npm run typecheck                        # EXIT:0
+$ npm test -- tests/skill-paths.test.mjs tests/skill-creation-domain.test.mjs \
+    tests/skill-verification-report.test.mjs tests/skill-evolution-display.test.mjs \
+    tests/skill-creation-store.test.mjs tests/skill-package.test.mjs
+ℹ tests 87 / pass 87 / fail 0
+```
