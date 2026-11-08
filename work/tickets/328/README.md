@@ -34,9 +34,35 @@ GitHub issue 是发布权威，原生 blocked-by 是实时状态权威；本目�
 并发批次与文件重叠由 Lead 在认领前写进团队任务板；共享文件（例如 `backend/skill-creator/src/creation.ts`、
 `tests/precommit.test.mjs`）的改动以「先合入者的版本 + 后来者 rebase」处理，冲突由票分支自己解决，不留给集成分支。
 
-验证：每票先跑相关测试（`OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test -- tests/<file> ...`，Android 用
-`cd android && ./gradlew test lintDebug` 的相关子集）；spec 收口时在集成分支跑全量 `npm test`、`npm run combo:verify`
-与 Android `./gradlew test lintDebug`。
+### 实际批次与合入顺序
 
-证据：本轮证据目录 `work/implementation/evidence/328-architecture/`（收口时建立），按
-[证据索引](../../implementation/evidence/README.md) 的约定记录命令与结果。
+8 票并行度只受写范围与本地构建资源限制，全部按 frontier 并发完成：
+
+- **批次 1（5 个 worktree 并行）**：#332（skill 路径）、#333（路由声明）、#334（文档门禁）、#331（Android 状态机）、
+  #335（requiredBuild/CI）。
+- **批次 2**：#329（验证判据）∥ #336（Android 通知）；#330（来源契约）等 #332 合入后开出。
+- **合入顺序**：#334 → #331 → #332 → #333 → #335 → #329 → #336 → #330。skill-creator 三票
+  （#332 → #329 → #330）串行合入，因为 `creation.ts` 有行级重叠；其余票文件不相交。
+- 每票合入前在自己的 worktree 合并集成分支 tip 并复跑相关测试；Lead 合入后补跑该票相关测试与 typecheck。
+
+并发执行者共享一台 6 核机器时，合并提交与跨包提交的本地 full 门禁会触发既有的时序敏感 flake。处理口径
+（记录在证据里）：本地提交/合并可用 `--no-verify` 跳过**本次**全量，但相关测试必须在票 worktree 真实跑绿；
+权威全量由 CI 与收口时独占运行产出（`AGENTS.md`「验证节奏」）。
+
+### 收口评审
+
+三轴 code-review（Standards / Spec / 可执行声称）在集成分支上对 `25a2b34...HEAD` 运行，发现回到所属模块由
+两个互不相交的修复批次处理：修复 A（skill-creator + Android 状态机）与修复 B（路由清单、CI 漂移测试、
+doctor 声称、客户端词汇表）。两处行为回归（#329 展示警告、#332 启动收敛）已恢复；没有可失败检查的绝对声称
+已收窄或补测试。逐条记录见 [`09-review-fixes`](../../implementation/evidence/328-architecture/09-review-fixes/README.md)。
+
+### 验证
+
+每票在 worktree 内跑相关测试（`OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test -- tests/<file> ...`，
+Android 用 `./gradlew :app:testDebugUnitTest --tests ...`）；spec 收口在集成分支独占跑全量 `npm test`、
+`npm run combo:verify` 与 Android `./gradlew test lintDebug`。完整结果（含本机既有 flake 与 `main` 基线的
+对照、CI run 结论）见 [`328-architecture/README.md`](../../implementation/evidence/328-architecture/README.md) §验收。
+
+证据：`work/implementation/evidence/328-architecture/`（9 个目录：8 票 + 收口评审），按
+[证据索引](../../implementation/evidence/README.md) 的约定记录命令与结果；规格小节由
+`evidence/index/36-spec-328.json` 生成。

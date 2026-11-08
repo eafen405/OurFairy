@@ -180,3 +180,19 @@ $ npm test -- tests/skill-paths.test.mjs tests/skill-creation-domain.test.mjs \
     tests/skill-creation-store.test.mjs tests/skill-package.test.mjs
 ℹ tests 87 / pass 87 / fail 0
 ```
+
+---
+
+## 12. 合并入口（Lead 收口记录）
+
+本目录合并了两个互不相交的修复批次：
+
+- **批次 A**（本文件上文 §1–§11）：skill-creator 三票的回归修复与声称收窄、Android 状态机用例，
+  分支 `ticket/328-fix-skill-creator` @ `12ae181`，合入 `587cef8`。
+- **批次 B**（独立文件 [gates.md](gates.md)）：route-inventory 准入清单声称、CI 漂移测试、
+  doctor 声称、客户端词汇表与任务图登记，分支 `ticket/328-fix-gates` @ `bda9c41`，合入 `0231e60`。
+
+三轴审查共报告：Standards 1 条硬问题 + 4 条判断项；Spec 3 条缺失/偏弱 + 2 条范围说明 + 2 条偏弱；
+可执行声称 9 条中 1 条可执行且同事实、4 条可执行但偏弱、4 条无检查。处置：2 处行为回归按修复前语义恢复，
+其余以「补可失败检查」或「把绝对声称收窄为事实」处理，逐条映射见 §1–§11 与 [gates.md](gates.md)。
+批次 A/B 合入后在集成分支上的收口验证结果见 [../README.md](../README.md) §验收。
