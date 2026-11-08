@@ -19,12 +19,12 @@ import type { IdentityService } from './index.js'
  * live credential, and invite minting also needs the administrator role.
  */
 export const SURFACE = freezeSurface([
-  { path: '/identity/invite', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'identity' },
-  { path: '/identity/register', method: 'POST', auth: 'fence', body: 'json', response: 'json', prefix: 'identity' },
-  { path: '/identity/sign-in', method: 'POST', auth: 'fence', body: 'json', response: 'json', prefix: 'identity' },
-  { path: '/identity/session', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'identity' },
-  { path: '/identity/sign-out', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'identity' },
-  { path: '/identity/agents', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/invite', method: 'POST', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/register', method: 'POST', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/sign-in', method: 'POST', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/session', method: 'POST', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/sign-out', method: 'POST', body: 'json', response: 'json', prefix: 'identity' },
+  { path: '/identity/agents', method: 'POST', body: 'json', response: 'json', prefix: 'identity' },
 ])
 
 /** Paths this module owns, in the order the carrier registers them. */
