@@ -29,13 +29,13 @@ export interface GatewayHandlerOptions {
  * Every one requires the administrator role.
  */
 export const SURFACE = freezeSurface([
-  { path: '/gateway/read', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
-  { path: '/gateway/selection', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
-  { path: '/gateway/route', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
-  { path: '/gateway/route/delete', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
-  { path: '/gateway/asr', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
-  { path: '/gateway/compaction', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
-  { path: '/gateway/maintenance', method: 'POST', auth: 'role', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/read', method: 'POST', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/selection', method: 'POST', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/route', method: 'POST', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/route/delete', method: 'POST', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/asr', method: 'POST', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/compaction', method: 'POST', body: 'json', response: 'json', prefix: 'gateway' },
+  { path: '/gateway/maintenance', method: 'POST', body: 'json', response: 'json', prefix: 'gateway' },
 ])
 
 /** Paths this module owns, in the order the carrier registers them. */

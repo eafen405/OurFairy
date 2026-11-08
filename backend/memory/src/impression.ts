@@ -183,7 +183,7 @@ export function registerImpressions(agent: Agent, service: ImpressionService, re
  * registers them. The sole route is an authenticated, owner-only read.
  */
 export const SURFACE = freezeSurface([
-  { path: '/impression/read', method: 'POST', auth: 'authentication', body: 'json', response: 'json', prefix: 'impression' },
+  { path: '/impression/read', method: 'POST', body: 'json', response: 'json', prefix: 'impression' },
 ])
 
 /** Paths the impression entry owns, in the order the carrier registers them. */

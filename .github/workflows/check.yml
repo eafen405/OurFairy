@@ -62,21 +62,14 @@ jobs:
           fi
           echo "OURFAIRY_DSH_DIR=$RUNNER_TEMP/dsh" >> "$GITHUB_ENV"
 
+      # combo.json is the only copy of the commands: the script reads
+      # repos.*.requiredBuild and runs each chain in its checkout, located
+      # through OURFAIRY_DSH_DIR (written to the environment above).
       - name: Build the locked dsh combination
-        working-directory: ${{ runner.temp }}/dsh
         run: |
           set -euo pipefail
           corepack enable
-          for step in \
-            "corepack pnpm@11.28.5 install" \
-            "corepack pnpm@11.28.5 run build:lib:host" \
-            "corepack pnpm@11.28.5 run build:lib:client" \
-            "corepack pnpm@11.28.5 run build:native-system"
-          do
-            echo "::group::$step"
-            $step
-            echo "::endgroup::"
-          done
+          node scripts/combo.ts build
 
       # npm test builds once and keeps the build lock until the suite exits.
       - name: Full suite and combination
