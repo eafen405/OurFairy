@@ -8,7 +8,9 @@
 - 基线：`integration/spec-328` @ `7e3c0d1`；票分支 `ticket/328-fix-gates`，worktree
   `/home/fatfish/OurFairy/.worktrees/328-fix-gates`。
 - 提交：`4608259`（#333 声称收窄）、`424a75b`（#335 CI 漂移检查）、`40ba150`（#335 doctor 断言）、
-  `88602d8`（#336 词汇表 + 任务图登记）、本证据提交。
+  `88602d8`（#336 词汇表 + 任务图登记）、`9e9aa82`（本证据）。
+- 合并：交付前 `git merge --no-verify integration/spec-328` → `Already up to date.`（集成分支 tip
+  `7e3c0d1`，本票基线即其最新 tip）。
 - 环境：Node `v24.22.2`；`OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2`。
 - 写范围：`tests/route-inventory.test.mjs`、`backend/http/src/http.ts`（仅 doc）、
   `tests/combo-build.test.mjs`、`scripts/combo.ts`（仅注释）、`tests/lifecycle.test.mjs`、
