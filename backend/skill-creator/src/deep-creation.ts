@@ -48,6 +48,7 @@ import {
   type SignalRow,
   type SkillStore,
 } from './store.js'
+import { readVerificationReport, verificationVerdict } from './verification-report.js'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { Context } from '@deepseek-ai/cordis'
 import type { AgentHandle } from '@deepseek-ai/dsh-agent'
@@ -338,7 +339,22 @@ export class SkillCreationEngine {
     const candidateVersionId = job.candidate_version_id
     if (candidateVersionId !== null) {
       const version = this.#store.version(candidateVersionId)
-      if (version === undefined || !verificationSettlesCandidate(version.verification)) {
+      if (version === undefined) {
+        this.#failed(jobId)
+        return
+      }
+      // The same verdict the approval gate applies decides whether this claim
+      // has a settle-able candidate: no failed/unexecuted scenario, real
+      // evidence, and — when the candidate revises a parent — an execution of
+      // its own for changed bytes. The parent hash is the database's immutable
+      // fact, exactly as approval reads it.
+      const parent = version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)
+      const verdict = verificationVerdict({
+        report: readVerificationReport(version),
+        candidateManifestHash: version.manifest_hash,
+        parentManifestHash: parent?.manifest_hash ?? null,
+      })
+      if (!verdict.ok) {
         // A failed or missing system-recorded verification is not a candidate:
         // retry inside the budget rather than settle a dead pending draft (B2).
         this.#failed(jobId)
@@ -671,33 +687,6 @@ export class SkillCreationEngine {
       },
     }))
   }
-}
-
-/**
- * Whether one stored verification report is a complete outcome a claim may
- * settle a candidate on.
- *
- * The same bar the approval gate applies: the report ran to an end, no
- * scenario failed or stayed unexecuted, and at least one scenario actually ran
- * (or was reused from a recorded parent run). A partial or failed report must
- * keep the claim retryable instead of becoming a pending draft nobody can
- * approve (B2).
- */
-function verificationSettlesCandidate(verification: string | null): boolean {
-  if (verification === null) return false
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(verification)
-  } catch {
-    return false
-  }
-  if (parsed === null || typeof parsed !== 'object') return false
-  const report = parsed as { complete?: unknown; executed?: unknown; reused?: unknown; unexecuted?: unknown; failed?: unknown }
-  const list = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : [])
-  return report.complete === true
-    && list(report.failed).length === 0
-    && list(report.unexecuted).length === 0
-    && list(report.executed).length + list(report.reused).length > 0
 }
 
 /** The model-supplied package files, refusing a file without text content. */

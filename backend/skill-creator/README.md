@@ -269,7 +269,13 @@ publishes, and the other keeps its draft for a rebase.
   really run again: a plan in which every scenario would be reused is overridden
   and the whole declared set reruns, so "new content with zero executions" cannot
   exist. The approval gate re-checks the rule for pre-fix pending rows, and the
-  display warns if a changed candidate has no fresh execution.
+  display warns if a changed candidate has no fresh execution. One reader and
+  one verdict (`src/verification-report.ts`) answer "is this stored report
+  usable" for the approval gate, for a background claim's settle decision and
+  for the review display, so completeness, failure/unexecuted, evidence and the
+  changed-content rule cannot drift between them. The changed-content parent
+  hash is the database's `parent_version_id` row (`parent.manifest_hash`), never
+  the display's file diff.
 - `rollback {versionId}` copies an approved **superseded** version's clean
   package into a new pending candidate (`source_type: 4`, parent = current),
   runs its recorded scenarios again with the same reuse rule, and requires

@@ -48,6 +48,7 @@ import {
   type ReusedScenario,
 } from './evolution.js'
 import { runVerification, type ScenarioRecord, type VerificationReport } from './verify.js'
+import { emptyVerificationReport, readVerificationReport, verificationVerdict } from './verification-report.js'
 import { SkillError } from './service.js'
 import { canInspect, canReview, requireSharingConsent, type SharingConsent } from './sharing.js'
 import type { InstallSource } from './install.js'
@@ -247,16 +248,8 @@ export interface ReviewPackage {
   /** Present when the result budget omitted verification records. */
   readonly verificationNote?: string | undefined
   readonly changes: ReviewChanges
-  readonly verification: {
-    readonly complete: boolean
-    readonly executed: VerificationReport['executed']
-    readonly reused: VerificationReport['reused']
-    readonly unexecuted: VerificationReport['unexecuted']
-    readonly failed: VerificationReport['failed']
-    readonly comparisons: VerificationReport['comparisons']
-    readonly environment: string
-    readonly ranAt: number
-  }
+  /** The stored report plus inspect's derived changed-content warning fact. */
+  readonly verification: VerificationReport & { readonly freshExecutionMissing: boolean }
   readonly nextActions: string[]
   readonly growthConfirmation: {
     readonly required: boolean
@@ -429,6 +422,7 @@ type BoundedReview = Omit<ReviewPackage, 'package' | 'changes' | 'verification' 
     comparisons: { name: string; withSkill: VerificationReport['executed'][number]; withoutSkill: VerificationReport['executed'][number] }[]
     environment: string
     ranAt: number
+    freshExecutionMissing: boolean
   }
   packageNote?: string | undefined
   verificationNote?: string | undefined
@@ -491,6 +485,7 @@ export function boundInspectResult(result: InspectResult): InspectResult {
       })),
       environment: clipText(result.review.verification.environment, 300),
       ranAt: result.review.verification.ranAt,
+      freshExecutionMissing: result.review.verification.freshExecutionMissing,
     },
   }
   const length = () => JSON.stringify({ ...bounded, review, display }).length
@@ -882,8 +877,11 @@ export function buildReviewDisplay(review: ReviewPackage): string {
   lines.push(`包内容：新增 ${review.changes.added.length} 个，删除 ${review.changes.removed.length} 个，修改 ${review.changes.changed.length} 个`)
   const verification = review.verification
   lines.push(`验证：实际执行 ${verification.executed.length}，复用 ${verification.reused.length}，未执行 ${verification.unexecuted.length}，失败 ${verification.failed.length}`)
-  const changedFiles = review.changes.added.length + review.changes.removed.length + review.changes.changed.length
-  if (changedFiles > 0 && verification.executed.length === 0) {
+  // The warning is inspect's verdict on the stored report (candidate hash vs
+  // the database's parent hash), not a bare changed-file count: a parent
+  // package that cannot be read must not make a legitimate approval look
+  // refused, and a reuse-only report for changed bytes must always warn.
+  if (verification.freshExecutionMissing) {
     lines.push('⚠ 内容有变化但本报告没有任何新执行，不能用于批准')
   }
   for (const record of verification.executed) lines.push(`✔ ${singleLine(record.name)}: ${singleLine(record.command)} → exit ${String(record.exitCode)}`)
@@ -952,47 +950,6 @@ function packageFiles(dir: string, manifest: readonly ManifestEntry[]): ReviewPa
     }
     return { path: entry.path, bytes, sha256: entry.sha256, executable: entry.executable }
   })
-}
-
-/** The verification report shape inspect exposes; a missing report is incomplete. */
-function verificationOf(version: SkillVersionRow): ReviewPackage['verification'] {
-  const empty = {
-    complete: false,
-    executed: [],
-    reused: [],
-    unexecuted: [],
-    failed: [],
-    comparisons: [],
-    environment: '',
-    ranAt: version.created_at,
-  } satisfies ReviewPackage['verification']
-  if (version.verification === null) return empty
-  try {
-    const parsed = JSON.parse(version.verification) as Partial<VerificationReport>
-    return {
-      complete: parsed.complete === true,
-      executed: parsed.executed ?? [],
-      reused: parsed.reused ?? [],
-      unexecuted: parsed.unexecuted ?? [],
-      failed: parsed.failed ?? [],
-      comparisons: parsed.comparisons ?? [],
-      environment: typeof parsed.environment === 'string' ? parsed.environment : '',
-      ranAt: typeof parsed.ranAt === 'number' ? parsed.ranAt : version.created_at,
-    }
-  } catch {
-    return empty
-  }
-}
-
-/** The approval verdict a verification report must satisfy. */
-function verificationReason(report: ReviewPackage['verification']): string | undefined {
-  if (!report.complete) return 'the verification report is incomplete; run it again'
-  if (report.executed.length === 0 && report.reused.length === 0) {
-    return 'the verification report has no executed or reused scenario'
-  }
-  if (report.unexecuted.length > 0) return 'the verification report has unexecuted scenarios'
-  if (report.failed.length > 0) return 'a verification scenario failed; change the candidate and verify it again'
-  return undefined
 }
 
 /** The creation module's dependencies: the store, the runtime service and the data root. */
@@ -1210,10 +1167,7 @@ export class SkillCreation {
             versionId: draft.versionId,
             status: VERSION_STATUS.pending,
             nextActions: ['run_verification', 'inspect', 'review'],
-            verification: {
-              complete: false, executed: [], reused: [], unexecuted: [], failed: [], comparisons: [],
-              environment: '', ranAt: Date.now(),
-            },
+            verification: emptyVerificationReport(Date.now()),
           }
         }
         const reuse = revision === undefined
@@ -1295,7 +1249,7 @@ export class SkillCreation {
       if (sourcePackage.manifestHash !== source.manifest_hash) {
         throw new SkillError(500, 'skills/integrity', `skill package integrity check failed for ${skill.name}`)
       }
-      const scenarios = rollbackScenarios(verificationOf(source))
+      const scenarios = rollbackScenarios(readVerificationReport(source))
       if (scenarios.length === 0) {
         throw new SkillError(409, 'skills/invalid-rollback',
           `version ${versionId} has no recorded verification scenario to roll back with`)
@@ -1419,13 +1373,6 @@ export class SkillCreation {
     scenarios: readonly CandidateScenario[]): { reused: ReusedScenario[]; rerun: readonly CandidateScenario[] } {
     const parentManifest = this.#readParentManifest(parent)
     if (parentManifest === undefined) return { reused: [], rerun: [...scenarios] }
-    let report: { executed: ScenarioRecord[]; reused: ScenarioRecord[] } | undefined
-    try {
-      const parsed = parent.verification === null ? undefined : JSON.parse(parent.verification) as { executed?: ScenarioRecord[]; reused?: ScenarioRecord[] }
-      if (parsed !== undefined) report = { executed: parsed.executed ?? [], reused: parsed.reused ?? [] }
-    } catch {
-      report = undefined
-    }
     const hashes = (manifest: readonly ManifestEntry[]) => new Map(manifest.map(entry => [entry.path, entry.sha256]))
     return planVerificationReuse({
       scenarios,
@@ -1433,7 +1380,7 @@ export class SkillCreation {
       parentHashes: hashes(parentManifest),
       candidateManifestHash,
       parentManifestHash: parent.manifest_hash,
-      parentReport: report,
+      parentReport: readVerificationReport(parent),
       parentVersionId: parent.id,
     })
   }
@@ -1538,7 +1485,12 @@ export class SkillCreation {
       const provenance = parseSourceLocation(version.source_location)
       const parent = version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)
       const parentManifest = parent === undefined ? undefined : this.#readParentManifest(parent)
-      const verification = verificationOf(version)
+      const verification = readVerificationReport(version)
+      const verdict = verificationVerdict({
+        report: verification,
+        candidateManifestHash: version.manifest_hash,
+        parentManifestHash: parent?.manifest_hash ?? null,
+      })
       const growth = growthOf(version.core_characters, parent?.core_characters ?? null)
       const changes = changesOf(parsed.manifest, parentManifest)
       const pending = version.status === VERSION_STATUS.pending
@@ -1576,7 +1528,10 @@ export class SkillCreation {
         package: packageFiles(directory, parsed.manifest),
         packageTotal: parsed.manifest.length,
         changes,
-        verification,
+        verification: {
+          ...verification,
+          freshExecutionMissing: verdict.ok === false && verdict.refusal === 'reused-only',
+        },
         nextActions: version.status === VERSION_STATUS.pending
           ? (canReview(shortId, isAdmin, skill) ? [...REVIEW_ACTIONS] : [])
           : version.status === VERSION_STATUS.superseded && canReview(shortId, isAdmin, skill) ? ['rollback'] : [],
@@ -1738,17 +1693,16 @@ export class SkillCreation {
         throw new SkillError(409, 'skills/revision-required',
           `skill "${skill.name}" already has a current version; a new version needs a revision`)
       }
-      const verification = verificationOf(version)
-      const blocked = verificationReason(verification)
-      if (blocked !== undefined) throw new SkillError(409, 'skills/verification-incomplete', blocked)
       const parent = version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)
-      // A3: bytes that changed cannot be approved on the parent's evidence alone.
-      // Pre-fix pending rows may still carry a reuse-only report for new
-      // content, so the approval gate re-checks the rule as well.
-      if (parent !== undefined && parent.manifest_hash !== version.manifest_hash && verification.executed.length === 0) {
-        throw new SkillError(409, 'skills/verification-incomplete',
-          'the candidate content changed from its parent but its report only reuses the parent\'s runs; verify it again')
-      }
+      // A3: the same verdict approval and background settlement share. It
+      // re-checks the changed-content rule for pre-fix pending rows, so bytes
+      // that changed can never be approved on the parent's evidence alone.
+      const verdict = verificationVerdict({
+        report: readVerificationReport(version),
+        candidateManifestHash: version.manifest_hash,
+        parentManifestHash: parent?.manifest_hash ?? null,
+      })
+      if (!verdict.ok) throw new SkillError(409, 'skills/verification-incomplete', verdict.message)
       // The stored growth flag is computed once at creation; the parent is
       // immutable, so recomputing here can only detect a corrupted row.
       const growth = growthOf(version.core_characters, parent?.core_characters ?? null)
