@@ -29,8 +29,9 @@
  * @module @ourfairy/dsh-skill-creator/src/service
  */
 import { existsSync, readdirSync, realpathSync, statSync, type Dirent } from 'node:fs'
-import { join, sep } from 'node:path'
+import { join } from 'node:path'
 import { readSkillFrontmatter, readSkillPackage } from './package.js'
+import { checkPackagePath, insideRoot, packageDirectory } from './paths.js'
 import { importReviewedPackage } from './seed.js'
 import {
   SKILL_SCOPE,
@@ -136,11 +137,6 @@ export interface SkillServiceOptions {
   readonly bundledSkillsDir: string
 }
 
-/** Whether one absolute path is `root` or under it. */
-function inside(root: string, path: string): boolean {
-  return path === root || path.startsWith(root.endsWith(sep) ? root : root + sep)
-}
-
 /** The default enablement: an unconfigured personal skill is on, a common one is off. */
 function defaultEnabled(scope: number): boolean {
   return scope === SKILL_SCOPE.personal
@@ -191,14 +187,21 @@ export class SkillService {
     return this.#bundledNames
   }
 
-  /** Read one version's package directory, refusing a path that escapes the data root. */
+  /**
+   * Read one version's package directory, refusing a path that escapes the data
+   * root.
+   *
+   * The row may be a draft (`candidates/`) or a committed version
+   * (`versions/`); the stored path vocabulary and the safety check come from
+   * `./paths`, and this method owns only the two integrity refusals.
+   */
   versionDirectory(version: SkillVersionRow): string {
-    const parts = version.package_path.split('/')
-    if (parts.some(part => part === '' || part === '.' || part === '..')) {
+    const checked = checkPackagePath(version.package_path)
+    if (checked === undefined) {
       throw new SkillError(500, 'skills/integrity', `skill version ${version.id} has an unsafe package path`)
     }
-    const directory = [this.#root, ...parts].join(sep)
-    if (!inside(this.#root, directory)) {
+    const directory = packageDirectory(this.#root, checked.segments)
+    if (!insideRoot(this.#root, directory)) {
       throw new SkillError(500, 'skills/integrity', `skill version ${version.id} escapes the skill data root`)
     }
     return directory

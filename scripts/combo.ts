@@ -16,12 +16,23 @@
  *     HEAD is the branch tip or an ancestor of it, i.e. that the worktree really
  *     is based on the combination.
  *
+ * `build` executes the commands combo.json records under
+ * `repos.<key>.requiredBuild`, each chain in that repository's checkout. It is
+ * what CI runs after checking out the locked combination. The recorded list is
+ * the authority for the build: editing or deleting a step is an authoritative
+ * edit that changes what the next CI run builds by design. The drift test
+ * (`tests/combo-build.test.mjs`) refuses a second copy of the commands in the
+ * workflow and an executor that stops calling the record; it does not refuse a
+ * changed record. `--print` resolves the checkouts and prints the commands
+ * without running them.
+ *
  * The research upstream baselines are not part of the combination; they live in
  * docs/research/README.md.
  *
  * Usage:
  *   node scripts/combo.ts verify [--json] [--allow-drift]
  *   node scripts/combo.ts show [--json]
+ *   node scripts/combo.ts build [--print]
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { readdirSync, existsSync, readFileSync } from 'node:fs'
@@ -151,6 +162,89 @@ export function repoPath(combo: Combo, key: string, root = repoRoot): string {
     throw new Error(`combo.json repos.${key}.localPath is missing; set ${override ?? 'its environment override'}`)
   }
   return isAbsolute(recorded) ? resolve(recorded) : resolve(primaryCheckout(root), recorded)
+}
+
+/**
+ * One repository's recorded build commands and the checkout they run in.
+ *
+ * combo.json records the commands under `repos.<key>.requiredBuild`, and
+ * nothing else copies them: this resolved list is what the CI build step runs.
+ */
+export interface RequiredBuild {
+  readonly key: string
+  readonly dir: string
+  readonly steps: readonly string[]
+}
+
+/**
+ * The build commands every repository of the combination records.
+ *
+ * A repository that does not record `requiredBuild` contributes nothing: the
+ * product repository builds itself through `npm test`, and the Android client
+ * has no pnpm build. A repository that DOES record the key must name a
+ * non-empty list of command strings — an empty list would report "the build
+ * ran" while building nothing, which is the failure the CI step prevents.
+ * @param options
+ * @returns one resolved chain per recording repository, in combo.json order.
+ * @throws when combo.json records no chain at all, or one is malformed.
+ */
+export function requiredBuildSteps({ root = repoRoot }: { root?: string } = {}): RequiredBuild[] {
+  const { combo, path } = readCombo(root)
+  const builds: RequiredBuild[] = []
+  for (const [key, entry] of Object.entries(combo.repos)) {
+    // `ComboRepo` describes only the fields this module's checks share;
+    // `requiredBuild` is read here and nowhere else, so its shape is narrowed here.
+    const recorded = (entry as ComboRepo & { readonly requiredBuild?: unknown }).requiredBuild
+    if (recorded === undefined) continue
+    if (!Array.isArray(recorded) || recorded.length === 0
+      || recorded.some(step => typeof step !== 'string' || step.trim() === '')) {
+      throw new Error(`${path} repos.${key}.requiredBuild must be a non-empty array of command strings`)
+    }
+    builds.push({ key, dir: repoPath(combo, key, root), steps: recorded })
+  }
+  if (builds.length === 0) {
+    throw new Error(`${path} records no repos.*.requiredBuild steps; the build would have nothing to run`)
+  }
+  return builds
+}
+
+/** The process runner behind `build`; a test injects one that records calls. */
+export type BuildRunner = (
+  command: string,
+  args: readonly string[],
+  options: { readonly cwd: string; readonly stdio: 'inherit' },
+) => { readonly status: number | null; readonly error?: Error | undefined }
+
+/**
+ * Execute the build commands combo.json records, one checkout after another.
+ *
+ * This is the only copy of the commands. CI used to repeat them in its own YAML,
+ * so changing the record left CI building the old combination. The first
+ * non-zero exit stops the run and throws with the repository, command, and exit
+ * code, so a red CI step names the step that failed instead of only its output.
+ * @param options
+ * @returns how many commands ran.
+ * @throws when a recorded chain has no checkout, or a command fails.
+ */
+export function runRequiredBuild({ root = repoRoot, run = spawnSync }: { root?: string; run?: BuildRunner } = {}): number {
+  let executed = 0
+  for (const { key, dir, steps } of requiredBuildSteps({ root })) {
+    if (!existsSync(join(dir, '.git'))) {
+      const override = PATH_OVERRIDES[key]
+      throw new Error(`combo.json repos.${key}.requiredBuild has no checkout at ${dir}`
+        + `${override === undefined ? '' : `; set ${override} to the checkout it should build`}`)
+    }
+    for (const step of steps) {
+      const result = run('bash', ['-c', step], { cwd: dir, stdio: 'inherit' })
+      if (result.status !== 0) {
+        const reason = result.error === undefined ? '' : ` (${result.error.message})`
+        throw new Error(`combo.json repos.${key}.requiredBuild step ${JSON.stringify(step)} failed in ${dir}`
+          + ` with exit code ${result.status ?? 'none'}${reason}`)
+      }
+      executed += 1
+    }
+  }
+  return executed
 }
 
 function git(args: string[], cwd: string): string {
@@ -812,19 +906,44 @@ function printShow(combo: Combo): string {
   return lines.join('\n')
 }
 
+/** The `build --print` report: what would run, where, in recorded order. */
+function printBuilds(builds: readonly RequiredBuild[]): string {
+  const lines: string[] = []
+  for (const { key, dir, steps } of builds) {
+    lines.push(`${key} build in ${dir}`)
+    for (const step of steps) lines.push(`  ${step}`)
+  }
+  return lines.join('\n')
+}
+
 function main(argv: string[]): number {
   const args = argv.slice(2)
   const command = args.find(arg => !arg.startsWith('-')) ?? 'verify'
   const json = args.includes('--json')
   const allowDrift = args.includes('--allow-drift')
+  const printOnly = args.includes('--print')
   const { combo } = readCombo()
 
   if (command === 'show') {
     process.stdout.write(`${json ? JSON.stringify(combo, undefined, 2) : printShow(combo)}\n`)
     return 0
   }
+  if (command === 'build') {
+    try {
+      // Print the resolved plan before doing anything: a CI log names each step
+      // before its output, and `--print` stops there instead of building.
+      const builds = requiredBuildSteps()
+      process.stdout.write(`${printBuilds(builds)}\n`)
+      if (printOnly) return 0
+      runRequiredBuild()
+    } catch (error) {
+      process.stderr.write(`combo: ${(error as Error).message}\n`)
+      return 1
+    }
+    return 0
+  }
   if (command !== 'verify') {
-    process.stderr.write(`combo: unknown command ${JSON.stringify(command)}; expected 'verify' or 'show'\n`)
+    process.stderr.write(`combo: unknown command ${JSON.stringify(command)}; expected 'verify', 'show' or 'build'\n`)
     return 2
   }
   const result = verifyCombination({ allowDrift })

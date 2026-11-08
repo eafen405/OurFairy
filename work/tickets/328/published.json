@@ -1,0 +1,14 @@
+{
+  "parent": 328,
+  "title": "整体架构优化：收敛共享不变式与模块接缝",
+  "children": [
+    { "file": "01.md", "issue": 329, "title": "统一技能验证报告的批准与结算判据" },
+    { "file": "02.md", "issue": 330, "title": "让技能修订的来源互斥由领域契约强制" },
+    { "file": "03.md", "issue": 331, "title": "收敛 Android 远程资源的串行读写状态机" },
+    { "file": "04.md", "issue": 332, "title": "统一技能候选包的路径词汇与崩溃回迁规则" },
+    { "file": "05.md", "issue": 333, "title": "消除路由准入声明与实际行为的漂移空间" },
+    { "file": "06.md", "issue": 334, "title": "解除文档链接检查对后端构建的无关依赖" },
+    { "file": "07.md", "issue": 335, "title": "让 requiredBuild 驱动 CI 并校准 doctor 声称" },
+    { "file": "08.md", "issue": 336, "title": "统一 Android 通知定位的端点与账号准入" }
+  ]
+}

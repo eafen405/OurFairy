@@ -39,6 +39,7 @@ import { dirname } from 'node:path'
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite'
 import { isValidTaskKey } from './learning-policy.js'
 import { PackageError } from './package.js'
+import { SKILL_DIR, checkPackagePath } from './paths.js'
 
 /** The current schema version of this file; the ladder is asserted by the store test. */
 export const SKILL_SCHEMA_VERSION = 3
@@ -525,8 +526,8 @@ function validateDraft(version: DraftVersion): void {
   if (version.scope === SKILL_SCOPE.common && version.ownerShortId !== undefined) {
     throw new SkillStoreError('skills/invalid-owner', 'a common skill has no owner short number')
   }
-  const parts = version.packagePath.split('/')
-  if (parts[0] !== 'candidates' || parts.length < 2 || parts.some(part => part === '' || part === '.' || part === '..')) {
+  const packagePath = checkPackagePath(version.packagePath)
+  if (packagePath === undefined || packagePath.segments[0] !== SKILL_DIR.candidates) {
     throw new SkillStoreError('skills/invalid-path', `a draft package path must be under candidates/: ${version.packagePath}`)
   }
   if (version.manifest === '' || version.manifestHash === '') {

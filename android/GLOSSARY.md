@@ -36,8 +36,13 @@ _Avoid_: 后台运行、推送
 ——投递是 Fairy 发出的内容，提醒是本机对它的通知。
 _Avoid_: 通知、推送
 
-**通知定位**（`RemoteNotificationTarget`）：
-一条通知指向的坐标：后端端点、用户编号、会话。只有当前账号与当前端点能接纳它，其余一律忽略。
+**通知定位**（`RemoteNotificationTarget` / `SkillsNotificationTarget`）：
+一条通知指向的坐标：后端端点与用户编号，会话通知另带要打开的会话。两类通知的准入都由
+`ui/identity/RemoteNotificationNavigation.kt` 的 `admits` 判断：端点比较前去掉尾部斜杠，用户编号
+必须等于当前账号，未登录一律拒绝。会话通知再由 `openRemoteNotification` 补会话归属检查与打开后的
+身份二次确认；技能提醒由同步的 `openSkillsNotification` 直接作答，不查询会话、不申请权限。
+Activity 只把 `BuildConfig.IDENTITY_ENDPOINT` 与 intent 解出的目标交给这两个入口，接纳后的落点由
+调用方设置；它不另写一份准入规则。
 _Avoid_: 深链接、跳转
 
 **目的地**（`FairyDestination`）：

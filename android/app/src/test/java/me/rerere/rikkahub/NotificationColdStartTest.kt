@@ -47,11 +47,11 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * A remote notification opened against the real [RouteActivity].
  *
- * The account, the endpoint and the session ownership checks live in
- * `openRemoteNotification`; what only the Activity can show is that a delivered
- * intent reaches them at the right moment — after the cold start has settled, or
- * queued until it has — and that the conversation it lands on actually opens.
- * Nothing here reaches the network.
+ * The account and endpoint admission lives in `openRemoteNotification` /
+ * `openSkillsNotification` (`ui/identity/RemoteNotificationNavigation.kt`); what
+ * only the Activity can show is that a delivered intent reaches it at the right
+ * moment — after the cold start has settled, or queued until it has — and that
+ * the destination it lands on actually opens. Nothing here reaches the network.
  *
  * The app must report itself foreground for the chat to bind at all: reception
  * only observes sessions while the process is at least started, and Robolectric
@@ -239,6 +239,20 @@ class NotificationColdStartTest {
         repeat(6) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
 
         compose.onNodeWithText("还没有可用的已审核技能。").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a skills reminder delivered before the account settles opens once it does`() {
+        compose.mainClock.autoAdvance = false
+        foreground()
+        // Nothing has composed yet: the Activity has no back stack and the
+        // identity has not settled, so this reminder can only be queued.
+        compose.runOnUiThread { compose.activity.handleIntent(skillsNotification()) }
+
+        settle()
+        repeat(6) { compose.mainClock.advanceTimeBy(1_000); compose.waitForIdle() }
+
+        compose.onNodeWithText("还没有可用的已审核技能。").assertIsDisplayed()
     }
 
     @Test

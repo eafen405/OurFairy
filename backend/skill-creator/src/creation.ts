@@ -20,7 +20,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, join } from 'node:path'
 import {
   PackageError,
   assertPackagePath,
@@ -48,7 +48,16 @@ import {
   type ReusedScenario,
 } from './evolution.js'
 import { runVerification, type ScenarioRecord, type VerificationReport } from './verify.js'
+import { emptyVerificationReport, needsFreshExecution, readVerificationReport, verificationVerdict } from './verification-report.js'
 import { SkillError } from './service.js'
+import {
+  SKILL_DIR,
+  candidatePackagePath,
+  packageDirectory,
+  rehomeCandidatePackage,
+  versionPackagePath,
+} from './paths.js'
+import { candidateOrigin, type BackgroundProvenance, type CandidateOrigin } from './origin.js'
 import { canInspect, canReview, requireSharingConsent, type SharingConsent } from './sharing.js'
 import type { InstallSource } from './install.js'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -104,17 +113,14 @@ export interface CandidateEvidence {
   readonly note?: string
 }
 
-/** Where one background candidate came from: the cross-session claim's evidence. */
-export interface BackgroundProvenance {
-  /** The canonical task key shared by the contributing signals. */
-  readonly taskKey: string
-  /** The contributing reuse-signal ids the creation claim froze. */
-  readonly signalIds: readonly number[]
-  /** The distinct source sessions those signals came from. */
-  readonly sourceSessions: readonly string[]
-  /** The creation job that produced this candidate. */
-  readonly creationJobId: number
-}
+/**
+ * The cross-session provenance of a background candidate.
+ *
+ * The shape lives in `./origin`, the module that resolves which origin a
+ * create call belongs to; it is re-exported here because
+ * {@link CreateCandidateInput} exposes it.
+ */
+export type { BackgroundProvenance } from './origin.js'
 
 /** The facts one `create` call hands the backend. */
 export interface CreateCandidateInput {
@@ -247,16 +253,8 @@ export interface ReviewPackage {
   /** Present when the result budget omitted verification records. */
   readonly verificationNote?: string | undefined
   readonly changes: ReviewChanges
-  readonly verification: {
-    readonly complete: boolean
-    readonly executed: VerificationReport['executed']
-    readonly reused: VerificationReport['reused']
-    readonly unexecuted: VerificationReport['unexecuted']
-    readonly failed: VerificationReport['failed']
-    readonly comparisons: VerificationReport['comparisons']
-    readonly environment: string
-    readonly ranAt: number
-  }
+  /** The stored report plus inspect's derived changed-content warning fact. */
+  readonly verification: VerificationReport & { readonly freshExecutionMissing: boolean }
   readonly nextActions: string[]
   readonly growthConfirmation: {
     readonly required: boolean
@@ -318,6 +316,21 @@ export const DISPLAY_MAX_CHARACTERS = 4_000
 
 /** The one instruction a growth-exceeded display must never lose. */
 export const GROWTH_INSTRUCTION = '篇幅增长超过 10%，批准前请在展示后单独回复「确认增长」'
+
+/**
+ * The one mapping from a resolved origin to the stored source vocabulary.
+ *
+ * Every value is read from `SOURCE_TYPE`; the mapping writes no number itself.
+ * A create call's stored code follows the origin `./origin` resolved instead of
+ * a second look at the overlapping input fields, which is what keeps the old
+ * priority chain from growing back.
+ */
+const SOURCE_TYPE_OF_ORIGIN: Readonly<Record<CandidateOrigin, number>> = Object.freeze({
+  explicit: SOURCE_TYPE.explicit,
+  install: SOURCE_TYPE.install,
+  background: SOURCE_TYPE.background,
+  evolution: SOURCE_TYPE.evolution,
+})
 
 /**
  * Whether one candidate's approval needs the reviewing user's own decision
@@ -429,6 +442,7 @@ type BoundedReview = Omit<ReviewPackage, 'package' | 'changes' | 'verification' 
     comparisons: { name: string; withSkill: VerificationReport['executed'][number]; withoutSkill: VerificationReport['executed'][number] }[]
     environment: string
     ranAt: number
+    freshExecutionMissing: boolean
   }
   packageNote?: string | undefined
   verificationNote?: string | undefined
@@ -491,6 +505,7 @@ export function boundInspectResult(result: InspectResult): InspectResult {
       })),
       environment: clipText(result.review.verification.environment, 300),
       ranAt: result.review.verification.ranAt,
+      freshExecutionMissing: result.review.verification.freshExecutionMissing,
     },
   }
   const length = () => JSON.stringify({ ...bounded, review, display }).length
@@ -605,12 +620,7 @@ interface SourceProvenance {
   readonly consent?: SharingConsent
   readonly benefit?: string
   /** The cross-session claim a background candidate came from (#300). */
-  readonly background?: {
-    readonly taskKey: string
-    readonly signalIds: readonly number[]
-    readonly sourceSessions: readonly string[]
-    readonly creationJobId: number
-  }
+  readonly background?: BackgroundProvenance
   /** The scenarios a deferred background candidate still has to verify with. */
   readonly scenarios?: readonly CandidateScenario[]
   readonly comparisons?: readonly CandidateComparison[]
@@ -882,8 +892,11 @@ export function buildReviewDisplay(review: ReviewPackage): string {
   lines.push(`包内容：新增 ${review.changes.added.length} 个，删除 ${review.changes.removed.length} 个，修改 ${review.changes.changed.length} 个`)
   const verification = review.verification
   lines.push(`验证：实际执行 ${verification.executed.length}，复用 ${verification.reused.length}，未执行 ${verification.unexecuted.length}，失败 ${verification.failed.length}`)
-  const changedFiles = review.changes.added.length + review.changes.removed.length + review.changes.changed.length
-  if (changedFiles > 0 && verification.executed.length === 0) {
+  // The warning is inspect's verdict on the stored report (candidate hash vs
+  // the database's parent hash), not a bare changed-file count: a parent
+  // package that cannot be read must not make a legitimate approval look
+  // refused, and a reuse-only report for changed bytes must always warn.
+  if (verification.freshExecutionMissing) {
     lines.push('⚠ 内容有变化但本报告没有任何新执行，不能用于批准')
   }
   for (const record of verification.executed) lines.push(`✔ ${singleLine(record.name)}: ${singleLine(record.command)} → exit ${String(record.exitCode)}`)
@@ -954,47 +967,6 @@ function packageFiles(dir: string, manifest: readonly ManifestEntry[]): ReviewPa
   })
 }
 
-/** The verification report shape inspect exposes; a missing report is incomplete. */
-function verificationOf(version: SkillVersionRow): ReviewPackage['verification'] {
-  const empty = {
-    complete: false,
-    executed: [],
-    reused: [],
-    unexecuted: [],
-    failed: [],
-    comparisons: [],
-    environment: '',
-    ranAt: version.created_at,
-  } satisfies ReviewPackage['verification']
-  if (version.verification === null) return empty
-  try {
-    const parsed = JSON.parse(version.verification) as Partial<VerificationReport>
-    return {
-      complete: parsed.complete === true,
-      executed: parsed.executed ?? [],
-      reused: parsed.reused ?? [],
-      unexecuted: parsed.unexecuted ?? [],
-      failed: parsed.failed ?? [],
-      comparisons: parsed.comparisons ?? [],
-      environment: typeof parsed.environment === 'string' ? parsed.environment : '',
-      ranAt: typeof parsed.ranAt === 'number' ? parsed.ranAt : version.created_at,
-    }
-  } catch {
-    return empty
-  }
-}
-
-/** The approval verdict a verification report must satisfy. */
-function verificationReason(report: ReviewPackage['verification']): string | undefined {
-  if (!report.complete) return 'the verification report is incomplete; run it again'
-  if (report.executed.length === 0 && report.reused.length === 0) {
-    return 'the verification report has no executed or reused scenario'
-  }
-  if (report.unexecuted.length > 0) return 'the verification report has unexecuted scenarios'
-  if (report.failed.length > 0) return 'a verification scenario failed; change the candidate and verify it again'
-  return undefined
-}
-
 /** The creation module's dependencies: the store, the runtime service and the data root. */
 export interface SkillCreationOptions {
   readonly root: string
@@ -1042,7 +1014,13 @@ export class SkillCreation {
   }
 
   /**
-   * Validate, stage, record and verify one explicit candidate or revision.
+   * Validate, stage, record and verify one candidate.
+   *
+   * One call has exactly one origin (`./origin`): an explicit package, an
+   * address install, a background claim or a revision. The two producers hand
+   * overlapping optional fields; a combination in which one origin would
+   * override another is refused here, before any byte is staged, so no adapter
+   * pre-check is what keeps it out.
    *
    * The file set is written to `tmp/<uuid>/`, re-read by the one package
    * algorithm, moved into `candidates/<uuid>/` and only then inserted. A name
@@ -1074,13 +1052,24 @@ export class SkillCreation {
       if (input.packageDir !== undefined && input.install === undefined) {
         throw new SkillError(400, 'skills/invalid-package', 'a fetched package needs the install source it was fetched from')
       }
+      // One candidate has exactly one origin. `tools.ts` owns the model's input
+      // vocabulary; this call is the domain authority over which sources may be
+      // combined, and it refuses a conflict before any byte is staged.
+      const origin = candidateOrigin({
+        install: input.install,
+        background: input.background,
+        revision: revision !== undefined,
+        deferredVerification: input.deferVerification === true,
+        focusNamed: input.focus !== undefined,
+        packageDir: input.packageDir !== undefined,
+      })
       // A background candidate has no calling turn to name: its provenance is
-      // the cross-session claim, and the review package shows that instead.
-      const background = input.background
+      // the cross-session claim, and the review package shows that instead. An
+      // address install has no calling turn either, so it needs no focus.
       let focus: FocusProvenance | undefined
-      if (background === undefined) {
+      if (origin !== 'background') {
         focus = input.focus === undefined ? undefined : resolveFocus(input.events, input.focus)
-        if (focus === undefined && input.install === undefined) {
+        if (focus === undefined && origin !== 'install') {
           throw new SkillError(400, 'skills/invalid-focus', 'create needs focus: {"kind":"turn"} or {"kind":"task","text":"..."}')
         }
       }
@@ -1134,54 +1123,68 @@ export class SkillCreation {
         const candidateDir = staged.candidateDir
         const growth = growthOf(parsed.coreCharacters, revision?.parent.core_characters ?? null)
         const install = input.install
-        const location: SourceProvenance = background !== undefined
-          ? {
-              ...(evidence.length === 0 ? {} : { evidence }),
-              ...(revision === undefined ? {} : { benefit: revision.benefit }),
-              background: {
-                taskKey: background.taskKey,
-                signalIds: [...background.signalIds],
-                sourceSessions: [...background.sourceSessions],
-                creationJobId: background.creationJobId,
-              },
-              // A deferred candidate keeps the scenarios it must still run:
-              // run_verification reads them back from this provenance.
-              ...(input.deferVerification
-                ? { scenarios, comparisons }
-                : {}),
-            }
-          : {
-              ...(common
-                ? { ...(consent === undefined ? {} : { consent }) }
+        const background = input.background
+        // One `source_location` per resolved origin. Each case builds only the
+        // fields its own origin owns, so no branch computes a block it cannot
+        // use; a combination that could carry two origins was refused above.
+        const personalProvenance: SourceProvenance = {
+          sessionId: input.sessionId,
+          ...(focus === undefined ? {} : { focus }),
+          ...(evidence.length === 0 ? {} : { evidence }),
+        }
+        const consentProvenance: SourceProvenance = consent === undefined ? {} : { consent }
+        const location: SourceProvenance = (() => {
+          switch (origin) {
+            case 'background':
+              // A background candidate has no calling turn: its provenance is
+              // the cross-session claim, plus the benefit of a revision.
+              return {
+                ...(revision === undefined ? {} : { benefit: revision.benefit }),
+                ...(evidence.length === 0 ? {} : { evidence }),
+                ...(background === undefined ? {} : {
+                  background: {
+                    taskKey: background.taskKey,
+                    signalIds: [...background.signalIds],
+                    sourceSessions: [...background.sourceSessions],
+                    creationJobId: background.creationJobId,
+                  },
+                }),
+                // A deferred candidate keeps the scenarios it must still run:
+                // run_verification reads them back from this provenance.
+                ...(input.deferVerification ? { scenarios, comparisons } : {}),
+              }
+            case 'install':
+              // An install records the fixed source; a common proposal its
+              // consent, a personal one the calling session.
+              return {
+                ...(common ? consentProvenance : personalProvenance),
+                ...(install === undefined ? {} : {
+                  address: install.address,
+                  resolvedVersion: install.resolvedVersion,
+                  digest: install.digest,
+                  fetchedAt: install.fetchedAt,
+                  ...(install.etag === undefined ? {} : { etag: install.etag }),
+                  ...(install.lastModified === undefined ? {} : { lastModified: install.lastModified }),
+                }),
+              }
+            case 'evolution':
+              // A common revision is Phaethon's private session too: only the
+              // revision's own evidence/benefit become review material the
+              // proposer may read.
+              return commonRevision
+                ? {
+                    ...(evidence.length === 0 ? {} : { evidence }),
+                    ...(revision === undefined ? {} : { benefit: revision.benefit }),
+                  }
                 : {
-                    // A common revision is Phaethon's private session too: only
-                    // the revision's own evidence/benefit become review
-                    // material the proposer may read.
-                    ...(commonRevision
-                      ? { ...(evidence.length === 0 ? {} : { evidence }), ...(revision === undefined ? {} : { benefit: revision.benefit }) }
-                      : {
-                          sessionId: input.sessionId,
-                          ...(focus === undefined ? {} : { focus }),
-                          ...(evidence.length === 0 ? {} : { evidence }),
-                          ...(revision === undefined ? {} : { benefit: revision.benefit }),
-                        }),
-                  }),
-              ...(install === undefined
-                ? {}
-                : {
-                    address: install.address,
-                    resolvedVersion: install.resolvedVersion,
-                    digest: install.digest,
-                    fetchedAt: install.fetchedAt,
-                    ...(install.etag === undefined ? {} : { etag: install.etag }),
-                    ...(install.lastModified === undefined ? {} : { lastModified: install.lastModified }),
-                  }),
-            }
-        const sourceType = background !== undefined
-          ? SOURCE_TYPE.background
-          : install !== undefined
-            ? SOURCE_TYPE.install
-            : revision === undefined ? SOURCE_TYPE.explicit : SOURCE_TYPE.evolution
+                    ...personalProvenance,
+                    ...(revision === undefined ? {} : { benefit: revision.benefit }),
+                  }
+            case 'explicit':
+              return common ? consentProvenance : personalProvenance
+          }
+        })()
+        const sourceType = SOURCE_TYPE_OF_ORIGIN[origin]
         const draft = this.#store.createDraft({
           name: parsed.name,
           scope,
@@ -1191,7 +1194,7 @@ export class SkillCreation {
           ...(common || commonRevision ? {} : { ownerShortId: input.ownerShortId }),
           ...(common ? { proposedBy: input.ownerShortId } : {}),
           createdBy: input.ownerShortId,
-          packagePath: `candidates/${staged.candidateId}`,
+          packagePath: candidatePackagePath(staged.candidateId),
           manifest: canonicalManifest(parsed.manifest),
           manifestHash: parsed.manifestHash,
           coreCharacters: parsed.coreCharacters,
@@ -1210,10 +1213,7 @@ export class SkillCreation {
             versionId: draft.versionId,
             status: VERSION_STATUS.pending,
             nextActions: ['run_verification', 'inspect', 'review'],
-            verification: {
-              complete: false, executed: [], reused: [], unexecuted: [], failed: [], comparisons: [],
-              environment: '', ranAt: Date.now(),
-            },
+            verification: emptyVerificationReport(Date.now()),
           }
         }
         const reuse = revision === undefined
@@ -1295,7 +1295,7 @@ export class SkillCreation {
       if (sourcePackage.manifestHash !== source.manifest_hash) {
         throw new SkillError(500, 'skills/integrity', `skill package integrity check failed for ${skill.name}`)
       }
-      const scenarios = rollbackScenarios(verificationOf(source))
+      const scenarios = rollbackScenarios(readVerificationReport(source))
       if (scenarios.length === 0) {
         throw new SkillError(409, 'skills/invalid-rollback',
           `version ${versionId} has no recorded verification scenario to roll back with`)
@@ -1325,7 +1325,7 @@ export class SkillCreation {
           // Phaethon rollback only creates a candidate for the same identity.
           ...(skill.scope === SKILL_SCOPE.common ? {} : { ownerShortId: shortId }),
           createdBy: shortId,
-          packagePath: `candidates/${staged.candidateId}`,
+          packagePath: candidatePackagePath(staged.candidateId),
           manifest: canonicalManifest(parsed.manifest),
           manifestHash: parsed.manifestHash,
           coreCharacters: parsed.coreCharacters,
@@ -1419,13 +1419,6 @@ export class SkillCreation {
     scenarios: readonly CandidateScenario[]): { reused: ReusedScenario[]; rerun: readonly CandidateScenario[] } {
     const parentManifest = this.#readParentManifest(parent)
     if (parentManifest === undefined) return { reused: [], rerun: [...scenarios] }
-    let report: { executed: ScenarioRecord[]; reused: ScenarioRecord[] } | undefined
-    try {
-      const parsed = parent.verification === null ? undefined : JSON.parse(parent.verification) as { executed?: ScenarioRecord[]; reused?: ScenarioRecord[] }
-      if (parsed !== undefined) report = { executed: parsed.executed ?? [], reused: parsed.reused ?? [] }
-    } catch {
-      report = undefined
-    }
     const hashes = (manifest: readonly ManifestEntry[]) => new Map(manifest.map(entry => [entry.path, entry.sha256]))
     return planVerificationReuse({
       scenarios,
@@ -1433,7 +1426,7 @@ export class SkillCreation {
       parentHashes: hashes(parentManifest),
       candidateManifestHash,
       parentManifestHash: parent.manifest_hash,
-      parentReport: report,
+      parentReport: readVerificationReport(parent),
       parentVersionId: parent.id,
     })
   }
@@ -1448,14 +1441,14 @@ export class SkillCreation {
    * return must remove both directories (see the create/rollback catch blocks).
    */
   #stageCandidate(source: { readonly files?: readonly CandidateFile[]; readonly packageDir?: string }): StagedCandidate {
-    const staging = join(this.#root, 'tmp', randomUUID())
+    const staging = packageDirectory(this.#root, [SKILL_DIR.tmp, randomUUID()])
     const candidateId = randomUUID()
     try {
       if (source.packageDir === undefined) writeSkillPackage(staging, source.files as readonly CandidateFile[])
       else copySkillPackage(source.packageDir, staging)
       const parsed = readSkillPackage(staging)
-      mkdirSync(join(this.#root, 'candidates'), { recursive: true })
-      const candidateDir = join(this.#root, 'candidates', candidateId)
+      mkdirSync(packageDirectory(this.#root, [SKILL_DIR.candidates]), { recursive: true })
+      const candidateDir = packageDirectory(this.#root, [SKILL_DIR.candidates, candidateId])
       renameSync(staging, candidateDir)
       return { staging, candidateId, candidateDir, parsed }
     } catch (error) {
@@ -1499,24 +1492,14 @@ export class SkillCreation {
    * pending row still pointing at `candidates/<uuid>/` while the bytes sit under
    * `versions/<skillId>/<uuid>/`; moving them back here makes the candidate
    * inspectable and approvable again instead of a permanent integrity failure.
-   * A boot reconciliation repeats this scan for rows nobody touched yet.
+   * A boot reconciliation repeats this scan for rows nobody touched yet; both
+   * run the one rule in `paths.rehomeCandidatePackage`.
    */
   #packageDirectory(version: SkillVersionRow, skill: SkillRow): string {
     const directory = this.#service.versionDirectory(version)
-    if (existsSync(directory)) return directory
-    const parts = version.package_path.split('/')
-    if (parts.length === 2 && parts[0] === 'candidates') {
-      const versionDirectory = join(this.#root, 'versions', String(skill.id), String(parts[1]))
-      if (existsSync(versionDirectory)) {
-        mkdirSync(dirname(directory), { recursive: true })
-        try {
-          renameSync(versionDirectory, directory)
-          return directory
-        } catch {
-          return directory
-        }
-      }
-    }
+    // 'missing' answers the service directory: the caller's package read then
+    // reports the integrity failure, exactly as before the repair was tried.
+    rehomeCandidatePackage({ root: this.#root, packagePath: version.package_path, skillId: skill.id })
     return directory
   }
 
@@ -1538,7 +1521,15 @@ export class SkillCreation {
       const provenance = parseSourceLocation(version.source_location)
       const parent = version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)
       const parentManifest = parent === undefined ? undefined : this.#readParentManifest(parent)
-      const verification = verificationOf(version)
+      const verification = readVerificationReport(version)
+      // The display's warning is the shared changed-content rule, not the
+      // verdict's first refusal: an incomplete, evidence-free or failed report
+      // for changed bytes also has no execution of its own and must warn. The
+      // parent hash is the database row, exactly as approval and settle read it.
+      const freshExecutionMissing = needsFreshExecution({
+        candidateManifestHash: version.manifest_hash,
+        parentManifestHash: parent?.manifest_hash ?? null,
+      }) && verification.executed.length === 0
       const growth = growthOf(version.core_characters, parent?.core_characters ?? null)
       const changes = changesOf(parsed.manifest, parentManifest)
       const pending = version.status === VERSION_STATUS.pending
@@ -1576,7 +1567,10 @@ export class SkillCreation {
         package: packageFiles(directory, parsed.manifest),
         packageTotal: parsed.manifest.length,
         changes,
-        verification,
+        verification: {
+          ...verification,
+          freshExecutionMissing,
+        },
         nextActions: version.status === VERSION_STATUS.pending
           ? (canReview(shortId, isAdmin, skill) ? [...REVIEW_ACTIONS] : [])
           : version.status === VERSION_STATUS.superseded && canReview(shortId, isAdmin, skill) ? ['rollback'] : [],
@@ -1738,17 +1732,16 @@ export class SkillCreation {
         throw new SkillError(409, 'skills/revision-required',
           `skill "${skill.name}" already has a current version; a new version needs a revision`)
       }
-      const verification = verificationOf(version)
-      const blocked = verificationReason(verification)
-      if (blocked !== undefined) throw new SkillError(409, 'skills/verification-incomplete', blocked)
       const parent = version.parent_version_id === null ? undefined : this.#store.version(version.parent_version_id)
-      // A3: bytes that changed cannot be approved on the parent's evidence alone.
-      // Pre-fix pending rows may still carry a reuse-only report for new
-      // content, so the approval gate re-checks the rule as well.
-      if (parent !== undefined && parent.manifest_hash !== version.manifest_hash && verification.executed.length === 0) {
-        throw new SkillError(409, 'skills/verification-incomplete',
-          'the candidate content changed from its parent but its report only reuses the parent\'s runs; verify it again')
-      }
+      // A3: the same verdict approval and background settlement share. It
+      // re-checks the changed-content rule for pre-fix pending rows, so bytes
+      // that changed can never be approved on the parent's evidence alone.
+      const verdict = verificationVerdict({
+        report: readVerificationReport(version),
+        candidateManifestHash: version.manifest_hash,
+        parentManifestHash: parent?.manifest_hash ?? null,
+      })
+      if (!verdict.ok) throw new SkillError(409, 'skills/verification-incomplete', verdict.message)
       // The stored growth flag is computed once at creation; the parent is
       // immutable, so recomputing here can only detect a corrupted row.
       const growth = growthOf(version.core_characters, parent?.core_characters ?? null)
@@ -1796,15 +1789,16 @@ export class SkillCreation {
       }
 
       const candidateDir = directory
-      const versionDir = join(this.#root, 'versions', String(skill.id), basename(candidateDir))
-      mkdirSync(join(this.#root, 'versions', String(skill.id)), { recursive: true })
+      const packageId = basename(candidateDir)
+      const versionDir = packageDirectory(this.#root, [SKILL_DIR.versions, String(skill.id), packageId])
+      mkdirSync(packageDirectory(this.#root, [SKILL_DIR.versions, String(skill.id)]), { recursive: true })
       let moved = false
       try {
         renameSync(candidateDir, versionDir)
         moved = true
         const published = this.#store.publishDraft({
           versionId,
-          packagePath: `versions/${String(skill.id)}/${basename(versionDir)}`,
+          packagePath: versionPackagePath(skill.id, packageId),
           reviewer: shortId,
           reviewedAt: now,
           ...(skill.owner_short_id === null ? {} : { ownerShortId: skill.owner_short_id }),
@@ -1935,13 +1929,18 @@ export class SkillCreation {
    *   candidate is inspectable and approvable again;
    * - a pending row with no bytes anywhere is settled as rejected with a system
    *   note, so it cannot block the pending list forever;
+   * - a pending row whose stored path is unsafe is settled the same way, with a
+   *   note naming the unsafe path: the decision is a database write only (the
+   *   module never joins such a path), and a row the read path refuses with a
+   *   500 integrity error cannot be reviewed, so leaving it pending forever
+   *   would only hide it from the user;
    * - committed version directories are never touched.
    *
    * @returns the counts, so the row's boot log says what it repaired.
    */
   reconcile(): ReconciliationReport {
     let tmpRemoved = 0
-    const tmpRoot = join(this.#root, 'tmp')
+    const tmpRoot = packageDirectory(this.#root, [SKILL_DIR.tmp])
     if (existsSync(tmpRoot)) {
       for (const entry of readdirSync(tmpRoot)) {
         rmSync(join(tmpRoot, entry), { recursive: true, force: true })
@@ -1952,29 +1951,21 @@ export class SkillCreation {
     let pendingSettled = 0
     const now = Date.now()
     for (const row of this.#store.allPendingDrafts()) {
-      const parts = row.package_path.split('/')
-      if (parts.some(part => part === '' || part === '.' || part === '..')) continue
-      const candidateDir = join(this.#root, ...parts)
-      if (existsSync(candidateDir)) continue
-      if (parts.length === 2 && parts[0] === 'candidates') {
-        const versionDir = join(this.#root, 'versions', String(row.skill_id), String(parts[1]))
-        if (existsSync(versionDir)) {
-          try {
-            mkdirSync(dirname(candidateDir), { recursive: true })
-            renameSync(versionDir, candidateDir)
-            pendingRecovered += 1
-            continue
-          } catch {
-            // Fall through: without the bytes the row cannot be reviewed.
-          }
-        }
+      const state = rehomeCandidatePackage({ root: this.#root, packagePath: row.package_path, skillId: row.skill_id })
+      if (state === 'rehomed') {
+        pendingRecovered += 1
+        continue
       }
+      if (state === 'present') continue
+      const note = state === 'unsafe'
+        ? '启动对账：候选路径不安全，无法继续审核'
+        : '启动对账：候选内容缺失，无法继续审核'
       if (this.#store.recordReviewDecision({
         versionId: row.id,
         status: VERSION_STATUS.rejected,
         reviewer: 0,
         reviewedAt: now,
-        note: '启动对账：候选内容缺失，无法继续审核',
+        note,
       })) pendingSettled += 1
     }
     return { tmpRemoved, pendingRecovered, pendingSettled }
