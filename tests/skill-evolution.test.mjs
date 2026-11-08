@@ -1131,6 +1131,73 @@ describe('changed-content verification', () => {
     assert.match(refused.text, /skills\/verification-incomplete/u, refused.text)
     assert.equal(versionOf(revision.value.versionId).status, 0)
   })
+
+  test('inspect warns on changed content with no fresh execution, whatever the first refusal', async () => {
+    const base = await publishNewSkill('reuse-inspect', { bodyLength: 1000 })
+    const revision = await createRevision('reuse-inspect', base.versionId, {
+      bodyLength: 1090, benefit: 'recover the branch',
+    })
+    assert.equal(revision.isError, false, revision.text)
+    const versionId = revision.value.versionId
+    const parentReport = JSON.parse(versionOf(base.versionId).verification)
+    /** Write one fabricated stored report, as a pre-fix row could carry. */
+    const storeReport = (id, report) => {
+      const database = new DatabaseSync(databasePath)
+      try {
+        database.prepare('UPDATE skill_version SET verification = ? WHERE id = ?').run(JSON.stringify(report), id)
+      } finally {
+        database.close()
+      }
+    }
+    const reuseOnly = {
+      complete: true,
+      executed: [],
+      reused: parentReport.executed.map(record => ({ ...record, reusedFrom: base.versionId })),
+      unexecuted: [],
+      failed: [],
+      comparisons: [],
+      environment: parentReport.environment,
+      ranAt: Date.now(),
+    }
+
+    // The changed-content warning is the shared fresh-execution predicate, not the
+    // verdict's first refusal: a reuse-only report is refused as 'reused-only'.
+    storeReport(versionId, reuseOnly)
+    const reused = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId })
+    assert.equal(reused.isError, false, reused.text)
+    assert.equal(reused.value.review.verification.freshExecutionMissing, true,
+      'changed content with only the parent runs has no fresh execution')
+    assert.ok(reused.value.display.includes('⚠ 内容有变化但本报告没有任何新执行，不能用于批准'), reused.value.display)
+
+    // An incomplete report is refused as 'incomplete' first, but it still carries
+    // no new execution, so the display warns exactly as it did before the verdict
+    // was introduced (the short-circuit used to swallow this case).
+    storeReport(versionId, { complete: false, executed: [], reused: [], unexecuted: [], failed: [], comparisons: [], environment: '', ranAt: Date.now() })
+    const incomplete = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId })
+    assert.equal(incomplete.isError, false, incomplete.text)
+    assert.equal(incomplete.value.review.verification.freshExecutionMissing, true,
+      'an incomplete changed report still has no fresh execution of its own')
+    assert.ok(incomplete.value.display.includes('⚠ 内容有变化但本报告没有任何新执行，不能用于批准'), incomplete.value.display)
+
+    // Unchanged content may legitimately rest on the parent's runs: the parent hash
+    // is equal, so the same report shape must not warn.
+    const unchanged = await callTool(alice, sessionAlice, 'skill_manage', {
+      action: 'create', scope: 1, focus: { kind: 'turn' },
+      parentVersionId: base.versionId, targetBenefit: 'keep the same body',
+      evidence: [{ kind: 'test', ref: 'the unchanged scenario' }],
+      files: packageFiles('reuse-inspect', { bodyLength: 1000 }),
+      scenarios: [{ name: 'ok', command: 'true' }],
+    })
+    assert.equal(unchanged.isError, false, unchanged.text)
+    assert.equal(versionOf(unchanged.value.versionId).manifest_hash, versionOf(base.versionId).manifest_hash,
+      'the fixture really keeps the parent content')
+    storeReport(unchanged.value.versionId, reuseOnly)
+    const unchangedInspect = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: unchanged.value.versionId })
+    assert.equal(unchangedInspect.isError, false, unchangedInspect.text)
+    assert.equal(unchangedInspect.value.review.verification.freshExecutionMissing, false,
+      'a candidate whose manifest hash matches its parent may reuse the parent runs')
+    assert.ok(!unchangedInspect.value.display.includes('⚠ 内容有变化'), unchangedInspect.value.display)
+  })
 })
 
 describe('growth confirmation is consumed once', () => {
@@ -1238,7 +1305,7 @@ describe('publish crash reconciliation', () => {
     assert.ok(!existsSync(displaced), 'the version area no longer holds the draft')
   })
 
-  test('a pending row with an unsafe stored path is left pending at boot', async () => {
+  test('a pending row with an unsafe stored path is settled as rejected at boot', async () => {
     const created = await callTool(alice, sessionAlice, 'skill_manage', {
       action: 'create', scope: 1, focus: { kind: 'turn' },
       files: packageFiles('unsafe-package-path', { bodyLength: 1000 }),
@@ -1265,7 +1332,10 @@ describe('publish crash reconciliation', () => {
     await start()
 
     const row = versionOf(created.value.versionId)
-    assert.equal(row.status, 0, 'boot leaves an unreadable row pending: it cannot make the terminal decision')
-    assert.equal(row.review_note, null, 'no review decision is recorded for an unsafe path')
+    assert.equal(row.status, 2, 'boot settles a row whose stored path it cannot interpret as rejected')
+    assert.match(row.review_note, /启动对账/u, 'the system note explains the boot decision')
+    assert.match(row.review_note, /不安全/u, 'the note names the unsafe path, not missing content')
+    const gone = await callTool(alice, sessionAlice, 'skill_manage', { action: 'inspect', versionId: created.value.versionId })
+    assert.equal(gone.isError, true, 'a settled unsafe row can no longer be inspected')
   })
 })

@@ -51,14 +51,18 @@ skill/
 
 A version's `package_path` is stored relative to that root, so the root can move.
 `paths.ts` is the one vocabulary and safety check for that stored path: it names
-the four areas, refuses a path that is absolute, escapes with `.`/`..`, or uses
-bytes whose meaning differs between platforms (`\`, control characters, a
+the areas whose directory names the stored-path writers share (`candidates`,
+`versions`, `tmp`), refuses a path that is absolute, escapes with `.`/`..`, or
+uses bytes whose meaning differs between platforms (`\`, control characters, a
 drive-letter first segment), resolves a checked path to a directory under the
 root, and owns the candidate crash re-home below. The store's draft validation,
 the service's read path, the seed import, publish and the boot reconciliation all
-call it; every stored path is written through it, so the stricter check cannot
-make an existing row unreadable. The row creates the single connection with WAL,
-versioned migrations and `BEGIN IMMEDIATE` transactions, following
+call it, and every stored `package_path` value is written by
+`candidatePackagePath` / `versionPackagePath`, so the stricter check cannot make
+an existing row unreadable. The one-shot staging directories `install.ts` fetches
+into (`tmp/install-<uuid>`) and `verify.ts` creates (`verify/<uuid>`) are not
+stored row values and keep their own names. The row creates the single connection
+with WAL, versioned migrations and `BEGIN IMMEDIATE` transactions, following
 `backend/memory/src/store.ts`.
 
 Schema v3 adds `skill_version.approval_message_id`, the partial unique index on
@@ -73,9 +77,10 @@ its transaction, so a process killed in between leaves a pending row whose bytes
 sit under `versions/`. The boot scan moves such a directory back, removes every
 interrupted `tmp/<uuid>/` staging entry, and settles a pending row whose bytes
 are gone as rejected with a system note; a pending row whose stored path is
-unsafe is left pending, because a build that cannot interpret a row must not make
-its terminal decision (the read path refuses the same row with a 500 integrity
-error). Committed version directories are never deleted. The same re-home rule
+unsafe is settled the same way, with a note naming the unsafe path — its decision
+is a database write only, and the read path refuses the same row with a 500
+integrity error, so leaving it pending would only hide an unreviewable row.
+Committed version directories are never deleted. The same re-home rule
 (`paths.rehomeCandidatePackage`) runs inline when a pending candidate's directory
 is missing at inspect/approve time. Publish and seed keep their own transaction,
 rename and rollback order; `paths.ts` only supplies names and directories.
@@ -291,13 +296,18 @@ publishes, and the other keeps its draft for a rebase.
   really run again: a plan in which every scenario would be reused is overridden
   and the whole declared set reruns, so "new content with zero executions" cannot
   exist. The approval gate re-checks the rule for pre-fix pending rows, and the
-  display warns if a changed candidate has no fresh execution. One reader and
-  one verdict (`src/verification-report.ts`) answer "is this stored report
-  usable" for the approval gate, for a background claim's settle decision and
-  for the review display, so completeness, failure/unexecuted, evidence and the
-  changed-content rule cannot drift between them. The changed-content parent
-  hash is the database's `parent_version_id` row (`parent.manifest_hash`), never
-  the display's file diff.
+  display warns if a changed candidate has no fresh execution. One reader
+  (`readVerificationReport`) and one rule for the changed-content requirement
+  (`needsFreshExecution`) live in `src/verification-report.ts`, and
+  `verificationVerdict` composes them with completeness, failure/unexecuted and
+  evidence into the approval gate's judgement. The approval gate and a background
+  claim's settle decision both refuse through `verificationVerdict`; the review
+  display's warning is the same `needsFreshExecution(...) && executed.length === 0`
+  predicate, never the display's file diff. The tests exercise each consumer on a
+  fabricated pre-fix report: approval and inspect in `tests/skill-evolution.test.mjs`,
+  settle in `tests/skill-learning.test.mjs`. The changed-content parent hash is the
+  database's `parent_version_id` row (`parent.manifest_hash`), never the display's
+  file diff.
 - `rollback {versionId}` copies an approved **superseded** version's clean
   package into a new pending candidate (`source_type: 4`, parent = current),
   runs its recorded scenarios again with the same reuse rule, and requires

@@ -42,8 +42,9 @@ function dataRoot(prefix = 'skill-paths-') {
 }
 
 describe('the directory vocabulary', () => {
-  test('the four data-root areas are frozen and named once', () => {
-    assert.deepEqual({ ...SKILL_DIR }, { candidates: 'candidates', versions: 'versions', tmp: 'tmp', verify: 'verify' })
+  test('the three stored-path areas are frozen and named once', () => {
+    assert.deepEqual({ ...SKILL_DIR }, { candidates: 'candidates', versions: 'versions', tmp: 'tmp' },
+      'verify/ is a one-shot verification directory owned by verify.ts, not a stored-path area')
     assert.equal(Object.isFrozen(SKILL_DIR), true, 'the vocabulary is a value, not mutable state')
   })
 
@@ -151,11 +152,11 @@ describe('rehomeCandidatePackage', () => {
     assert.ok(existsSync(otherSkill), 'a non-matching directory is never moved')
   })
 
-  test('refuses an unsafe recorded path instead of joining it', () => {
+  test('refuses an unsafe recorded path instead of joining it, and says so', () => {
     const root = dataRoot()
     mkdirSync(join(root, 'candidates'), { recursive: true })
     for (const unsafe of ['', 'candidates', 'candidates/../pkg', '/candidates/pkg', 'candidates\\pkg']) {
-      assert.equal(rehomeCandidatePackage({ root, packagePath: unsafe, skillId: 7 }), 'missing', unsafe)
+      assert.equal(rehomeCandidatePackage({ root, packagePath: unsafe, skillId: 7 }), 'unsafe', unsafe)
     }
   })
 
