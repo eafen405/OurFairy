@@ -35,16 +35,25 @@ tip 合进票分支。所有票完成后跑三轴 code-review（Standards / Spec
 
 ## 验收
 
-收口时在最终集成状态独占运行（无并行实现者）：
+集成分支最终树（含修复批 A/B 与收口文档）上的独占运行记录：
 
-- `OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test`：结果与 `main` 基线的既有 flake 对照见
-  [09-review-fixes/README.md §10](09-review-fixes/README.md)。本机 `tests/skill-learning.test.mjs` 存在
-  与 `main@25a2b34` **完全相同的** 3 条时序 flake（同一文件同一用例，基线也失败）；CI 的 clean-runner
-  `full-gate` 通过，作为全量权威证据。
+- `npm run typecheck`：EXIT 0。
+- 相关套件：`skill-verification-report` 18、`skill-creation-domain` 15、`skill-paths` 15（+扩展用例）、
+  `skill-evolution` 17、`skill-evolution-display`、`skill-creation-store`、`skill-package`、`skill-learning`
+  整文件 23/23；每票的完整命令与结果见各自目录 README。
 - `npm run combo:verify`：三行 ok（产品基于集成分支、dsh 锁定 `ae2adffd8d67`、Android 来源一致）。
-- Android `cd android && ./gradlew test lintDebug`：见收口提交时的运行记录（`RemoteAttachmentPreviewTest`
-  在本机为既有 Compose 超时 flake：同一类曾在 CI 两次失败、重跑通过；本 spec 未改附件预览）。
-- CI：`integration/spec-328` 推送后的 `full-gate` 与 `android` job 均通过（android 首次因上述既有 flake 失败，
-  重跑通过；`full-gate` 首次即通过，且其构建步骤已由 `node scripts/combo.ts build` 执行）。
+- Android `cd android && ./gradlew test lintDebug`：**BUILD SUCCESSFUL**，`testDebugUnitTest` 758 tests /
+  0 failures，`lintDebug` 执行通过。首次全量跑曾在 `RemoteAttachmentPreviewTest`
+  （「an undecodable text attachment…」）出现 Compose 5s 超时；该文件本 spec 未改，同一用例隔离重跑通过、
+  `main@25a2b34` 上同一套件 10/10 通过，第二次全量即绿——判定为既有 Robolectric/Compose flake；CI 的
+  `android` job 也曾两次在该类用例上 flake、重跑通过。
+- 全量 `npm test`：**838 tests / 836 pass / 2 fail**（cancelled 0 / skipped 0）。2 条失败全部是
+  `tests/skill-learning.test.mjs` 的时序用例（`a failure signal never counts…`、`an uncertain review…`）。
+  基线对照：同一文件在 `main@25a2b34` 上 **22/19/3**，失败名与集成分支完全一致且更多一条
+  （`a failed creation retries…`），日志 `/tmp/skill-learning-main.log` 与 `/tmp/skill-learning-tip.log`
+  已核对；两条失败在隔离/低负载下均可通过。故本机全量不绿是既有 flake，不是本 spec 回归；clean-runner 的
+  CI `full-gate` 已通过，作为全量权威证据。
+- CI（`integration/spec-328` 推送）：`full-gate` 通过（其构建步骤由 `node scripts/combo.ts build` 执行，
+  即 #335 的新路径）；`android` job 首跑因上述既有 flake 失败，重跑通过。
 
 原始运行输出不入库；上表目录的 README 记录命令、结果与未完成项。
