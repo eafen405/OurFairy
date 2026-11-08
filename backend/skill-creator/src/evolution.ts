@@ -14,6 +14,7 @@
  * @module @ourfairy/dsh-skill-creator/src/evolution
  */
 import { SkillError } from './service.js'
+import { needsFreshExecution } from './verification-report.js'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ScenarioRecord } from './verify.js'
 
@@ -154,7 +155,10 @@ export function planVerificationReuse(input: {
     }
     rerun.push(scenario)
   }
-  const contentChanged = input.parentManifestHash !== undefined && input.parentManifestHash !== input.candidateManifestHash
+  const contentChanged = needsFreshExecution({
+    candidateManifestHash: input.candidateManifestHash,
+    parentManifestHash: input.parentManifestHash ?? null,
+  })
   if (contentChanged && rerun.length === 0 && input.scenarios.length > 0) {
     // The candidate's bytes changed but no recorded evidence covers the change:
     // a reuse-only report would be zero fresh executions for new content. Force

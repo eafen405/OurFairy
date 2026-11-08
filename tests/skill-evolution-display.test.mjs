@@ -48,7 +48,9 @@ function review({ exceeded, command = 'true', scenarios = 1 }) {
     package: [],
     packageTotal: 0,
     changes: { added: [], removed: [], changed: ['SKILL.md'], summary: '相对父版本：新增 0 个，删除 0 个，修改 1 个' },
-    verification: { complete: true, executed, reused: [], unexecuted: [], failed: [], comparisons: [], environment: 'bwrap', ranAt: 1 },
+    // inspect derives this from the stored report and the database parent hash;
+    // the display reads it instead of recomputing a changed-file proxy.
+    verification: { complete: true, executed, reused: [], unexecuted: [], failed: [], comparisons: [], environment: 'bwrap', ranAt: 1, freshExecutionMissing: false },
     nextActions: ['approve', 'request_changes', 'reject'],
     growthConfirmation: {
       required: exceeded,
@@ -191,6 +193,7 @@ test('a forged warning cannot add a second warning line to a reuse-only report',
     ...changed.verification,
     executed: [],
     reused: [{ ...executed, reusedFrom: 6 }],
+    freshExecutionMissing: true,
   }
   const warnings = buildReviewDisplay(changed).split('\n').filter(line => line.startsWith('⚠'))
 
@@ -227,9 +230,45 @@ test('a changed candidate with a reuse-only report can never look approvable', (
     ...changed.verification,
     executed: [],
     reused: [parentRecord],
+    freshExecutionMissing: true,
   }
   const display = buildReviewDisplay(changed)
   assert.ok(display.includes('⚠ 内容有变化但本报告没有任何新执行，不能用于批准'), display)
+})
+
+test('the changed-content warning comes from the stored-report verdict, not the display file diff', () => {
+  // A parent package whose bytes cannot be read makes the diff look like a
+  // brand-new skill (all files added); the report may still legitimately reuse
+  // the parent's runs when the manifest hash did not change. Approval allows
+  // that, so the display must not invent a warning from the file count.
+  const parentUnreadable = review({ exceeded: false })
+  parentUnreadable.changes = {
+    added: ['SKILL.md'],
+    removed: [],
+    changed: [],
+    summary: '新技能，包内 1 个文件',
+  }
+  parentUnreadable.verification = {
+    ...parentUnreadable.verification,
+    executed: [],
+    reused: [{ ...parentUnreadable.verification.executed[0], reusedFrom: 6 }],
+    freshExecutionMissing: false,
+  }
+  assert.ok(!buildReviewDisplay(parentUnreadable).includes('⚠ 内容有变化'),
+    'an unreadable parent diff alone no longer looks refused')
+
+  // The opposite direction: inspect's verdict warns even when the display diff
+  // happens to show no file change.
+  const changedButNoDiff = review({ exceeded: false })
+  changedButNoDiff.changes = { added: [], removed: [], changed: [], summary: '相对父版本：新增 0 个，删除 0 个，修改 0 个' }
+  changedButNoDiff.verification = {
+    ...changedButNoDiff.verification,
+    executed: [],
+    reused: [{ ...changedButNoDiff.verification.executed[0], reusedFrom: 6 }],
+    freshExecutionMissing: true,
+  }
+  assert.ok(buildReviewDisplay(changedButNoDiff).includes('⚠ 内容有变化但本报告没有任何新执行，不能用于批准'),
+    'the verdict is repeated verbatim even with an empty diff')
 })
 
 /* The approval-evidence rule the review path re-reads from the durable log. */
