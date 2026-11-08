@@ -16,15 +16,10 @@
  * answer 404 there instead of the fence's 403.
  *
  * Admission is not a field on these entries: it is what each address's handler
- * does, and the authority is the real HTTP suites — every address's Host/Origin
- * fence in `tests/identity-http.test.mjs`, and the credential, role and
- * ownership answers in `tests/identity-http.test.mjs`, `tests/gateway.test.mjs`,
- * `tests/bill-route.test.mjs`, `tests/owned-sessions.test.mjs`,
- * `tests/session-archive.test.mjs`, `tests/remote-chat.test.mjs`,
- * `tests/session-rename.test.mjs`, `tests/attachments.test.mjs`,
- * `tests/jobs.test.mjs`, `tests/skill-sharing.test.mjs`,
- * `tests/memory-impression.test.mjs` and `tests/speech.test.mjs`. The exact
- * field set below keeps a per-address admission word from coming back.
+ * does, and the product rows prove it over real HTTP in their own suites. This
+ * file holds no list of those suites — such a list would keep passing after a
+ * suite was renamed and could not notice a new address without a test. The
+ * exact field set below keeps a per-address admission word from coming back.
  *
  * @covers backend/http — the shared `SurfaceEntry` shape and `freezeSurface`.
  * @covers backend/identity, backend/sessions, backend/chat, backend/gateway,
