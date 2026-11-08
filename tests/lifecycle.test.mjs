@@ -7,7 +7,7 @@
  * leaks neither ports nor child processes.
  */
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { describeRun, makeHome, removeHome, repoRoot, runBackend } from './helpers/backend.mjs'
@@ -199,4 +199,45 @@ test('doctor --json records a missing dsh checkout as a failed check instead of 
     check.detail.includes(missing),
     `the failed check must name the missing path ${missing}; its detail was ${JSON.stringify(check.detail)}`,
   )
+})
+
+/**
+ * A pid number is reused once its process is reaped, so `stop` and `status`
+ * cannot answer "is my backend still running" from the number alone.
+ *
+ * The recorded state is driven by hand here: one cycle starts a real backend and
+ * stops it, then the state file is rewritten with a pid that certainly exists
+ * (this test runner's parent) but carries a different kernel start time. The
+ * launcher must read that as "the recorded process is gone" rather than as
+ * "something is still running" — the failure mode is a `stop` that exits 1 and
+ * names a process the product never started.
+ */
+test('a recorded pid whose start time moved belongs to another process', () => {
+  const started = runBackend(['start', '--json'], env)
+  assert.equal(started.code, 0, describeRun('start', started))
+  const statePath = join(home, 'run', 'backend.json')
+  const recorded = JSON.parse(readFileSync(statePath, 'utf8'))
+  assert.ok(typeof recorded.pidStart === 'string' && recorded.pidStart !== '',
+    `the recorded state must carry the kernel start time it was spawned with: ${JSON.stringify(recorded)}`)
+
+  // Stop the real backend first: what follows is about a stale state file, and a
+  // running child would legitimately be found as a leak.
+  const stopped = runBackend(['stop', '--json'], env)
+  assert.equal(stopped.code, 0, describeRun('stop', stopped))
+
+  // A pid that exists but started at another moment.
+  writeFileSync(statePath, `${JSON.stringify({ ...recorded, pid: process.ppid, pidStart: '0' }, undefined, 2)}\n`)
+  try {
+    const status = runBackend(['status', '--json'], env)
+    assert.equal(status.code, 0, describeRun('status', status))
+    assert.match(status.stdout, /"running": false/,
+      `a reused pid must not read as the recorded backend:\n${status.stdout}`)
+
+    // Nothing of its own is running, which is what `stop` exists to achieve.
+    const again = runBackend(['stop', '--json'], env)
+    assert.equal(again.code, 0,
+      `stop must treat a reused pid as already gone:\n${describeRun('stop', again)}`)
+  } finally {
+    rmSync(statePath, { force: true })
+  }
 })

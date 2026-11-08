@@ -87,6 +87,15 @@ export type LauncherOptions = {
 type BackendState = {
   pid: number
   startedAt: string
+  /**
+   * The kernel's start time for `pid`, in clock ticks.
+   *
+   * A pid number is reused once its process is reaped, so the number alone
+   * cannot answer "is my backend still running". This pair can. It is absent in
+   * a state file written before the field existed; those runs fall back to the
+   * signal probe, which is what they had.
+   */
+  pidStart?: string
   logFile: string
   reportPath: string
   isolatedHome: string
@@ -455,7 +464,46 @@ async function commandBootProduct(layout: Layout, options: LauncherOptions, comb
   return exitCode
 }
 
-function isAlive(pid: number): boolean {
+/**
+ * The kernel's stat fields for one pid, or undefined when the pid is gone.
+ *
+ * The second field is the executable name in parentheses and may itself contain
+ * spaces and parentheses, so the fields are read from AFTER the last `)` rather
+ * than by splitting the whole line. Field 1 after that is the state letter and
+ * field 20 is the start time in clock ticks — the pair identifies one process
+ * even after its pid number is reused.
+ * @param pid - the process to read.
+ * @returns the state letter and start time, or undefined.
+ */
+function processStat(pid: number): { state: string; start: string } | undefined {
+  let raw: string
+  try {
+    raw = readFileSync(`/proc/${pid}/stat`, 'utf8')
+  } catch {
+    return undefined
+  }
+  const close = raw.lastIndexOf(')')
+  if (close < 0) return undefined
+  const fields = raw.slice(close + 2).split(' ')
+  const state = fields[0]
+  const start = fields[19]
+  if (state === undefined || start === undefined) return undefined
+  return { state, start }
+}
+
+/**
+ * Whether the recorded process is still running.
+ *
+ * The signal probe answers "does this pid exist", which is not the same
+ * question: a pid number is reused once its process is reaped, so a supervisor
+ * that outlives its child can find a stranger under the same number. The caller
+ * records the start time when it spawns, so a pid whose start time moved belongs
+ * to another process and the recorded one is gone.
+ * @param pid - the recorded pid.
+ * @param startedAt - the start time recorded when the process was spawned, if known.
+ * @returns true when the recorded process is still running.
+ */
+function isAlive(pid: number, startedAt?: string): boolean {
   try {
     process.kill(pid, 0)
   } catch (error) {
@@ -463,12 +511,12 @@ function isAlive(pid: number): boolean {
     // reads its `code`, exactly as the pre-migration code did.
     return (error as NodeJS.ErrnoException).code === 'EPERM'
   }
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
-    if (stat.split(' ')[2] === 'Z') return false
-  } catch {
-    // No /proc entry on this platform; the signal probe above stands.
-  }
+  const stat = processStat(pid)
+  // No /proc entry on this platform: the signal probe above stands.
+  if (stat === undefined) return true
+  if (stat.state === 'Z') return false
+  // A different start time under the same number is a different process.
+  if (startedAt !== undefined && startedAt !== stat.start) return false
   return true
 }
 
@@ -556,7 +604,7 @@ async function commandStart(layout: Layout, options: LauncherOptions, combinatio
   const dsh = resolveDsh(options, combination)
   const installMode = installProfile(layout, options, combination)
   const existing = readState(layout)
-  if (existing !== undefined && isAlive(existing.pid)) {
+  if (existing !== undefined && isAlive(existing.pid, existing.pidStart)) {
     fail(`backend already running with pid ${existing.pid} (started ${existing.startedAt}); run 'stop' first`)
   }
   mkdirSync(layout.logDir, { recursive: true })
@@ -575,6 +623,9 @@ async function commandStart(layout: Layout, options: LauncherOptions, combinatio
   writeState(layout, {
     pid: child.pid!,
     startedAt: new Date().toISOString(),
+    // Captured now, while the pid certainly names this child: the stop path
+    // uses it to tell this process from a later one that reused the number.
+    pidStart: processStat(child.pid!)?.start,
     logFile,
     reportPath,
     isolatedHome: layout.home,
@@ -626,7 +677,11 @@ async function commandStop(layout: Layout, options: LauncherOptions): Promise<nu
     process.stdout.write('ourfairy-backend: no recorded backend (nothing to stop)\n')
     return 0
   }
-  if (!isAlive(state.pid)) {
+  // Every liveness question below goes through the recorded start time, so a
+  // pid number that has been reused reads as the recorded process being gone
+  // instead of as a stranger still running.
+  const alive = (): boolean => isAlive(state.pid, state.pidStart)
+  if (!alive()) {
     const survivors = leakScan(layout)
     rmSync(layout.statePath, { force: true })
     process.stdout.write(`ourfairy-backend: pid ${state.pid} already exited; leaked processes: ${survivors.length}\n`)
@@ -639,25 +694,34 @@ async function commandStop(layout: Layout, options: LauncherOptions): Promise<nu
   } catch {
     try { process.kill(state.pid, 'SIGTERM') } catch { /* exited between the checks */ }
   }
-  if (!(await waitFor(() => !isAlive(state.pid), options.stopTimeoutMs))) {
+  if (!(await waitFor(() => !alive(), options.stopTimeoutMs))) {
     forced = true
     try { process.kill(-state.pid, 'SIGKILL') } catch { try { process.kill(state.pid, 'SIGKILL') } catch { /* already gone */ } }
-    await waitFor(() => !isAlive(state.pid), 5000)
+    await waitFor(() => !alive(), 5000)
   }
   const survivors = leakScan(layout)
   const portsAfter = survivors.flatMap(survivor => listeningPorts(survivor.pid))
+  const exited = !alive()
   rmSync(layout.statePath, { force: true })
   const summary = {
     pid: state.pid,
-    exited: !isAlive(state.pid),
+    exited,
     forced,
     portsBefore,
     portsAfter,
     leakedProcesses: survivors,
     isolatedHome: layout.home,
+    // Which of the three conditions failed, named: a caller reading `exited:
+    // false` next to empty `portsAfter` and `leakedProcesses` used to have no
+    // way to tell which one it was.
+    reasons: [
+      ...(exited ? [] : ['process still running']),
+      ...(survivors.length === 0 ? [] : [`${String(survivors.length)} leaked process(es)`]),
+      ...(portsAfter.length === 0 ? [] : [`ports still held: ${portsAfter.join(', ')}`]),
+    ],
   }
   process.stdout.write(options.json ? `${JSON.stringify(summary, undefined, 2)}\n` : `ourfairy-backend: stopped\n${JSON.stringify(summary, undefined, 2)}\n`)
-  return summary.exited && survivors.length === 0 && portsAfter.length === 0 ? 0 : 1
+  return summary.reasons.length === 0 ? 0 : 1
 }
 
 function commandStatus(layout: Layout, options: LauncherOptions): number {
@@ -672,7 +736,7 @@ function commandStatus(layout: Layout, options: LauncherOptions): number {
       : `ourfairy-backend: not running\n${JSON.stringify(idle, undefined, 2)}\n`)
     return 0
   }
-  const alive = isAlive(state.pid)
+  const alive = isAlive(state.pid, state.pidStart)
   const report = readJson(state.reportPath)
   const summary = {
     running: alive,
