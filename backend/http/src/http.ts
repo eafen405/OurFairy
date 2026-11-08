@@ -128,8 +128,8 @@ export type SurfaceResponse = 'json' | 'sse' | 'binary'
  *
  * Admission is deliberately not a field: it is the handler's, and the real rule
  * depends on the resource (a skill's scope, an attachment's upload and its
- * session), so one published word would misstate it. The addresses prove their
- * admission over real HTTP in the suites `tests/route-inventory.test.mjs` names.
+ * session), so one published word would misstate it. The product rows prove
+ * their admission over real HTTP in their own suites.
  */
 export interface SurfaceEntry {
   readonly path: string

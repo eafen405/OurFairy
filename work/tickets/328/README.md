@@ -18,13 +18,13 @@ GitHub issue 是发布权威，原生 blocked-by 是实时状态权威；本目�
 | 票 | issue | 主题 | 主要写范围 |
 | --- | --- | --- | --- |
 | 01 技能验证报告判据 | [#329](https://github.com/eafen405/OurFairy/issues/329) | 批准 / 后台结算 / 审核展示消费同一验证事实与 verdict | `backend/skill-creator/src/`（verify、creation、learning、展示路径）及其测试 |
-| 02 修订来源互斥 | [#330](https://github.com/eafen405/OurFairy/issues/330) | `SkillCreation` 自身拒绝「修订 + 地址安装来源」组合 | `backend/skill-creator/src/creation.ts`、`tools.ts`、domain 测试 |
+| 02 修订来源互斥 | [#330](https://github.com/eafen405/OurFairy/issues/330) | `SkillCreation` 自身拒绝「修订 + 地址安装来源」组合 | `backend/skill-creator/src/creation.ts`、`tools.ts`、`origin.ts`、domain 测试 |
 | 03 Android 远程资源状态机 | [#331](https://github.com/eafen405/OurFairy/issues/331) | 技能池 / 印象 / 网关共享串行读写、写后重读、失败保留旧快照与传输失败映射 | `android/app/src/main/java/me/rerere/rikkahub/`（remote + fairy 页面）及其测试 |
 | 04 候选包路径与崩溃回迁 | [#332](https://github.com/eafen405/OurFairy/issues/332) | 路径校验、目录解析、候选回迁只有一份权威实现 | `backend/skill-creator/src/`（install、package、store、service、creation）及其测试 |
-| 05 路由准入声明 | [#333](https://github.com/eafen405/OurFairy/issues/333) | 删除或行为对账「看似强制、实际无消费者」的准入声明 | `backend/*/src/http.ts` 的 SURFACE 声明、`backend/http`、路由清单测试 |
+| 05 路由准入声明 | [#333](https://github.com/eafen405/OurFairy/issues/333) | 删除或行为对账「看似强制、实际无消费者」的准入声明 | `backend/*/src/http.ts` 与 `backend/memory/src/impression.ts` 的 SURFACE 声明、`backend/http`、`backend/bill/README.md`、路由清单测试 |
 | 06 文档门禁解耦 | [#334](https://github.com/eafen405/OurFairy/issues/334) | tracked Markdown 链接检查不再依赖后端构建或 dsh 检出 | `tests/docs.test.mjs`、`tests/helpers/*`、`tests/precommit.test.mjs`、`scripts/precommit.ts` |
 | 07 requiredBuild 驱动 CI | [#335](https://github.com/eafen405/OurFairy/issues/335) | CI 遍历组合记录构建；doctor / README 声称与实际覆盖一致 | `.github/workflows/check.yml`、`scripts/combo.ts`、doctor、README |
-| 08 Android 通知定位 | [#336](https://github.com/eafen405/OurFairy/issues/336) | 会话通知与技能提醒共享端点规范化与账号准入 | Android 通知 / 路由 Activity / fairy 落点代码及其测试 |
+| 08 Android 通知定位 | [#336](https://github.com/eafen405/OurFairy/issues/336) | 会话通知与技能提醒共享端点规范化与账号准入 | Android 通知 / 路由 Activity / fairy 落点代码及其测试、`android/GLOSSARY.md` |
 
 ## 实施与合并
 
