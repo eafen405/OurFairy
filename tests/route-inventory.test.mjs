@@ -15,6 +15,17 @@
  * cases from these same exports; a published address that no row mounted would
  * answer 404 there instead of the fence's 403.
  *
+ * Admission is not a field on these entries: it is what each address's handler
+ * does, and the authority is the real HTTP suites — every address's Host/Origin
+ * fence in `tests/identity-http.test.mjs`, and the credential, role and
+ * ownership answers in `tests/identity-http.test.mjs`, `tests/gateway.test.mjs`,
+ * `tests/bill-route.test.mjs`, `tests/owned-sessions.test.mjs`,
+ * `tests/session-archive.test.mjs`, `tests/remote-chat.test.mjs`,
+ * `tests/session-rename.test.mjs`, `tests/attachments.test.mjs`,
+ * `tests/jobs.test.mjs`, `tests/skill-sharing.test.mjs`,
+ * `tests/memory-impression.test.mjs` and `tests/speech.test.mjs`. The exact
+ * field set below keeps a per-address admission word from coming back.
+ *
  * @covers backend/http — the shared `SurfaceEntry` shape and `freezeSurface`.
  * @covers backend/identity, backend/sessions, backend/chat, backend/gateway,
  * backend/memory, backend/attachments, backend/speech, backend/bill — each row's published
@@ -60,9 +71,8 @@ const ROWS = [
 const ALL = ROWS.flatMap(([row, surface]) => surface.map(entry => ({ row, ...entry })))
 
 /** The entry fields, exactly; an added or missing field is a shape change. */
-const FIELDS = ['auth', 'body', 'method', 'path', 'prefix', 'response']
+const FIELDS = ['body', 'method', 'path', 'prefix', 'response']
 
-const AUTH = ['fence', 'authentication', 'ownership', 'role']
 const BODY = ['json', 'binary', 'none']
 const RESPONSE = ['json', 'sse', 'binary']
 
@@ -112,7 +122,6 @@ test('the nine rows publish 44 unique addresses, read-only and grouped as declar
       assert.ok(entry.path.startsWith('/'), `${row} publishes an absolute path: ${entry.path}`)
       assert.equal(entry.path.split('/')[1], entry.prefix,
         `${entry.path} must answer under its own error prefix ${entry.prefix}`)
-      assert.ok(AUTH.includes(entry.auth), `${entry.path} declares a known admission: ${entry.auth}`)
       assert.ok(BODY.includes(entry.body), `${entry.path} declares a known request body: ${entry.body}`)
       assert.ok(RESPONSE.includes(entry.response), `${entry.path} declares a known response: ${entry.response}`)
     }

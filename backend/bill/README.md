@@ -30,11 +30,11 @@ admission instead of going through `postHandler`.
   } }
 ```
 
-- **Admission is a live credential and nothing more** (`auth: 'authentication'`).
-  The bill is this Fairy's public total and belongs to no session, so an
-  ordinary agent reads exactly what the administrator reads; there is no
-  ownership or role check, and the caller comes from the credential because a
-  bill read has no body to name anyone in.
+- **Admission is a live credential and nothing more.** The bill is this Fairy's
+  public total and belongs to no session, so an ordinary agent reads exactly
+  what the administrator reads; there is no ownership or role check, and the
+  caller comes from the credential because a bill read has no body to name
+  anyone in. `tests/bill-route.test.mjs` pins the 401 and 403 answers.
 - **The order is the security claim**: fence → method → credential → aggregate.
   An anonymous caller is refused before any log is opened, and an untrusted
   `Host` is refused before the credential is even read.
