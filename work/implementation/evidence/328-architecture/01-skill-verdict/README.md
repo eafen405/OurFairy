@@ -161,3 +161,43 @@ $ OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test -- \
 两票在 `creation.ts` 的改动共存：本票的 `readVerificationReport`/`verificationVerdict`/
 `freshExecutionMissing` 与 #332 的 `candidatePackagePath`/`versionPackagePath`/
 `rehomeCandidatePackage` 均在同一文件中，typecheck 与上述测试通过。
+
+## 7. merge tip 上的整机复跑（含基线对照）
+
+在 merge tip `a155113`（已含 #332/#331，集成分支 tip `9e4a3a3`）上，低负载窗口（`load average` 4.5）
+逐文件顺序跑：
+
+```console
+$ node --test tests/skill-creation.test.mjs
+ℹ tests 16 / pass 16 / fail 0   EXIT:0
+$ node --test tests/skill-evolution.test.mjs
+ℹ tests 17 / pass 17 / fail 0   EXIT:0
+$ node --test tests/skill-learning.test.mjs
+ℹ tests 22 / pass 16 / fail 6   EXIT:1
+```
+
+learning 失败 6 条（全部是检测/claim 启动时序或 mock 回复超时，不在本票改动的判据路径上）：
+`a failure signal never counts …`、`two independent sessions reach the threshold …`、
+`a failed creation retries only its claim …`、`a late correction …`、
+`the creation prompt carries the user's recently rejected skills …`、
+`a detection interval that spends its budget …`。
+
+**基线对照**：同一 worktree `git switch --detach 9e4a3a3`（集成分支 tip，**不含 #329**），
+`OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test -- tests/skill-learning.test.mjs`：
+
+```console
+ℹ tests 22 / pass 17 / fail 5   BASELINE_EXIT:1
+✖ a failure signal never counts toward the two-session creation threshold
+✖ two independent sessions reach the threshold: one claim, one creation child, explicit no improvement
+✖ a failed creation retries only its claim, never the detection watermarks
+✖ a late correction inside a later interval revokes the earlier success and the old evidence is not rewritten
+✖ a detection interval that spends its budget is given up and only a newer closed turn releases it
+```
+
+基线（无本票改动）同样整文件失败 5 条，与本票的失败集合重叠 5/6（本票多出的 dedupe 一条在更早的
+并行运行与相关门禁里也失败过，隔离复跑通过）。结论：`skill-learning` 的全文件执行在本机存在与本票
+无关的既有 order/时序 flakiness；本票新增/改动的判据与结算行为由通过的 `skill-creation`（16/16）、
+`skill-evolution`（17/17，含 #332 的包路径 / 崩溃回迁新用例）与隔离复跑的 learning 用例覆盖。
+切换回票分支后已用 `npm test -- tests/skill-verification-report.test.mjs
+tests/skill-evolution-display.test.mjs` 重新构建并复跑（30/30，30 passed / 0 failed），确认工作树
+是票分支源码的构建产物。
