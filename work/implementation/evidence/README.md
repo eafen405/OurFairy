@@ -93,6 +93,7 @@
 | [arch-279-agent-capabilities](arch-279-agent-capabilities/README.md) | #279 用「是否用户会话」与「是否有 owner」替代 9 处 maintenance preset 判断，`MAINTENANCE_PRESET` 回到 memory 私有 |
 | [test-reliability-2026-11-05](test-reliability-2026-11-05/README.md) | 构建/测试互斥、真实并行构建验证、语音与技能取消握手、临时目录隔离 |
 | [302-context-engineering](302-context-engineering/README.md) | #302 采用 #249 的《绝区零》权威人格与昵称身份段；主会话记忆政策去重、complete 替换守卫，记忆/技能子代理 complete 隔离与恢复/深创提示冲突修复；最终 665/665 与 Android test/lint，真实模型复验未执行 |
+| [314-persona-acceptance-cleanup](314-persona-acceptance-cleanup/README.md) | #311–314 票面聚焦用户体验；清理人格词汇、字数判据与风格统计，保留采样和工具事实检查 |
 
 ## 插件生态（规格 #73）
 
