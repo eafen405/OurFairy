@@ -26,6 +26,7 @@
 | [2026-10-23-typescript-build-route.md](2026-10-23-typescript-build-route.md) | 2026-10-23 | backend/ 的 TypeScript 构建与类型检查路线：tsc 项目引用、dist 布局与模块说明符的实测结论。（#199） |
 | [2026-10-23-typescript-install-chain.md](2026-10-23-typescript-install-chain.md) | 2026-10-23 | 安装链与构建产物：`files`、`productSourceHash`、模板与 doctor 的事实层与失效路径。（#200） |
 | [2026-10-23-typescript-test-gates.md](2026-10-23-typescript-test-gates.md) | 2026-10-23 | TypeScript 迁移期的测试、构建前置与门禁分流：import 路径、build-before-test 与 CI/precommit 的分流判断。（#202） |
+| [2026-11-09-fairy-persona-review.md](2026-11-09-fairy-persona-review.md) | 2026-11-09 | #311–314 与 Fairy 人格、印象、记忆操作及真实相处验收的处理审视。 |
 | [2026-11-04-autonomous-web-intake.md](2026-11-04-autonomous-web-intake.md) | 2026-11-04 | Fairy 自主信息摄取：养鱼/B站系三范式、麦麦系人格证据、通用调度生态与成本模型，以及本仓库接缝与两档落地路径。（#303） |
 | [2026-10-26-context-memory-dreaming.md](2026-10-26-context-memory-dreaming.md) | 2026-10-26 | 上下文治理、长期记忆与 DREAMING：Letta、Mem0、Graphiti、LangMem、SillyTavern 的一手资料与复用边界。（#240） |
 | [2026-11-01-dsh-superagent-prototype.md](2026-11-01-dsh-superagent-prototype.md) | 2026-11-01 | 官方实验性插件仓库 dsh-superagent 原型的源码调查：挂载形态、原生 API 逐条对照、两层 Session 的编排与持久化，以及可复用与不可复用的逐条判断。 |
