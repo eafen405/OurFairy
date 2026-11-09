@@ -650,6 +650,12 @@ describe('background detection', () => {
       requestText(entry.body).includes('第三条属于下一区间')), 30_000)
     assert.equal(requestText(next.body).includes('先生成发布说明'), false, 'the frozen cut separates the intervals')
     assert.equal(requestText(next.body).includes('第二条还在进行中'), false)
+    const nextCut = learningState(session).cut_seq
+    assert.notEqual(nextCut, null, 'the next child must have a frozen cut before the case ends')
+    await waitFor('the next interval completion before resetting the shared script', () => {
+      const state = learningState(session)
+      return state?.status === 0 && state.watermark_seq >= nextCut
+    })
   })
 
   test('the detection prompt carries the existing task keys and a malformed key is refused before any row', async () => {
