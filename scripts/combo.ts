@@ -20,11 +20,12 @@
  * `repos.<key>.requiredBuild`, each chain in that repository's checkout. It is
  * what CI runs after checking out the locked combination. The recorded list is
  * the authority for the build: editing or deleting a step is an authoritative
- * edit that changes what the next CI run builds by design. The drift test
- * (`tests/combo-build.test.mjs`) refuses a second copy of the commands in the
- * workflow and an executor that stops calling the record; it does not refuse a
- * changed record. `--print` resolves the checkouts and prints the commands
- * without running them.
+ * edit that changes what the next CI run builds by design. The workflow test
+ * (`tests/combo-build.test.mjs`) executes its build run block with fixture
+ * commands and checks their effects after record edits and deletions. A separate
+ * literal scan flags familiar command copies as a hint, without proving that no
+ * copy exists. `--print` resolves the checkouts and prints the commands without
+ * running them.
  *
  * The research upstream baselines are not part of the combination; they live in
  * docs/research/README.md.
@@ -167,8 +168,8 @@ export function repoPath(combo: Combo, key: string, root = repoRoot): string {
 /**
  * One repository's recorded build commands and the checkout they run in.
  *
- * combo.json records the commands under `repos.<key>.requiredBuild`, and
- * nothing else copies them: this resolved list is what the CI build step runs.
+ * combo.json records the commands under `repos.<key>.requiredBuild`; this list
+ * resolves each repository's checkout before the commands run.
  */
 export interface RequiredBuild {
   readonly key: string
@@ -218,8 +219,8 @@ export type BuildRunner = (
 /**
  * Execute the build commands combo.json records, one checkout after another.
  *
- * This is the only copy of the commands. CI used to repeat them in its own YAML,
- * so changing the record left CI building the old combination. The first
+ * The executor reads the commands from the record. CI used to repeat them in
+ * its own YAML, so changing the record left CI building the old combination. The first
  * non-zero exit stops the run and throws with the repository, command, and exit
  * code, so a red CI step names the step that failed instead of only its output.
  * @param options

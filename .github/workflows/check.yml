@@ -62,7 +62,7 @@ jobs:
           fi
           echo "OURFAIRY_DSH_DIR=$RUNNER_TEMP/dsh" >> "$GITHUB_ENV"
 
-      # combo.json is the only copy of the commands: the script reads
+      # Read the recorded commands through the executor: it reads
       # repos.*.requiredBuild and runs each chain in its checkout, located
       # through OURFAIRY_DSH_DIR (written to the environment above).
       - name: Build the locked dsh combination

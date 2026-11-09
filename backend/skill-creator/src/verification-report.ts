@@ -9,9 +9,9 @@
  * is the only place that parses that JSON and answers them; the runner
  * (`./verify`) still owns producing the report.
  *
- * A missing or malformed report is never a hidden exception: it reads as an
- * incomplete empty report, so every consumer refuses it the same way instead of
- * disagreeing about how much bad data to tolerate.
+ * A missing value, invalid JSON or a non-object container reads as an incomplete
+ * empty report. The reader normalises the outer fields; scenario and comparison
+ * records retain the shape the system runner wrote and are not validated here.
  *
  * @module @ourfairy/dsh-skill-creator/src/verification-report
  */
@@ -58,9 +58,10 @@ function records<T>(value: unknown): T[] {
  *
  * A null value, broken JSON or a non-object reads as an incomplete empty report
  * stamped with the row's creation time. A field of the wrong type falls back to
- * its empty default and `complete` is only ever the literal `true`, so a
- * malformed row can never look approvable to one consumer and unreadable to
- * another.
+ * its empty default and `complete` is only ever the literal `true`. Array
+ * elements are carried through as system-written records without a schema check.
+ * The fallback and field defaults are covered by
+ * `tests/skill-verification-report.test.mjs`.
  */
 export function readVerificationReport(version: {
   readonly verification: string | null

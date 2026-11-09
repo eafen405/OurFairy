@@ -5,14 +5,13 @@
  * a second time in a bash `for step in` loop. Nothing read the recorded list, so
  * adding, changing, or deleting a step left CI running the old commands, and a
  * missing step only showed up at run time as a missing module. The `build`
- * subcommand now executes the recorded list in each checkout; these tests pin
- * both halves of that seam: the behavior (the recorded steps, in order, are what
- * runs) and the workflow shape (CI calls the executor instead of keeping a
- * copy).
+ * subcommand now executes the recorded list in each checkout. The workflow test
+ * runs its build step in a fixture and observes the recorded commands' effects,
+ * including after the record changes. A literal scan also flags familiar copies
+ * of build commands as a quick hint; it does not prove that no copy can exist.
  *
  * Editing or deleting a recorded step is an authoritative edit: it changes the
- * next build by design. The drift checks only refuse a second copy of the
- * commands in the workflow and an executor that stops following the record.
+ * next build by design.
  *
  * This file imports only `scripts/combo.ts`, so it runs without a product build
  * or a dsh checkout — the plain `node --test tests/combo-build.test.mjs` entry
@@ -20,7 +19,7 @@
  */
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -230,29 +229,84 @@ test('an empty or malformed build record is a configuration error naming the rep
   }
 })
 
-test('CI calls the executor and keeps no copy of the commands anywhere in the workflow', () => {
-  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'check.yml'), 'utf8')
-  const buildStart = workflow.indexOf('Build the locked dsh combination')
-  const buildEnd = workflow.indexOf('Full suite and combination')
-  assert.ok(buildStart >= 0, 'CI must keep a step that builds the locked dsh combination')
-  assert.ok(buildEnd > buildStart, 'the build step must stay before the full suite and unchanged in name')
-  assert.ok(
-    workflow.indexOf('Check out the locked dsh combination') < buildStart,
-    'the build step must run after the checkout step that exports OURFAIRY_DSH_DIR',
-  )
-  assert.ok(
-    workflow.indexOf('node scripts/combo.ts build') < workflow.indexOf('npm test'),
-    'the build step must run before the suite that consumes its product',
-  )
-  const step = workflow.slice(buildStart, buildEnd)
-  assert.match(step, /run: \|/u, 'the build step must still be a run step')
-  assert.match(step, /node scripts\/combo\.ts build/u, 'CI must execute the recorded build through the executor')
+/** Extract only this workflow's named build step and literal run block for Bash. */
+function workflowBuildRun(workflow) {
+  const lines = workflow.split('\n')
+  const start = lines.indexOf('      - name: Build the locked dsh combination')
+  assert.ok(start >= 0, 'the workflow must have the named combination build step')
+  const run = start + 1
+  assert.equal(lines[run], '        run: |', 'the build step must expose its literal run block')
+  const body = []
+  for (const line of lines.slice(run + 1)) {
+    if (line.trim() === '') {
+      body.push('')
+      continue
+    }
+    if (!line.startsWith('          ')) break
+    body.push(line.slice(10))
+  }
+  assert.ok(body.some(line => line.trim() !== ''), 'the build run block must not be empty')
+  return body.join('\n')
+}
 
-  // The no-copy rule covers the whole workflow, not just the build step: a copy
-  // parked in a comment, another step, or the Android job would still drift
-  // from combo.json. Editing or deleting a recorded step is the authoritative
-  // edit and changes the next build by design; what these assertions refuse is
-  // a second copy of the list, not a changed record.
+test('the workflow build step executes the combination record and follows edits and deletions', () => {
+  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'check.yml'), 'utf8')
+  const script = workflowBuildRun(workflow)
+  const root = buildFixture({ dsh: { requiredBuild: ['node ../witness.cjs first', 'node ../witness.cjs second'] } })
+  try {
+    mkdirSync(join(root, 'scripts'))
+    for (const name of ['combo.ts', 'ourfairy-composition.ts', 'cli-guard.ts']) {
+      cpSync(join(repoRoot, 'scripts', name), join(root, 'scripts', name))
+    }
+    // The workflow may enable corepack, but this fixture never installs packages.
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'corepack'), '#!/bin/sh\n[ "$#" -eq 1 ] && [ "$1" = enable ]\n', { mode: 0o755 })
+    writeFileSync(join(root, 'witness.cjs'), `
+      const { appendFileSync } = require('node:fs')
+      appendFileSync(process.env.BUILD_WITNESS, JSON.stringify({ step: process.argv[2], cwd: process.cwd() }) + '\\n')
+    `)
+    const witness = join(root, 'build.jsonl')
+    const expected = steps => steps.map(step => ({ step, cwd: join(root, 'dsh') }))
+    const assertBuild = (buildScript, steps) => {
+      writeFileSync(witness, '')
+      const run = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', buildScript], {
+        cwd: root,
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OURFAIRY_DSH_DIR: join(root, 'dsh'), BUILD_WITNESS: witness },
+        encoding: 'utf8',
+        timeout: 30_000,
+      })
+      assert.equal(run.status, 0, `the workflow build script must succeed:\n${run.stdout}\n${run.stderr}`)
+      const records = readFileSync(witness, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line))
+      assert.deepEqual(records, expected(steps), 'the workflow must execute the current recorded steps, in order and in their checkout')
+    }
+    assertBuild(script, ['first', 'second'])
+
+    const combo = JSON.parse(readFileSync(join(root, 'combo.json'), 'utf8'))
+    combo.repos.dsh.requiredBuild = ['node ../witness.cjs changed', 'node ../witness.cjs second']
+    writeFileSync(join(root, 'combo.json'), JSON.stringify(combo))
+    assertBuild(script, ['changed', 'second'])
+    combo.repos.dsh.requiredBuild = ['node ../witness.cjs changed']
+    writeFileSync(join(root, 'combo.json'), JSON.stringify(combo))
+    assertBuild(script, ['changed'])
+
+    // A comment naming the executor cannot stand in for running it. Exercise
+    // the same extraction and witness assertion on the previously missed drift.
+    const commented = workflow.replace('          node scripts/combo.ts build', '          # node scripts/combo.ts build\n          :')
+    assert.notEqual(commented, workflow, 'the negative case must replace the actual executor invocation')
+    assert.throws(
+      () => assertBuild(workflowBuildRun(commented), ['changed']),
+      { code: 'ERR_ASSERTION', message: /the workflow must execute the current recorded steps/u },
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('the workflow has no familiar build command literals as a drift hint', () => {
+  const workflow = readFileSync(join(repoRoot, '.github', 'workflows', 'check.yml'), 'utf8')
+  // This heuristic catches familiar copies, including ones in comments. It is
+  // not a check of shell behavior or a guarantee against other spellings.
   for (const copied of [
     'build:lib:host',
     'build:lib:client',
@@ -262,18 +316,15 @@ test('CI calls the executor and keeps no copy of the commands anywhere in the wo
   ]) {
     assert.ok(
       !workflow.includes(copied),
-      `CI must not spell the recorded build out a second time; found ${JSON.stringify(copied)} anywhere in check.yml`,
+      `possible copied build command ${JSON.stringify(copied)} in check.yml; keep build commands in combo.json`,
     )
   }
-  // The fixed literals above would go stale if combo.json renamed a command, so
-  // read the record too: whatever combo.json currently records must not appear
-  // anywhere in the workflow either.
   const combo = JSON.parse(readFileSync(join(repoRoot, 'combo.json'), 'utf8'))
   for (const [key, entry] of Object.entries(combo.repos)) {
     for (const recorded of entry.requiredBuild ?? []) {
       assert.ok(
         !workflow.includes(recorded),
-        `CI copies repos.${key}.requiredBuild step ${JSON.stringify(recorded)} instead of running the executor`,
+        `possible copy of repos.${key}.requiredBuild step ${JSON.stringify(recorded)} in check.yml`,
       )
     }
   }

@@ -25,13 +25,17 @@ tip 合进票分支。所有票完成后跑三轴 code-review（Standards / Spec
 | 04 候选包路径与崩溃回迁 | [#332](https://github.com/eafen405/OurFairy/issues/332) | 新增 `paths.ts`：路径词汇/校验/目录解析/候选回迁唯一实现；`unsafe` 与 `missing` 分开，启动对账都结案并留 note；publish/seed 事务顺序原样 | [04-skill-package-paths](04-skill-package-paths/README.md) |
 | 05 路由准入声明 | [#333](https://github.com/eafen405/OurFairy/issues/333) | 删除零生产消费者的 `SurfaceEntry.auth` 与 44 条声明；字段集精确断言阻止回潮；fence/认证/角色/归属一行未动 | [05-route-admission](05-route-admission/README.md) |
 | 06 文档门禁解耦 | [#334](https://github.com/eafen405/OurFairy/issues/334) | `tests/docs.test.mjs` 唯一生产改动：不再经后端 helper 取 repoRoot；新增无构建/无 dsh 副本的 fixture 回归（清 GIT_* 防 index 污染） | [06-docs-gate](06-docs-gate/README.md) |
-| 07 requiredBuild 驱动 CI | [#335](https://github.com/eafen405/OurFairy/issues/335) | `scripts/combo.ts build` 遍历组合记录执行；CI 改为调用它；doctor/README 声称收窄到实际覆盖；新增整文件无副本 + 真实记录逐条执行的漂移测试 | [07-required-build](07-required-build/README.md) |
+| 07 requiredBuild 驱动 CI | [#335](https://github.com/eafen405/OurFairy/issues/335) | `scripts/combo.ts build` 遍历组合记录执行；CI 改为调用它；doctor/README 声称收窄到实际覆盖；当前快速检查执行真实 CI build 的 `run` 片段并核对记录动作，字面副本扫描只作启发式提示，见 [后续复审](10-followup-review/README.md) | [07-required-build](07-required-build/README.md) |
 | 08 Android 通知定位 | [#336](https://github.com/eafen405/OurFairy/issues/336) | `RemoteNotificationNavigation.admits` 成为两类通知唯一的端点规范化+账号准入；Activity 只排队/调用/落点；会话归属与二次确认保留 | [08-android-notification-target](08-android-notification-target/README.md) |
 
 ## 收口评审
 
 [09-review-fixes](09-review-fixes/README.md)：三轴 code-review 的发现、处置与可失败检查（含修复批 A 的
 行为回归修复与修复批 B 的声称收窄）；[gates.md](09-review-fixes/gates.md) 是修复批 B 的逐条记录。
+
+2026-11-09 的[独立复审与小范围修复](10-followup-review/README.md)固定检查 `25a2b34...88b1916`：
+规范轴 2 项、需求轴 1 项（#335 同一根因跨两轴），分别补 CI 实际 run 的行为验证并收窄报告解析的过度注释。
+该记录包含本轮复现、八票覆盖及重新验证结果；以下验收数字保留为上一轮收口的历史记录。
 
 ## 验收
 
