@@ -3,6 +3,8 @@
 2026-11-09，审查范围固定为 `git diff 25a2b34...88b1916`。基线来自
 [任务图](../../../../tickets/328/README.md)，包含 #338 合入前的全部实现及上一轮修复。
 GitHub 元数据核对：#328 与 #329–#336 均关闭，8 张子票的开放 blocker 数均为 0。
+`gh pr view 338 --json number,mergedAt,mergeCommit,headRefOid,statusCheckRollup` 核实原 PR 于
+2026-11-08 合为 `88b1916`，历史 `full-gate` 与 `android` 均 SUCCESS；本轮未推送或触发 CI。
 本轮不发布 tracker 评论，不改 ADR、数据结构或产品权限。
 
 ## 审查方法与架构判断
@@ -80,7 +82,33 @@ GitHub 元数据核对：#328 与 #329–#336 均关闭，8 张子票的开放 b
 - 行为探针覆盖当前构建步骤的 literal run 内容，不模拟 GitHub Actions 调度及未来的 step-level if/shell/env 配置。
 - 提交不重复触发全量钩子；最终本地 main 上统一运行全量门禁，随后把结果补入本文。
 
-最终集成检查尚在运行，结果待补。
+首次集成检查（本地 `main` @ `b393221`）：
+
+- `OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm run typecheck`：exit 0。
+- `OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm run combo:verify`：三行 ok。
+- `JAVA_HOME=/home/fatfish/tools/jdk-21.0.13+9 ANDROID_HOME=/home/fatfish/tools/android-sdk ./gradlew test lintDebug`（android 目录）：BUILD SUCCESSFUL，6m31s；app 686、ui 20、highlight 52，共 758 tests，0 failures / errors，lintDebug 完成。
+- `OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test`：839 tests / 836 pass / 3 fail，0 skipped / cancelled，659.7s。
+  失败均为 `tests/skill-learning.test.mjs` 的替身观察断言：`a failure signal never counts…` 的原第 710 行（全局 `seen.creation.length` 为 2；前一条按任务键过滤的数据库断言通过）、`an uncertain review…` 的原第 726 行（全局请求数为 1；信号状态断言通过）、`a background candidate reaches…` 的原第 805 行（全局第二个 creation 请求无预期工具结果）。同时旧 claim 请求触发新用例的全局 callback，在原第 875 行产生异步断言。
+- 三项隔离：`OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test -- --test-concurrency=1 --test-name-pattern 'a failure signal never counts|an uncertain review is stored|a background candidate reaches the pending list' tests/skill-learning.test.mjs`：3/3，14.3s。
+- 原树整文件独占：`OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test -- --test-concurrency=1 tests/skill-learning.test.mjs`：23/23，156.8s。历史 [09-review-fixes](../09-review-fixes/README.md) 第 10 节也记录过这三项失败及整文件 23/23 的隔离结果。
+
+## 验收暴露的既有测试边界修正
+
+失败调查确认单文件共享的 `script`、`seen.creation` 未按 claim 隔离。`a running source session blocks…`
+用例末尾只等待第三条消息的检测请求到达，就允许下一用例 `resetScript`，旧子代理仍可能发送后续模型请求，
+吃到新脚本或触发新 case 的 callback。#329 新增判据只在子代理完成、候选已存在后的结算阶段参与，
+不能直接造成上述阈值之后的全局请求计数和请求索引断言失败。
+
+本轮只在这个已定位的用例末尾加六行：捕获第三冻结 cut，等待同源学习状态回到 0 且水位覆盖该 cut。
+请求前 claim 已持久化 cut；结算发生在 `whenIdle()` 之后且保留 cut，因此这是等待本次工作完成，
+不是重算产品算法。保留全部观察和负断言，不过滤请求、不引入通用隔离框架，不改产品逻辑。
+两位审查者独立复核通过；这封住一个明确窗口，不声称全套替身已完全隔离。
+
+修正已提交为 `1efade0` 并快进本地 main：
+
+- `OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test -- --test-concurrency=1 --test-name-pattern 'a running source session blocks|a failure signal never counts|an uncertain review is stored|a background candidate reaches|a changed candidate that only reuses' tests/skill-learning.test.mjs`：5/5，21.6s。
+- 最终 `OURFAIRY_DSH_DIR=/home/fatfish/dsh-d80522d2 npm test` 在该树独占运行：**839 tests / 839 pass / 0 fail**，52 suites，0 skipped / cancelled，637.2s；后台学习 23/23，未再出现前轮三项失败及异步断言。Android 源码与前一次完整 test/lint 的树相同，未重复运行。
+- 初始审查的两项发现与验收期间定位的六行测试同步修正均已完成；后续仅提交本证据和索引描述。
 
 本轮验证使用替身模型/网络及 Android JVM 测试；未执行真实云服务、APK 构建或真机验收。
 原始日志与 XML 不入库。
