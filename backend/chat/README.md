@@ -355,7 +355,7 @@ projection` 与 `native job stop outcome vocabulary matches the adapter` 分别�
 自己的 complete 提示。`tests/prompt-guard.test.mjs` 覆盖错乱注册顺序、后续监听器返回
 新装配、隐藏 complete 标记以及 ownerless 预设。
 
-人格定义世界观、性格与九类表达方式，并常驻六条语感参考。检索、依据、真实能力与交付要求由
+人格定义世界观、性格与表达方式，并常驻十条语感参考。检索、依据、真实能力与交付要求由
 独立的 `ourfairy:work-rules` 段承载；两段正文都在 `src/persona.ts`。`tests/remote-chat.test.mjs`
 经真实模型 HTTP 输入检查选定引文、工作规则与认证称呼，`tests/prompt-inventory.test.mjs` 检查最终分段。
 称呼由 `ownerIdentity` 按认证短号和已存昵称生成，昵称使用 JSON 引用，空昵称回退为「用户<短号>」。
