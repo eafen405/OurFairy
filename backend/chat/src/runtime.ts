@@ -222,6 +222,7 @@ export class SessionRuntime {
     }
   }
 
+  sessionWritePending(sessionId: SessionId): boolean { return this.#queues.sessionPending(sessionId) }
   /** Serialize work that writes one session. */
   runSession<T>(sessionId: SessionId, work: () => Promise<T>): Promise<T> { return this.#queues.runSession(sessionId, work) }
   /** Serialize one outgoing delivery's preparation, apart from the target session's queue. */

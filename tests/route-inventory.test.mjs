@@ -96,7 +96,7 @@ function countsOf(values) {
 const MATRIX = {
   identity: { 'POST/json/json': 6 },
   sessions: { 'POST/json/json': 7 },
-  chat: { 'POST/json/json': 9, 'POST/json/sse': 1 },
+  chat: { 'POST/json/json': 11, 'POST/json/sse': 1 },
   gateway: { 'POST/json/json': 7 },
   memory: { 'POST/json/json': 1 },
   attachments: { 'POST/json/json': 2, 'POST/binary/json': 1, 'POST/json/binary': 1 },
@@ -105,9 +105,9 @@ const MATRIX = {
   bill: { 'GET/none/json': 1 },
 }
 
-test('the nine rows publish 44 unique addresses, read-only and grouped as declared', () => {
-  assert.equal(ALL.length, 44, 'the product HTTP surface is 44 addresses')
-  assert.equal(new Set(ALL.map(entry => entry.path)).size, 44, 'every published path is unique')
+test('the nine rows publish 46 unique addresses, read-only and grouped as declared', () => {
+  assert.equal(ALL.length, 46, 'the product HTTP surface is 46 addresses')
+  assert.equal(new Set(ALL.map(entry => entry.path)).size, 46, 'every published path is unique')
 
   for (const [row, surface] of ROWS) {
     assert.ok(Object.isFrozen(surface), `${row} must publish its SURFACE as a read-only array`)
@@ -123,15 +123,15 @@ test('the nine rows publish 44 unique addresses, read-only and grouped as declar
   }
 
   assert.deepEqual(countsOf(ALL.map(entry => entry.row)), {
-    identity: 6, sessions: 7, chat: 10, gateway: 7, memory: 1, attachments: 4, speech: 2, skills: 6, bill: 1,
+    identity: 6, sessions: 7, chat: 12, gateway: 7, memory: 1, attachments: 4, speech: 2, skills: 6, bill: 1,
   }, 'the rows must publish the declared number of addresses')
 
-  // The chat row owns nine chat addresses and serves the session family's one
+  // The chat row owns eleven chat addresses and serves the session family's one
   // rename address; the prefix counts therefore differ from the row counts.
-  assert.deepEqual(countsOf(CHAT_SURFACE.map(entry => entry.prefix)), { chat: 9, sessions: 1 },
-    'the chat row publishes nine chat addresses and the one session rename')
+  assert.deepEqual(countsOf(CHAT_SURFACE.map(entry => entry.prefix)), { chat: 11, sessions: 1 },
+    'the chat row publishes eleven chat addresses and the one session rename')
   assert.deepEqual(countsOf(ALL.map(entry => entry.prefix)), {
-    identity: 6, sessions: 8, chat: 9, gateway: 7, impression: 1, attachments: 4, speech: 2, skills: 6, bill: 1,
+    identity: 6, sessions: 8, chat: 11, gateway: 7, impression: 1, attachments: 4, speech: 2, skills: 6, bill: 1,
   }, 'the error-prefix grouping is the one the addresses answer with')
 
   const renames = CHAT_SURFACE.filter(entry => entry.prefix === 'sessions')
@@ -148,11 +148,11 @@ test('each row serves the method/body/response matrix it publishes', () => {
     )
   }
 
-  assert.deepEqual(countsOf(ALL.map(entry => entry.method)), { POST: 42, GET: 2 },
+  assert.deepEqual(countsOf(ALL.map(entry => entry.method)), { POST: 44, GET: 2 },
     'every address is POST except the speech availability read and the bill read')
-  assert.deepEqual(countsOf(ALL.map(entry => entry.body)), { json: 40, binary: 2, none: 2 },
-    '40 addresses read a JSON object; chunk and transcriptions read raw bytes; the two GETs read none')
-  assert.deepEqual(countsOf(ALL.map(entry => entry.response)), { json: 42, sse: 1, binary: 1 },
+  assert.deepEqual(countsOf(ALL.map(entry => entry.body)), { json: 42, binary: 2, none: 2 },
+    '42 addresses read a JSON object; chunk and transcriptions read raw bytes; the two GETs read none')
+  assert.deepEqual(countsOf(ALL.map(entry => entry.response)), { json: 44, sse: 1, binary: 1 },
     'every address answers JSON except the SSE and download responses')
 })
 
