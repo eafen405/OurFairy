@@ -1,6 +1,6 @@
 # Android 命令输入、状态呈现与重连恢复
 
-Part of #342。依赖前置后端命令票，GitHub 原生 blocked-by 为实时权威。
+Part of #342。后端票已交付固定协议，本票可独立接线并与 #343 剩余实现/验证并行；GitHub 原生 blocked-by 为实时权威。协议见 [合同](protocol.md)，集成前合入 #343 的最终实现。
 
 ## 指针与范围
 

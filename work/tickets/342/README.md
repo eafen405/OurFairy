@@ -9,11 +9,11 @@
 | 票 | 本地副本 | 阻塞于 | 交付 |
 | --- | --- | --- | --- |
 | [#343](https://github.com/eafen405/OurFairy/issues/343) | [后端命令](01-backend.md) | — | 现成 compact、最小 clear、稳定操作结果、日志投影与后端协议 |
-| [#344](https://github.com/eafen405/OurFairy/issues/344) | [Android 接线](02-android.md) | #343 | 候选、焦点、青色识别、发送分流、状态和恢复 |
+| [#344](https://github.com/eafen405/OurFairy/issues/344) | [Android 接线](02-android.md) | 协议已交付 | 候选、焦点、青色识别、发送分流、状态和恢复 |
 | [#345](https://github.com/eafen405/OurFairy/issues/345) | [保留与恢复验收](03-integration.md) | #343 | 记忆/技能保留、维护/投递竞争、分页/观察与故障恢复 |
 | [#346](https://github.com/eafen405/OurFairy/issues/346) | [集成收口](04-closeout.md) | #344 #345 | 证据、全量门禁、两轴审查与清场 |
 
-起始 frontier 只有 #343；#343 关闭后 #344 与 #345 并行。每票一个 fresh implementer、一个独立 worktree/分支，从集成最新 tip 开出，交付前再合入集成最新 tip，由 merger 合入。
+起始 frontier 只有 #343；随后 #343 先冻结并交付了 [客户端合同](protocol.md)，#344 的协议前置已满足，因此解除其原生阻塞边，与 #343 剩余实现/验证并行。#345 仍在 #343 关闭后开工，#346 等待 #344/#345。每票一个 fresh implementer、一个独立 worktree/分支，从集成最新 tip 开出，交付前再合入集成最新 tip，由 merger 合入。
 
 ## 复用与范围决定
 
