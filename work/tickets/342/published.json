@@ -1,0 +1,26 @@
+{
+  "parent": 342,
+  "title": "Android 会话命令与上下文重置",
+  "children": [
+    {
+      "file": "01-backend.md",
+      "issue": 343,
+      "title": "会话命令后端：复用原生压缩与轻量上下文重置"
+    },
+    {
+      "file": "02-android.md",
+      "issue": 344,
+      "title": "Android 命令输入、状态呈现与重连恢复"
+    },
+    {
+      "file": "03-integration.md",
+      "issue": 345,
+      "title": "会话命令保留语义、竞争与恢复的组合验收"
+    },
+    {
+      "file": "04-closeout.md",
+      "issue": 346,
+      "title": "会话命令集成收口、审查与交付证据"
+    }
+  ]
+}

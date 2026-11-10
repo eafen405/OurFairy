@@ -5,7 +5,7 @@
     "ourfairy": {
       "role": "product",
       "lock": "integration-branch",
-      "integrationBranch": "main"
+      "integrationBranch": "integration/spec-342"
     },
     "dsh": {
       "role": "backend-harness",
