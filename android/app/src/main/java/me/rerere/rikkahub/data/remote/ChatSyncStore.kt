@@ -43,6 +43,7 @@ data class ChatSyncRecord(
      * owes; reception sees every session and publishes each owed session's reminder.
      */
     val notificationOwed: Boolean = false,
+    val pendingCommand: StoredSessionCommand? = null,
 )
 
 interface ChatSyncStore {

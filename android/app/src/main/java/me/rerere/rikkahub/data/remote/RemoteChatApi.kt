@@ -73,7 +73,7 @@ data class RemoteChatMessage(
     val text: String,
     val attachments: List<RemoteChatAttachment> = emptyList(),
     val tools: List<String> = emptyList(),
-    /** Derived rows only: 1 skill activation; 2 is reserved for the skill review row. */
+    /** Derived rows only: 1 skill activation, 2 skill review, 3 session command. */
     val kind: Int? = null,
     /** The tool call a derived row was paired with; ordinary messages carry none. */
     val toolCallId: String? = null,
@@ -81,6 +81,11 @@ data class RemoteChatMessage(
     val turn: Int = 0,
     /** The turn's settled spend, on the turn's last Fairy row only. */
     val usage: RemoteChatUsage? = null,
+    /** Derived kind 3: session command identity and result. */
+    val commandId: String? = null,
+    val command: Int? = null,
+    val commandStatus: Int? = null,
+    val commandError: RemoteSessionCommandError? = null,
 )
 
 /** One settled turn's token buckets, as the provider reported them. */
@@ -204,6 +209,7 @@ internal data class ChatEnvelope(
     val projection: RemoteChatProjection? = null,
     val page: ChatHistoryPage? = null,
     val durableThroughSeq: Long? = null,
+    val command: RemoteSessionCommandSnapshot? = null,
     val error: Failure? = null,
 ) {
     @Serializable
@@ -232,7 +238,17 @@ class RemoteChatApi(
     private val baseUrl: String,
     private val client: OkHttpClient,
     private val json: Json = Json { ignoreUnknownKeys = true },
-) : RemoteChatBackend {
+) : RemoteChatBackend, RemoteSessionCommandBackend {
+
+    @Serializable
+    private data class CommandDocument(val sessionId: String, val requestId: String, val command: Int)
+
+    override suspend fun executeCommand(token: String, sessionId: String, requestId: String, command: Int): RemoteSessionCommandSnapshot =
+        call("/chat/commands/execute", json.encodeToString(CommandDocument(sessionId, requestId, command)), token).command
+            ?: throw IdentityUnreachable(IllegalStateException("the backend omitted the command result"))
+
+    override suspend fun commandStatus(token: String, sessionId: String, requestId: String): RemoteSessionCommandSnapshot? =
+        call("/chat/commands/status", json.encodeToString(ReceiptDocument(sessionId, requestId)), token).command
 
     /**
      * `/chat/read`: one POST naming only the session, so the backend's default
