@@ -1,6 +1,6 @@
 # Android 会话命令设计记录
 
-状态：交互设计于 2026-11-10 确认，正式规格已发布为 [#342](https://github.com/eafen405/OurFairy/issues/342)。#343/#344/#345/#347 已合入 `integration/spec-342`；最终门禁与未执行项见[收口证据](../../work/implementation/evidence/342-session-commands/04-closeout/README.md)。Standards/Spec 两轴审查 **PENDING**，由 Lead 后续补齐。
+状态：交互设计于 2026-11-10 确认，正式规格已发布为 [#342](https://github.com/eafen405/OurFairy/issues/342)。#343/#344/#345/#347 已合入 `integration/spec-342`；最终门禁与未执行项见[收口证据](../../work/implementation/evidence/342-session-commands/04-closeout/README.md)。Standards/Spec 两轴各 1 个 P2 已修复，并获各自原 reviewer 定点确认 RESOLVED；原报告、Root claims check 与确认范围见 [06](../../work/implementation/evidence/342-session-commands/06-review-fixes/README.md)，不是第二轮全量 review。
 
 本文保留设计访谈与发布时的只读调查，不把历史缺口当作当前状态。现行需求见[会话命令规格](../specs/session-commands.md)，接口统一见[协议合同](../../work/tickets/342/protocol.md)。产品术语见[产品词汇表](../../GLOSSARY.md)，记忆与技能分别遵循[记忆词汇表](../glossary/memory.md)和[技能词汇表](../glossary/skill.md)。
 
@@ -91,4 +91,4 @@
 
 ## 本轮收口
 
-Q1–Q9 的交互决策均已由用户确认，无剩余产品交互分支。设计访谈阶段仅交付设计与术语文档，前述代码事实来自发布前只读调查；随后通过 `/to-spec` 转写正式规格，并在测试接缝获得用户确认后发布为 [#342](https://github.com/eafen405/OurFairy/issues/342)。后续 #343/#344 交付命令及 Android 接线，#345 补充保留/恢复组合行为测试，#347 修复并锁定原生冷读取；本记录不重开已确认产品决定。最终全量结果、两轴审查 PENDING 与未执行的设备/真实服务验收以[收口证据](../../work/implementation/evidence/342-session-commands/04-closeout/README.md)为准。
+Q1–Q9 的交互决策均已由用户确认，无剩余产品交互分支。设计访谈阶段仅交付设计与术语文档，前述代码事实来自发布前只读调查；随后通过 `/to-spec` 转写正式规格，并在测试接缝获得用户确认后发布为 [#342](https://github.com/eafen405/OurFairy/issues/342)。后续 #343/#344 交付命令及 Android 接线，#345 补充保留/恢复组合行为测试，#347 修复并锁定原生冷读取；本记录不重开已确认产品决定。最终全量结果、两轴原 finding 的定点 RESOLVED 确认与未执行的设备/真实服务验收以[收口证据](../../work/implementation/evidence/342-session-commands/04-closeout/README.md)及其 06 审查记录为准。

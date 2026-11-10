@@ -1,5 +1,7 @@
 # #342 两轴 review fixes
 
+> 下列 source 修复及 merger 构建各节保留各自阶段的命令、heads 和交接状态；其中“最终 full 待 Root/#346”指当时的前置边界。其后 #346 在 `de9ba53` + native `2b05c48` 上的首轮失败、最小 test-only 夹具修复与最终完整门禁统一见 [04 当前记录](../04-closeout/README.md#审查后最终完整门禁当前)。原两轴 reviewer 的定点 RESOLVED 确认保持原范围，没有重写为第二轮全量 review。
+
 同一 fresh implementer 在两个独占 worktree 修复已接受的 Standards P2 与 Spec P2，没有再分实现代理。产品分支 `ticket/342-review-fixes` 从精确 `02c6e6d0e29e7acb10d2032b63a5fda79cff2297` 创建，native 分支 `ticket/342-review-native` 从精确 `8014fc775a27e7273300a68fcadb7e2980bb93f0` 创建；两个开工基线均 clean。source 交付时产品 native pin 仍为 8014，留给 Lead merger 统一更新；implementer 没有修改 primary/master、Root integration、#346 原 worktree 或旧 dsh 工作区。后续实际合入与最终 pin 见[merger 交接](#merger-最终组合与构建交接)。
 
 ## 原始审查与 Root claims check
@@ -114,3 +116,21 @@ native 最终构建在 PRIMARY exact `2b05c48` 顺序执行；PATH 前置 Root �
 merger 不重跑 native source 已通过的行为测试，也没有把 doctor 构建/装配检查写成真实模型、真机或完整产品门禁通过。metadata 提交按 Lead 明确授权使用产品侧 `git commit --no-verify`，最终 full 留给 Root/#346；native source 的正常 hooks 记录仍如上。#342/#346 保持 OPEN；无 push、issue close、清 worktree 或 SourceFix 写入。
 
 最终暂存范围仅 combo pin + 本页/04/规格证据入口共 4 files。`git diff --exit-code f733e0d -- android backend tests scripts package.json tsconfig.json` exit0，`git diff --check` 与 `git diff --cached --check` exit0；native primary 和两个 source 均再次 clean。`node --test tests/docs.test.mjs` exit0，2 tests / 2 pass / 0 fail、cancelled、skipped、todo（`09-docs-test.log`）；`npm run evidence:index -- --check` exit0、current（`10-evidence-index-check.log`）。本段只补结果数字，无链接或实现变更。最终提交前 `npm run specs:status -- --offline` exit1 唯一 need-attention 为 #342 unpushed，tip `f733e0d`、9 ahead、copies ok（`11-specs-status-final.log`）；符合 no-push 安排，不记作测试失败。五个 merger 托管 job 均已 `job_output` 收集，`job_list` 无运行中任务，无需取消；原始日志保留供 Root 复查。
+
+## #346 审查后最终完整产品门禁
+
+#346 原独立 worktree 已从 `02c6e6d` 以 `git merge --ff-only integration/spec-342` 精确快进到产品 **`de9ba53ce4f8e9e42c548b99f0a5c3ed31d08932`**，native PRIMARY master/HEAD 为 **`2b05c480ec6377f7a592a1d4d7a379584aba2bf5`**，开工均 clean。原 Node 854 / Android 787 是更早组合的 HISTORICAL；本节与 [04 当前完整记录](../04-closeout/README.md#审查后最终完整门禁当前)才记录审查后执行结果。
+
+首次最终 Node 实际为 853/854、1 fail：quiet job 用例期待 report.status0，实际3。Root 授权在同一公开 HTTP/native-job 接缝归因；独立负对照证明 busy-context seq25 在初始 turn1/end seq33 前已于seq28消费，正对照先 idle 再释放真实 job 得到 quiet-context/status0且后续真实 turn2消费，原全部断言通过。这些 seq 是独立对照，不是给原 full 补造 trace。仅修复 `tests/jobs.test.mjs` 的固定 `.3` 完成时机为真实脚本门闩，保留全部原语义断言，未改 production 或扩大矩阵。整文件 10/10 通过后才重新开始完整门禁。
+
+最终测试树为 `de9ba53` 加上述唯一 test-only diff，fixed jobs blob **`d290140de0f0045d2049a35f5fb8e78b71588cff`**；运行实现、Android 和配置仍精确对应 `de9ba53`。最终完整运行启动后只编辑 work/docs 证据。没有重复 native 构建或宽门禁；native 2b 的四条 requiredBuild、artifacts7/7、随后 build:check2/2、doctor12/12沿用上方 merger 实测，不转称 #346 重跑。
+
+| 最终顺序实际命令 | 实际结果 | ignored log（#346 worktree 的 `work/tmp/346/`） |
+| --- | --- | --- |
+| `OURFAIRY_DSH_DIR=/home/fatfish/deepseek-harness npm test`（jobs 夹具修复后） | **exit0；854 tests / 52 suites / 854 pass / 0 fail、cancelled、skipped、todo；824644.793399ms** | `post-review-npm-test-fixed.log` |
+| `OURFAIRY_DSH_DIR=/home/fatfish/deepseek-harness npm run combo:verify`（最终 Node 后） | **exit0；产品 de9 / native2b / Androidsource460109d1 三行ok，无 skipped** | `post-review-combo-verify.log` |
+| `JAVA_HOME=/home/fatfish/tools/jdk-21.0.13+9 ANDROID_HOME=/home/fatfish/tools/android-sdk ./gradlew test lintDebug --max-workers=2`（android/） | **exit0；BUILD SUCCESSFUL in4m25s，130 tasks（15 executed / 115 up-to-date）；JUnit 89 suites / 791 tests / 0 failures、errors、skipped；lint0 errors / 42 warnings / 2 hints**，app实际执行，未变highlight/ui增量复用 | `post-review-android-test-lint.log` |
+
+原 Standards/Spec 各1个P2的原报告与原 reviewer 定点 RESOLVED 确认仍按上文保留，无原 finding remaining；Root 已复核可执行声称并确认上述最小 fixture 修复不弱化原断言。本轮没有新全量 review 或 CI 通过声称。首轮失败、短 loop/正负对照、related 与最终 full 不能累加为不同测试总数。逐 suite 计数、实际 lint、最终文档/index/combo门禁及未执行项以 [04](../04-closeout/README.md)为准。真机、真实模型/ASR、多设备、APK构建安装和 connected tests仍未执行；#342/#346保持OPEN，产品push/票关闭由Root接管，#346不push、不close、不清worktree。
+
+Root 在最终产品 full 全绿后报告：已正常推送 native fork `master` 至 `2b05c480ec6377f7a592a1d4d7a379584aba2bf5`，未绕过 hook；该次真实 pre-push typecheck **5/5 PASS，29.20s**，hook总计35.38s，remote从ae2更新至2b成功。原始记录在 **Root** ignored `work/tmp/347/native-final-push.log`，这不是 #346 执行或重跑的 native gate；远端SHA核对与产品后续push由Root继续接管，不以本执行者名义声称已推送产品。

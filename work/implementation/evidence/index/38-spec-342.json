@@ -5,7 +5,7 @@
       "dirs": [
         "342-session-commands"
       ],
-      "note": "#343/#344/#345/#347 已合入：原生 compact、同会话 clear、数字操作状态与稳定身份恢复、Android 候选/焦点/颜色/发送和草稿保护、保留/恢复/投递竞争组合测试；最终 DSH 锁 8014fc7，原生交付及其宽文档四项基线失败见 05。#346 记录最终完整 Node、combo、Android test/lint 的实际计数和工具链；当前协议统一指向 work/tickets/342/protocol.md，旧证据为历史快照。Standards/Spec 两轴各 1 P2 已修复，原报告及新 focused 红绿/录制回放证据见 06，待 Lead 最终集成复验；旧 full 不充作 Android 修复后最终门禁；真机、真实模型/ASR、APK 构建/安装未执行，不宣称全部 64 条故事设备验收。"
+      "note": "#343/#344/#345/#347 已合入：原生 compact、同会话 clear、稳定命令身份/耐久反馈、Android 候选/焦点/颜色/恢复及保留/竞争组合测试。当前 native 锁 2b05c48；两轴原各1个P2已修复并获各自原 reviewer 定点RESOLVED，Root claims已复核，不冒称第二轮全量review或CI。#346在产品de9+唯一jobs夹具diff上顺序完成Node854/854、combo三行ok、Android89 suites/791 tests（0failures/errors/skipped）+lint0errors/42warnings/2hints；首轮853/854失败、busy/idle正负对照和只建立idle前置的test-only门闩修复见04。旧854/787为历史快照，原报告/native2b构建和最终产品结果见06，native宽文档4项BASELINE失败仍见05。当前协议仅维护在work/tickets/342/protocol.md；真机、多设备、真实模型/ASR、APK构建安装未执行，不宣称全部64条故事设备验收。"
     }
   ]
 }

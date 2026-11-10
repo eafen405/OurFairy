@@ -1,6 +1,6 @@
 # Android 会话命令与上下文重置规格
 
-实施状态（2026-11-10）：#343/#344/#345/#347 已合入 `integration/spec-342`；#346 已记录最终完整 Node、combo 与 Android test/lint 门禁结果。当前[协议合同](../../work/tickets/342/protocol.md)、[任务图](../../work/tickets/342/README.md)和[证据入口](../../work/implementation/evidence/342-session-commands/README.md)分别承载接口、进度与执行事实。Standards/Spec 两轴各发现 1 个 P2，已修复待最终集成复验，见 [review fixes](../../work/implementation/evidence/342-session-commands/06-review-fixes/README.md)；真机与真实模型/ASR 验收未执行。
+实施状态（2026-11-10）：#343/#344/#345/#347 已合入 `integration/spec-342`；#346 已记录最终完整 Node、combo 与 Android test/lint 门禁结果。当前[协议合同](../../work/tickets/342/protocol.md)、[任务图](../../work/tickets/342/README.md)和[证据入口](../../work/implementation/evidence/342-session-commands/README.md)分别承载接口、进度与执行事实。Standards/Spec 两轴各发现 1 个 P2，已修复并获各自原 reviewer 定点确认 RESOLVED；审查后最终组合已完成完整 Node、combo 与 Android test/lint，见 [review fixes](../../work/implementation/evidence/342-session-commands/06-review-fixes/README.md)及[当前最终证据](../../work/implementation/evidence/342-session-commands/04-closeout/README.md#审查后最终完整门禁当前)，不是第二轮全量 review；真机与真实模型/ASR 验收未执行。
 
 ## Problem Statement
 
@@ -204,6 +204,6 @@
 - 产品身份、会话和权限继续服从[首版总规格](https://github.com/eafen405/OurFairy/issues/23)。本增量承接[记忆与上下文治理](https://github.com/eafen405/OurFairy/issues/240)及[技能系统](https://github.com/eafen405/OurFairy/issues/295)，不改变它们各自的事实与权限边界。
 - 沿用 ADR-0001 的原生接缝复用原则，以及 ADR-0003、ADR-0004 的技能运行时和审核边界；本规格不重新定义记忆失效或技能批准语义。
 - 发布时的只读能力调查以 DSH fork `ae2adffd8d67773e125b8048120cf9ad2ba7edf3` 为依据。它记录当时已有立即压缩、尚无已核实的上层 clear API；不代表当前功能状态，也不以 Harness GUI 的安装版本作为产品能力依据。
-- 实施后，产品通过既有会话维护、surface replacement、队列和 barrier 接入命令。#347 修复 V4 冷读取的投递 literal、晚到 system 和实际 system 首节点保护；最终产品锁为 `8014fc775a27e7273300a68fcadb7e2980bb93f0`，详见[原生修复证据](../../work/implementation/evidence/342-session-commands/05-native-reader/README.md)。
+- 实施后，产品通过既有会话维护、surface replacement、队列和 barrier 接入命令。#347 修复 V4 冷读取的投递 literal、晚到 system 和实际 system 首节点保护，交付时产品锁为 `8014fc775a27e7273300a68fcadb7e2980bb93f0`，详见[原生修复证据](../../work/implementation/evidence/342-session-commands/05-native-reader/README.md)。审查后补齐既有 SDK keyless recorded-session、delivery helper 与 host 检查，当前锁为 `2b05c480ec6377f7a592a1d4d7a379584aba2bf5`，见 [06 的修复与 merger 证据](../../work/implementation/evidence/342-session-commands/06-review-fixes/README.md)。
 - 重置后的旧内容仍可能经长期记忆或后续维护重新成为 Fairy 的认识，这是保留记忆和技能学习的预期结果，不是本规格承诺的遗忘能力。
 - 本文保留发布时的需求与验收要求；当前执行结果和未执行项只记在[收口证据](../../work/implementation/evidence/342-session-commands/04-closeout/README.md)，不把自动化通过写成全部 64 条故事的设备验收。

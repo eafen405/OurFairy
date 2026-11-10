@@ -313,16 +313,22 @@ test('configured quiet completion leaves context for later without inventing pen
   const overlay = writeOverlay(home, [{ id: 'tool-jobs', config: { completionDelivery: 'quiet' } }], 'quiet.patch.yml')
   await start([overlay])
   const sessionId = (await request('/sessions/create', alice.token)).session.id
-  await startJob(alice, sessionId, 'sleep .3; printf quiet-result')
-  const quiet = await until(() => projection(alice, sessionId), p => p.tasks[0].status === 3 && p.replyStatus === 0, 'quiet result retained')
-  assert.equal(quiet.tasks[0].report.status, 0)
-  assert.equal(quiet.activity.status, 1)
-  assert.ok(!quiet.messages.some(message => message.text.startsWith('REPORT:')))
-  assert.ok(quiet.events.some(event => event.type === 'jobs/report' && event.data.delivery === 'quiet-context'))
-  await send(alice, sessionId, '__CHAT__')
-  const later = await until(() => projection(alice, sessionId), p => p.tasks[0].report.status === 3, 'quiet context entered later real turn')
-  assert.equal(later.activity.status, 1)
-  assert.notEqual(later.activity.completed.episodeId, quiet.activity.completed.episodeId)
+  const release = () => writeFileSync(join(home, 'dsh-home', 'spaces', 'private', String(alice.user.shortId), 'quiet-completion-release'), 'ready')
+  try {
+    // Completion during a reply is busy-context; this case needs an idle source first.
+    await startJob(alice, sessionId, 'while [ ! -f quiet-completion-release ]; do sleep .02; done; printf quiet-result')
+    await until(() => projection(alice, sessionId), p => p.tasks[0].status === 1 && p.replyStatus === 0, 'initial reply ended before releasing quiet job')
+    release()
+    const quiet = await until(() => projection(alice, sessionId), p => p.tasks[0].status === 3 && p.replyStatus === 0, 'quiet result retained')
+    assert.equal(quiet.tasks[0].report.status, 0)
+    assert.equal(quiet.activity.status, 1)
+    assert.ok(!quiet.messages.some(message => message.text.startsWith('REPORT:')))
+    assert.ok(quiet.events.some(event => event.type === 'jobs/report' && event.data.delivery === 'quiet-context'))
+    await send(alice, sessionId, '__CHAT__')
+    const later = await until(() => projection(alice, sessionId), p => p.tasks[0].report.status === 3, 'quiet context entered later real turn')
+    assert.equal(later.activity.status, 1)
+    assert.notEqual(later.activity.completed.episodeId, quiet.activity.completed.episodeId)
+  } finally { release() }
 })
 
 test('accepted consecutive turns form one execution episode and canceled parked input does not stay active', async () => {
