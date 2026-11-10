@@ -10,14 +10,17 @@
 | --- | --- | --- | --- |
 | [#343](https://github.com/eafen405/OurFairy/issues/343) | [后端命令](01-backend.md) | — | 现成 compact、最小 clear、稳定操作结果、日志投影与后端协议 |
 | [#344](https://github.com/eafen405/OurFairy/issues/344) | [Android 接线](02-android.md) | 协议已交付 | 候选、焦点、青色识别、发送分流、状态和恢复 |
-| [#345](https://github.com/eafen405/OurFairy/issues/345) | [保留与恢复验收](03-integration.md) | #343 | 记忆/技能保留、维护/投递竞争、分页/观察与故障恢复 |
+| [#345](https://github.com/eafen405/OurFairy/issues/345) | [保留与恢复验收](03-integration.md) | #343 #347 | 记忆/技能保留、维护/投递竞争、分页/观察与故障恢复 |
 | [#346](https://github.com/eafen405/OurFairy/issues/346) | [集成收口](04-closeout.md) | #344 #345 | 证据、全量门禁、两轴审查与清场 |
+| [#347](https://github.com/eafen405/OurFairy/issues/347) | [DSH 冷读取修复](05-native-reader.md) | — | V4 关系校验正确折叠既有投递 surface 节点，更新组合锁 |
 
 起始 frontier 只有 #343；随后 #343 先冻结并交付了 [客户端合同](protocol.md)，#344 的协议前置已满足，因此解除其原生阻塞边，与 #343 剩余实现/验证并行。#345 仍在 #343 关闭后开工，#346 等待 #344/#345。每票一个 fresh implementer、一个独立 worktree/分支，从集成最新 tip 开出，交付前再合入集成最新 tip，由 merger 合入。
 
 ## 复用与范围决定
 
 用户 2026-11-10 澄清：`/clear` 尚未实现、功能简单。`/compact` 调用锁定 DSH 的 `ctx.compaction.compactNow`；`/clear` 复用 surface replacement、`agent.runMaintenance`、现有会话队列和持久 barrier。优先沿用原生 `command/run`、`command/done` 日志以及带产品 source 的 replacement，不新增原生必需事件、业务表、命令平台或第二份历史。实际协议以 #343 的交付记录为准。
+
+#343 与 #344 已合入并关闭。#345 的确定性投递/clear 冷恢复回归发现，锁定 DSH 的 V4 relationships 校验器遗漏已受 core Session 支持的 `delivery/message`，因此它维护的 surface 不含投递节点，拒绝真实 prune/replacement 的区间。新增 #347，仅修既有事件的折叠与正反回归；完成原生构建和产品锁更新后继续 #345。没有新增格式版本、持久事件或业务表。
 
 数据影响限于现有追加日志的命令/结果/重置表达、聊天投影及客户端待恢复操作元数据；不迁移记忆或技能库。原始日志、主会话身份和维护/学习水位保留。
 

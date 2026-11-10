@@ -21,6 +21,11 @@
       "file": "04-closeout.md",
       "issue": 346,
       "title": "会话命令集成收口、审查与交付证据"
+    },
+    {
+      "file": "05-native-reader.md",
+      "issue": 347,
+      "title": "DSH V4 冷读取器识别投递消息的 surface 位置"
     }
   ]
 }
