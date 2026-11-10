@@ -1,5 +1,7 @@
 # #346 会话命令最终集成门禁与交接
 
+> 本页下列运行固定于 review fixes 之前的 `0886f18` + native `8014fc7`；Node 854 / Android 787 是历史 full，不能替代修复后最终组合的全量门禁。两仓修复已 FF，产品修复为 `f733e0d`、native pin 为 `2b05c48`，merger 构建与交接见 [06](../06-review-fixes/README.md#merger-最终组合与构建交接)。#346 由 Root 接回最终完整门禁，#342/#346 保持 OPEN。
+
 2026-11-10，独立 worktree `/home/fatfish/OurFairy/.worktrees/346-session-command-closeout`，分支 `ticket/346-session-command-closeout`。从最新 `integration/spec-342` 精确 `0886f18a652d9c8e920f026b76b554eacd924115` 创建，开工 HEAD 与该 tip 相等且干净。本票仅整理文档、证据描述与索引，没有改产品源码、测试代码、包配置或 DSH。最终门禁测试代码及运行实现固定在该 OurFairy 提交；文档完成后另用既有文档/索引检查覆盖最终内容。
 
 ## 固定组合与工具链
@@ -184,7 +186,7 @@ python3 work/tmp/346/summarize_android.py android/app/build/test-results/testDeb
 
 ## 审查与未执行项
 
-- **Standards / Spec：各发现 1 个 P2，发现并修复待最终集成复验。** 固定审查基线为 OurFairy `02c6e6d` 与 DSH `8014fc7`；原始两轴报告、Root 可执行声称检查、同一 fresh implementer 的修复与新 focused evidence 见 [06 review fixes](../06-review-fixes/README.md)。本页的 Node 854 / Android 787 是修复前基线的历史 full，不能用作 Android 修复后最终组合的完整门禁。
+- **Standards / Spec：各原有 1 个 P2，已修复合入并获各自原 reviewer 定点确认 RESOLVED。** 原固定审查基线为 OurFairy `02c6e6d` 与 DSH `8014fc7`；定点确认源码为产品 `f733e0d` / native `2b05c48`，不是第二轮全量 review。原始两轴报告、Root 可执行声称检查、修复与 focused evidence 见 [06 review fixes](../06-review-fixes/README.md)。本页的 Node 854 / Android 787 是修复前基线的历史 full，不能用作修复后最终组合的完整门禁；最终 full 待 Root 接回 #346。
 - 没有 adb 设备；真机候选、软键盘焦点、主题可读性、真实多设备与通知验收未执行。Robolectric/公共状态不替代这些验收。
 - 未调用真实云模型、真实 ASR 或其他外部服务；替身请求只证明当前组合的可观察行为。未构建/安装本轮 APK，未执行 connected/instrumented 设备测试。
 - Native full tests/coverage/platform matrix/full lint/full doc-sync 未在本票执行。05 已记录的宽文档四项基线失败不扩修，不称原生全绿。

@@ -1,6 +1,6 @@
 # #342 两轴 review fixes
 
-同一 fresh implementer 在两个独占 worktree 修复已接受的 Standards P2 与 Spec P2，没有再分实现代理。产品分支 `ticket/342-review-fixes` 从精确 `02c6e6d0e29e7acb10d2032b63a5fda79cff2297` 创建，native 分支 `ticket/342-review-native` 从精确 `8014fc775a27e7273300a68fcadb7e2980bb93f0` 创建；两个开工基线均 clean。产品 native pin 仍为 8014，待 Lead merger 合并 native 后统一更新；没有修改 primary/master、Root integration、#346 原 worktree 或旧 dsh 工作区。
+同一 fresh implementer 在两个独占 worktree 修复已接受的 Standards P2 与 Spec P2，没有再分实现代理。产品分支 `ticket/342-review-fixes` 从精确 `02c6e6d0e29e7acb10d2032b63a5fda79cff2297` 创建，native 分支 `ticket/342-review-native` 从精确 `8014fc775a27e7273300a68fcadb7e2980bb93f0` 创建；两个开工基线均 clean。source 交付时产品 native pin 仍为 8014，留给 Lead merger 统一更新；implementer 没有修改 primary/master、Root integration、#346 原 worktree 或旧 dsh 工作区。后续实际合入与最终 pin 见[merger 交接](#merger-最终组合与构建交接)。
 
 ## 原始审查与 Root claims check
 
@@ -72,8 +72,45 @@ Root 原检查确认的 commandResult.seq <= cut、Android terminal seq > durabl
 
 两 repo 交付前分别 `git merge --no-edit integration/spec-342` / `git merge --no-edit master`，均 exit0 Already up to date，target 仍为上述基线。`OURFAIRY_DSH_DIR=/home/fatfish/deepseek-harness npm run combo:verify` exit0，产品 based-on integration、native 8014、Android source 460109d1 三行 ok，无 skipped。descriptor 更新后用 `npm run evidence:index` 生成索引，再 `-- --check` 通过。产品 `specs:status --offline` exit1唯一原因仍为 #342 unpushed，依授权不 push。
 
-最终产品提交按 Lead 已授权使用 `--no-verify` 避免 hook 重跑全量；native 正常 commit/hooks。完整 Node、Android full test/lint、新 native SHA requiredBuild/artifacts/check 和最终 pin 更新由 Lead merger 在最终合入组合统一执行，本轮不冒称最终 full 或 CI。原 native 宽文档门禁 17 pass / 4 BASELINE fail 独立保留于 [05](../05-native-reader/README.md)，本轮未扩修或重复宽门禁。
+最终产品提交按 Lead 已授权使用 `--no-verify` 避免 hook 重跑全量；native 正常 commit/hooks。source 阶段未执行新 native SHA requiredBuild/artifacts/check 或最终 pin 更新，这些由 Lead merger 在 primary 完成；修复后完整 Node 与 Android test/lint 由 Root 接回 #346 在最终组合执行。本轮不冒称最终 full 或 CI。原 native 宽文档门禁 17 pass / 4 BASELINE fail 独立保留于 [05](../05-native-reader/README.md)，本轮未扩修或重复宽门禁。
 
 文档补齐后，`node --test tests/docs.test.mjs` 为 2/2 PASS（exit0）；`npm run evidence:index -- --check` 为 current（exit0），`git diff --cached --check` exit0。对应日志为 `product-docs.log` 与 `evidence-index-check.log`。相关后台任务均已收集或明确取消，最终 job list 无运行中任务；运行中曾发生任务句柄丢失，已核实无遗留 compiler 后才重新获取类型检查退出状态，没有把缺退出状态的旧日志记作通过。
 
 真机、真实多设备、真实云模型、ASR、APK 构建/安装和 connected/instrumented tests 未执行。所有原始日志/临时 typeconfig、编译产物链接不入提交；工作区保留给 Lead，无 push、close issues 或清 worktree。
+
+## 原 reviewer 定点确认
+
+2026-11-10，Root 转交两位原 reviewer 对修复源码的只读定点确认；两轴各自原来的 1 个 P2 均为 **RESOLVED**，无原 finding remaining。这不是第二轮全量 review，也没有新增测试运行声称。
+
+- Standards，原 reviewer `a203b47d-273e-4d98-9e6e-983e7ccae8a9`，clean native `2b05c480ec6377f7a592a1d4d7a379584aba2bf5`：确认 shipped SDK authored 场景的三进程/三回合/两次 cold restore、sdk/default/header pin、canonical 完整 transcript，以及已记录的 keyless 标准入口新 case 1、paired 2、corpus 3、helper 151 pass / 1 platform skip 对应原要求。
+- Spec，原 reviewer `dba8d91f-0c64-4243-a11e-15f98b56e06e`，clean 产品 `f733e0d40c81c0f2d33bebce03e851c8cc84d1dd`：确认 status401/403/404/409 保留 ID 且非终态、持久副作用前 epoch guard，以及生产 API wire 回归在 reauth/rebuild 后先查询原 ID、总共仅一次 execute。
+
+Root 原可执行声称检查没有额外 finding；原始分轴报告原文保留于本目录，未改写成通过报告。
+
+## Merger 最终组合与构建交接
+
+2026-11-10，fresh merger 在每次合入前核对 source/target exact HEAD、branch、clean status 与 ancestor，均使用 `git merge --ff-only <exact SHA>`，无 merge commit：native PRIMARY `/home/fatfish/deepseek-harness` 的 `master` 从 `8014fc775a27e7273300a68fcadb7e2980bb93f0` FF 到 `2b05c480ec6377f7a592a1d4d7a379584aba2bf5`；产品 ROOT `integration/spec-342` 从 `02c6e6d0e29e7acb10d2032b63a5fda79cff2297` FF 到产品修复 `f733e0d40c81c0f2d33bebce03e851c8cc84d1dd`。随后只将 [combo.json](../../../../../combo.json) 的 native pin 从 8014 更新为 2b，并整理本页、[04 历史 full 限定](../04-closeout/README.md)与[规格证据入口](../README.md)的 metadata；无新生产改动。最终 metadata 提交 SHA 通过交接消息提供，不在自身提交内循环记录。
+
+native 最终构建在 PRIMARY exact `2b05c48` 顺序执行；PATH 前置 Root 已有的 `work/tmp/347/bin/pnpm` shim（内部 exec `corepack pnpm@11.28.5 "$@"`），没有修改全局配置或 hook。所有本轮原始日志均在 ROOT ignored `work/tmp/342-review-merge/`，不入提交。2026-11-10 11:10:46–11:15:27 UTC，以下六条均 exit0；每条启动前再次核对 native HEAD 未移动：
+
+| 实际命令（native PRIMARY） | 结果 | ignored log（上述目录内） |
+| --- | --- | --- |
+| `corepack pnpm@11.28.5 install` | PASS，pnpm 11.28.5；366 workspace projects，Already up to date | `01-install.log` |
+| `corepack pnpm@11.28.5 run build:lib:host` | PASS，host compiler / bundle 与 Desktop bundle 完成 | `02-build-lib-host.log` |
+| `corepack pnpm@11.28.5 run build:lib:client` | PASS，client compiler / bundle 完成 | `03-build-lib-client.log` |
+| `corepack pnpm@11.28.5 run build:native-system` | PASS，built linux-x64 glibc system.node | `04-build-native-system.log` |
+| `corepack pnpm@11.28.5 run build:artifacts` | PASS，7 passed / 0 failed / 0 skipped，96.52s | `05-build-artifacts.log` |
+| `corepack pnpm@11.28.5 run build:check`（紧随最新 artifacts） | PASS，host + client aggregate，2 passed / 0 failed / 0 skipped，44.30s；覆盖新增 host include 的 SDK snapshot author | `06-build-check.log` |
+
+构建日志仍有跨平台可选包 unsupported-platform 与 bundler 弃用 warning；exit0 不写成零警告。source 已有 keyless/native focused 结果沿用上文，不因 FF 重跑或累加；未执行 native 全量测试、coverage、平台矩阵或重复宽文档基线。产品完整 Node / Android test/lint 仍 PENDING，由 Root 接回 #346 执行。
+
+在上述全部 native 构建完成、产品 pin 已改为 2b 后，顺序执行：
+
+| 实际命令（产品 ROOT） | 结果 | ignored log |
+| --- | --- | --- |
+| `OURFAIRY_DSH_DIR=/home/fatfish/deepseek-harness npm run combo:verify` | PASS，exit0；产品 integration tip `f733e0d`、dsh `2b05c48`、Android source `460109d1` 三行 ok，无 skipped | `07-combo-verify.log` |
+| `OURFAIRY_DSH_DIR=/home/fatfish/deepseek-harness npm run backend:doctor` | PASS，exit0，12/12 checks；actual native HEAD/CLI、产品构建、包、profile、兼容性与 native capabilities 通过；model double not configured，keyless startup only | `08-backend-doctor.log` |
+
+merger 不重跑 native source 已通过的行为测试，也没有把 doctor 构建/装配检查写成真实模型、真机或完整产品门禁通过。metadata 提交按 Lead 明确授权使用产品侧 `git commit --no-verify`，最终 full 留给 Root/#346；native source 的正常 hooks 记录仍如上。#342/#346 保持 OPEN；无 push、issue close、清 worktree 或 SourceFix 写入。
+
+最终暂存范围仅 combo pin + 本页/04/规格证据入口共 4 files。`git diff --exit-code f733e0d -- android backend tests scripts package.json tsconfig.json` exit0，`git diff --check` 与 `git diff --cached --check` exit0；native primary 和两个 source 均再次 clean。`node --test tests/docs.test.mjs` exit0，2 tests / 2 pass / 0 fail、cancelled、skipped、todo（`09-docs-test.log`）；`npm run evidence:index -- --check` exit0、current（`10-evidence-index-check.log`）。本段只补结果数字，无链接或实现变更。最终提交前 `npm run specs:status -- --offline` exit1 唯一 need-attention 为 #342 unpushed，tip `f733e0d`、9 ahead、copies ok（`11-specs-status-final.log`）；符合 no-push 安排，不记作测试失败。五个 merger 托管 job 均已 `job_output` 收集，`job_list` 无运行中任务，无需取消；原始日志保留供 Root 复查。
