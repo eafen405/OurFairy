@@ -413,6 +413,12 @@
 | --- | --- |
 | [328-architecture](328-architecture/README.md) | #329–#336：skill-creator 收敛为三份共享实现——存储在 skill_version.verification 的验证报告由 verification-report.ts 唯一解析与唯一 verdict 服务批准/后台结算/审核展示/回滚（父哈希取 DB 行，展示警告按「内容变化且零执行」独立派生）；create 的来源由 origin.ts 在 staging 前解析为显式/安装/后台/修订四者之一并拒绝 5 条冲突组合；候选与版本目录的路径词汇、安全校验与崩溃回迁由 paths.ts 唯一实现，publish/seed 事务与 rename/回滚顺序留在调用点，不安全或缺失的 pending 行在启动对账结案留 note、读路径仍 500。Android 侧 Skills/Gateway/Impression 三页共享 RemoteResource 的串行 lane（写后重读、失败保留旧快照、只捕传输失败、接受即回调不因重读失败丢失），技能审核入口写一次不重读；会话通知与技能提醒共享 RemoteNotificationNavigation.admits 的端点规范化与账号准入，Activity 只排队/调用/落点，会话归属与打开后二次确认保留。HTTP 面删除零生产消费者、无灵敏度的 SurfaceEntry.auth 与 44 条声明，字段集精确断言阻止回潮，fence/认证/角色/归属代码一行未动。README 链接门禁不再导入带构建副作用的后端 helper（新增无 dist/无 dsh 的 fixture 回归），requiredBuild 成为 CI 构建步骤的唯一执行来源（scripts/combo.ts build，实际 CI build run 片段的行为探针 + 真实记录逐条执行测试，字面副本扫描仅作启发式提示；后续复审见 10-followup-review（另补一处学习用例结算等待；本轮最终 npm test 839/839、Android 758 tests + lintDebug 通过）），doctor/README 的构建声称收窄到 build:lib:host 的 CLI 产物并由 doctor 测试固定。8 票无原生阻塞边、按文件重叠分批并行；完成后两轴 code-review + 可执行声称检查，发现回所属模块修复（#329 展示警告与 #332 启动收敛两处回归已恢复，无检查的绝对声称已收窄或补测试）。详细证据见该目录 README 与 09-review-fixes；收口验证：相关套件全绿、CI full-gate 与 android job 通过（android 首跑遇既有 RemoteAttachmentPreviewTest flake，重跑通过）；本机 tests/skill-learning.test.mjs 的时序 flake 与 main@25a2b34 基线完全相同。 |
 
+## 电费账单文本优化（#341）
+
+| 目录 | 内容 |
+| --- | --- |
+| [341-bill-copy](341-bill-copy/README.md) | #341 按用户要求把账单页收成两块仪器面板：删去三个总量前的开场说明、走势图后的汇率说明、辅助调用与悬挂回合的口径脚注，以及「正在刷新…」提示，只保留三个总量与 30 天走势，未登录/读取中/空账单/失败与重试这些状态文案按原语义保留（否则「正在读」会与「零账单」混同）；三个总量的丁尼与 token 共用一条紧凑规则，千位以下维持原样、千位起换 K/M/B/T 并保留一位小数，取整到一位小数发生在选单位之前（999,999 读 1.0M 而非 1000.0K），单位与倍率只有 `BillUnits` 一份清单，数字由 `BigDecimal` 生成因此分隔符与手机 locale 无关；布局、字号、列宽与 `maxLines` 未改。规格 `docs/specs/fairy-bill.md` 在「已知的口径缺口」与「标题生成等辅助调用不计入」两处原文后追加 2026-11-10 呈现修订，说明脚注从页面移除而缺口本身不变。检查：`FairyBillPageTest.the page keeps no small print outside the two panels` 断言三条原文文字出现数为 0；`BillFormatTest` 固定单位、进位换单位与 locale 无关性。 |
+
 ## 界面微调（#215/#217/#218/#239/#255/#290/#291/#292）
 
 | 目录 | 内容 |

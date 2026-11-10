@@ -139,7 +139,7 @@ class FairyBillPageTest {
             }
         }
         // Both units for every total, at the backend's own figures: 2000/60000/600000.
-        for (text in listOf("0.7 丁尼", "2,000", "20.0 丁尼", "60,000", "200.0 丁尼", "600,000")) {
+        for (text in listOf("0.7 丁尼", "2.0K", "20.0 丁尼", "60.0K", "200.0 丁尼", "600.0K")) {
             compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().let {
                 assertEquals("the bill shows $text", 1, it.size)
             }
@@ -245,15 +245,18 @@ class FairyBillPageTest {
     }
 
     @Test
-    fun `the page states the caveats the bill is known to have`() {
+    fun `the page keeps no small print outside the two panels`() {
         open()
 
-        // The spec's 已知的口径缺口: auxiliary calls and crashed turns are not billed.
-        // The page says so rather than letting the numbers look complete.
-        compose.onNodeWithText(
+        // #341: the bill is the two instrument panels and nothing else. Every
+        // explanatory line that used to surround them is gone.
+        for (text in listOf(
+            "这台 Fairy 的电费：今日、本月与历史以来，以及最近 30 天的走势。账单只有这一台 Fairy 的合计，不按用户拆分。",
+            "汇率是叙事设定，不是市场价：每 3000 原始用量记为 1 丁尼。",
             "标题生成等辅助调用不产生账单，进程被终止时未完成的回合也不计入。",
-            useUnmergedTree = true,
-        ).assertExists()
+        )) {
+            compose.onAllNodesWithText(text, useUnmergedTree = true).assertCountEquals(0)
+        }
     }
 
     @Test

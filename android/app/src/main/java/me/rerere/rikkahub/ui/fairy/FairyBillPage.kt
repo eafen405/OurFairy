@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -30,10 +31,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.data.remote.AccountSession
@@ -43,7 +49,8 @@ import me.rerere.rikkahub.data.remote.BillDay
 import me.rerere.rikkahub.data.remote.BillFailure
 import me.rerere.rikkahub.data.remote.BillState
 import me.rerere.rikkahub.data.remote.BillTotal
-import java.util.Locale
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 /** The chart's plot height above its baseline. */
 private val BillChartHeight = 132.dp
@@ -116,12 +123,6 @@ fun FairyBillPage(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.Top,
         ) {
-            Text(
-                text = "这台 Fairy 的电费：今日、本月与历史以来，以及最近 30 天的走势。账单只有这一台 Fairy 的合计，不按用户拆分。",
-                style = MaterialTheme.typography.bodySmall,
-                color = tokens.textMuted,
-            )
-
             if (token == null) {
                 Spacer(Modifier.height(16.dp))
                 Text(
@@ -179,22 +180,6 @@ fun FairyBillPage(
                     BillTotals(bill)
                     Spacer(Modifier.height(16.dp))
                     BillChartPanel(bill.days)
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        text = "汇率是叙事设定，不是市场价：每 3000 原始用量记为 1 丁尼。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = tokens.textMuted.copy(alpha = 0.85f),
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "标题生成等辅助调用不产生账单，进程被终止时未完成的回合也不计入。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = tokens.textMuted.copy(alpha = 0.7f),
-                    )
-                    if (snapshot.loading) {
-                        Spacer(Modifier.height(8.dp))
-                        Text("正在刷新…", style = MaterialTheme.typography.bodySmall, color = tokens.textMuted)
-                    }
                 }
             }
 
@@ -211,8 +196,8 @@ fun FairyBillPage(
 /**
  * The three totals in one instrument cluster.
  *
- * Each column prints the backend's Denny and the raw count it stands for. Neither is
- * derived here — no rate is applied on this page.
+ * Each column prints the backend's Denny and the count it stands for, both in
+ * compact units. Neither is derived here — no rate is applied on this page.
  */
 @Composable
 private fun BillTotals(bill: Bill) {
@@ -256,13 +241,15 @@ private fun BillTotalColumn(label: String, tag: String, total: BillTotal, modifi
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = billDennyText(total.denny),
+            text = billDennyFigure(total.denny),
             fontFamily = tokens.telemetryFontFamily,
             fontWeight = FontWeight.Bold,
             fontSize = 15.sp,
             color = tokens.signal,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            // The figure keeps its size; if a very narrow screen plus a large system
+            // font still cannot hold it, it steps down rather than losing a digit.
+            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 15.sp, stepSize = 1.sp),
         )
         Text(
             text = billCountText(total.tokens.total),
@@ -270,26 +257,88 @@ private fun BillTotalColumn(label: String, tag: String, total: BillTotal, modifi
             fontSize = 10.sp,
             color = tokens.textMuted,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 10.sp, stepSize = 1.sp),
         )
     }
 }
 
-/** The backend's Denny to a tenth, in the unit's own name. */
-internal fun billDennyText(denny: Double): String =
-    String.format(Locale.ROOT, "%.1f 丁尼", denny)
+/** The unit word that follows a Denny figure, in the size the column can spare. */
+private const val BILL_DENNY_UNIT = " 丁尼"
 
 /**
- * The raw count behind a Denny figure, grouped so it can be read at a glance.
+ * The unit's size relative to the figure's, so it shrinks with it.
  *
- * It is printed as the number alone: 丁尼 is the bill's unit and the word for the
- * underlying measure belongs to the spec, not to a label on this page. The count
- * stays exact — rounding it would defeat the point of showing it beside the
- * converted figure. `Locale.ROOT` keeps the grouping stable whatever the phone's
- * locale is, because this page's copy is Chinese regardless of it.
+ * A fixed size would stay put while [Builder.autoSize] stepped the figure down,
+ * and on the narrowest viewport that left the full-size unit as the part that
+ * still did not fit.
+ */
+private const val BILL_DENNY_UNIT_EM = 0.62f
+
+/**
+ * The Denny line: its figure at the column's own size, its unit smaller.
+ *
+ * The unit is a constant word, so setting it below the figure's size costs no
+ * meaning and buys the width a three-way column does not have — at 320dp and a
+ * large system font the full-size unit was what pushed the figure into an
+ * ellipsis. The text is built from [billDennyText] rather than alongside it, so
+ * there is one formatting rule and one place to change it.
+ */
+private fun billDennyFigure(denny: Double): AnnotatedString {
+    val figure = billDennyText(denny).removeSuffix(BILL_DENNY_UNIT)
+    return buildAnnotatedString {
+        append(figure)
+        withStyle(SpanStyle(fontSize = BILL_DENNY_UNIT_EM.em)) { append(BILL_DENNY_UNIT) }
+    }
+}
+
+/** The backend's Denny in a compact unit, one decimal: 0.7, 20.0, 1.2K, 3.4M, 5.6B. */
+internal fun billDennyText(denny: Double): String =
+    "${billAmountText(denny)}$BILL_DENNY_UNIT"
+
+/**
+ * The raw count behind a Denny figure, in the same compact units.
+ *
+ * The count below a thousand stays exact; from a thousand up it takes a K, M, B
+ * or T suffix and one decimal, so the line fits the narrow column the totals
+ * share. Rounding ends at one decimal: the figure sits beside the Denny total as
+ * a magnitude, not as an audit trail.
  */
 internal fun billCountText(count: Long): String =
-    String.format(Locale.ROOT, "%,d", count)
+    if (count < 1_000L) count.toString() else billAmountText(count.toDouble())
+
+/** Each suffix and the figure it stands for, from the plain unit up to a trillion. */
+private val BillUnits = listOf(
+    "" to BigDecimal.ONE,
+    "K" to BigDecimal.valueOf(1_000),
+    "M" to BigDecimal.valueOf(1_000_000),
+    "B" to BigDecimal.valueOf(1_000_000_000),
+    "T" to BigDecimal.valueOf(1_000_000_000_000),
+)
+
+/** The first printed figure that no longer fits in a unit without losing a digit. */
+private val BillUnitCeiling = BigDecimal.valueOf(1_000)
+
+/**
+ * One non-negative figure in the largest unit that still fits, keeping a tenth.
+ *
+ * The tenth is rounded before the unit is chosen, so a figure that would print as
+ * four digits — 999,999 — reads as 1.0M instead of as 1000.0K. [BillUnits] stops
+ * at T; a figure past a trillion keeps the T and grows with it.
+ *
+ * The result is built from a decimal rather than from `String.format`, so the
+ * separator is a dot whatever the phone's locale is: this page's copy is Chinese
+ * regardless of it.
+ */
+private fun billAmountText(value: Double): String {
+    val amount = BigDecimal.valueOf(value)
+    val (suffix, scale) = BillUnits.firstOrNull { (_, scale) -> billTenths(amount, scale) < BillUnitCeiling }
+        ?: BillUnits.last()
+    return billTenths(amount, scale).toPlainString() + suffix
+}
+
+/** [amount] over [scale], rounded half up to the one decimal the page prints. */
+private fun billTenths(amount: BigDecimal, scale: BigDecimal): BigDecimal =
+    amount.divide(scale, 1, RoundingMode.HALF_UP)
 
 /** The series as an instrument readout: its span, 30 hand-drawn bars, and its date range. */
 @Composable

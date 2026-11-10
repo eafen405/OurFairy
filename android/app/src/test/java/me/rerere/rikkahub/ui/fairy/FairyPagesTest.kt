@@ -16,6 +16,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsEnabled
@@ -34,6 +35,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
@@ -320,6 +322,22 @@ class FairyPagesTest {
                 },
             )
         }
+    }
+
+    /** A bill whose all-time figure is long enough to need a unit: 1.2B Denny, 3.6T tokens. */
+    private val bigBillBackend = object : BillBackend {
+        override suspend fun read(token: String): Bill = Bill(
+            today = BillTotal(BillTokens(inputTokens = 1_234_567), denny = 411.5),
+            month = BillTotal(BillTokens(inputTokens = 1_200_000_000), denny = 400_000.0),
+            allTime = BillTotal(BillTokens(inputTokens = 3_600_000_000_000), denny = 1_200_000_000.0),
+            days = (0 until 30).map { index ->
+                BillDay(
+                    day = "2026-10-${(index + 1).toString().padStart(2, '0')}",
+                    tokens = BillTokens(inputTokens = index.toLong() * 40_000L),
+                    denny = index.toDouble() * 13.3,
+                )
+            },
+        )
     }
 
     /** The account's own impression, already written. */
@@ -1163,6 +1181,64 @@ class FairyPagesTest {
         compose.onNodeWithContentDescription("返回").assertIsDisplayed()
         compose.onNodeWithTag("fairy-window-settings").assertDoesNotExist()
         compose.runOnIdle { assertEquals("the bill page read the scope's backend", 1, billReads) }
+    }
+
+    /**
+     * The bill as #341 leaves it: two panels and nothing else, figures in units.
+     *
+     * The page is assembled with a bill large enough that every total needs a
+     * suffix, so the narrow columns show the case that used to be ellipsized. The
+     * screenshot is opt-in (`FAIRY_UI_SCREENSHOTS`), like the rest of this file's.
+     */
+    @Test fun `the bill is two panels and figures in units`() {
+        show {
+            FairyBillPage(onBack = {}, session = account, backend = bigBillBackend)
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        for (text in listOf("411.5 丁尼", "1.2M", "400.0K 丁尼", "1.2B", "1.2B 丁尼", "3.6T")) {
+            assertWhole(text)
+        }
+        screenshot("bill-341")
+    }
+
+    /**
+     * The same bill on the narrowest viewport the app supports, at a large font.
+     *
+     * #341 replaced raw counts with units because the three columns cut long
+     * figures off; this is the viewport where that would show up first, so the
+     * figures are asserted to be laid out whole rather than ellipsized.
+     */
+    @Test
+    @Config(qualifiers = "zh-rCN-w320dp-h640dp", fontScale = 1.3f)
+    fun `the bill's figures fit the narrowest viewport`() {
+        show {
+            FairyBillPage(onBack = {}, session = account, backend = bigBillBackend)
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+
+        for (text in listOf("411.5 丁尼", "1.2M", "400.0K 丁尼", "1.2B", "1.2B 丁尼", "3.6T")) {
+            assertWhole(text)
+        }
+        screenshot("bill-341-narrow")
+    }
+
+    /**
+     * [text] is on the page and drawn without cutting a character off.
+     *
+     * The string being present says nothing about whether it fits: an ellipsized
+     * figure still carries its full text in semantics. The layout the composable
+     * itself published is the thing that knows, so this reads it back.
+     */
+    private fun assertWhole(text: String) {
+        val node = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode()
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        val layout = layouts.singleOrNull()
+        assertNotNull("$text publishes no text layout", layout)
+        assertFalse("$text is cut off in its column", layout!!.hasVisualOverflow)
     }
 
     @Test fun `settings exposes the current version and app update entry`() {
