@@ -11,7 +11,7 @@
 | [#343](https://github.com/eafen405/OurFairy/issues/343) | [后端命令](01-backend.md) | 已合入、CLOSED | — | 原生 compact、最小 clear、稳定操作结果、日志投影与后端协议 |
 | [#344](https://github.com/eafen405/OurFairy/issues/344) | [Android 接线](02-android.md) | 已合入、CLOSED | 协议先交付 | 候选、焦点、青色识别、发送分流、状态和恢复 |
 | [#345](https://github.com/eafen405/OurFairy/issues/345) | [保留与恢复验收](03-integration.md) | 已合入、CLOSED | #343 #347 | 记忆/技能保留、维护/投递竞争、分页/观察与故障恢复 |
-| [#346](https://github.com/eafen405/OurFairy/issues/346) | [集成收口](04-closeout.md) | OPEN、blocked=0；完整门禁已记录，待 Lead 审查/merger | #344 #345 | [最终集成证据](../../implementation/evidence/342-session-commands/04-closeout/README.md)；两轴审查 PENDING，待 Lead |
+| [#346](https://github.com/eafen405/OurFairy/issues/346) | [集成收口](04-closeout.md) | OPEN、blocked=0；完整门禁已记录，待 Lead 审查/merger | #344 #345 | [最终集成证据](../../implementation/evidence/342-session-commands/04-closeout/README.md)；两轴各 1 P2 已修复，[待最终集成复验](../../implementation/evidence/342-session-commands/06-review-fixes/README.md) |
 | [#347](https://github.com/eafen405/OurFairy/issues/347) | [DSH 冷读取修复](05-native-reader.md) | 已合入、CLOSED | — | V4 投递 literal、晚到 system 与实际首节点保护；组合锁 `8014fc7` |
 
 依赖演变（历史）：起始 frontier 只有 #343；随后先冻结并交付[客户端合同](protocol.md)，解除 #344 的协议前置，与后端剩余实现/验证并行。#345 在 #343 关闭后开工，受原生冷读缺口阻塞后由 #347 解阻。2026-11-10 收口实查 GitHub：#343/#344/#345/#347 均 CLOSED、blocked=0，#346 已 assigned、OPEN、blocked=0。每票独立 worktree/分支并在交付前合入集成 tip；收口分支按 Lead 要求保留给 merger，不在实现者阶段 push、关闭 #346 或清除本 worktree。

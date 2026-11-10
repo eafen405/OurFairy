@@ -423,7 +423,7 @@
 
 | 目录 | 内容 |
 | --- | --- |
-| [342-session-commands](342-session-commands/README.md) | #343/#344/#345/#347 已合入：原生 compact、同会话 clear、数字操作状态与稳定身份恢复、Android 候选/焦点/颜色/发送和草稿保护、保留/恢复/投递竞争组合测试；最终 DSH 锁 8014fc7，原生交付及其宽文档四项基线失败见 05。#346 记录最终完整 Node、combo、Android test/lint 的实际计数和工具链；当前协议统一指向 work/tickets/342/protocol.md，旧证据为历史快照。Standards/Spec 两轴审查 PENDING，待 Lead fresh reviewers；真机、真实模型/ASR、APK 构建/安装未执行，不宣称全部 64 条故事设备验收。 |
+| [342-session-commands](342-session-commands/README.md) | #343/#344/#345/#347 已合入：原生 compact、同会话 clear、数字操作状态与稳定身份恢复、Android 候选/焦点/颜色/发送和草稿保护、保留/恢复/投递竞争组合测试；最终 DSH 锁 8014fc7，原生交付及其宽文档四项基线失败见 05。#346 记录最终完整 Node、combo、Android test/lint 的实际计数和工具链；当前协议统一指向 work/tickets/342/protocol.md，旧证据为历史快照。Standards/Spec 两轴各 1 P2 已修复，原报告及新 focused 红绿/录制回放证据见 06，待 Lead 最终集成复验；旧 full 不充作 Android 修复后最终门禁；真机、真实模型/ASR、APK 构建/安装未执行，不宣称全部 64 条故事设备验收。 |
 
 ## 界面微调（#215/#217/#218/#239/#255/#290/#291/#292）
 

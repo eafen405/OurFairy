@@ -184,7 +184,7 @@ python3 work/tmp/346/summarize_android.py android/app/build/test-results/testDeb
 
 ## 审查与未执行项
 
-- **Standards：PENDING；Spec：PENDING；可执行声称复核：PENDING。** Lead 在全部实现合入后调用一次 `code-review`，以 OurFairy `520e1b16a6002a22f641c4bf5174d0b20a834811` 到最终 integration tip 的规格增量，以及 DSH ae2 到 `8014fc7` 的原生增量为固定范围，另起 fresh 平行 reviewers。此处仅提供检查导航，不代称独立审查通过。
+- **Standards / Spec：各发现 1 个 P2，发现并修复待最终集成复验。** 固定审查基线为 OurFairy `02c6e6d` 与 DSH `8014fc7`；原始两轴报告、Root 可执行声称检查、同一 fresh implementer 的修复与新 focused evidence 见 [06 review fixes](../06-review-fixes/README.md)。本页的 Node 854 / Android 787 是修复前基线的历史 full，不能用作 Android 修复后最终组合的完整门禁。
 - 没有 adb 设备；真机候选、软键盘焦点、主题可读性、真实多设备与通知验收未执行。Robolectric/公共状态不替代这些验收。
 - 未调用真实云模型、真实 ASR 或其他外部服务；替身请求只证明当前组合的可观察行为。未构建/安装本轮 APK，未执行 connected/instrumented 设备测试。
 - Native full tests/coverage/platform matrix/full lint/full doc-sync 未在本票执行。05 已记录的宽文档四项基线失败不扩修，不称原生全绿。

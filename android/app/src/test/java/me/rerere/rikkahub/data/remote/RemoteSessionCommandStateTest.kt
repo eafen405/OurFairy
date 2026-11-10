@@ -33,6 +33,7 @@ class RemoteSessionCommandStateTest {
         var failure: Exception? = IdentityUnreachable(IOException("lost response"))
         var gate: CompletableDeferred<Unit>? = null
         var statusGate: CompletableDeferred<Unit>? = null
+        var statusFailure: Exception? = null
         var onExecute: (() -> Unit)? = null
         var ack = -1L
         override suspend fun executeCommand(token: String, sessionId: String, requestId: String, command: Int): RemoteSessionCommandSnapshot {
@@ -44,7 +45,9 @@ class RemoteSessionCommandStateTest {
         }
         override suspend fun commandStatus(token: String, sessionId: String, requestId: String): RemoteSessionCommandSnapshot? {
             queried += sessionId to requestId
+            val failure = statusFailure
             if (sessionId == "main") statusGate?.let { withContext(NonCancellable) { it.await() } }
+            failure?.let { throw it }
             return answer
         }
         override fun observe(token: String, sessionId: String) = flow
@@ -91,6 +94,28 @@ class RemoteSessionCommandStateTest {
         assertEquals(id, state.snapshot.value.sessionCommand?.request?.requestId)
         assertFalse(state.snapshot.value.sessionCommand!!.terminal)
         assertNotNull(state.snapshot.value.sessionCommand?.failure)
+    }
+
+    @Test fun `old status refusal after same account token refresh cannot erase pending identity`() = runTest {
+        val store = Store()
+        val gate = CompletableDeferred<Unit>()
+        val backend = Backend().apply {
+            statusGate = gate
+            statusFailure = IdentityRefused(401, "identity/expired", "login again")
+        }
+        val state = RemoteChatState(backend, backgroundScope, store, "https://fairy")
+        state.bind("expired", "main", 1); runCurrent()
+        val id = state.send("/clear")!!; runCurrent()
+        assertEquals(listOf("main" to id), backend.queried)
+        backend.statusGate = null
+        backend.statusFailure = null
+        backend.answer = RemoteSessionCommandSnapshot("main", id, "op", 2, 1, 0)
+        state.bind("fresh", "main", 1); runCurrent()
+        assertEquals(1, state.snapshot.value.sessionCommand?.status)
+        gate.complete(Unit); runCurrent()
+        assertEquals(id, store.record.pendingCommand?.requestId)
+        assertFalse(state.snapshot.value.sessionCommand!!.terminal)
+        assertEquals(1, backend.executed.size)
     }
 
     @Test fun `unknown retry queries first and reuses the saved identity`() = runTest {

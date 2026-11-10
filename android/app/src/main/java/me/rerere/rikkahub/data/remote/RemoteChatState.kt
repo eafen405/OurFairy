@@ -814,7 +814,8 @@ class RemoteChatState(
                 if (started == epoch && result.status == 1) recoverSessionCommand()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
-                failSessionCommand(selected, started, request, failure)
+                failSessionCommand(selected, started, request, failure,
+                    admissionRefused = failure is IdentityRefused && failure.status < 500)
                 if (started == epoch && (failure !is IdentityRefused || failure.status >= 500)) recoverSessionCommand()
             }
         }
@@ -885,8 +886,11 @@ class RemoteChatState(
 
     private suspend fun failSessionCommand(
         selected: ChatSyncKey, started: Long, request: StoredSessionCommand, failure: Exception,
+        admissionRefused: Boolean = false,
     ) {
-        var rejected = failure is IdentityRefused && failure.status < 500
+        if (started != epoch || selected != key) return
+        // A failed status query cannot establish whether the original execute was admitted.
+        var rejected = admissionRefused
         if (rejected) {
             try {
                 update(selected) {

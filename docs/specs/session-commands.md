@@ -1,6 +1,6 @@
 # Android 会话命令与上下文重置规格
 
-实施状态（2026-11-10）：#343/#344/#345/#347 已合入 `integration/spec-342`；#346 已记录最终完整 Node、combo 与 Android test/lint 门禁结果。当前[协议合同](../../work/tickets/342/protocol.md)、[任务图](../../work/tickets/342/README.md)和[证据入口](../../work/implementation/evidence/342-session-commands/README.md)分别承载接口、进度与执行事实。Standards/Spec 两轴审查 **PENDING**，由 Lead 在全部实现合入后另起 fresh reviewers；真机与真实模型/ASR 验收未执行。
+实施状态（2026-11-10）：#343/#344/#345/#347 已合入 `integration/spec-342`；#346 已记录最终完整 Node、combo 与 Android test/lint 门禁结果。当前[协议合同](../../work/tickets/342/protocol.md)、[任务图](../../work/tickets/342/README.md)和[证据入口](../../work/implementation/evidence/342-session-commands/README.md)分别承载接口、进度与执行事实。Standards/Spec 两轴各发现 1 个 P2，已修复待最终集成复验，见 [review fixes](../../work/implementation/evidence/342-session-commands/06-review-fixes/README.md)；真机与真实模型/ASR 验收未执行。
 
 ## Problem Statement
 
