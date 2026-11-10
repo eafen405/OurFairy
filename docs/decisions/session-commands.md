@@ -1,8 +1,8 @@
 # Android 会话命令设计记录
 
-状态：交互设计已确认，正式规格已发布为 [#342](https://github.com/eafen405/OurFairy/issues/342)，待实现。确认日期：2026-11-10。
+状态：交互设计于 2026-11-10 确认，正式规格已发布为 [#342](https://github.com/eafen405/OurFairy/issues/342)。#343/#344/#345/#347 已合入 `integration/spec-342`；最终门禁与未执行项见[收口证据](../../work/implementation/evidence/342-session-commands/04-closeout/README.md)。Standards/Spec 两轴审查 **PENDING**，由 Lead 后续补齐。
 
-本文记录用户已确认的需求、固定版本的代码事实与实施边界；需求确认不表示功能已经实现。正式规格已转写为[会话命令规格](../specs/session-commands.md)，本记录保留访谈来源与代码调查依据。产品术语见[产品词汇表](../../GLOSSARY.md)，记忆与技能分别遵循[记忆词汇表](../glossary/memory.md)和[技能词汇表](../glossary/skill.md)。
+本文保留设计访谈与发布时的只读调查，不把历史缺口当作当前状态。现行需求见[会话命令规格](../specs/session-commands.md)，接口统一见[协议合同](../../work/tickets/342/protocol.md)。产品术语见[产品词汇表](../../GLOSSARY.md)，记忆与技能分别遵循[记忆词汇表](../glossary/memory.md)和[技能词汇表](../glossary/skill.md)。
 
 ## 用户已确认
 
@@ -21,11 +21,11 @@
 
 确认来源：本次设计访谈中，用户先回复“可以的”接受首轮 Q1–Q3 及事实补充，并提出 `/` 与 `/cl` 的快捷选项交互；随后对 Q4–Q7 回复“按推荐”，并提出命令识别后的变色反馈；最后对 Q8–Q9 回复“是”，确认完整匹配的着色、普通文本行为及系统执行反馈。
 
-## 已核实的代码事实
+## 发布时核实的代码事实（历史调查）
 
-以下来自只读源码调查，未执行真实会话重置或设备验收。
+以下是正式规格发布前在 `main@520e1b1` 与当时锁定 DSH `ae2adffd8d67773e125b8048120cf9ad2ba7edf3` 上的只读调查，调查阶段未执行新命令或设备验收。下文的“当前”“现有”“尚未”等均指该调查时点；后续实现与最终原生锁见[证据入口](../../work/implementation/evidence/342-session-commands/README.md)。
 
-- 以[组合登记](../../combo.json)锁定的外部 DSH fork `ae2adffd8d67773e125b8048120cf9ad2ba7edf3` 为能力依据；当前 Harness GUI 的安装版本不是产品集成依据。
+- 调查使用上述固定 DSH fork 提交为能力依据；当前 Harness GUI 的安装版本不是产品集成依据。
 - [会话服务](../../backend/sessions/src/service.ts)按用户编号确定固定主会话身份，禁止归档主会话；切换当前会话不会替换主会话。现有新建入口可能复用空会话。
 - [产品装配](../../backend/v1-bundle/cordis.patch.yml)已经挂载原生自动压缩能力；[聊天入口](../../backend/chat/src/index.ts)没有手动压缩或重置入口。现有发送把这些命令当作普通用户文本。
 - 锁定 DSH 的公开 `ctx.compaction.compactNow(agent, signal, sourceCommandId?)` 可以直接调用；原生命令插件本身也调用这一接缝。它使用原生 maintenance 互斥与持久化处理，不必为产品手动压缩引入 Typert 或另一套压缩算法。
@@ -55,7 +55,7 @@
 
 ## 实施边界与数据影响
 
-以下为承接已确认交互的实施约束；具体公开接口与日志字段在实施中确定。
+以下保留承接已确认交互的实施约束；已交付的公开接口与日志投影字段统一见[协议合同](../../work/tickets/342/protocol.md)，具体运行结果见[证据入口](../../work/implementation/evidence/342-session-commands/README.md)。
 
 - 在现有产品插件及 HTTP/SSE 接缝中增加命令受理与结果呈现，复用身份鉴权、会话归属、同会话顺序执行和持久化；不为这两个命令另建通用命令平台、Typert 传输或第二套会话系统。
 - `/compact` 直接适配原生 `ctx.compaction.compactNow(...)`，沿用摘要、近期原文保留、maintenance 互斥和失败处理；不新增压缩算法，也不改变部署级自动压缩设置。
@@ -68,7 +68,7 @@
 
 ## 验收要求
 
-以下是实施后的行为验收目标，当前尚未执行这些新功能验证。采用真实产品入口与确定性模型替身，直接观察模型请求、原始日志和客户端公共状态；原生能力的内部细节不由产品另抄一套算法断言。
+以下是访谈转写的行为验收目标。实施后的实际检查与边界见[分票及收口证据](../../work/implementation/evidence/342-session-commands/README.md)：采用真实产品入口与确定性模型替身观察模型请求、原始日志和客户端公共状态；原生能力不由产品另抄一套算法断言。真机与真实模型/ASR 验收尚未执行。
 
 | 场景 | 需要核验的行为 |
 | --- | --- |
@@ -91,4 +91,4 @@
 
 ## 本轮收口
 
-Q1–Q9 的交互决策均已由用户确认，无剩余产品交互分支。设计访谈阶段仅交付设计与术语文档，前述代码事实来自只读调查；随后通过 `/to-spec` 转写正式规格，并在测试接缝获得用户确认后发布为 [#342](https://github.com/eafen405/OurFairy/issues/342)。功能尚未实现，也未运行真实会话操作。
+Q1–Q9 的交互决策均已由用户确认，无剩余产品交互分支。设计访谈阶段仅交付设计与术语文档，前述代码事实来自发布前只读调查；随后通过 `/to-spec` 转写正式规格，并在测试接缝获得用户确认后发布为 [#342](https://github.com/eafen405/OurFairy/issues/342)。后续 #343/#344 交付命令及 Android 接线，#345 补充保留/恢复组合行为测试，#347 修复并锁定原生冷读取；本记录不重开已确认产品决定。最终全量结果、两轴审查 PENDING 与未执行的设备/真实服务验收以[收口证据](../../work/implementation/evidence/342-session-commands/04-closeout/README.md)为准。

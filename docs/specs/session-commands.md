@@ -1,10 +1,12 @@
 # Android 会话命令与上下文重置规格
 
+实施状态（2026-11-10）：#343/#344/#345/#347 已合入 `integration/spec-342`；#346 已记录最终完整 Node、combo 与 Android test/lint 门禁结果。当前[协议合同](../../work/tickets/342/protocol.md)、[任务图](../../work/tickets/342/README.md)和[证据入口](../../work/implementation/evidence/342-session-commands/README.md)分别承载接口、进度与执行事实。Standards/Spec 两轴审查 **PENDING**，由 Lead 在全部实现合入后另起 fresh reviewers；真机与真实模型/ASR 验收未执行。
+
 ## Problem Statement
 
 用户在 Android 与 Fairy 长期交互时，需要主动压缩上下文，也需要在当前会话中重新开始对话。每位用户的主会话身份固定，另开或切换普通会话不会替换主会话；因此，单靠切换会话不能满足主会话重新开始的需要。
 
-当前输入框没有命令候选或识别反馈，直接输入 `/compact`、`/clear` 会作为普通用户消息交给 Fairy。用户无法分辨自己正在输入一条实际操作，还是仅仅给模型发了一段看起来像命令的文字。
+发布本规格时，输入框没有命令候选或识别反馈，直接输入 `/compact`、`/clear` 会作为普通用户消息交给 Fairy。用户无法分辨自己正在输入一条实际操作，还是仅仅给模型发了一段看起来像命令的文字。
 
 用户希望获得快捷、明确的命令交互，同时保留原始聊天记录、印象、长期记忆和可用技能。尤其是 `/clear`，需要重置后续推理的会话上下文，而不是让 Fairy 丢失已经保存的认识和工作流。
 
@@ -201,7 +203,7 @@
 - 本规格由已完成的 Q1–Q9 设计访谈转写，不重新打开已确认的产品决策；命令输入、着色、旧历史保留、忙时拒绝和系统反馈均已获用户确认。
 - 产品身份、会话和权限继续服从[首版总规格](https://github.com/eafen405/OurFairy/issues/23)。本增量承接[记忆与上下文治理](https://github.com/eafen405/OurFairy/issues/240)及[技能系统](https://github.com/eafen405/OurFairy/issues/295)，不改变它们各自的事实与权限边界。
 - 沿用 ADR-0001 的原生接缝复用原则，以及 ADR-0003、ADR-0004 的技能运行时和审核边界；本规格不重新定义记忆失效或技能批准语义。
-- 能力调查以产品组合锁定的 DSH fork 提交 `ae2adffd8d67773e125b8048120cf9ad2ba7edf3` 为依据。当前 Harness GUI 的安装版本不是产品能力依据；源码调查不能替代新命令的运行验收。
-- 目前已经有可直接适配的原生立即压缩能力，但没有已核实可直接调用的上层 clear API。上下文重置仍需在现有会话维护、surface 与持久化接缝中实现。
+- 发布时的只读能力调查以 DSH fork `ae2adffd8d67773e125b8048120cf9ad2ba7edf3` 为依据。它记录当时已有立即压缩、尚无已核实的上层 clear API；不代表当前功能状态，也不以 Harness GUI 的安装版本作为产品能力依据。
+- 实施后，产品通过既有会话维护、surface replacement、队列和 barrier 接入命令。#347 修复 V4 冷读取的投递 literal、晚到 system 和实际 system 首节点保护；最终产品锁为 `8014fc775a27e7273300a68fcadb7e2980bb93f0`，详见[原生修复证据](../../work/implementation/evidence/342-session-commands/05-native-reader/README.md)。
 - 重置后的旧内容仍可能经长期记忆或后续维护重新成为 Fairy 的认识，这是保留记忆和技能学习的预期结果，不是本规格承诺的遗忘能力。
-- 本规格只定义待实现行为及验收要求；尚未实现命令，也未执行其新功能验收。
+- 本文保留发布时的需求与验收要求；当前执行结果和未执行项只记在[收口证据](../../work/implementation/evidence/342-session-commands/04-closeout/README.md)，不把自动化通过写成全部 64 条故事的设备验收。

@@ -1,4 +1,6 @@
-# #343 会话命令后端证据与协议
+# #343 会话命令后端证据与协议快照
+
+本文保留 #343 交付时的基线、协议摘录和验证事实；当前客户端合同统一维护在[协议入口](../../../../tickets/342/protocol.md)，最终组合与收口状态见 [#342 证据入口](../README.md)。
 
 基线：`integration/spec-342` @ `520e1b1`；独立分支 `ticket/343-session-command-backend`。原生 DSH 固定 `ae2adffd8d67773e125b8048120cf9ad2ba7edf3`，不改 DSH。
 

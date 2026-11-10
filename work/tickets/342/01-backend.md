@@ -8,7 +8,7 @@ Part of #342。
 
 ## 写范围
 
-`backend/chat/`、必要的既有同会话协调接缝、`tests/session-commands.test.mjs`、受新增路由影响的既有路由与投影测试。本票证据放 `work/implementation/evidence/342-session-commands/01-backend/README.md`。协议记录放该证据目录或 `backend/chat/README.md`，由后继票复用。
+`backend/chat/`、必要的既有同会话协调接缝、`tests/session-commands.test.mjs`、受新增路由影响的既有路由与投影测试。本票证据放 `work/implementation/evidence/342-session-commands/01-backend/README.md`。当前协议统一维护在[客户端合同](protocol.md)，证据中的协议摘录为交付时快照。
 
 ## 可观察交付
 

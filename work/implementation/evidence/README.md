@@ -419,6 +419,12 @@
 | --- | --- |
 | [341-bill-copy](341-bill-copy/README.md) | #341 按用户要求把账单页收成两块仪器面板：删去三个总量前的开场说明、走势图后的汇率说明、辅助调用与悬挂回合的口径脚注，以及「正在刷新…」提示，只保留三个总量与 30 天走势，未登录/读取中/空账单/失败与重试这些状态文案按原语义保留（否则「正在读」会与「零账单」混同）；三个总量的丁尼与 token 共用一条紧凑规则，千位以下维持原样、千位起换 K/M/B/T 并保留一位小数，取整到一位小数发生在选单位之前（999,999 读 1.0M 而非 1000.0K），单位与倍率只有 `BillUnits` 一份清单，数字由 `BigDecimal` 生成因此分隔符与手机 locale 无关；布局、字号、列宽与 `maxLines` 未改。规格 `docs/specs/fairy-bill.md` 在「已知的口径缺口」与「标题生成等辅助调用不计入」两处原文后追加 2026-11-10 呈现修订，说明脚注从页面移除而缺口本身不变。检查：`FairyBillPageTest.the page keeps no small print outside the two panels` 断言三条原文文字出现数为 0；`BillFormatTest` 固定单位、进位换单位与 locale 无关性。 |
 
+## Android 会话命令与上下文重置（规格 #342）
+
+| 目录 | 内容 |
+| --- | --- |
+| [342-session-commands](342-session-commands/README.md) | #343/#344/#345/#347 已合入：原生 compact、同会话 clear、数字操作状态与稳定身份恢复、Android 候选/焦点/颜色/发送和草稿保护、保留/恢复/投递竞争组合测试；最终 DSH 锁 8014fc7，原生交付及其宽文档四项基线失败见 05。#346 记录最终完整 Node、combo、Android test/lint 的实际计数和工具链；当前协议统一指向 work/tickets/342/protocol.md，旧证据为历史快照。Standards/Spec 两轴审查 PENDING，待 Lead fresh reviewers；真机、真实模型/ASR、APK 构建/安装未执行，不宣称全部 64 条故事设备验收。 |
+
 ## 界面微调（#215/#217/#218/#239/#255/#290/#291/#292）
 
 | 目录 | 内容 |
