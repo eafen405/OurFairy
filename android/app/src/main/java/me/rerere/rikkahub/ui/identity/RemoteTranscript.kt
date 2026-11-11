@@ -183,6 +183,21 @@ internal fun RemoteTranscript(
                 when (message.kind) {
                     1 -> SkillActivationLine(message.text, Modifier.fillMaxWidth())
                     2 -> SkillReviewPanel(message.text, Modifier.fillMaxWidth())
+                    3 -> Column(Modifier.fillMaxWidth().testTag("session-command")) {
+                        if (message.commandStatus == 4) androidx.compose.material3.HorizontalDivider(
+                            color = LocalFairyTokens.current.signal.copy(alpha = 0.4f),
+                        )
+                        Text(
+                            sessionCommandStatusText(message.command, message.commandStatus, message.commandError?.message),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (message.commandStatus == 5) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                        if (message.commandStatus == 4) Text(CONTEXT_RESET_RETENTION,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     else -> Unit
                 }
                 return@items

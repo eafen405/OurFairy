@@ -28,6 +28,7 @@ export class SessionQueues {
   #queues = new Map<string, Promise<unknown>>()
   #held = new AsyncLocalStorage<Map<string, HeldEntry>>()
 
+  sessionPending(sessionId: string): boolean { return this.#queues.has(`session:${sessionId}`) }
   runSession<T>(sessionId: string, work: QueueWork<T>): Promise<T> { return this.#run(`session:${sessionId}`, work) }
   runDelivery<T>(deliveryId: string, work: QueueWork<T>): Promise<T> { return this.#run(`delivery:${deliveryId}`, work) }
 

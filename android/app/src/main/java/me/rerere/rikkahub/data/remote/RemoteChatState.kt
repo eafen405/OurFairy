@@ -75,6 +75,7 @@ data class RemoteChatSnapshot(
     val downloading: Boolean = false,
     val attachmentNotice: String? = null,
     val taskDetail: RemoteTaskDetail? = null,
+    val sessionCommand: PendingSessionCommand? = null,
 ) {
     /**
      * Backend facts stay intact; incomplete observation/recovery cannot establish silence.
@@ -160,6 +161,8 @@ class RemoteChatState(
     private var taskEpoch = 0L
     private var notifier: (() -> Unit)? = null
     private var titleNotifier: ((String, String) -> Unit)? = null
+    private val commandsBackend = backend as? RemoteSessionCommandBackend
+    private var commandRecovery: Job? = null
 
     suspend fun speechAvailability(expectedEpoch: Long): RemoteSpeechAvailability {
         check(expectedEpoch == attachmentEpoch)
@@ -198,6 +201,8 @@ class RemoteChatState(
         token = credential
         key = selected
         epoch++
+        commandRecovery?.cancel()
+        commandRecovery = null
         connection++
         observer?.cancel()
         synchronization?.cancel()
@@ -222,7 +227,11 @@ class RemoteChatState(
                     mutable.value = mutable.value.copy(
                         storageReady = true, consumedThrough = record.consumedThrough,
                         initialized = record.initialized, pending = record.pending?.pending(), connecting = true,
+                        sessionCommand = record.pendingCommand?.let { saved ->
+                            mutable.value.sessionCommand?.takeIf { it.request == saved } ?: PendingSessionCommand(saved)
+                        } ?: mutable.value.sessionCommand,
                     )
+                    if (record.pendingCommand != null) recoverSessionCommand()
                     var first = true
                     backend.observe(credential, selected.sessionId).collect { projection ->
                         if (!current(boundEpoch, opened) || projection.sessionId != selected.sessionId) return@collect
@@ -246,8 +255,10 @@ class RemoteChatState(
                         require(projection.throughSeq == cut) { "恢复截点在同一连接中发生变化" }
                         mergeEvents(projection.events, projection.fromSeq, projection.cursor + 1)
                         mergeMessages(projection.messages)
+                        val durableThrough = maxOf(projection.durableThroughSeq,
+                            previous?.takeIf { it.generation == projection.generation }?.durableThroughSeq ?: -1)
                         mutable.value = mutable.value.copy(
-                            projection = projection.copy(messages = orderedMessages()),
+                            projection = projection.copy(durableThroughSeq = durableThrough, messages = orderedMessages(durableThrough)),
                             connected = true, connecting = false, failure = null, syncing = true,
                         )
                         val title = projection.titleText()
@@ -275,6 +286,8 @@ class RemoteChatState(
     fun detach() {
         closeTaskOutput()
         epoch++
+        commandRecovery?.cancel()
+        commandRecovery = null
         connection++
         observer?.cancel()
         synchronization?.cancel()
@@ -408,7 +421,18 @@ class RemoteChatState(
                 }
                 if (currentGeneration()) mutable.value = mutable.value.copy(
                     syncing = mutable.value.consumedThrough < (mutable.value.projection?.cursor ?: -1),
-                    projection = mutable.value.projection?.copy(durableThroughSeq = maxOf(latest.durableThroughSeq, acknowledged)),
+                    projection = mutable.value.projection?.copy(
+                        durableThroughSeq = maxOf(latest.durableThroughSeq, acknowledged),
+                        messages = orderedMessages(maxOf(latest.durableThroughSeq, acknowledged)),
+                    ),
+                )
+                val command = mutable.value.sessionCommand
+                val row = messages.values.firstOrNull {
+                    it.role == 3 && it.kind == 3 && it.requestId == command?.request?.requestId &&
+                        it.seq <= maxOf(latest.durableThroughSeq, acknowledged) && (it.commandStatus ?: 1) >= 2
+                }
+                if (command != null && row != null) settleSessionCommand(
+                    selected, boundEpoch, command.request, row.commandStatus!!, row.commandError?.message,
                 )
                 // Reception waits for every session to stop catching up before it publishes, so it
                 // has to hear about a session that settled without owing anything too.
@@ -472,7 +496,12 @@ class RemoteChatState(
      * The transcript in the backend's presentation order. A message's position is its first
      * appearance, so content freshness (`seq`) never decides where a row is shown.
      */
-    private fun orderedMessages() = messages.values.sortedBy { it.position }
+    private fun orderedMessages(durableThrough: Long = mutable.value.projection?.durableThroughSeq ?: -1) =
+        messages.values.sortedBy { it.position }.map { row ->
+            if (row.role == 3 && row.kind == 3 && (row.commandStatus ?: 1) >= 2 && row.seq > durableThrough) {
+                row.copy(status = 1, text = "", commandStatus = 1, commandError = null)
+            } else row
+        }
     private fun current(boundEpoch: Long, opened: Long) = boundEpoch == epoch && opened == connection
 
     /** A picker result belongs to the binding captured before the picker opened. */
@@ -671,6 +700,7 @@ class RemoteChatState(
      * the same event.
      */
     fun send(text: String): String? {
+        RemoteSessionCommand.match(text)?.let { return executeSessionCommand(it, text) }
         val selected = key ?: return null
         val credential = token ?: return null
         val drafts = mutable.value.attachments
@@ -761,6 +791,122 @@ class RemoteChatState(
             catch (failure: Exception) { if (selected == key) mutable.value = mutable.value.copy(sending = false, failure = failure.description()) }
         }
     }
+    private fun executeSessionCommand(command: RemoteSessionCommand, text: String): String? {
+        val selected = key ?: return null
+        val credential = token ?: return null
+        val backend = commandsBackend ?: return null
+        val state = mutable.value
+        if (state.attachments.isNotEmpty()) {
+            noticeAttachment("执行命令前请先移除附件")
+            return null
+        }
+        if (!state.storageReady || state.pending != null || state.sending ||
+            state.sessionCommand?.terminal == false) return null
+        val request = StoredSessionCommand(UUID.randomUUID().toString(), command.code, text)
+        val started = epoch
+        mutable.value = state.copy(sessionCommand = PendingSessionCommand(request, resolving = true), attachmentNotice = null)
+        scope.launch {
+            try {
+                update(selected) { it.copy(pendingCommand = request) }
+                if (started != epoch || credential != token || selected != key) return@launch
+                val result = backend.executeCommand(credential, selected.sessionId, request.requestId, request.command)
+                acceptSessionCommand(selected, started, request, result)
+                if (started == epoch && result.status == 1) recoverSessionCommand()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                failSessionCommand(selected, started, request, failure,
+                    admissionRefused = failure is IdentityRefused && failure.status < 500)
+                if (started == epoch && (failure !is IdentityRefused || failure.status >= 500)) recoverSessionCommand()
+            }
+        }
+        return request.requestId
+    }
+
+    /** Query first; only an explicit retry may execute a missing original identity again. */
+    fun recoverSessionCommand(retry: Boolean = false): Boolean {
+        val selected = key ?: return false
+        val credential = token ?: return false
+        val backend = commandsBackend ?: return false
+        val command = mutable.value.sessionCommand ?: return false
+        if (command.terminal || commandRecovery?.isActive == true) return false
+        val request = command.request
+        val started = epoch
+        mutable.value = mutable.value.copy(sessionCommand = command.copy(resolving = true, failure = null))
+        commandRecovery = scope.launch {
+            try {
+                update(selected) { if (it.pendingCommand == null) it.copy(pendingCommand = request) else it }
+                if (started != epoch || credential != token || selected != key) return@launch
+                var result = backend.commandStatus(credential, selected.sessionId, request.requestId)
+                if (result == null && retry && started == epoch) {
+                    result = backend.executeCommand(credential, selected.sessionId, request.requestId, request.command)
+                }
+                if (result != null) acceptSessionCommand(selected, started, request, result)
+                else if (started == epoch && mutable.value.sessionCommand?.terminal != true) {
+                    mutable.value = mutable.value.copy(sessionCommand = mutable.value.sessionCommand?.copy(
+                        resolving = false, failure = "操作结果尚未确认，请查询或重试原命令",
+                    ))
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { failSessionCommand(selected, started, request, failure) }
+        }
+        return true
+    }
+
+    fun retrySessionCommand(): Boolean {
+        val current = mutable.value.sessionCommand ?: return false
+        if (current.failed) {
+            val command = RemoteSessionCommand.entries.firstOrNull { it.code == current.request.command } ?: return false
+            return executeSessionCommand(command, current.request.text) != null
+        }
+        return recoverSessionCommand(retry = true)
+    }
+
+    private suspend fun acceptSessionCommand(
+        selected: ChatSyncKey, started: Long, request: StoredSessionCommand, result: RemoteSessionCommandSnapshot,
+    ) {
+        require(result.sessionId == selected.sessionId && result.requestId == request.requestId && result.command == request.command) {
+            "命令结果与原请求不一致"
+        }
+        settleSessionCommand(selected, started, request, result.status, result.error?.message)
+    }
+
+    private suspend fun settleSessionCommand(
+        selected: ChatSyncKey, started: Long, request: StoredSessionCommand, status: Int, failure: String?,
+    ) {
+        if (status >= 2) update(selected) {
+            if (it.pendingCommand?.requestId == request.requestId) it.copy(pendingCommand = null) else it
+        }
+        if (started != epoch || selected != key) return
+        val previous = mutable.value.sessionCommand?.takeIf { it.request.requestId == request.requestId } ?: return
+        if (previous.terminal && status == 1) return
+        mutable.value = mutable.value.copy(sessionCommand = previous.copy(
+            status = status, resolving = false, failure = failure,
+        ))
+    }
+
+    private suspend fun failSessionCommand(
+        selected: ChatSyncKey, started: Long, request: StoredSessionCommand, failure: Exception,
+        admissionRefused: Boolean = false,
+    ) {
+        if (started != epoch || selected != key) return
+        // A failed status query cannot establish whether the original execute was admitted.
+        var rejected = admissionRefused
+        if (rejected) {
+            try {
+                update(selected) {
+                    if (it.pendingCommand?.requestId == request.requestId) it.copy(pendingCommand = null) else it
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { rejected = false }
+        }
+        if (started != epoch || selected != key) return
+        val previous = mutable.value.sessionCommand?.takeIf { it.request.requestId == request.requestId } ?: return
+        if (previous.terminal) return
+        mutable.value = mutable.value.copy(sessionCommand = previous.copy(
+            resolving = false, failure = failure.description(), rejected = rejected,
+        ))
+    }
+
     fun stop() {
         scope.launch { stopReply() }
     }

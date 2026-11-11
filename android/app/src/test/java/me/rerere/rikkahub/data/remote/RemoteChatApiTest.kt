@@ -136,6 +136,65 @@ class RemoteChatApiTest {
 
     private fun paths(): List<String> = recorded.map { it.path }
 
+    @Test
+    fun `session command uses numeric contract and queries the original operation`() = runTest {
+        reply(200, """{"ok":true,"command":{"sessionId":"s-1","requestId":"clear-1","commandId":"op-1","command":2,"status":1,"acceptedSeq":8}}""")
+        val running = api.executeCommand(TOKEN, "s-1", "clear-1", 2)
+        assertEquals(1, running.status)
+        assertEquals("/chat/commands/execute", onlyRequest().path)
+        assertEquals("Bearer $TOKEN", onlyRequest().authorization)
+        assertEquals("""{"sessionId":"s-1","requestId":"clear-1","command":2}""", onlyRequest().body)
+        recorded.clear()
+        reply(200, """{"ok":true,"command":{"sessionId":"s-1","requestId":"clear-1","commandId":"op-1","command":2,"status":4,"acceptedSeq":8,"completedSeq":10}}""")
+        val completed = api.commandStatus(TOKEN, "s-1", "clear-1")
+        assertEquals(4, completed?.status)
+        assertEquals(10L, completed?.completedSeq)
+        assertEquals("/chat/commands/status", onlyRequest().path)
+        assertEquals("""{"sessionId":"s-1","requestId":"clear-1"}""", onlyRequest().body)
+    }
+
+    @Test
+    fun `command system result decodes through read page and observation`() = runTest {
+        val row = """{"messageId":"command:op","position":4,"seq":9,"requestId":"r","role":3,"kind":3,"turn":0,"status":4,"text":"failed","commandId":"op","command":1,"commandStatus":5,"commandError":{"code":1,"message":"interrupted"}}"""
+        val projection = """{"sessionId":"s","cursor":9,"durableThroughSeq":8,"messages":[$row]}"""
+        reply(200, """{"ok":true,"projection":$projection}""")
+        val read = api.read(TOKEN, "s")
+        reply(200, """{"ok":true,"page":{"sessionId":"s","throughSeq":9,"fromSeq":0,"messages":[$row]}}""")
+        val page = api.page(TOKEN, "s", 9, 10)
+        sseFrames = listOf("event: projection\ndata: $projection\n\n")
+        val observed = api.observe(TOKEN, "s").toList().single()
+        for (message in listOf(read.messages.single(), page.messages.single(), observed.messages.single())) {
+            assertEquals("r", message.requestId)
+            assertEquals("op", message.commandId)
+            assertEquals(1, message.command)
+            assertEquals(5, message.commandStatus)
+            assertEquals(RemoteSessionCommandError(1, "interrupted"), message.commandError)
+            assertEquals(0, message.turn)
+            assertEquals(4L, message.position)
+            assertNull(listOf(message).newestFairyOutput())
+        }
+        assertEquals(8L, observed.durableThroughSeq)
+    }
+
+    @Test
+    fun `command query null refusal and missing execution result preserve protocol meaning`() = runTest {
+        reply(200, """{"ok":true,"command":null}""")
+        assertNull(api.commandStatus(TOKEN, "s", "r"))
+        try {
+            api.executeCommand(TOKEN, "s", "r", 2)
+            fail("missing execute result must remain unknown")
+        } catch (_: IdentityUnreachable) { }
+        reply(409, """{"ok":false,"error":{"code":"chat/session-busy","message":"wait for task"}}""")
+        try {
+            api.executeCommand(TOKEN, "s", "r", 2)
+            fail("busy must be a refusal")
+        } catch (failure: IdentityRefused) {
+            assertEquals(409, failure.status)
+            assertEquals("chat/session-busy", failure.code)
+            assertEquals("wait for task", failure.message)
+        }
+    }
+
     // ---- sending ----
 
     @Test

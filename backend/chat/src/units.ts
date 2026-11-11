@@ -25,7 +25,7 @@
  *
  * `stateVersion` increments whenever this module's fold semantics or state
  * shape change; the registry then discards persisted rows of an older version
- * and refolds the log from `init`. The transcript is at version 9 (immutable
+ * and refolds the log from `init`. The transcript is at version 10 (command results plus immutable
  * first appearance plus ordered transitions, a move index, each row's tool
  * names, the narrow pairing map that derives a `role: 3` activation row, the
  * `skill_manage` call pairing that derives a `kind: 2` review row, and the
@@ -42,6 +42,7 @@
  * carries the `turn` and message facts it was consumed with).
  */
 
+import { commandInput, commandResult, commandResultSchema, commandText } from './command-events.js'
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import { assembleAssistantStream, lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm/assistant-stream'
 import { z } from 'zod'
@@ -277,8 +278,11 @@ const transcriptRowSchema = z.object({
    * that name none take the open turn.
    */
   turn: z.number().int(),
-  /** Derived rows only: 1 skill activation, 2 skill review. Ordinary messages carry none. */
+  /** Derived rows only: 1 skill activation, 2 skill review, 3 session command. Ordinary messages carry none. */
   kind: z.number().int().optional(),
+  commandId: z.string().optional(),
+  command: z.number().int().optional(),
+  commandResult: commandResultSchema.extend({ seq: z.number().int() }).optional(),
   /** The tool call a derived row was paired with; ordinary messages carry none. */
   toolCallId: z.string().optional(),
   text: z.string(),
@@ -388,6 +392,8 @@ function rowAtCut(row: TranscriptRow, cut: number, position: number) {
       ...row.usage.cache === undefined ? {} : { cache: row.usage.cache },
       output: row.usage.output }
     : undefined
+  const result = row.commandResult !== undefined && row.commandResult.seq <= cut ? row.commandResult : undefined
+  const commandStatus = result?.status ?? 1
   return {
     messageId: row.messageId,
     position,
@@ -396,7 +402,9 @@ function rowAtCut(row: TranscriptRow, cut: number, position: number) {
     role: row.role,
     turn: row.turn,
     status: transition === null ? row.first.status : transition.status,
-    text: row.text,
+    text: row.command === undefined ? row.text : commandText(row.command, commandStatus, result?.error),
+    ...row.command === undefined ? {} : { command: row.command, commandId: row.commandId, commandStatus,
+      ...result?.error === undefined ? {} : { commandError: result.error } },
     ...(row.attachments === null ? {} : { attachments: row.attachments }),
     ...(row.tools.length === 0 ? {} : { tools: row.tools }),
     ...(usage === undefined ? {} : { usage }),
@@ -452,11 +460,27 @@ function reviewDisplayOf(message: { readonly content?: readonly ContentBlock[] }
  */
 export const transcriptDefinition: ProjectionDefinition<'ourfairyTranscript', TranscriptState> = {
   key: 'ourfairyTranscript',
-  stateVersion: 9,
+  stateVersion: 10,
   stateSchema: transcriptStateSchema,
   init: header => ({ sessionId: header.id, rows: [], index: {}, attemptsByTurn: {}, turnEnds: {}, receipts: [],
     skillCalls: {}, manageCalls: {}, moves: [], openTurn: 0, spend: null }),
   apply(state, event) {
+    if (event.type === 'command/run') {
+      const input = commandInput(event)
+      if (input === undefined) return state
+      const messageId = `command:${event.data.commandId}`
+      if (state.index[messageId] !== undefined) return state
+      return appendRow(state, { messageId, requestId: input.requestId, role: 3, kind: 3, turn: 0,
+        command: input.command, commandId: event.data.commandId, text: '', attachments: null, tools: [],
+        first: { seq: event.seq, status: 1 }, transitions: [] })
+    }
+    if (event.type === 'command/done') {
+      const index = state.index[`command:${event.data.commandId}`]
+      const result = commandResult(event)
+      if (index === undefined || result === undefined || state.rows[index]?.commandResult !== undefined) return state
+      return recordTransition(state, index, { commandResult: { ...result, seq: event.seq } },
+        { seq: event.seq, status: result.status === 5 ? 4 : 2, repositions: true })
+    }
     if (event.type === 'agent/inbox/spliced') {
       const inserted = event.data.inserted.filter(message => {
         const view = productMessage(message)

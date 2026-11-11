@@ -5,7 +5,7 @@
     "ourfairy": {
       "role": "product",
       "lock": "integration-branch",
-      "integrationBranch": "main"
+      "integrationBranch": "integration/spec-342"
     },
     "dsh": {
       "role": "backend-harness",
@@ -14,7 +14,7 @@
       "remoteName": "fork",
       "remoteUrl": "https://github.com/eafen405/deepseek-harness.git",
       "integrationBranch": "master",
-      "productCommit": "ae2adffd8d67773e125b8048120cf9ad2ba7edf3",
+      "productCommit": "2b05c480ec6377f7a592a1d4d7a379584aba2bf5",
       "requiredBuild": [
         "corepack pnpm@11.28.5 install",
         "corepack pnpm@11.28.5 run build:lib:host",

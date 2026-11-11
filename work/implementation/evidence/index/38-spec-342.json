@@ -1,0 +1,11 @@
+{
+  "title": "Android 会话命令与上下文重置（规格 #342）",
+  "entries": [
+    {
+      "dirs": [
+        "342-session-commands"
+      ],
+      "note": "#343/#344/#345/#347 已合入：原生 compact、同会话 clear、稳定命令身份/耐久反馈、Android 候选/焦点/颜色/恢复及保留/竞争组合测试。当前 native 锁 2b05c48；两轴原各1个P2已修复并获各自原 reviewer 定点RESOLVED，Root claims已复核，不冒称第二轮全量review或CI。#346在产品de9+唯一jobs夹具diff上顺序完成Node854/854、combo三行ok、Android89 suites/791 tests（0failures/errors/skipped）+lint0errors/42warnings/2hints；首轮853/854失败、busy/idle正负对照和只建立idle前置的test-only门闩修复见04。旧854/787为历史快照，原报告/native2b构建和最终产品结果见06，native宽文档4项BASELINE失败仍见05。当前协议仅维护在work/tickets/342/protocol.md；真机、多设备、真实模型/ASR、APK构建安装未执行，不宣称全部64条故事设备验收。"
+    }
+  ]
+}

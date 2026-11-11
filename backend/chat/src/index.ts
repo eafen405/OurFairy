@@ -1,5 +1,6 @@
 /** Narrow product routes over native Agent/SessionQuery, without the upstream controller. */
 import { freezeSurface, mountRoutes, postHandler, type RouteHandler } from '@ourfairy/dsh-http/http'
+import { SessionCommands } from './commands.js'
 import { RemoteChat } from './service.js'
 import { SessionRuntime } from './runtime.js'
 import { ChatRuntimeFacade } from './runtime-facade.js'
@@ -31,12 +32,14 @@ export type { ChatRuntimeFacade } from './runtime-facade.js'
 /**
  * The addresses this row publishes, in registration order.
  *
- * Nine answer in the `chat` family and one — a rename accepted only on a live
+ * Eleven answer in the `chat` family and one — a rename accepted only on a live
  * session — belongs to the session family, so it uses that family's path
  * constant and error prefix. `observe` is the row's only SSE response; every
  * other address reads a JSON object and writes JSON.
  */
 export const SURFACE = freezeSurface([
+  { path: '/chat/commands/execute', method: 'POST', body: 'json', response: 'json', prefix: 'chat' },
+  { path: '/chat/commands/status', method: 'POST', body: 'json', response: 'json', prefix: 'chat' },
   { path: '/chat/send', method: 'POST', body: 'json', response: 'json', prefix: 'chat' },
   { path: '/chat/receipt', method: 'POST', body: 'json', response: 'json', prefix: 'chat' },
   { path: '/chat/read', method: 'POST', body: 'json', response: 'json', prefix: 'chat' },
@@ -60,7 +63,7 @@ export const inject = ['webServer', 'connection', 'identity', 'ourfairySessions'
   // the Agent factory that `agents.resume` needs, so this row must not take
   // work before that factory is available. Chat never reads `ctx.agentLoop`.
   'agentLoop',
-  'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'llm', 'sessionPersistence', 'jobs', 'sessionProjections']
+  'agentDefaultModel', 'sessions', 'sessionQuery', 'systemPrompt', 'ourfairyAttachments', 'llm', 'sessionPersistence', 'jobs', 'sessionProjections', 'compaction', 'tokenMeter']
 export function apply(ctx: Context): void {
   installPromptAssembly(ctx)
   // Every registered unit folds on the native event drive, once per session and
@@ -70,6 +73,7 @@ export function apply(ctx: Context): void {
   const runtime = new SessionRuntime(ctx)
   new ChatRuntimeFacade(ctx, runtime)
   const chat = new RemoteChat(ctx, runtime)
+  const commands = new SessionCommands(ctx, runtime)
   const { jobOutput, jobStop } = installJobs(ctx, runtime)
   installSpillRead(ctx)
   // `family` is the code prefix a route answers with. Every chat path answers
@@ -82,6 +86,8 @@ export function apply(ctx: Context): void {
     ...respond !== undefined ? { respond } : {},
   })
   const handlers = new Map<string, RouteHandler>([
+    ['/chat/commands/execute', post('chat', async (owner, body) => ({ ok: true, command: await commands.execute(owner, body) }))],
+    ['/chat/commands/status', post('chat', async (owner, body) => ({ ok: true, command: await commands.status(owner, body) }))],
     ['/chat/send', post('chat', async (owner, body) => ({ ok: true, receipt: await chat.send(owner, body) }))],
     ['/chat/receipt', post('chat', async (owner, body) => ({ ok: true, receipt: await chat.receipt(owner, body) }))],
     ['/chat/read', post('chat', async (owner, body) => ({ ok: true, projection: await chat.read(owner, body) }))],

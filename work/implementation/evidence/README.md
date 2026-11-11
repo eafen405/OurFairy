@@ -420,6 +420,12 @@
 | --- | --- |
 | [341-bill-copy](341-bill-copy/README.md) | #341 按用户要求把账单页收成两块仪器面板：删去三个总量前的开场说明、走势图后的汇率说明、辅助调用与悬挂回合的口径脚注，以及「正在刷新…」提示，只保留三个总量与 30 天走势，未登录/读取中/空账单/失败与重试这些状态文案按原语义保留（否则「正在读」会与「零账单」混同）；三个总量的丁尼与 token 共用一条紧凑规则，千位以下维持原样、千位起换 K/M/B/T 并保留一位小数，取整到一位小数发生在选单位之前（999,999 读 1.0M 而非 1000.0K），单位与倍率只有 `BillUnits` 一份清单，数字由 `BigDecimal` 生成因此分隔符与手机 locale 无关；布局、字号、列宽与 `maxLines` 未改。规格 `docs/specs/fairy-bill.md` 在「已知的口径缺口」与「标题生成等辅助调用不计入」两处原文后追加 2026-11-10 呈现修订，说明脚注从页面移除而缺口本身不变。检查：`FairyBillPageTest.the page keeps no small print outside the two panels` 断言三条原文文字出现数为 0；`BillFormatTest` 固定单位、进位换单位与 locale 无关性。 |
 
+## Android 会话命令与上下文重置（规格 #342）
+
+| 目录 | 内容 |
+| --- | --- |
+| [342-session-commands](342-session-commands/README.md) | #343/#344/#345/#347 已合入：原生 compact、同会话 clear、稳定命令身份/耐久反馈、Android 候选/焦点/颜色/恢复及保留/竞争组合测试。当前 native 锁 2b05c48；两轴原各1个P2已修复并获各自原 reviewer 定点RESOLVED，Root claims已复核，不冒称第二轮全量review或CI。#346在产品de9+唯一jobs夹具diff上顺序完成Node854/854、combo三行ok、Android89 suites/791 tests（0failures/errors/skipped）+lint0errors/42warnings/2hints；首轮853/854失败、busy/idle正负对照和只建立idle前置的test-only门闩修复见04。旧854/787为历史快照，原报告/native2b构建和最终产品结果见06，native宽文档4项BASELINE失败仍见05。当前协议仅维护在work/tickets/342/protocol.md；真机、多设备、真实模型/ASR、APK构建安装未执行，不宣称全部64条故事设备验收。 |
+
 ## 界面微调（#215/#217/#218/#239/#255/#290/#291/#292）
 
 | 目录 | 内容 |

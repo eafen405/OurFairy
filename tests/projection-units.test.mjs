@@ -127,7 +127,7 @@ test('the stateVersion constants bind the README contract', () => {
   // The README is read, not restated: the numbers below are this suite's
   // expectation, and the documented sentence must name the same ones, so a
   // version bump that forgets the prose fails here instead of shipping drift.
-  const versions = { ourfairyTranscript: 9, ourfairyWork: 2 }
+  const versions = { ourfairyTranscript: 10, ourfairyWork: 2 }
   const documented = { ourfairyTranscript: /transcript `(\d+)`/u, ourfairyWork: /\bwork `(\d+)`/u }
   const readme = readFileSync(new URL('../backend/chat/README.md', import.meta.url), 'utf8')
   for (const definition of [units.transcriptDefinition, units.workDefinition]) {

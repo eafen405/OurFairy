@@ -42,6 +42,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import me.rerere.rikkahub.data.remote.RemoteSessionCommand
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -122,8 +125,8 @@ fun RemoteChatPanel(
     var speechError by remember(snapshot.attachmentEpoch) { mutableStateOf<String?>(null) }
     var showTasks by remember(snapshot.attachmentEpoch) { mutableStateOf(false) }
     val drafts = snapshot.attachments
-    // Draft editing is frozen while a command is unresolved: the pending record already holds
-    // this message's text and upload ids, and changing the draft would contradict a resend.
+    // Ordinary pending sends freeze their saved text and upload ids. Session commands have
+    // a separate lifecycle, so their execution never freezes the next draft.
     val frozen = !snapshot.storageReady || snapshot.sending || snapshot.pending != null || speechBusy
     val uploadsSettled = drafts.all { it.uploadId != null && !it.uploading }
     // Text may be empty as long as files are attached; neither may be empty.
@@ -230,6 +233,40 @@ fun RemoteChatPanel(
                     if (state.retryPending()) onSendAccepted(pending.requestId)
                 },
             )
+        }
+
+        snapshot.sessionCommand?.let { command ->
+            val inTranscript = projection?.messages?.any { it.kind == 3 && it.requestId == command.request.requestId } == true
+            val commandFailure = if (command.failure == SessionsSnapshot.UNREACHABLE) unreachable else command.failure
+            if (!inTranscript || command.failed || commandFailure != null) {
+                InstrumentPanel(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    if (!inTranscript) Text(
+                        if (command.rejected) "命令失败：$commandFailure"
+                        else if (!command.failed && commandFailure != null) "操作结果待确认：$commandFailure"
+                        else sessionCommandStatusText(command.request.command, command.status, commandFailure),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (inTranscript && !command.failed && commandFailure != null) Text(
+                        "操作结果待确认：$commandFailure", style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (!inTranscript && command.status == 4) Text(CONTEXT_RESET_RETENTION,
+                        style = MaterialTheme.typography.labelSmall)
+                    if (!command.terminal) {
+                        TextButton(onClick = { state.recoverSessionCommand() }, enabled = !command.resolving) {
+                            Text("查询操作结果")
+                        }
+                    }
+                    if (command.failed || (command.failure != null && !command.resolving)) {
+                        Row {
+                            TextButton(onClick = { state.retrySessionCommand() }, enabled = !command.resolving) { Text("重试命令") }
+                            if (command.failed) TextButton(
+                                onClick = { if (draft.isEmpty()) draft = command.request.text },
+                                enabled = draft.isEmpty(),
+                            ) { Text("恢复命令草稿") }
+                        }
+                    }
+                }
+            }
         }
 
         snapshot.attachmentNotice?.let { notice ->
@@ -479,7 +516,15 @@ private fun Composer(
 ) {
     val running = replyStatus == 1 || replyStatus == 2
     val tokens = LocalFairyTokens.current
+    val focus = remember { FocusRequester() }
     var menuOpen by remember { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        RemoteSessionCommand.candidates(draft).forEach { command ->
+            TextButton(onClick = { onDraftChange(command.text); focus.requestFocus() }, enabled = !frozen) {
+                Text(command.text)
+            }
+        }
+    }
     InstrumentPanel(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         level = InstrumentLevel.RECESSED,
@@ -515,10 +560,13 @@ private fun Composer(
             TextField(
                 value = draft,
                 onValueChange = onDraftChange,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).focusRequester(focus),
                 placeholder = { Text("发送消息…") },
                 enabled = !frozen,
                 maxLines = 5,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = if (RemoteSessionCommand.match(draft) != null) tokens.signal else Color.Unspecified,
+                ),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
